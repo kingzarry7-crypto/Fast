@@ -1122,7 +1122,7 @@ class KingZarryAI(
         f"❌ AI error: `{str(e)[:1500]}`",
         mention_author=False
     )
-                )
+                
 
             return
 
