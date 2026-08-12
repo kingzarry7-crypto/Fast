@@ -4,6 +4,7 @@ import base64
 import asyncio
 import requests
 import discord
+
 from discord import app_commands
 
 
@@ -14,6 +15,7 @@ from discord import app_commands
 TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 TWELVE_DATA_API_KEY = os.environ.get("TWELVE_DATA_API_KEY")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
 DISCORD_GUILD_ID = os.environ.get("DISCORD_GUILD_ID")
 
 TWELVE_DATA_URL = "https://api.twelvedata.com"
@@ -23,6 +25,26 @@ OPENAI_MODEL = os.environ.get(
     "OPENAI_MODEL",
     "gpt-4.1-mini"
 )
+
+
+# =========================================================
+# VALIDATION
+# =========================================================
+
+if not TOKEN:
+    raise RuntimeError(
+        "DISCORD_BOT_TOKEN is missing in Railway Variables."
+    )
+
+if not TWELVE_DATA_API_KEY:
+    raise RuntimeError(
+        "TWELVE_DATA_API_KEY is missing in Railway Variables."
+    )
+
+if not OPENAI_API_KEY:
+    raise RuntimeError(
+        "OPENAI_API_KEY is missing in Railway Variables."
+    )
 
 
 # =========================================================
@@ -51,13 +73,13 @@ def normalize_timeframe(timeframe):
 
 
 # =========================================================
-# DISCORD MESSAGE SENDER
+# DISCORD MESSAGE HELPER
 # =========================================================
 
 async def send_long_message(
     channel,
     text,
-    reference_message=None
+    reference=None
 ):
     """
     Discord messages have a 2000 character limit.
@@ -65,15 +87,19 @@ async def send_long_message(
     """
 
     if not text:
-        text = "❌ The AI returned an empty response."
+        text = "❌ AI returned an empty response."
 
     chunks = []
 
-    while len(text) > 2000:
-        split_at = text.rfind("\n", 0, 2000)
+    while len(text) > 1900:
+        split_at = text.rfind(
+            "\n",
+            0,
+            1900
+        )
 
         if split_at < 500:
-            split_at = 2000
+            split_at = 1900
 
         chunks.append(
             text[:split_at]
@@ -84,46 +110,44 @@ async def send_long_message(
     if text:
         chunks.append(text)
 
-    for i, chunk in enumerate(chunks):
+    first = True
 
-        if (
-            i == 0
-            and reference_message is not None
-        ):
+    for chunk in chunks:
 
-            await reference_message.reply(
+        if first and reference is not None:
+            await reference.reply(
                 chunk,
                 mention_author=False
             )
+            first = False
 
         else:
-
             await channel.send(chunk)
 
 
-async def send_long_followup(
+async def send_interaction_message(
     interaction,
     text
 ):
     """
-    Send long slash-command responses safely.
+    Discord interaction responses also have limits.
     """
 
     if not text:
-        text = "❌ The AI returned an empty response."
+        text = "❌ AI returned an empty response."
 
     chunks = []
 
-    while len(text) > 2000:
+    while len(text) > 1900:
 
         split_at = text.rfind(
             "\n",
             0,
-            2000
+            1900
         )
 
         if split_at < 500:
-            split_at = 2000
+            split_at = 1900
 
         chunks.append(
             text[:split_at]
@@ -134,16 +158,12 @@ async def send_long_followup(
     if text:
         chunks.append(text)
 
-    for i, chunk in enumerate(chunks):
+    await interaction.followup.send(
+        chunks[0]
+    )
 
-        if i == 0:
-            await interaction.followup.send(
-                chunk
-            )
-        else:
-            await interaction.channel.send(
-                chunk
-            )
+    for chunk in chunks[1:]:
+        await interaction.channel.send(chunk)
 
 
 # =========================================================
@@ -156,11 +176,6 @@ def get_market_candles(
     outputsize=100
 ):
 
-    if not TWELVE_DATA_API_KEY:
-        raise RuntimeError(
-            "TWELVE_DATA_API_KEY is missing."
-        )
-
     response = requests.get(
         f"{TWELVE_DATA_URL}/time_series",
         params={
@@ -169,7 +184,7 @@ def get_market_candles(
             "outputsize": outputsize,
             "apikey": TWELVE_DATA_API_KEY,
         },
-        timeout=15,
+        timeout=20,
     )
 
     response.raise_for_status()
@@ -177,7 +192,6 @@ def get_market_candles(
     data = response.json()
 
     if data.get("status") == "error":
-
         raise RuntimeError(
             data.get(
                 "message",
@@ -186,7 +200,6 @@ def get_market_candles(
         )
 
     if "values" not in data:
-
         raise RuntimeError(
             f"Unexpected Twelve Data response: {data}"
         )
@@ -196,9 +209,8 @@ def get_market_candles(
     )
 
     if len(candles) < 50:
-
         raise RuntimeError(
-            f"Not enough data returned for {symbol}."
+            f"Not enough market data for {symbol}."
         )
 
     return candles
@@ -206,18 +218,13 @@ def get_market_candles(
 
 def get_market_price(symbol):
 
-    if not TWELVE_DATA_API_KEY:
-        raise RuntimeError(
-            "TWELVE_DATA_API_KEY is missing."
-        )
-
     response = requests.get(
         f"{TWELVE_DATA_URL}/price",
         params={
             "symbol": symbol,
             "apikey": TWELVE_DATA_API_KEY,
         },
-        timeout=15,
+        timeout=20,
     )
 
     response.raise_for_status()
@@ -225,7 +232,6 @@ def get_market_price(symbol):
     data = response.json()
 
     if data.get("status") == "error":
-
         raise RuntimeError(
             data.get(
                 "message",
@@ -234,7 +240,6 @@ def get_market_price(symbol):
         )
 
     if "price" not in data:
-
         raise RuntimeError(
             f"Unexpected price response: {data}"
         )
@@ -291,9 +296,7 @@ def rsi(values, period=14):
         else:
 
             gains.append(0)
-            losses.append(
-                abs(change)
-            )
+            losses.append(abs(change))
 
     avg_gain = (
         sum(gains[:period])
@@ -347,7 +350,6 @@ def analyze_market(
 ):
 
     if len(closes) < 50:
-
         raise RuntimeError(
             "Not enough market data."
         )
@@ -380,7 +382,6 @@ def analyze_market(
         or ema50 is None
         or current_rsi is None
     ):
-
         raise RuntimeError(
             "Indicators could not be calculated."
         )
@@ -395,38 +396,26 @@ def analyze_market(
 
     score = 0
 
-    # EMA 9 / EMA 21
-
     if ema9 > ema21:
         score += 1
     else:
         score -= 1
-
-    # EMA 21 / EMA 50
 
     if ema21 > ema50:
         score += 1
     else:
         score -= 1
 
-    # Price / EMA 21
-
     if current_price > ema21:
         score += 1
     else:
         score -= 1
 
-    # RSI
-
     if 50 < current_rsi < 70:
-
         score += 1
 
     elif 30 < current_rsi < 50:
-
         score -= 1
-
-    # Signal
 
     if score >= 3:
 
@@ -448,55 +437,27 @@ def analyze_market(
 
     entry = current_price
 
-    # Risk management
-
     if signal == "BUY":
 
-        risk = (
-            entry
-            - recent_low
-        )
+        risk = entry - recent_low
 
         if risk <= 0:
             risk = entry * 0.005
 
-        stop_loss = (
-            entry - risk
-        )
-
-        tp1 = (
-            entry
-            + risk * 1.5
-        )
-
-        tp2 = (
-            entry
-            + risk * 2.5
-        )
+        stop_loss = entry - risk
+        tp1 = entry + (risk * 1.5)
+        tp2 = entry + (risk * 2.5)
 
     elif signal == "SELL":
 
-        risk = (
-            recent_high
-            - entry
-        )
+        risk = recent_high - entry
 
         if risk <= 0:
             risk = entry * 0.005
 
-        stop_loss = (
-            entry + risk
-        )
-
-        tp1 = (
-            entry
-            - risk * 1.5
-        )
-
-        tp2 = (
-            entry
-            - risk * 2.5
-        )
+        stop_loss = entry + risk
+        tp1 = entry - (risk * 1.5)
+        tp2 = entry - (risk * 2.5)
 
     else:
 
@@ -513,31 +474,18 @@ def analyze_market(
     )
 
     return {
-
         "price": current_price,
-
         "signal": signal,
-
         "direction": direction,
-
         "trend": trend,
-
         "rsi": current_rsi,
-
         "ema9": ema9,
-
         "ema21": ema21,
-
         "ema50": ema50,
-
         "entry": entry,
-
         "stop_loss": stop_loss,
-
         "tp1": tp1,
-
         "tp2": tp2,
-
         "strength": strength,
     }
 
@@ -581,7 +529,7 @@ def analyze_symbol(
 
 
 # =========================================================
-# FORMAT ANALYSIS
+# FORMAT MARKET ANALYSIS
 # =========================================================
 
 def format_analysis(
@@ -590,19 +538,15 @@ def format_analysis(
 ):
 
     return (
-
         f"👑 **{title}**\n\n"
 
         f"📊 **{data['symbol']}**\n"
-
-        f"⏱ Timeframe: "
-        f"**{data['interval']}**\n\n"
+        f"⏱ Timeframe: **{data['interval']}**\n\n"
 
         f"{data['direction']} "
         f"**SIGNAL: {data['signal']}**\n"
 
-        f"📈 Trend: "
-        f"**{data['trend']}**\n"
+        f"📈 Trend: **{data['trend']}**\n"
 
         f"🔥 Analysis Strength: "
         f"**{data['strength']}%**\n\n"
@@ -619,8 +563,7 @@ def format_analysis(
         f"🎯 TP2: "
         f"`${data['tp2']:,.2f}`\n\n"
 
-        f"📊 RSI: "
-        f"**{data['rsi']:.2f}**\n"
+        f"📊 RSI: **{data['rsi']:.2f}**\n"
 
         f"EMA 9: "
         f"`${data['ema9']:,.2f}`\n"
@@ -632,7 +575,6 @@ def format_analysis(
         f"`${data['ema50']:,.2f}`\n\n"
 
         "📡 Data: **Twelve Data**\n"
-
         "⚠️ Algorithmic analysis only. "
         "No signal guarantees profit."
     )
@@ -642,98 +584,12 @@ def format_analysis(
 # OPENAI TEXT AI
 # =========================================================
 
-def ask_ai(prompt):
+def extract_openai_text(data):
 
-    if not OPENAI_API_KEY:
+    text = data.get("output_text")
 
-        raise RuntimeError(
-            "OPENAI_API_KEY is missing."
-        )
-
-    headers = {
-
-        "Authorization":
-            f"Bearer {OPENAI_API_KEY}",
-
-        "Content-Type":
-            "application/json",
-    }
-
-    payload = {
-
-        "model": OPENAI_MODEL,
-
-        "input": [
-
-            {
-
-                "role": "system",
-
-                "content": [
-
-                    {
-
-                        "type": "input_text",
-
-                        "text": (
-                            "You are King Zarry AI 👑. "
-                            "You are a helpful AI assistant "
-                            "with strong knowledge of trading, "
-                            "crypto, forex, gold, technical "
-                            "analysis, markets and general "
-                            "questions. "
-
-                            "Answer normal questions naturally. "
-                            "When discussing trading, provide "
-                            "careful analysis and explain risk. "
-
-                            "Never guarantee profits. "
-                            "Never claim certainty about future "
-                            "market movements. "
-
-                            "Be concise but useful. "
-                            "Use clear formatting and emojis "
-                            "when appropriate."
-                        ),
-                    }
-                ],
-            },
-
-            {
-
-                "role": "user",
-
-                "content": [
-
-                    {
-
-                        "type": "input_text",
-
-                        "text": prompt,
-                    }
-                ],
-            },
-        ],
-    }
-
-    response = requests.post(
-
-        OPENAI_URL,
-
-        headers=headers,
-
-        json=payload,
-
-        timeout=60,
-    )
-
-    response.raise_for_status()
-
-    data = response.json()
-
-    if data.get("output_text"):
-
-        return data["output_text"]
+    if text:
+        return text.strip()
 
     pieces = []
 
@@ -751,26 +607,93 @@ def ask_ai(prompt):
                 "type"
             ) == "output_text":
 
-                pieces.append(
-                    content.get(
-                        "text",
-                        ""
-                    )
+                value = content.get(
+                    "text",
+                    ""
                 )
 
-    if pieces:
+                if value:
+                    pieces.append(value)
 
-        return "\n".join(
-            pieces
-        )
+    if pieces:
+        return "\n".join(pieces).strip()
 
     raise RuntimeError(
         "OpenAI returned no text."
     )
 
 
+def ask_ai(prompt):
+
+    headers = {
+        "Authorization": (
+            f"Bearer {OPENAI_API_KEY}"
+        ),
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "model": OPENAI_MODEL,
+        "input": [
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": (
+                            "You are King Zarry AI 👑. "
+                            "You are a helpful AI assistant "
+                            "with strong knowledge of trading, "
+                            "crypto, forex, gold, technical "
+                            "analysis and general questions. "
+                            "Answer the user's actual question. "
+                            "Be clear and useful. "
+                            "For trading questions, explain "
+                            "risk and never guarantee profit. "
+                            "Do not pretend to have live prices "
+                            "unless live market data was supplied."
+                        ),
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": prompt,
+                    }
+                ],
+            },
+        ],
+    }
+
+    response = requests.post(
+        OPENAI_URL,
+        headers=headers,
+        json=payload,
+        timeout=90,
+    )
+
+    if not response.ok:
+
+        try:
+            error_data = response.json()
+
+        except Exception:
+            error_data = response.text
+
+        raise RuntimeError(
+            f"OpenAI API error: {error_data}"
+        )
+
+    data = response.json()
+
+    return extract_openai_text(data)
+
+
 # =========================================================
-# OPENAI IMAGE ANALYSIS
+# OPENAI CHART IMAGE ANALYSIS
 # =========================================================
 
 def analyze_chart_image(
@@ -778,12 +701,6 @@ def analyze_chart_image(
     symbol="Unknown",
     timeframe="Unknown"
 ):
-
-    if not OPENAI_API_KEY:
-
-        raise RuntimeError(
-            "OPENAI_API_KEY is missing."
-        )
 
     image_base64 = base64.b64encode(
         image_bytes
@@ -800,32 +717,32 @@ Market:
 Timeframe:
 {timeframe}
 
-Only use information actually visible
-in the uploaded image.
+Only use information that is actually visible
+in the image.
 
 Analyse:
 
-• Overall trend
-• Market structure
-• Higher highs and higher lows
-• Lower highs and lower lows
-• Support
-• Resistance
-• Breakout or breakdown
-• Candlestick behaviour
-• EMA if visible
-• RSI if visible
-• Possible BUY / SELL / WAIT setup
-• Entry zone
-• Invalidation / stop area
-• TP1
-• TP2
-• Main reason
-• Risk
+1. Overall trend
+2. Market structure
+3. Higher highs and higher lows
+4. Lower highs and lower lows
+5. Support
+6. Resistance
+7. Breakout or breakdown
+8. Candlestick behaviour
+9. EMA if visible
+10. RSI if visible
+11. Possible BUY / SELL / WAIT setup
+12. Entry zone
+13. Invalidation / stop area
+14. TP1
+15. TP2
+16. Main reason
+17. Risk
 
 Use this format:
 
-👑 **KING ZARRY AI CHART ANALYSIS**
+👑 KING ZARRY AI CHART ANALYSIS
 
 📊 Market:
 ⏱ Timeframe:
@@ -852,78 +769,52 @@ Use this format:
 
 IMPORTANT:
 
-Do not invent exact prices that cannot
-be read from the image.
+Do not invent exact prices that cannot be
+read from the image.
 
-If the chart does not contain enough
-information, clearly say so.
+If information is unclear, say so.
 
 Never claim a trade is guaranteed.
 """
 
     headers = {
-
-        "Authorization":
-            f"Bearer {OPENAI_API_KEY}",
-
-        "Content-Type":
-            "application/json",
+        "Authorization": (
+            f"Bearer {OPENAI_API_KEY}"
+        ),
+        "Content-Type": "application/json",
     }
 
     payload = {
-
         "model": OPENAI_MODEL,
-
         "input": [
-
             {
-
                 "role": "system",
-
                 "content": [
-
                     {
-
                         "type": "input_text",
-
                         "text": (
-                            "You are King Zarry AI 👑. "
-                            "You analyse trading screenshots "
-                            "carefully. "
-
-                            "Only describe information "
-                            "visible in the image. "
-
-                            "Never invent prices, "
-                            "indicators or levels that "
+                            "You are King Zarry AI. "
+                            "You carefully analyse trading "
+                            "screenshots. "
+                            "Never invent information that "
                             "cannot be seen."
                         ),
                     }
                 ],
             },
-
             {
-
                 "role": "user",
-
                 "content": [
-
                     {
-
                         "type": "input_text",
-
                         "text": prompt,
                     },
-
                     {
-
                         "type": "input_image",
-
-                        "image_url":
-                            (
-                                "data:image/png;base64,"
-                                + image_base64
-                            ),
+                        "image_url": (
+                            "data:image/png;base64,"
+                            + image_base64
+                        ),
                     },
                 ],
             },
@@ -931,104 +822,75 @@ Never claim a trade is guaranteed.
     }
 
     response = requests.post(
-
         OPENAI_URL,
-
         headers=headers,
-
         json=payload,
-
-        timeout=90,
+        timeout=120,
     )
 
-    response.raise_for_status()
+    if not response.ok:
+
+        try:
+            error_data = response.json()
+
+        except Exception:
+            error_data = response.text
+
+        raise RuntimeError(
+            f"OpenAI image API error: {error_data}"
+        )
 
     data = response.json()
 
-    if data.get("output_text"):
-
-        return data["output_text"]
-
-    pieces = []
-
-    for item in data.get(
-        "output",
-        []
-    ):
-
-        for content in item.get(
-            "content",
-            []
-        ):
-
-            if content.get(
-                "type"
-            ) == "output_text":
-
-                pieces.append(
-                    content.get(
-                        "text",
-                        ""
-                    )
-                )
-
-    if pieces:
-
-        return "\n".join(
-            pieces
-        )
-
-    raise RuntimeError(
-        "AI returned no chart analysis."
-    )
+    return extract_openai_text(data)
 
 
 # =========================================================
 # DETECT MARKET / TIMEFRAME
 # =========================================================
 
-def detect_market_and_timeframe(
-    text
-):
+def detect_market_and_timeframe(text):
 
     upper = text.upper()
 
     symbol = "UNKNOWN"
 
     markets = {
-
         "XAU/USD": [
             "XAU/USD",
             "XAUUSD",
-            "GOLD"
+            "GOLD",
         ],
 
         "BTC/USD": [
             "BTC/USD",
             "BTCUSDT",
-            "BTC"
+            "BITCOIN",
+            "BTC",
         ],
 
         "ETH/USD": [
             "ETH/USD",
             "ETHUSDT",
-            "ETH"
+            "ETHEREUM",
+            "ETH",
         ],
 
         "SOL/USD": [
             "SOL/USD",
             "SOLUSDT",
-            "SOL"
+            "SOLANA",
+            "SOL",
         ],
 
         "EUR/USD": [
             "EUR/USD",
-            "EURUSD"
+            "EURUSD",
         ],
 
         "GBP/USD": [
             "GBP/USD",
-            "GBPUSD"
+            "GBPUSD",
         ],
     }
 
@@ -1052,7 +914,6 @@ def detect_market_and_timeframe(
     )
 
     if match:
-
         timeframe = match.group(1)
 
     return symbol, timeframe
@@ -1062,15 +923,11 @@ def detect_market_and_timeframe(
 # DISCORD BOT
 # =========================================================
 
-class KingZarryAI(
-    discord.Client
-):
+class KingZarryAI(discord.Client):
 
     def __init__(self):
 
-        intents = (
-            discord.Intents.default()
-        )
+        intents = discord.Intents.default()
 
         # Required for normal messages.
         intents.message_content = True
@@ -1079,24 +936,16 @@ class KingZarryAI(
             intents=intents
         )
 
-        self.tree = (
-            app_commands.CommandTree(
-                self
-            )
+        self.tree = app_commands.CommandTree(
+            self
         )
-
-    # =====================================================
-    # SLASH COMMAND SYNC
-    # =====================================================
 
     async def setup_hook(self):
 
         if DISCORD_GUILD_ID:
 
             guild = discord.Object(
-                id=int(
-                    DISCORD_GUILD_ID
-                )
+                id=int(DISCORD_GUILD_ID)
             )
 
             self.tree.copy_global_to(
@@ -1121,10 +970,6 @@ class KingZarryAI(
                 f"global commands."
             )
 
-    # =====================================================
-    # READY
-    # =====================================================
-
     async def on_ready(self):
 
         print(
@@ -1132,37 +977,42 @@ class KingZarryAI(
         )
 
         print(
-            f"🤖 Bot ID: {self.user.id}"
+            f"🆔 Bot ID: {self.user.id}"
         )
 
         print(
             "📡 King Zarry AI is ONLINE."
         )
 
-    # =====================================================
-    # ALL NORMAL MESSAGES + IMAGES
-    # =====================================================
+        print(
+            "💬 Normal message chat: ENABLED"
+        )
+
+        print(
+            "📸 Image analysis: ENABLED"
+        )
+
 
     async def on_message(
         self,
         message: discord.Message
     ):
 
-        # Never respond to bots.
+        # -------------------------------------------------
+        # IGNORE ALL BOTS
+        # -------------------------------------------------
 
         if message.author.bot:
             return
 
-        # =================================================
+
+        # -------------------------------------------------
         # IMAGE MESSAGE
-        # =================================================
+        # -------------------------------------------------
 
         image_attachments = [
-
             attachment
-
             for attachment in message.attachments
-
             if (
                 attachment.content_type
                 and attachment.content_type.startswith(
@@ -1175,9 +1025,7 @@ class KingZarryAI(
 
             try:
 
-                async with (
-                    message.channel.typing()
-                ):
+                async with message.channel.typing():
 
                     symbol, timeframe = (
                         detect_market_and_timeframe(
@@ -1185,20 +1033,15 @@ class KingZarryAI(
                         )
                     )
 
-                    attachment = (
-                        image_attachments[0]
-                    )
-
-                    # 10 MB limit
+                    attachment = image_attachments[0]
 
                     if attachment.size > (
                         10 * 1024 * 1024
                     ):
 
                         await message.reply(
-                            "❌ Chart image is too "
-                            "large. Please keep it "
-                            "under 10 MB.",
+                            "❌ Chart image is too large. "
+                            "Please keep it under 10 MB.",
                             mention_author=False
                         )
 
@@ -1218,38 +1061,67 @@ class KingZarryAI(
                 await send_long_message(
                     message.channel,
                     result,
-                    reference_message=message
+                    reference=message
                 )
 
             except Exception as e:
 
                 print(
-                    "❌ IMAGE ANALYSIS ERROR:",
+                    "❌ IMAGE ERROR:",
                     repr(e)
                 )
 
                 await message.reply(
-                    "❌ I couldn't analyse that image "
-                    "right now.",
+                    "❌ I couldn't analyse that image.\n\n"
+                    f"**Error:** `{str(e)[:1200]}`",
                     mention_author=False
                 )
 
             return
 
-        # =================================================
-        # NORMAL TEXT MESSAGE
-        # =================================================
+
+        # -------------------------------------------------
+        # NORMAL MESSAGE
+        # -------------------------------------------------
 
         content = message.content.strip()
 
         if not content:
             return
 
+
+        # Remove bot mention if present.
+
+        if self.user:
+
+            content = content.replace(
+                f"<@{self.user.id}>",
+                ""
+            )
+
+            content = content.replace(
+                f"<@!{self.user.id}>",
+                ""
+            )
+
+            content = content.strip()
+
+
+        if not content:
+
+            content = (
+                "Hello King Zarry AI. "
+                "Are you online?"
+            )
+
+
+        # -------------------------------------------------
+        # AI CHAT
+        # -------------------------------------------------
+
         try:
 
-            async with (
-                message.channel.typing()
-            ):
+            async with message.channel.typing():
 
                 answer = await asyncio.to_thread(
                     ask_ai,
@@ -1259,7 +1131,7 @@ class KingZarryAI(
             await send_long_message(
                 message.channel,
                 answer,
-                reference_message=message
+                reference=message
             )
 
         except Exception as e:
@@ -1270,11 +1142,16 @@ class KingZarryAI(
             )
 
             await message.reply(
-                "❌ I couldn't process "
-                "that request right now.",
+                "❌ I couldn't process that request "
+                "right now.\n\n"
+                f"**Error:** `{str(e)[:1200]}`",
                 mention_author=False
             )
 
+
+# =========================================================
+# CREATE CLIENT
+# =========================================================
 
 client = KingZarryAI()
 
@@ -1298,23 +1175,16 @@ async def start(
         "Your AI market-analysis engine "
         "is online. 📡📈\n\n"
 
-        "**Commands:**\n"
+        "**COMMANDS**\n\n"
 
         "📊 `/signal` - BTC 15M signal\n"
-
         "₿ `/btc` - Bitcoin analysis\n"
-
         "🪙 `/crypto` - Crypto prices\n"
-
         "🟡 `/gold` - Gold analysis\n"
-
         "📈 `/analyze` - Live market analysis\n"
-
         "📸 `/analyze_chart` - Chart analysis\n"
-
-        "💬 Send a normal message to chat\n"
-
-        "📷 Upload a chart to analyse it"
+        "💬 Normal message - AI chat\n"
+        "📷 Upload chart - AI chart analysis"
     )
 
 
@@ -1335,20 +1205,17 @@ async def help_command(
         "👑 **KING ZARRY AI**\n\n"
 
         "📊 `/signal` - BTC signal\n"
-
         "₿ `/btc` - BTC analysis\n"
-
         "🪙 `/crypto` - Crypto prices\n"
-
         "🟡 `/gold` - Gold analysis\n"
-
         "📈 `/analyze` - Live market\n"
+        "📸 `/analyze_chart` - Chart screenshot\n\n"
 
-        "📸 `/analyze_chart` - Chart screenshot\n"
+        "💬 **AI CHAT**\n"
+        "Send a normal message and I will answer.\n\n"
 
-        "💬 Normal messages - AI chat\n"
-
-        "📷 Upload chart - AI chart analysis"
+        "📷 **IMAGE ANALYSIS**\n"
+        "Upload a trading chart and I will analyse it."
     )
 
 
@@ -1374,7 +1241,7 @@ async def signal(
             "15min"
         )
 
-        await send_long_followup(
+        await send_interaction_message(
             interaction,
             format_analysis(
                 data,
@@ -1385,7 +1252,7 @@ async def signal(
     except Exception as e:
 
         print(
-            "SIGNAL ERROR:",
+            "❌ SIGNAL ERROR:",
             repr(e)
         )
 
@@ -1416,7 +1283,7 @@ async def btc(
             "15min"
         )
 
-        await send_long_followup(
+        await send_interaction_message(
             interaction,
             format_analysis(
                 data,
@@ -1427,7 +1294,7 @@ async def btc(
     except Exception as e:
 
         print(
-            "BTC ERROR:",
+            "❌ BTC ERROR:",
             repr(e)
         )
 
@@ -1486,13 +1353,13 @@ async def crypto(
     except Exception as e:
 
         print(
-            "CRYPTO ERROR:",
+            "❌ CRYPTO ERROR:",
             repr(e)
         )
 
         await interaction.followup.send(
-            "❌ Unable to retrieve "
-            "crypto market data."
+            "❌ Unable to retrieve crypto "
+            "market data."
         )
 
 
@@ -1518,7 +1385,7 @@ async def gold(
             "15min"
         )
 
-        await send_long_followup(
+        await send_interaction_message(
             interaction,
             format_analysis(
                 data,
@@ -1529,7 +1396,7 @@ async def gold(
     except Exception as e:
 
         print(
-            "GOLD ERROR:",
+            "❌ GOLD ERROR:",
             repr(e)
         )
 
@@ -1572,7 +1439,7 @@ async def analyze(
             interval
         )
 
-        await send_long_followup(
+        await send_interaction_message(
             interaction,
             format_analysis(
                 data,
@@ -1583,7 +1450,7 @@ async def analyze(
     except Exception as e:
 
         print(
-            "ANALYZE ERROR:",
+            "❌ ANALYZE ERROR:",
             repr(e)
         )
 
@@ -1622,13 +1489,11 @@ async def analyze_chart(
             or ""
         )
 
-        if not content_type.startswith(
-            "image/"
-        ):
+        if not content_type.startswith("image/"):
 
             await interaction.followup.send(
                 "❌ Please upload a PNG, JPG "
-                "or other image."
+                "or another image."
             )
 
             return
@@ -1644,22 +1509,16 @@ async def analyze_chart(
 
             return
 
-        image_bytes = (
-            await image.read()
-        )
+        image_bytes = await image.read()
 
         result = await asyncio.to_thread(
-
             analyze_chart_image,
-
             image_bytes,
-
             symbol.upper().strip(),
-
             timeframe
         )
 
-        await send_long_followup(
+        await send_interaction_message(
             interaction,
             result
         )
@@ -1667,13 +1526,13 @@ async def analyze_chart(
     except Exception as e:
 
         print(
-            "CHART ERROR:",
+            "❌ CHART ERROR:",
             repr(e)
         )
 
         await interaction.followup.send(
-            "❌ I couldn't analyse that chart "
-            "right now."
+            "❌ I couldn't analyse that chart.\n\n"
+            f"**Error:** `{str(e)[:1200]}`"
         )
 
 
@@ -1702,7 +1561,7 @@ async def ask(
             question
         )
 
-        await send_long_followup(
+        await send_interaction_message(
             interaction,
             answer
         )
@@ -1710,42 +1569,30 @@ async def ask(
     except Exception as e:
 
         print(
-            "ASK ERROR:",
+            "❌ ASK ERROR:",
             repr(e)
         )
 
         await interaction.followup.send(
-            "❌ AI chat is unavailable right now."
+            "❌ AI chat is unavailable right now.\n\n"
+            f"**Error:** `{str(e)[:1200]}`"
         )
 
 
 # =========================================================
-# ENVIRONMENT CHECK
+# START BOT
 # =========================================================
 
-if not TOKEN:
-
-    raise RuntimeError(
-        "DISCORD_BOT_TOKEN is missing."
-    )
-
-
-if not TWELVE_DATA_API_KEY:
-
-    raise RuntimeError(
-        "TWELVE_DATA_API_KEY is missing."
-    )
-
-
-if not OPENAI_API_KEY:
-
-    raise RuntimeError(
-        "OPENAI_API_KEY is missing."
-    )
-
+print(
+    "========================================"
+)
 
 print(
-    "👑 King Zarry AI Discord bot is starting..."
+    "👑 KING ZARRY AI"
+)
+
+print(
+    "🤖 Starting Discord bot..."
 )
 
 print(
@@ -1753,7 +1600,20 @@ print(
 )
 
 print(
-    "📡 Starting Discord connection..."
+    "💬 Text chat: ENABLED"
 )
+
+print(
+    "📸 Image analysis: ENABLED"
+)
+
+print(
+    "📊 Market analysis: ENABLED"
+)
+
+print(
+    "========================================"
+)
+
 
 client.run(TOKEN)
