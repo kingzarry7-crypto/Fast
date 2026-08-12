@@ -1,6 +1,7 @@
 import os
-import re
 import base64
+import requests
+import discord
 import asyncio
 import requests
 import discord
