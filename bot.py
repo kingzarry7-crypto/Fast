@@ -1113,15 +1113,15 @@ class KingZarryAI(
 
             except Exception as e:
 
-                print(
-                    "IMAGE CHAT ERROR:",
-                    repr(e)
-                )
+    print(
+        "❌ CHAT ERROR:",
+        repr(e)
+    )
 
-                await message.reply(
-                    "❌ I couldn't analyse "
-                    "that chart right now.",
-                    mention_author=False
+    await message.reply(
+        f"❌ AI error: `{str(e)[:1500]}`",
+        mention_author=False
+    )
                 )
 
             return
