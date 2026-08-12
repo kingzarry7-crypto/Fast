@@ -1,7 +1,6 @@
 import os
+import re
 import base64
-import requests
-import discord
 import asyncio
 import requests
 import discord
@@ -15,9 +14,6 @@ from discord import app_commands
 TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 TWELVE_DATA_API_KEY = os.environ.get("TWELVE_DATA_API_KEY")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-
-# Optional: put your Discord SERVER ID in Railway.
-# This makes slash-command updates appear immediately.
 DISCORD_GUILD_ID = os.environ.get("DISCORD_GUILD_ID")
 
 TWELVE_DATA_URL = "https://api.twelvedata.com"
@@ -46,13 +42,108 @@ TIMEFRAME_MAP = {
 
 
 def normalize_timeframe(timeframe):
-
     timeframe = timeframe.lower().strip()
 
     return TIMEFRAME_MAP.get(
         timeframe,
         timeframe
     )
+
+
+# =========================================================
+# DISCORD MESSAGE SENDER
+# =========================================================
+
+async def send_long_message(
+    channel,
+    text,
+    reference_message=None
+):
+    """
+    Discord messages have a 2000 character limit.
+    Split long AI responses safely.
+    """
+
+    if not text:
+        text = "❌ The AI returned an empty response."
+
+    chunks = []
+
+    while len(text) > 2000:
+        split_at = text.rfind("\n", 0, 2000)
+
+        if split_at < 500:
+            split_at = 2000
+
+        chunks.append(
+            text[:split_at]
+        )
+
+        text = text[split_at:].lstrip()
+
+    if text:
+        chunks.append(text)
+
+    for i, chunk in enumerate(chunks):
+
+        if (
+            i == 0
+            and reference_message is not None
+        ):
+
+            await reference_message.reply(
+                chunk,
+                mention_author=False
+            )
+
+        else:
+
+            await channel.send(chunk)
+
+
+async def send_long_followup(
+    interaction,
+    text
+):
+    """
+    Send long slash-command responses safely.
+    """
+
+    if not text:
+        text = "❌ The AI returned an empty response."
+
+    chunks = []
+
+    while len(text) > 2000:
+
+        split_at = text.rfind(
+            "\n",
+            0,
+            2000
+        )
+
+        if split_at < 500:
+            split_at = 2000
+
+        chunks.append(
+            text[:split_at]
+        )
+
+        text = text[split_at:].lstrip()
+
+    if text:
+        chunks.append(text)
+
+    for i, chunk in enumerate(chunks):
+
+        if i == 0:
+            await interaction.followup.send(
+                chunk
+            )
+        else:
+            await interaction.channel.send(
+                chunk
+            )
 
 
 # =========================================================
@@ -162,9 +253,10 @@ def ema(values, period):
 
     multiplier = 2 / (period + 1)
 
-    result = sum(
-        values[:period]
-    ) / period
+    result = (
+        sum(values[:period])
+        / period
+    )
 
     for price in values[period:]:
 
@@ -366,10 +458,7 @@ def analyze_market(
         )
 
         if risk <= 0:
-
-            risk = (
-                entry * 0.005
-            )
+            risk = entry * 0.005
 
         stop_loss = (
             entry - risk
@@ -393,10 +482,7 @@ def analyze_market(
         )
 
         if risk <= 0:
-
-            risk = (
-                entry * 0.005
-            )
+            risk = entry * 0.005
 
         stop_loss = (
             entry + risk
@@ -415,9 +501,7 @@ def analyze_market(
     else:
 
         stop_loss = recent_low
-
         tp1 = recent_high
-
         tp2 = recent_high
 
     strength = min(
@@ -592,16 +676,24 @@ def ask_ai(prompt):
                         "type": "input_text",
 
                         "text": (
-                            "You are King Zarry AI 👑, "
-                            "a helpful trading and market "
-                            "analysis assistant. "
-                            "You can discuss crypto, "
-                            "forex, gold and technical "
-                            "analysis. "
-                            "Be concise but useful. "
+                            "You are King Zarry AI 👑. "
+                            "You are a helpful AI assistant "
+                            "with strong knowledge of trading, "
+                            "crypto, forex, gold, technical "
+                            "analysis, markets and general "
+                            "questions. "
+
+                            "Answer normal questions naturally. "
+                            "When discussing trading, provide "
+                            "careful analysis and explain risk. "
+
                             "Never guarantee profits. "
-                            "Clearly distinguish "
-                            "analysis from certainty."
+                            "Never claim certainty about future "
+                            "market movements. "
+
+                            "Be concise but useful. "
+                            "Use clear formatting and emojis "
+                            "when appropriate."
                         ),
                     }
                 ],
@@ -708,7 +800,8 @@ Market:
 Timeframe:
 {timeframe}
 
-Only use information that is actually visible.
+Only use information actually visible
+in the uploaded image.
 
 Analyse:
 
@@ -727,12 +820,12 @@ Analyse:
 • Invalidation / stop area
 • TP1
 • TP2
-• Main reason for the setup
+• Main reason
 • Risk
 
 Use this format:
 
-👑 KING ZARRY AI CHART ANALYSIS
+👑 **KING ZARRY AI CHART ANALYSIS**
 
 📊 Market:
 ⏱ Timeframe:
@@ -794,11 +887,16 @@ Never claim a trade is guaranteed.
                         "type": "input_text",
 
                         "text": (
-                            "You are King Zarry AI. "
-                            "You analyse trading "
-                            "screenshots carefully. "
-                            "Never invent information "
-                            "that cannot be seen."
+                            "You are King Zarry AI 👑. "
+                            "You analyse trading screenshots "
+                            "carefully. "
+
+                            "Only describe information "
+                            "visible in the image. "
+
+                            "Never invent prices, "
+                            "indicators or levels that "
+                            "cannot be seen."
                         ),
                     }
                 ],
@@ -941,11 +1039,9 @@ def detect_market_and_timeframe(
             if name in upper:
 
                 symbol = market
-
                 break
 
         if symbol != "UNKNOWN":
-
             break
 
     timeframe = "15m"
@@ -976,7 +1072,7 @@ class KingZarryAI(
             discord.Intents.default()
         )
 
-        # REQUIRED for reading normal messages.
+        # Required for normal messages.
         intents.message_content = True
 
         super().__init__(
@@ -989,11 +1085,11 @@ class KingZarryAI(
             )
         )
 
-    async def setup_hook(self):
+    # =====================================================
+    # SLASH COMMAND SYNC
+    # =====================================================
 
-        # -------------------------------------------------
-        # Fast guild sync for testing
-        # -------------------------------------------------
+    async def setup_hook(self):
 
         if DISCORD_GUILD_ID:
 
@@ -1025,6 +1121,10 @@ class KingZarryAI(
                 f"global commands."
             )
 
+    # =====================================================
+    # READY
+    # =====================================================
+
     async def on_ready(self):
 
         print(
@@ -1032,8 +1132,16 @@ class KingZarryAI(
         )
 
         print(
+            f"🤖 Bot ID: {self.user.id}"
+        )
+
+        print(
             "📡 King Zarry AI is ONLINE."
         )
+
+    # =====================================================
+    # ALL NORMAL MESSAGES + IMAGES
+    # =====================================================
 
     async def on_message(
         self,
@@ -1043,12 +1151,11 @@ class KingZarryAI(
         # Never respond to bots.
 
         if message.author.bot:
-
             return
 
-        # -------------------------------------------------
+        # =================================================
         # IMAGE MESSAGE
-        # -------------------------------------------------
+        # =================================================
 
         image_attachments = [
 
@@ -1082,6 +1189,8 @@ class KingZarryAI(
                         image_attachments[0]
                     )
 
+                    # 10 MB limit
+
                     if attachment.size > (
                         10 * 1024 * 1024
                     ):
@@ -1106,38 +1215,35 @@ class KingZarryAI(
                         timeframe
                     )
 
-                await message.reply(
+                await send_long_message(
+                    message.channel,
                     result,
-                    mention_author=False
+                    reference_message=message
                 )
 
             except Exception as e:
 
-    print(
-        "❌ CHAT ERROR:",
-        repr(e)
-    )
+                print(
+                    "❌ IMAGE ANALYSIS ERROR:",
+                    repr(e)
+                )
 
-    await message.reply(
-        f"❌ AI error: `{str(e)[:1500]}`",
-        mention_author=False
-    )
-                
+                await message.reply(
+                    "❌ I couldn't analyse that image "
+                    "right now.",
+                    mention_author=False
+                )
 
             return
 
-        # -------------------------------------------------
-        # NORMAL CHAT
-        # -------------------------------------------------
+        # =================================================
+        # NORMAL TEXT MESSAGE
+        # =================================================
 
         content = message.content.strip()
 
         if not content:
-
             return
-
-        # Bot responds to normal messages.
-        # It ignores empty messages and bot messages.
 
         try:
 
@@ -1150,15 +1256,16 @@ class KingZarryAI(
                     content
                 )
 
-            await message.reply(
+            await send_long_message(
+                message.channel,
                 answer,
-                mention_author=False
+                reference_message=message
             )
 
         except Exception as e:
 
             print(
-                "CHAT ERROR:",
+                "❌ CHAT ERROR:",
                 repr(e)
             )
 
@@ -1261,12 +1368,14 @@ async def signal(
 
     try:
 
-        data = analyze_symbol(
+        data = await asyncio.to_thread(
+            analyze_symbol,
             "BTC/USD",
             "15min"
         )
 
-        await interaction.followup.send(
+        await send_long_followup(
+            interaction,
             format_analysis(
                 data,
                 "KING ZARRY AI BTC SIGNAL"
@@ -1301,12 +1410,14 @@ async def btc(
 
     try:
 
-        data = analyze_symbol(
+        data = await asyncio.to_thread(
+            analyze_symbol,
             "BTC/USD",
             "15min"
         )
 
-        await interaction.followup.send(
+        await send_long_followup(
+            interaction,
             format_analysis(
                 data,
                 "KING ZARRY AI BTC ANALYSIS"
@@ -1341,15 +1452,18 @@ async def crypto(
 
     try:
 
-        btc_price = get_market_price(
+        btc_price = await asyncio.to_thread(
+            get_market_price,
             "BTC/USD"
         )
 
-        eth_price = get_market_price(
+        eth_price = await asyncio.to_thread(
+            get_market_price,
             "ETH/USD"
         )
 
-        sol_price = get_market_price(
+        sol_price = await asyncio.to_thread(
+            get_market_price,
             "SOL/USD"
         )
 
@@ -1398,12 +1512,14 @@ async def gold(
 
     try:
 
-        data = analyze_symbol(
+        data = await asyncio.to_thread(
+            analyze_symbol,
             "XAU/USD",
             "15min"
         )
 
-        await interaction.followup.send(
+        await send_long_followup(
+            interaction,
             format_analysis(
                 data,
                 "KING ZARRY AI GOLD SIGNAL"
@@ -1450,12 +1566,14 @@ async def analyze(
             timeframe
         )
 
-        data = analyze_symbol(
+        data = await asyncio.to_thread(
+            analyze_symbol,
             symbol,
             interval
         )
 
-        await interaction.followup.send(
+        await send_long_followup(
+            interaction,
             format_analysis(
                 data,
                 "KING ZARRY AI MARKET ANALYSIS"
@@ -1541,7 +1659,8 @@ async def analyze_chart(
             timeframe
         )
 
-        await interaction.followup.send(
+        await send_long_followup(
+            interaction,
             result
         )
 
@@ -1553,7 +1672,8 @@ async def analyze_chart(
         )
 
         await interaction.followup.send(
-            "❌ I couldn't analyse that chart."
+            "❌ I couldn't analyse that chart "
+            "right now."
         )
 
 
@@ -1582,7 +1702,8 @@ async def ask(
             question
         )
 
-        await interaction.followup.send(
+        await send_long_followup(
+            interaction,
             answer
         )
 
@@ -1625,6 +1746,14 @@ if not OPENAI_API_KEY:
 
 print(
     "👑 King Zarry AI Discord bot is starting..."
+)
+
+print(
+    f"🧠 OpenAI model: {OPENAI_MODEL}"
+)
+
+print(
+    "📡 Starting Discord connection..."
 )
 
 client.run(TOKEN)
