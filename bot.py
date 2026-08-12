@@ -1,9 +1,8 @@
 import os
-import base64
 import requests
 import discord
 from discord import app_commands
-
+from openai import OpenAI
 # =========================================================
 # ENVIRONMENT
 # =========================================================
