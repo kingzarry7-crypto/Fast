@@ -1,3 +1,6 @@
 discord.py==2.6.0
 requests==2.32.4
 openai
+google-genai
+discord-ext-voice-recv
+PyNaCl
