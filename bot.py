@@ -278,14 +278,14 @@ def get_market_candles(
         raise RuntimeError(
             data.get(
                 "message",
-                "Twelve Data returned an error."
+                "Market data returned an error."
             )
         )
 
     if "values" not in data:
 
         raise RuntimeError(
-            f"Unexpected Twelve Data response: {data}"
+            f"Unexpected market data response: {data}"
         )
 
     candles = list(
@@ -332,7 +332,7 @@ def get_market_price(symbol):
         raise RuntimeError(
             data.get(
                 "message",
-                "Twelve Data returned an error."
+                "Market data returned an error."
             )
         )
 
@@ -759,8 +759,6 @@ def format_analysis(
 
         f"EMA 50: "
         f"`${data['ema50']:,.2f}`\n\n"
-
-        "📡 Data: **Twelve Data**\n"
 
         "⚠️ Algorithmic analysis only. "
         "No signal guarantees profit."
@@ -1388,9 +1386,7 @@ async def crypto(
             f"`${eth_price:,.2f}`\n"
 
             f"◎ SOL/USD: "
-            f"`${sol_price:,.2f}`\n\n"
-
-            "📡 Data: **Twelve Data**"
+            f"`${sol_price:,.2f}`"
         )
 
     except Exception as e:
@@ -1662,10 +1658,6 @@ print(
 
 print(
     f"🤖 Hugging Face model: {HF_MODEL}"
-)
-
-print(
-    "📡 Twelve Data market system loaded."
 )
 
 print(
