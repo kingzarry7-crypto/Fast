@@ -1,6 +1,5 @@
-discord.py==2.6.0
+discord.py[voice]==2.6.0
+PyNaCl
 requests==2.32.4
 openai
-google-genai
-discord-ext-voice-recv
-PyNaCl
+python-telegram-bot==22.5
