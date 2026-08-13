@@ -1,90 +1,119 @@
+import os
+import signal
 import subprocess
 import sys
-import signal
-
-
-processes = []
-
-
-def start_bot(filename):
-    print(f"🚀 Starting {filename}...")
-
-    process = subprocess.Popen(
-        [sys.executable, filename]
-    )
-
-    processes.append(process)
-
-    return process
-
-
-def shutdown(signum, frame):
-
-    print("🛑 Shutting down King Zarry AI...")
-
-    for process in processes:
-
-        if process.poll() is None:
-
-            process.terminate()
-
-    sys.exit(0)
-
-
-signal.signal(
-    signal.SIGTERM,
-    shutdown
-)
-
-signal.signal(
-    signal.SIGINT,
-    shutdown
-)
+import time
 
 
 print("👑 =======================================")
 print("👑 KING ZARRY AI MULTI-PLATFORM")
 print("👑 =======================================")
-print("🤖 Starting Discord...")
-print("📱 Starting Telegram...")
+
+processes = []
 
 
-discord_process = start_bot("bot.py")
-telegram_process = start_bot("telegram_bot.py")
+def start_process(name, script):
+    print(f"🚀 Starting {name}...")
+
+    process = subprocess.Popen(
+        [sys.executable, script],
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+        env=os.environ.copy(),
+    )
+
+    processes.append((name, process))
+
+    print(
+        f"✅ {name} process started "
+        f"(PID: {process.pid})"
+    )
+
+    return process
 
 
-print("✅ Discord process started.")
-print("✅ Telegram process started.")
-print("📡 KING ZARRY AI IS RUNNING.")
+def shutdown(signum=None, frame=None):
+    print("")
+    print("🛑 Shutting down King Zarry AI...")
+
+    for name, process in processes:
+        if process.poll() is None:
+            print(f"🛑 Stopping {name}...")
+
+            try:
+                process.terminate()
+            except Exception:
+                pass
+
+    time.sleep(2)
+
+    for name, process in processes:
+        if process.poll() is None:
+            try:
+                process.kill()
+            except Exception:
+                pass
+
+    print("👑 King Zarry AI stopped.")
 
 
-while True:
+signal.signal(signal.SIGTERM, shutdown)
+signal.signal(signal.SIGINT, shutdown)
 
-    discord_status = discord_process.poll()
-    telegram_status = telegram_process.poll()
 
-    if discord_status is not None:
+try:
 
-        print(
-            f"❌ Discord bot stopped with code "
-            f"{discord_status}"
-        )
+    discord_process = start_process(
+        "Discord",
+        "bot.py"
+    )
 
-    if telegram_status is not None:
+    telegram_process = start_process(
+        "Telegram",
+        "telegram_bot.py"
+    )
 
-        print(
-            f"❌ Telegram bot stopped with code "
-            f"{telegram_status}"
-        )
+    print("")
+    print("📡 KING ZARRY AI IS RUNNING.")
+    print("👑 Discord + Telegram are active.")
+    print("")
 
-    if (
-        discord_status is not None
-        and telegram_status is not None
-    ):
+    while True:
 
-        print("❌ Both bots have stopped.")
-        sys.exit(1)
+        discord_code = discord_process.poll()
+        telegram_code = telegram_process.poll()
 
-    import time
+        if discord_code is not None:
 
-    time.sleep(10)
+            print(
+                f"❌ Discord process stopped "
+                f"with exit code {discord_code}"
+            )
+
+            break
+
+        if telegram_code is not None:
+
+            print(
+                f"❌ Telegram process stopped "
+                f"with exit code {telegram_code}"
+            )
+
+            break
+
+        time.sleep(2)
+
+
+except KeyboardInterrupt:
+
+    pass
+
+except Exception as e:
+
+    print(
+        f"❌ Launcher error: {e}"
+    )
+
+finally:
+
+    shutdown()
