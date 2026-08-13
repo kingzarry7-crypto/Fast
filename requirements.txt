@@ -1,4 +1,4 @@
-discord.py[voice]==2.6.0
+Discord.py[voice]==2.6.0
 PyNaCl
 requests==2.32.4
 openai
@@ -6,3 +6,4 @@ python-telegram-bot==22.5
 edge-tts
 ffmpeg-python
 google-genai
+groq
