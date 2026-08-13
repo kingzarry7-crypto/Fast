@@ -5,3 +5,4 @@ openai
 python-telegram-bot==22.5
 edge-tts
 ffmpeg-python
+google-genai
