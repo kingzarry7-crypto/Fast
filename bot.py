@@ -2264,4 +2264,4 @@ async def run_discord():
 
 
 if __name__ == "__main__":
-    asyncio.run(run_discord())
+    client.run(TOKEN)
