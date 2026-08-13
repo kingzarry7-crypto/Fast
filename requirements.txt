@@ -3,3 +3,5 @@ PyNaCl
 requests==2.32.4
 openai
 python-telegram-bot==22.5
+edge-tts
+ffmpeg-python
