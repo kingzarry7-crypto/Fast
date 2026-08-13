@@ -1,0 +1,18 @@
+services:
+  bot:
+    build: .
+    container_name: king_zarry_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - XAI_API_KEY=${XAI_API_KEY}
+      - TWELVE_DATA_API_KEY=${TWELVE_DATA_API_KEY}
+      - DATABASE_PATH=/app/data/king_zarry_memory.db
