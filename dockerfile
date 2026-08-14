@@ -8,8 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /app
 
-# Install system dependencies
-# ffmpeg is required for the discord.py voice features
+# Install system dependencies (ffmpeg for discord voice)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
@@ -19,13 +18,14 @@ RUN adduser --disabled-password --gecos "" appuser
 
 # Install requirements
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
 
-# Change ownership of the app directory to the new user
-RUN chown -R appuser:appuser /app
+# Create data directory for persistent SQLite memory & assign permissions
+RUN mkdir -p /app/data && chown -R appuser:appuser /app
 
 # Switch to non-root user
 USER appuser
