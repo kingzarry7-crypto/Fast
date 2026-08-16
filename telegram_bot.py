@@ -196,15 +196,15 @@ TWELVE_DATA_URL = "https://api.twelvedata.com"
 # =========================================================
 
 MONTHLY_STARS = int(
-    os.environ.get("MONTHLY_STARS", "250")
+    os.environ.get("MONTHLY_STARS", "150")
 )
 
 THREE_MONTH_STARS = int(
-    os.environ.get("THREE_MONTH_STARS", "600")
+    os.environ.get("THREE_MONTH_STARS", "500")
 )
 
 YEARLY_STARS = int(
-    os.environ.get("YEARLY_STARS", "2000")
+    os.environ.get("YEARLY_STARS", "2500")
 )
 
 
