@@ -49,11 +49,11 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 FAL_KEY = os.getenv("FAL_KEY")
 
 # Vision & Text Models
-GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "llama-3.2-90b-vision-preview")
-GROQ_TEXT_MODEL = os.getenv("GROQ_TEXT_MODEL", "llama-3.3-70b-versatile")
+GROQ_VISION_MODEL=qwen/qwen3.6-27b
+GROQ_TEXT_MODEL=llama-3.3-70b-versatile
 
-TEXT_TO_VIDEO_MODEL = os.getenv("TEXT_TO_VIDEO_MODEL", "fal-ai/ltx-video")
-IMAGE_TO_VIDEO_MODEL = os.getenv("IMAGE_TO_VIDEO_MODEL", "fal-ai/ltx-video/image-to-video")
+TEXT_TO_VIDEO_MODEL=fal-ai/ltx-video
+IMAGE_TO_VIDEO_MODEL=fal-ai/ltx-video/image-to-video
 
 MAX_PROMPT_LENGTH = 1500
 MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB
@@ -71,7 +71,7 @@ SYSTEM_VOICE_PROMPT = (
     "Keep responses concise, clear, and direct. "
     "NEVER mention ElevenLabs, Discord, Telegram, or any underlying tools, models, or APIs. "
     "If the user asks if you can speak, talk, or send voice messages, respond naturally with: "
-    "'Yes, I can talk to you freely! What would you like me to say?'"
+    "'Yes, I can talk to you! What would you like me to say?'"
 )
 
 
@@ -217,21 +217,26 @@ def format_market(data: dict, title: str) -> str:
     ema50 = safe_float(data.get('ema50'))
     rsi = safe_float(data.get('rsi'))
 
-    return (
+    
+        return (
         f"👑 **{title}**\n\n"
         f"📊 Market: **{symbol}**\n"
         f"⏱ Timeframe: **{timeframe}**\n\n"
         f"🎯 Signal: **{signal}**\n"
         f"📈 Trend: **{trend}**\n\n"
         f"💰 Price: `${price:,.5f}`\n\n"
+        f"🔴 Stop Loss: `${stop_loss:,.5f}`\n"
+        f"🎯 TP 1: `${tp1:,.5f}`\n"
+        f"🎯 TP 2: `${tp2:,.5f}`\n\n"
         f"🟢 Support: `${support:,.5f}`\n"
         f"🔴 Resistance: `${resistance:,.5f}`\n\n"
         f"EMA 9: `${ema9:,.5f}`\n"
         f"EMA 21: `${ema21:,.5f}`\n"
         f"EMA 50: `${ema50:,.5f}`\n"
         f"RSI: **{rsi:.2f}**\n\n"
-        "⚠️ Algorithmic analysis only. No guaranteed profit."
+        "⚠️ Educational analysis only. No guaranteed profit."
     )
+
 
 
 # ==========================================================
