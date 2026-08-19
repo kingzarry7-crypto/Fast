@@ -21,6 +21,7 @@ from telegram.ext import (
     MessageHandler,
     ContextTypes,
     PreCheckoutQueryHandler,
+    TypeHandler
     filters,
 )
 
