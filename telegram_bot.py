@@ -16,7 +16,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, FancyArrowPatch
 
-from telegram import Update, LabeledPrice
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -26,6 +25,11 @@ from telegram.ext import (
     filters,
 )
 
+from telegram.error import (
+    Forbidden,
+    BadRequest,
+    RetryAfter,
+)
 # ============================================================
 # 👑 KING ZARRY AI
 # SINGLE-FILE TELEGRAM BOT
