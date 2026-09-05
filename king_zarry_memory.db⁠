@@ -1,0 +1,598 @@
+import os
+import sqlite3
+from typing import List, Dict, Optional
+
+
+class UserMemoryManager:
+    """
+    Persistent user memory manager for KING ZARRY AI.
+
+    Stores:
+      - User's preferred name
+      - Conversation history
+      - Platform information
+
+    SQLite is used for persistence.
+    """
+
+    def __init__(
+        self,
+        db_path: str = "king_zarry_memory.db",
+        schema_path: Optional[str] = None,
+    ):
+        # Allow the database path to be configured with an environment variable.
+        self.db_path = os.getenv("MEMORY_DB_PATH", db_path)
+
+        # Keep schema_path for backwards compatibility, but the database
+        # can now initialize itself without schema.sql.
+        self.schema_path = schema_path
+
+        self._init_db()
+
+    # =========================================================
+    # DATABASE CONNECTION
+    # =========================================================
+
+    def _get_connection(self) -> sqlite3.Connection:
+        """
+        Create a new SQLite connection configured for reliability.
+        """
+
+        conn = sqlite3.connect(
+            self.db_path,
+            timeout=30.0,
+            check_same_thread=False,
+        )
+
+        conn.row_factory = sqlite3.Row
+
+        # Wait when another operation temporarily holds the database lock.
+        conn.execute("PRAGMA busy_timeout = 30000")
+
+        # Better concurrent read/write behavior.
+        conn.execute("PRAGMA journal_mode = WAL")
+
+        # Enforce foreign keys.
+        conn.execute("PRAGMA foreign_keys = ON")
+
+        # Safer transaction behavior.
+        conn.execute("PRAGMA synchronous = NORMAL")
+
+        return conn
+
+    # =========================================================
+    # DATABASE INITIALIZATION
+    # =========================================================
+
+    def _init_db(self):
+        """
+        Create all required tables and indexes automatically.
+        """
+
+        try:
+            # Make sure the parent directory exists when a directory
+            # was included in the database path.
+            directory = os.path.dirname(os.path.abspath(self.db_path))
+
+            if directory:
+                os.makedirs(directory, exist_ok=True)
+
+            with self._get_connection() as conn:
+
+                conn.executescript(
+                    """
+                    CREATE TABLE IF NOT EXISTS users (
+                        user_id TEXT NOT NULL,
+                        platform TEXT NOT NULL,
+                        preferred_name TEXT,
+                        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+                        PRIMARY KEY (user_id, platform)
+                    );
+
+                    CREATE TABLE IF NOT EXISTS conversation_memory (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                        user_id TEXT NOT NULL,
+                        platform TEXT NOT NULL,
+
+                        role TEXT NOT NULL,
+                        content TEXT NOT NULL,
+
+                        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+                        FOREIGN KEY (user_id, platform)
+                            REFERENCES users(user_id, platform)
+                            ON DELETE CASCADE
+                    );
+
+                    CREATE INDEX IF NOT EXISTS idx_memory_user_platform
+                    ON conversation_memory(user_id, platform);
+
+                    CREATE INDEX IF NOT EXISTS idx_memory_created
+                    ON conversation_memory(created_at);
+
+                    CREATE INDEX IF NOT EXISTS idx_users_platform
+                    ON users(platform);
+                    """
+                )
+
+                conn.commit()
+
+            print(f"✅ User memory database ready: {self.db_path}")
+
+        except Exception as e:
+            print(f"❌ User memory database initialization failed: {e}")
+            raise
+
+    # =========================================================
+    # USER MANAGEMENT
+    # =========================================================
+
+    def _ensure_user(self, user_id: str, platform: str):
+        """
+        Make sure a user exists before storing related data.
+        """
+
+        user_id = str(user_id)
+        platform = str(platform)
+
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO users (
+                    user_id,
+                    platform
+                )
+                VALUES (?, ?)
+
+                ON CONFLICT(user_id, platform)
+                DO UPDATE SET
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (user_id, platform),
+            )
+
+            conn.commit()
+
+    # =========================================================
+    # SAVE USER NAME
+    # =========================================================
+
+    def set_user_name(
+        self,
+        user_id: str,
+        platform: str,
+        name: str,
+    ):
+        """
+        Save or update the name the user prefers to be called.
+        """
+
+        user_id = str(user_id)
+        platform = str(platform)
+
+        if name is None:
+            return
+
+        name = str(name).strip()
+
+        if not name:
+            return
+
+        # Prevent accidentally storing extremely large values.
+        name = name[:200]
+
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO users (
+                    user_id,
+                    platform,
+                    preferred_name
+                )
+                VALUES (?, ?, ?)
+
+                ON CONFLICT(user_id, platform)
+                DO UPDATE SET
+                    preferred_name = excluded.preferred_name,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    user_id,
+                    platform,
+                    name,
+                ),
+            )
+
+            conn.commit()
+
+    # =========================================================
+    # GET USER NAME
+    # =========================================================
+
+    def get_user_name(
+        self,
+        user_id: str,
+        platform: Optional[str] = None,
+    ) -> Optional[str]:
+        """
+        Retrieve the user's preferred name.
+
+        If platform is supplied:
+            Only that platform is checked.
+
+        If platform is omitted:
+            The first matching platform is returned.
+        """
+
+        user_id = str(user_id)
+
+        with self._get_connection() as conn:
+
+            if platform:
+                cursor = conn.execute(
+                    """
+                    SELECT preferred_name
+                    FROM users
+                    WHERE user_id = ?
+                      AND platform = ?
+                    LIMIT 1
+                    """,
+                    (
+                        user_id,
+                        str(platform),
+                    ),
+                )
+
+            else:
+                cursor = conn.execute(
+                    """
+                    SELECT preferred_name
+                    FROM users
+                    WHERE user_id = ?
+                    ORDER BY updated_at DESC
+                    LIMIT 1
+                    """,
+                    (user_id,),
+                )
+
+            row = cursor.fetchone()
+
+            if row and row["preferred_name"]:
+                return str(row["preferred_name"])
+
+            return None
+
+    # =========================================================
+    # ADD CHAT MESSAGE
+    # =========================================================
+
+    def add_chat(
+        self,
+        user_id: str,
+        platform: str,
+        role: str,
+        content: str,
+    ):
+        """
+        Store a user message or assistant response.
+        """
+
+        user_id = str(user_id)
+        platform = str(platform)
+        role = str(role).strip()
+        content = str(content)
+
+        if not role:
+            raise ValueError("role cannot be empty")
+
+        if not content.strip():
+            return
+
+        with self._get_connection() as conn:
+
+            # Make sure the user exists first.
+            conn.execute(
+                """
+                INSERT INTO users (
+                    user_id,
+                    platform
+                )
+                VALUES (?, ?)
+
+                ON CONFLICT(user_id, platform)
+                DO UPDATE SET
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    user_id,
+                    platform,
+                ),
+            )
+
+            # Save conversation.
+            conn.execute(
+                """
+                INSERT INTO conversation_memory (
+                    user_id,
+                    platform,
+                    role,
+                    content
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    user_id,
+                    platform,
+                    role,
+                    content,
+                ),
+            )
+
+            conn.commit()
+
+    # =========================================================
+    # GET USER HISTORY
+    # =========================================================
+
+    def get_user_history(
+        self,
+        user_id: str,
+        platform: str,
+        limit: int = 20,
+    ) -> List[Dict[str, str]]:
+        """
+        Retrieve recent conversation history in chronological order.
+        """
+
+        user_id = str(user_id)
+        platform = str(platform)
+
+        try:
+            limit = int(limit)
+        except (TypeError, ValueError):
+            limit = 20
+
+        # Protect the database from unreasonable queries.
+        limit = max(1, min(limit, 200))
+
+        with self._get_connection() as conn:
+
+            cursor = conn.execute(
+                """
+                SELECT role, content
+                FROM (
+                    SELECT
+                        id,
+                        role,
+                        content
+
+                    FROM conversation_memory
+
+                    WHERE user_id = ?
+                      AND platform = ?
+
+                    ORDER BY id DESC
+
+                    LIMIT ?
+                )
+
+                ORDER BY id ASC
+                """,
+                (
+                    user_id,
+                    platform,
+                    limit,
+                ),
+            )
+
+            rows = cursor.fetchall()
+
+            return [
+                {
+                    "role": str(row["role"]),
+                    "content": str(row["content"]),
+                }
+                for row in rows
+            ]
+
+    # =========================================================
+    # CLEAR USER MEMORY
+    # =========================================================
+
+    def clear_user_history(
+        self,
+        user_id: str,
+        platform: str,
+    ):
+        """
+        Delete all conversation history for a user/platform.
+        """
+
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                DELETE FROM conversation_memory
+                WHERE user_id = ?
+                  AND platform = ?
+                """,
+                (
+                    str(user_id),
+                    str(platform),
+                ),
+            )
+
+            conn.commit()
+
+    # =========================================================
+    # DELETE USER
+    # =========================================================
+
+    def delete_user(
+        self,
+        user_id: str,
+        platform: str,
+    ):
+        """
+        Delete the user and all of their conversation memory.
+        """
+
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                DELETE FROM users
+                WHERE user_id = ?
+                  AND platform = ?
+                """,
+                (
+                    str(user_id),
+                    str(platform),
+                ),
+            )
+
+            conn.commit()
+
+    # =========================================================
+    # COUNT MESSAGES
+    # =========================================================
+
+    def get_message_count(
+        self,
+        user_id: str,
+        platform: str,
+    ) -> int:
+        """
+        Return the number of stored messages for a user.
+        """
+
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM conversation_memory
+                WHERE user_id = ?
+                  AND platform = ?
+                """,
+                (
+                    str(user_id),
+                    str(platform),
+                ),
+            )
+
+            row = cursor.fetchone()
+
+            return int(row[0]) if row else 0
+
+    # =========================================================
+    # CHECK USER
+    # =========================================================
+
+    def user_exists(
+        self,
+        user_id: str,
+        platform: str,
+    ) -> bool:
+        """
+        Check whether a user exists.
+        """
+
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT 1
+                FROM users
+                WHERE user_id = ?
+                  AND platform = ?
+                LIMIT 1
+                """,
+                (
+                    str(user_id),
+                    str(platform),
+                ),
+            )
+
+            return cursor.fetchone() is not None
+
+    # =========================================================
+    # GET ALL USERS
+    # =========================================================
+
+    def get_all_users(
+        self,
+        platform: Optional[str] = None,
+    ) -> List[Dict[str, str]]:
+        """
+        Retrieve stored users.
+
+        Optionally filter by platform.
+        """
+
+        with self._get_connection() as conn:
+
+            if platform:
+                cursor = conn.execute(
+                    """
+                    SELECT
+                        user_id,
+                        platform,
+                        preferred_name,
+                        created_at,
+                        updated_at
+
+                    FROM users
+
+                    WHERE platform = ?
+
+                    ORDER BY updated_at DESC
+                    """,
+                    (str(platform),),
+                )
+
+            else:
+                cursor = conn.execute(
+                    """
+                    SELECT
+                        user_id,
+                        platform,
+                        preferred_name,
+                        created_at,
+                        updated_at
+
+                    FROM users
+
+                    ORDER BY updated_at DESC
+                    """
+                )
+
+            rows = cursor.fetchall()
+
+            return [
+                {
+                    "user_id": str(row["user_id"]),
+                    "platform": str(row["platform"]),
+                    "preferred_name": row["preferred_name"],
+                    "created_at": str(row["created_at"]),
+                    "updated_at": str(row["updated_at"]),
+                }
+                for row in rows
+            ]
+
+    # =========================================================
+    # DATABASE HEALTH CHECK
+    # =========================================================
+
+    def health_check(self) -> bool:
+        """
+        Verify that the database is accessible.
+        """
+
+        try:
+            with self._get_connection() as conn:
+                conn.execute("SELECT 1")
+                return True
+
+        except Exception as e:
+            print(f"❌ Memory database health check failed: {e}")
+            return False
