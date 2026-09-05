@@ -1,0 +1,249 @@
+import os
+import sqlite3
+from typing import List, Dict, Optional, Tuple
+
+
+class UserMemoryManager:
+    """
+    Persistent user memory manager for KING ZARRY AI.
+
+    Stores:
+      - User's preferred name & subscription status
+      - Conversation history & Telegram Stars payments
+      - Platform information
+    """
+
+    def __init__(
+        self,
+        db_path: str = "king_zarry_memory.db",
+        schema_path: Optional[str] = None,
+    ):
+        self.db_path = os.getenv("MEMORY_DB_PATH", db_path)
+        self.schema_path = schema_path
+        self._init_db()
+
+    # =========================================================
+    # DATABASE CONNECTION
+    # =========================================================
+
+    def _get_connection(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(
+            self.db_path,
+            timeout=30.0,
+            check_same_thread=False,
+        )
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA busy_timeout = 30000")
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA synchronous = NORMAL")
+        return conn
+
+    # =========================================================
+    # DATABASE INITIALIZATION
+    # =========================================================
+
+    def _init_db(self):
+        try:
+            directory = os.path.dirname(os.path.abspath(self.db_path))
+            if directory:
+                os.makedirs(directory, exist_ok=True)
+
+            with self._get_connection() as conn:
+                conn.executescript(
+                    """
+                    CREATE TABLE IF NOT EXISTS users (
+                        user_id TEXT NOT NULL,
+                        platform TEXT NOT NULL,
+                        preferred_name TEXT,
+                        is_subscribed INTEGER NOT NULL DEFAULT 0,
+                        subscription_expires_at TEXT,
+                        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+                        PRIMARY KEY (user_id, platform)
+                    );
+
+                    CREATE TABLE IF NOT EXISTS conversation_memory (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id TEXT NOT NULL,
+                        platform TEXT NOT NULL,
+                        role TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+                        FOREIGN KEY (user_id, platform)
+                            REFERENCES users(user_id, platform)
+                            ON DELETE CASCADE
+                    );
+
+                    CREATE INDEX IF NOT EXISTS idx_memory_user_platform
+                    ON conversation_memory(user_id, platform);
+
+                    CREATE INDEX IF NOT EXISTS idx_users_subscription
+                    ON users(is_subscribed, platform);
+                    """
+                )
+                conn.commit()
+
+            print(f"✅ User memory database ready: {self.db_path}")
+
+        except Exception as e:
+            print(f"❌ User memory database initialization failed: {e}")
+            raise
+
+    # =========================================================
+    # USER & SUBSCRIPTION MANAGEMENT
+    # =========================================================
+
+    def register_or_update_user(self, user_id: str, platform: str, preferred_name: Optional[str] = None):
+        """
+        Track every user (free or paid) when they interact with the bot.
+        """
+        user_id = str(user_id)
+        platform = str(platform)
+
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO users (user_id, platform, preferred_name)
+                VALUES (?, ?, ?)
+                ON CONFLICT(user_id, platform)
+                DO UPDATE SET
+                    preferred_name = COALESCE(excluded.preferred_name, users.preferred_name),
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (user_id, platform, preferred_name),
+            )
+            conn.commit()
+
+    def set_user_subscription(
+        self,
+        user_id: str,
+        platform: str,
+        is_subscribed: bool,
+        expires_at: Optional[str] = None,
+    ):
+        """
+        Update user subscription status when Telegram Stars payment succeeds.
+        """
+        user_id = str(user_id)
+        platform = str(platform)
+        sub_flag = 1 if is_subscribed else 0
+
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO users (user_id, platform, is_subscribed, subscription_expires_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(user_id, platform)
+                DO UPDATE SET
+                    is_subscribed = excluded.is_subscribed,
+                    subscription_expires_at = excluded.subscription_expires_at,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (user_id, platform, sub_flag, expires_at),
+            )
+            conn.commit()
+
+    # =========================================================
+    # USER & SUBSCRIBER STATS FOR TELEGRAM BOT COMMANDS
+    # =========================================================
+
+    def get_user_counts(self, platform: str = "telegram") -> Dict[str, int]:
+        """
+        Returns stats for /users command breakdown:
+        Total users, Active Subscribers, and Free/Unsubscribed users.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT 
+                    COUNT(*) as total_users,
+                    SUM(CASE WHEN is_subscribed = 1 THEN 1 ELSE 0 END) as subscribers
+                FROM users
+                WHERE platform = ?
+                """,
+                (str(platform),),
+            )
+            row = cursor.fetchone()
+            
+            total = row["total_users"] if row else 0
+            subscribers = row["subscribers"] if (row and row["subscribers"]) else 0
+            unsubscribed = total - subscribers
+
+            return {
+                "total_users": total,
+                "subscribers": subscribers,
+                "unsubscribed": unsubscribed,
+            }
+
+    def get_subscribers(self, platform: str = "telegram") -> List[Dict[str, str]]:
+        """
+        Returns details of active paying subscribers for the /subscribers command.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT user_id, preferred_name, subscription_expires_at, created_at
+                FROM users
+                WHERE platform = ? AND is_subscribed = 1
+                ORDER BY updated_at DESC
+                """,
+                (str(platform),),
+            )
+            rows = cursor.fetchall()
+            return [
+                {
+                    "user_id": str(row["user_id"]),
+                    "preferred_name": row["preferred_name"] or "Unknown",
+                    "expires_at": str(row["subscription_expires_at"]),
+                    "created_at": str(row["created_at"]),
+                }
+                for row in rows
+            ]
+
+    # =========================================================
+    # CONVERSATION MEMORY & OTHER HELPERS
+    # =========================================================
+
+    def add_chat(self, user_id: str, platform: str, role: str, content: str):
+        user_id = str(user_id)
+        platform = str(platform)
+
+        if not role.strip() or not content.strip():
+            return
+
+        with self._get_connection() as conn:
+            self.register_or_update_user(user_id, platform)
+            conn.execute(
+                """
+                INSERT INTO conversation_memory (user_id, platform, role, content)
+                VALUES (?, ?, ?, ?)
+                """,
+                (user_id, platform, str(role).strip(), str(content)),
+            )
+            conn.commit()
+
+    def get_user_history(self, user_id: str, platform: str, limit: int = 20) -> List[Dict[str, str]]:
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT role, content FROM (
+                    SELECT id, role, content FROM conversation_memory
+                    WHERE user_id = ? AND platform = ?
+                    ORDER BY id DESC LIMIT ?
+                ) ORDER BY id ASC
+                """,
+                (str(user_id), str(platform), max(1, min(limit, 200))),
+            )
+            return [{"role": str(r["role"]), "content": str(r["content"])} for r in cursor.fetchall()]
+
+    def health_check(self) -> bool:
+        try:
+            with self._get_connection() as conn:
+                conn.execute("SELECT 1")
+                return True
+        except Exception as e:
+            print(f"❌ Memory database health check failed: {e}")
+            return False
