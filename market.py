@@ -1,784 +1,162 @@
+"""Market-data access and pure intraday analysis helpers."""
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass
+from math import sqrt
+from statistics import mean, pstdev
+from typing import Any, Iterable, Mapping, Sequence
+
 import requests
+
 import config
-import math
+
+TWELVE_DATA_URL = getattr(config, "TWELVE_DATA_URL", "https://api.twelvedata.com").rstrip("/")
 
 
-# =========================================================
-# 👑 KING ZARRY AI
-# MARKET ENGINE
-# =========================================================
-#
-# Returns:
-# BUY / SELL / WAIT
-# Entry zone
-# Stop Loss
-# TP1 / TP2 / TP3
-# Setup strength
-# Trend
-# Structure
-# Support / Resistance
-# EMA 9 / 21 / 50
-# RSI
-#
-# Designed to plug into the existing King Zarry AI bot.
-# =========================================================
-
-
-# =========================================================
-# CONFIGURATION
-# =========================================================
-
-TWELVE_DATA_API_KEY = getattr(
-    config,
-    "TWELVE_DATA_API_KEY",
-    None
-)
-
-TWELVE_DATA_URL = getattr(
-    config,
-    "TWELVE_DATA_URL",
-    "https://api.twelvedata.com"
-).rstrip("/")
-
-
-# =========================================================
-# TIMEFRAME MAP
-# =========================================================
-
-TIMEFRAME_MAP = {
-    "1m": "1min",
-    "5m": "5min",
-    "15m": "15min",
-    "30m": "30min",
-    "1h": "1h",
-    "2h": "2h",
-    "4h": "4h",
-    "1d": "1day",
-}
-
-
-# =========================================================
-# TIMEFRAME
-# =========================================================
-
-def normalize_timeframe(timeframe):
-    timeframe = str(timeframe).lower().strip()
-    return TIMEFRAME_MAP.get(timeframe, timeframe)
-
-
-# =========================================================
-# NUMBER HELPERS
-# =========================================================
-
-def safe_float(value, default=None):
+def _number(value: Any) -> float | None:
     try:
-        return float(value)
+        number = float(value)
     except (TypeError, ValueError):
-        return default
-
-
-def round_price(price):
-    """
-    Keeps gold/forex prices readable while also working
-    with crypto and other instruments.
-    """
-    if price is None:
         return None
-
-    price = float(price)
-
-    if abs(price) >= 1000:
-        return round(price, 2)
-
-    if abs(price) >= 100:
-        return round(price, 3)
-
-    if abs(price) >= 1:
-        return round(price, 4)
-
-    return round(price, 6)
+    return number if number == number else None
 
 
-# =========================================================
-# GET CURRENT PRICE
-# =========================================================
-
-def get_price(symbol):
-    if not TWELVE_DATA_API_KEY:
-        raise RuntimeError("TWELVE_DATA_API_KEY is missing.")
-
-    response = requests.get(
-        f"{TWELVE_DATA_URL}/price",
-        params={
-            "symbol": symbol.upper().strip(),
-            "apikey": TWELVE_DATA_API_KEY
-        },
-        timeout=30
-    )
-
-    if response.status_code != 200:
-        raise RuntimeError(
-            f"Twelve Data HTTP error: {response.status_code}"
-        )
-
-    data = response.json()
-
-    if data.get("status") == "error":
-        raise RuntimeError(
-            data.get("message", "Twelve Data error.")
-        )
-
-    if "price" not in data:
-        raise RuntimeError(
-            f"Price unavailable: {data}"
-        )
-
-    return float(data["price"])
+def _series(rows: Sequence[Mapping[str, Any]], key: str) -> list[float]:
+    values = [_number(row.get(key)) for row in rows]
+    return [value for value in values if value is not None]
 
 
-# =========================================================
-# GET CANDLES
-# =========================================================
-
-def get_candles(symbol, timeframe="15m", outputsize=150):
-    if not TWELVE_DATA_API_KEY:
-        raise RuntimeError("TWELVE_DATA_API_KEY is missing.")
-
-    interval = normalize_timeframe(timeframe)
-
-    response = requests.get(
-        f"{TWELVE_DATA_URL}/time_series",
-        params={
-            "symbol": symbol.upper().strip(),
-            "interval": interval,
-            "outputsize": outputsize,
-            "apikey": TWELVE_DATA_API_KEY
-        },
-        timeout=30
-    )
-
-    if response.status_code != 200:
-        raise RuntimeError(
-            f"Twelve Data HTTP error: {response.status_code}"
-        )
-
-    data = response.json()
-
-    if data.get("status") == "error":
-        raise RuntimeError(
-            data.get("message", "Twelve Data error.")
-        )
-
-    if "values" not in data:
-        raise RuntimeError(
-            f"No candle data returned: {data}"
-        )
-
-    candles = list(reversed(data["values"]))
-
-    # LOWERED REQUIREMENT: Lowered threshold from 60 to 15 to handle API tier limits
-    if not candles or len(candles) < 15:
-        raise RuntimeError(
-            f"Insufficient candle data returned for {symbol} (got {len(candles)} candles)."
-        )
-
-    return candles
-
-
-# =========================================================
-# EMA
-# =========================================================
-
-def calculate_ema(values, period):
-    if not values:
-        return None
-
-    # Fallback to simple average if data length is smaller than period
+def _ema(values: Sequence[float], period: int) -> float | None:
     if len(values) < period:
-        return sum(values) / len(values)
-
+        return None
+    result = mean(values[:period])
     multiplier = 2 / (period + 1)
-
-    result = sum(values[:period]) / period
-
-    for price in values[period:]:
-        result = (
-            (price - result) * multiplier
-        ) + result
-
+    for value in values[period:]:
+        result = (value - result) * multiplier + result
     return result
 
 
-# =========================================================
-# RSI
-# =========================================================
-
-def calculate_rsi(values, period=14):
-    if not values or len(values) < 2:
-        return 50.0
-
-    actual_period = min(period, len(values) - 1)
-
-    gains = []
-    losses = []
-
-    for i in range(1, len(values)):
-        change = values[i] - values[i - 1]
-
-        if change > 0:
-            gains.append(change)
-            losses.append(0)
-        else:
-            gains.append(0)
-            losses.append(abs(change))
-
-    avg_gain = sum(gains[:actual_period]) / actual_period
-    avg_loss = sum(losses[:actual_period]) / actual_period
-
-    for i in range(actual_period, len(gains)):
-        avg_gain = (
-            (avg_gain * (actual_period - 1))
-            + gains[i]
-        ) / actual_period
-
-        avg_loss = (
-            (avg_loss * (actual_period - 1))
-            + losses[i]
-        ) / actual_period
-
-    if avg_loss == 0:
-        return 100.0
-
-    rs = avg_gain / avg_loss
-
-    return 100 - (100 / (1 + rs))
-
-
-# =========================================================
-# ATR
-# =========================================================
-
-def calculate_atr(candles, period=14):
-    if not candles or len(candles) < 2:
+def _rsi(values: Sequence[float], period: int = 14) -> float | None:
+    if len(values) <= period:
         return None
+    changes = [values[index] - values[index - 1] for index in range(1, len(values))]
+    gains = [max(change, 0.0) for change in changes]
+    losses = [max(-change, 0.0) for change in changes]
+    average_gain = mean(gains[:period])
+    average_loss = mean(losses[:period])
+    for gain, loss in zip(gains[period:], losses[period:]):
+        average_gain = ((average_gain * (period - 1)) + gain) / period
+        average_loss = ((average_loss * (period - 1)) + loss) / period
+    if average_loss == 0:
+        return 100.0 if average_gain else 50.0
+    relative_strength = average_gain / average_loss
+    return 100 - (100 / (1 + relative_strength))
 
-    true_ranges = []
 
-    for i in range(1, len(candles)):
-        high = safe_float(candles[i]["high"])
-        low = safe_float(candles[i]["low"])
-        previous_close = safe_float(
-            candles[i - 1]["close"]
-        )
-
-        if None in (high, low, previous_close):
+def _atr(rows: Sequence[Mapping[str, Any]], period: int = 14) -> float | None:
+    if len(rows) <= period:
+        return None
+    true_ranges: list[float] = []
+    previous_close = _number(rows[0].get("close"))
+    for row in rows[1:]:
+        high, low, close = (_number(row.get(key)) for key in ("high", "low", "close"))
+        if high is None or low is None or close is None:
             continue
+        true_ranges.append(max(high - low, abs(high - (previous_close or close)), abs(low - (previous_close or close))))
+        previous_close = close
+    if len(true_ranges) < period:
+        return None
+    return mean(true_ranges[-period:])
 
-        tr = max(
-            high - low,
-            abs(high - previous_close),
-            abs(low - previous_close)
+
+def _swing_points(rows: Sequence[Mapping[str, Any]], window: int = 2) -> tuple[list[float], list[float]]:
+    highs: list[float] = []
+    lows: list[float] = []
+    for index in range(window, len(rows) - window):
+        high = _number(rows[index].get("high"))
+        low = _number(rows[index].get("low"))
+        surrounding_highs = [_number(rows[item].get("high")) for item in range(index - window, index + window + 1)]
+        surrounding_lows = [_number(rows[item].get("low")) for item in range(index - window, index + window + 1)]
+        if high is not None and all(item is not None for item in surrounding_highs) and high == max(surrounding_highs):
+            highs.append(high)
+        if low is not None and all(item is not None for item in surrounding_lows) and low == min(surrounding_lows):
+            lows.append(low)
+    return highs, lows
+
+
+@dataclass(frozen=True)
+class MarketAnalysis:
+    market: str
+    bias: str | None
+    action: str
+    setup: str | None
+    timeframe: str
+    current_price: float | None
+    entry_zone: tuple[float, float] | None
+    stop_loss: float | None
+    tp1: float | None
+    tp2: float | None
+    tp3: float | None
+    risk_reward: float | None
+    confidence: str
+    strength: int | None
+    invalidation: str | None
+    reasoning: str
+    indicators: dict[str, float | None]
+    market_structure: dict[str, Any]
+    data_provenance: dict[str, Any]
+    available: bool
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def fetch_time_series(symbol: str, interval: str = "1h", outputsize: int | None = None, timeout: int = 15) -> list[dict[str, Any]]:
+    """Fetch candles from the existing Twelve Data integration; return [] on unavailable data."""
+    api_key = getattr(config, "TWELVE_DATA_API_KEY", None) or __import__("os").getenv("TWELVE_DATA_API_KEY")
+    if not api_key:
+        return []
+    try:
+        response = requests.get(
+            f"{TWELVE_DATA_URL}/time_series",
+            params={"symbol": symbol, "interval": interval, "outputsize": outputsize or config.ANALYSIS_LOOKBACK_BARS, "apikey": api_key, "format": "JSON"},
+            timeout=timeout,
         )
-
-        true_ranges.append(tr)
-
-    if not true_ranges:
-        return safe_float(candles[-1]["close"], 1.0) * 0.005
-
-    actual_period = min(period, len(true_ranges))
-    atr = sum(true_ranges[:actual_period]) / actual_period
-
-    for tr in true_ranges[actual_period:]:
-        atr = (
-            ((atr * (actual_period - 1)) + tr)
-            / actual_period
-        )
-
-    return atr
-
-
-# =========================================================
-# CANDLE BODY
-# =========================================================
-
-def candle_body(candle):
-    open_price = safe_float(candle["open"])
-    close_price = safe_float(candle["close"])
-
-    if open_price is None or close_price is None:
-        return 0
-
-    return abs(close_price - open_price)
-
-
-# =========================================================
-# BULLISH / BEARISH CANDLE
-# =========================================================
-
-def is_bullish_candle(candle):
-    open_price = safe_float(candle["open"])
-    close_price = safe_float(candle["close"])
-
-    return (
-        open_price is not None
-        and close_price is not None
-        and close_price > open_price
-    )
-
-
-def is_bearish_candle(candle):
-    open_price = safe_float(candle["open"])
-    close_price = safe_float(candle["close"])
-
-    return (
-        open_price is not None
-        and close_price is not None
-        and close_price < open_price
-    )
-
-
-# =========================================================
-# MARKET STRUCTURE
-# =========================================================
-
-def determine_structure(candles):
-    """
-    Basic structure detection using recent swing highs/lows.
-    """
-
-    if len(candles) < 10:
-        return "NEUTRAL"
-
-    recent = candles[-20:] if len(candles) >= 20 else candles
-
-    highs = [
-        safe_float(c["high"])
-        for c in recent
-    ]
-
-    lows = [
-        safe_float(c["low"])
-        for c in recent
-    ]
-
-    highs = [x for x in highs if x is not None]
-    lows = [x for x in lows if x is not None]
-
-    if len(highs) < 4 or len(lows) < 4:
-        return "NEUTRAL"
-
-    mid = len(highs) // 2
-
-    previous_high = max(highs[:mid])
-    recent_high = max(highs[mid:])
-
-    previous_low = min(lows[:mid])
-    recent_low = min(lows[mid:])
-
-    if (
-        recent_high > previous_high
-        and recent_low > previous_low
-    ):
-        return "BULLISH"
-
-    if (
-        recent_high < previous_high
-        and recent_low < previous_low
-    ):
-        return "BEARISH"
-
-    return "NEUTRAL"
-
-
-# =========================================================
-# SUPPORT / RESISTANCE
-# =========================================================
-
-def calculate_support_resistance(candles):
-    recent = candles[-30:] if len(candles) >= 30 else candles
-
-    highs = [
-        safe_float(c["high"])
-        for c in recent
-    ]
-
-    lows = [
-        safe_float(c["low"])
-        for c in recent
-    ]
-
-    highs = [x for x in highs if x is not None]
-    lows = [x for x in lows if x is not None]
-
-    if not highs or not lows:
-        return None, None
-
-    support = min(lows)
-    resistance = max(highs)
-
-    return support, resistance
-
-
-# =========================================================
-# MOMENTUM
-# =========================================================
-
-def momentum_score(closes):
-    if len(closes) < 3:
-        return 0
-
-    recent = closes[-6:] if len(closes) >= 6 else closes
-
-    rising = 0
-    falling = 0
-
-    for i in range(1, len(recent)):
-        if recent[i] > recent[i - 1]:
-            rising += 1
-
-        elif recent[i] < recent[i - 1]:
-            falling += 1
-
-    if rising >= len(recent) // 2 + 1:
-        return 1
-
-    if falling >= len(recent) // 2 + 1:
-        return -1
-
-    return 0
-
-
-# =========================================================
-# SIGNAL ENGINE
-# =========================================================
-
-def analyze_market(symbol, timeframe="15m"):
-
-    candles = get_candles(
-        symbol,
-        timeframe,
-        150
-    )
-
-    closes = [
-        float(c["close"])
-        for c in candles
-    ]
-
-    highs = [
-        float(c["high"])
-        for c in candles
-    ]
-
-    lows = [
-        float(c["low"])
-        for c in candles
-    ]
-
-    price = closes[-1]
-
-    # =====================================================
-    # INDICATORS
-    # =====================================================
-
-    ema9 = calculate_ema(closes, 9)
-    ema21 = calculate_ema(closes, 21)
-    ema50 = calculate_ema(closes, 50)
-
-    rsi = calculate_rsi(closes, 14)
-    atr = calculate_atr(candles, 14)
-
-    if None in (ema9, ema21, ema50, rsi, atr):
-        raise RuntimeError("Unable to calculate technical indicators.")
-
-    # =====================================================
-    # SUPPORT / RESISTANCE
-    # =====================================================
-
-    support, resistance = calculate_support_resistance(candles)
-
-    if support is None or resistance is None:
-        support = price - (atr * 2)
-        resistance = price + (atr * 2)
-
-    # =====================================================
-    # MARKET STRUCTURE
-    # =====================================================
-
-    structure = determine_structure(candles)
-
-    # =====================================================
-    # SCORE
-    # =====================================================
-
-    bullish_score = 0
-    bearish_score = 0
-
-    reasons = []
-
-    # -----------------------------------------------------
-    # EMA 9 vs EMA 21
-    # -----------------------------------------------------
-
-    if ema9 > ema21:
-        bullish_score += 15
-        reasons.append("EMA 9 above EMA 21")
-
-    elif ema9 < ema21:
-        bearish_score += 15
-        reasons.append("EMA 9 below EMA 21")
-
-    # -----------------------------------------------------
-    # EMA 21 vs EMA 50
-    # -----------------------------------------------------
-
-    if ema21 > ema50:
-        bullish_score += 15
-        reasons.append("EMA 21 above EMA 50")
-
-    elif ema21 < ema50:
-        bearish_score += 15
-        reasons.append("EMA 21 below EMA 50")
-
-    # -----------------------------------------------------
-    # PRICE VS EMA 21
-    # -----------------------------------------------------
-
-    if price > ema21:
-        bullish_score += 10
-
-    elif price < ema21:
-        bearish_score += 10
-
-    # -----------------------------------------------------
-    # PRICE VS EMA 50
-    # -----------------------------------------------------
-
-    if price > ema50:
-        bullish_score += 10
-
-    elif price < ema50:
-        bearish_score += 10
-
-    # -----------------------------------------------------
-    # RSI
-    # -----------------------------------------------------
-
-    if 50 <= rsi < 70:
-        bullish_score += 15
-        reasons.append("RSI supports bullish momentum")
-
-    elif 30 < rsi < 50:
-        bearish_score += 15
-        reasons.append("RSI supports bearish momentum")
-
-    elif rsi >= 70:
-        bullish_score += 8
-        reasons.append("Strong bullish RSI momentum")
-
-    elif rsi <= 30:
-        bearish_score += 8
-        reasons.append("Strong bearish RSI momentum")
-
-    # -----------------------------------------------------
-    # STRUCTURE
-    # -----------------------------------------------------
-
-    if structure == "BULLISH":
-        bullish_score += 15
-        reasons.append("Bullish market structure")
-
-    elif structure == "BEARISH":
-        bearish_score += 15
-        reasons.append("Bearish market structure")
-
-    # -----------------------------------------------------
-    # RECENT MOMENTUM
-    # -----------------------------------------------------
-
-    momentum = momentum_score(closes)
-
-    if momentum > 0:
-        bullish_score += 10
-        reasons.append("Recent price momentum is bullish")
-
-    elif momentum < 0:
-        bearish_score += 10
-        reasons.append("Recent price momentum is bearish")
-
-    # =====================================================
-    # DETERMINE TREND
-    # =====================================================
-
-    if bullish_score >= bearish_score + 10:
-        trend = "BULLISH"
-
-    elif bearish_score >= bullish_score + 10:
-        trend = "BEARISH"
-
-    else:
-        trend = "NEUTRAL"
-
-    # =====================================================
-    # SETUP STRENGTH
-    # =====================================================
-
-    setup_strength = max(bullish_score, bearish_score)
-    setup_strength = min(100, max(0, int(setup_strength)))
-
-    # =====================================================
-    # DETERMINE SIGNAL
-    # =====================================================
-
-    if bullish_score >= 60 and bullish_score >= bearish_score + 10:
-        signal = "BUY"
-
-    elif bearish_score >= 60 and bearish_score >= bullish_score + 10:
-        signal = "SELL"
-
-    else:
-        signal = "WAIT"
-
-    # =====================================================
-    # ENTRY / SL / TP
-    # =====================================================
-
-    entry_low = None
-    entry_high = None
-    stop_loss = None
-    tp1 = None
-    tp2 = None
-    tp3 = None
-
-    # =====================================================
-    # BUY SETUP
-    # =====================================================
-
-    if signal == "BUY":
-        entry_low = max(support, price - (atr * 0.35))
-        entry_high = price + (atr * 0.15)
-
-        atr_stop = price - (atr * 1.2)
-        stop_loss = min(support, atr_stop)
-
-        if stop_loss >= price:
-            stop_loss = price - atr
-
-        risk = price - stop_loss
-
-        if risk <= 0:
-            risk = atr
-            stop_loss = price - risk
-
-        tp1 = price + (risk * 1.0)
-        tp2 = price + (risk * 2.0)
-        tp3 = price + (risk * 3.0)
-
-        if resistance > price:
-            if tp2 < resistance:
-                tp2 = resistance
-
-            if tp3 < resistance:
-                tp3 = max(tp3, resistance + atr * 0.5)
-
-    # =====================================================
-    # SELL SETUP
-    # =====================================================
-
-    elif signal == "SELL":
-        entry_low = price - (atr * 0.15)
-        entry_high = min(resistance, price + (atr * 0.35))
-
-        atr_stop = price + (atr * 1.2)
-        stop_loss = max(resistance, atr_stop)
-
-        if stop_loss <= price:
-            stop_loss = price + atr
-
-        risk = stop_loss - price
-
-        if risk <= 0:
-            risk = atr
-            stop_loss = price + risk
-
-        tp1 = price - (risk * 1.0)
-        tp2 = price - (risk * 2.0)
-        tp3 = price - (risk * 3.0)
-
-        if support < price:
-            if tp2 > support:
-                tp2 = support
-
-            if tp3 > support:
-                tp3 = min(tp3, support - atr * 0.5)
-
-    # =====================================================
-    # WAIT SETUP
-    # =====================================================
-
-    else:
-        if trend == "BULLISH":
-            entry_low = max(support, price - atr)
-            entry_high = price
-
-        elif trend == "BEARISH":
-            entry_low = price
-            entry_high = min(resistance, price + atr)
-
-        else:
-            entry_low = support
-            entry_high = resistance
-
-    # =====================================================
-    # SETUP DESCRIPTION
-    # =====================================================
-
-    if signal == "BUY":
-        setup = "Bullish confirmation detected from trend, momentum and technical structure."
-
-    elif signal == "SELL":
-        setup = "Bearish confirmation detected from trend, momentum and technical structure."
-
-    elif trend == "BULLISH":
-        setup = "Bullish bias detected, but entry confirmation is not strong enough yet."
-
-    elif trend == "BEARISH":
-        setup = "Bearish bias detected, but entry confirmation is not strong enough yet."
-
-    else:
-        setup = "Market structure is mixed. Wait for stronger directional confirmation."
-
-    # =====================================================
-    # RETURN COMPLETE MARKET DATA
-    # =====================================================
-
-    return {
-        "symbol": symbol.upper().strip(),
-        "timeframe": timeframe,
-        "price": round_price(price),
-        "signal": signal,
-        "trend": trend,
-        "structure": structure,
-        "setup_strength": setup_strength,
-        "support": round_price(support),
-        "resistance": round_price(resistance),
-        "ema9": round_price(ema9),
-        "ema21": round_price(ema21),
-        "ema50": round_price(ema50),
-        "rsi": round(rsi, 2),
-        "atr": round_price(atr),
-        "entry_low": round_price(entry_low),
-        "entry_high": round_price(entry_high),
-        "entry_zone": (
-            f"{round_price(entry_low)} - {round_price(entry_high)}"
-            if entry_low is not None and entry_high is not None
-            else None
-        ),
-        "stop_loss": round_price(stop_loss) if stop_loss is not None else None,
-        "tp1": round_price(tp1) if tp1 is not None else None,
-        "tp2": round_price(tp2) if tp2 is not None else None,
-        "tp3": round_price(tp3) if tp3 is not None else None,
-        "take_profit": round_price(tp2) if tp2 is not None else None,
-        "reason": setup,
-        "reasons": reasons,
-    }
+        response.raise_for_status()
+        payload = response.json()
+        values = payload.get("values", [])
+        return list(reversed(values)) if isinstance(values, list) else []
+    except (requests.RequestException, ValueError, TypeError):
+        return []
+
+
+def build_intraday_analysis(symbol: str, rows: Iterable[Mapping[str, Any]], timeframe: str | None = None) -> MarketAnalysis:
+    """Build a conservative, machine-readable analysis from supplied candles only."""
+    candles = [dict(row) for row in rows]
+    timeframe = timeframe or config.ANALYSIS_DEFAULT_TIMEFRAME
+    closes = _series(candles, "close")
+    if not closes:
+        return MarketAnalysis(symbol, None, "WAIT", None, timeframe, None, None, None, None, None, None, None, "LOW", None, "Live candle data is unavailable.", {}, {}, {"source": "unavailable"}, False)
+    current = closes[-1]
+    ema9, ema21, ema50 = (_ema(closes, period) for period in (9, 21, 50))
+    rsi, atr = _rsi(closes), _atr(candles)
+    recent = closes[-min(20, len(closes)):]
+    volatility = pstdev(recent) if len(recent) > 1 else None
+    momentum = current - closes[-min(10, len(closes))] if len(closes) >= 10 else None
+    swing_highs, swing_lows = _swing_points(candles)
+    support = max(swing_lows[-3:], default=None)
+    resistance = min(swing_highs[-3:], default=None)
+    bullish = bool(ema9 and ema21 and ema50 and ema9 > ema21 > ema50 and momentum is not None and momentum > 0)
+    bearish = bool(ema9 and ema21 and ema50 and ema9 < ema21 < ema50 and momentum is not None and momentum < 0)
+    bias = "BULLISH" if bullish else "BEARISH" if bearish else "NEUTRAL"
+    extended = bool(atr and abs(current - (ema21 or current)) > atr * 2)
+    action = "WAIT" if extended or bias == "NEUTRAL" else ("BUY" if bullish else "SELL")
+    setup = "extended/unclear" if action == "WAIT" else "trend continuation"
+    entry = (min(current, ema9 or current), max(current, ema9 or current)) if action != "WAIT" else None
+    stop = ((entry[0] - atr) if action == "BUY" and entry and atr else (entry[1] + atr) if action == "SELL" and entry and atr else None)
+    risk = abs((entry[0] if entry else current) - stop) if stop is not None and entry else None
+    tp1 = (current + risk if action == "BUY" and risk else current - risk if action == "SELL" and risk else None)
+    tp2 = (current + risk * 2 if action == "BUY" and risk else current - risk * 2 if action == "SELL" and risk else None)
+    tp3 = (current + risk * 3 if action == "BUY" and risk else current - risk * 3 if action == "SELL" and risk else None)
+    strength = int(max(0, min(100, abs((ema9 or current) - (ema21 or current)) / current * 10000))) if current else None
+    return MarketAnalysis(symbol, bias, action, setup, timeframe, current, entry, stop, tp1, tp2, tp3, 2.0 if risk and tp2 else None, "MEDIUM" if action != "WAIT" else "LOW", strength, "Break of the recent swing structure or a move beyond the ATR-based stop.", {"ema9": ema9, "ema21": ema21, "ema50": ema50, "rsi14": rsi, "atr14": atr, "momentum": momentum, "volatility": volatility, "support": support, "resistance": resistance}, {"swing_highs": swing_highs[-5:], "swing_lows": swing_lows[-5:], "trend": bias}, {"source": "Twelve Data candles supplied to function", "live_price": True}, True)
