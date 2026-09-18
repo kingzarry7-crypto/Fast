@@ -13,3 +13,4 @@ tavily-python
 fal-client
 PyNaCl
 davey
+psycopg2-binary
