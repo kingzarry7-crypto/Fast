@@ -7,7 +7,9 @@ openai
 groq
 google-generativeai
 discord.py
-edge_tts
+edge-tts
 apscheduler
 tavily-python
 fal-client
+PyNaCl
+davey
