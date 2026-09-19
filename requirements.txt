@@ -16,3 +16,4 @@ davey
 psycopg2-binary
 fastapi
 uvicorn[standard]
+email-validator
