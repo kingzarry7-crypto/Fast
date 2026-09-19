@@ -1,126 +1,51 @@
-Build and finish this file only:
+"use client";
 
-Fast/frontend/hooks/useSignals.ts
-
-You are working inside the existing KING ZARRY AI Next.js + TypeScript frontend.
-
-FIRST: INSPECT THE PROJECT
-
-Before writing code, inspect the existing project and determine the actual contracts already used by the frontend and backend.
-
-Read:
-
-* Fast/frontend/app/signals/page.tsx
-* Fast/frontend/app/dashboard/page.tsx
-* Fast/frontend/components/trading/SignalCard.tsx
-* Fast/frontend/components/trading/TradeLevels.tsx
-* Fast/frontend/components/trading/TradingChart.tsx
-* Fast/frontend/components/trading/IndicatorPanel.tsx
-* Fast/frontend/components/dashboard/RecentSignals.tsx
-* Fast/frontend/hooks/useMarket.ts
-* Fast/frontend/hooks/useChat.ts
-* Fast/frontend/hooks/useAuth.ts
-* Fast/frontend/lib/api.ts
-* existing files under Fast/frontend/types/
-* the actual FastAPI signal/trading endpoints in the repository
-
-Do not guess an API endpoint, request body, response structure, signal field, or backend capability.
-
-PURPOSE
-
-Create a reusable useSignals() React hook for the KING ZARRY AI web frontend.
-
-The hook should provide a clean interface for future and existing signal intelligence functionality.
-
-It should manage, where actually supported by the existing backend:
-
-* signal data
-* selected symbol/asset
-* selected timeframe
-* loading state
-* error state
-* refresh
-* request cancellation
-* stale-request protection
-* optional signal retrieval
-
-Trading is only one capability of KING ZARRY AI. Do not design the hook as the entire AI system.
-
-CRITICAL DATA RULE
-
-NEVER fabricate trading signals.
-
-Do not generate:
-
-* fake BUY signals
-* fake SELL signals
-* fake WAIT signals
-* fake entry prices
-* fake stop losses
-* fake take profits
-* fake confidence percentages
-* fake RSI
-* fake EMA
-* fake ATR
-* fake market structure
-* fake multi-timeframe analysis
-* fake signal history
-* fake timestamps
-* fake outcomes
-* fake win rates
-
-Do not use:
-
-Math.random()
-
-Do not hardcode market values.
-
-If a real signal endpoint does not currently exist, the hook must return an empty state rather than pretending signals are available.
-
-TYPES
-
-Use TypeScript.
-
-Do not use any.
-
-First reuse an existing signal type if one already exists in:
-
-Fast/frontend/types/
-
-or an existing trading component.
-
-If no shared type exists, define a minimal local type based only on the actual backend response.
-
-A reasonable shape, ONLY if it matches the existing project, could contain:
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface SignalData {
   id?: string | number;
+  daily_plan_id?: string;
   symbol: string;
   timeframe?: string | null;
   direction?: string | null;
   status?: string | null;
+
   entry?: number | null;
+  entry_low?: number | null;
+  entry_high?: number | null;
   stop_loss?: number | null;
+
   take_profit_1?: number | null;
   take_profit_2?: number | null;
   take_profit_3?: number | null;
+
+  tp1?: number | null;
+  tp2?: number | null;
+  tp3?: number | null;
+
   confidence?: number | null;
+  strength?: number | null;
+
+  rsi?: number | null;
+  ema9?: number | null;
+  ema21?: number | null;
+  ema50?: number | null;
+  atr?: number | null;
+
   created_at?: string | null;
+  updated_at?: string | null;
   timestamp?: string | null;
+  trading_date?: string | null;
+
   [key: string]: unknown;
 }
-
-Do not add fields merely because they sound useful.
-
-PUBLIC HOOK API
-
-If the existing project does not already define a different interface, use a structure similar to:
 
 export interface UseSignalsOptions {
   symbol?: string;
   timeframe?: string;
   autoLoad?: boolean;
 }
+
 export interface UseSignalsReturn {
   signals: SignalData[];
   isLoading: boolean;
@@ -132,289 +57,432 @@ export interface UseSignalsReturn {
   setTimeframe: (timeframe: string) => void;
 }
 
-Preserve an existing public interface if one already exists.
+interface RawSignal {
+  id?: unknown;
+  daily_plan_id?: unknown;
+  symbol?: unknown;
+  asset?: unknown;
+  timeframe?: unknown;
+  direction?: unknown;
+  signal?: unknown;
+  status?: unknown;
+
+  entry?: unknown;
+  entry_price?: unknown;
+  entry_low?: unknown;
+  entry_high?: unknown;
+  stop_loss?: unknown;
+  sl?: unknown;
+
+  take_profit_1?: unknown;
+  take_profit_2?: unknown;
+  take_profit_3?: unknown;
+
+  tp1?: unknown;
+  tp2?: unknown;
+  tp3?: unknown;
+
+  confidence?: unknown;
+  strength?: unknown;
+  setup_strength?: unknown;
+
+  rsi?: unknown;
+  ema9?: unknown;
+  ema21?: unknown;
+  ema50?: unknown;
+  atr?: unknown;
+
+  created_at?: unknown;
+  updated_at?: unknown;
+  timestamp?: unknown;
+  trading_date?: unknown;
+
+  [key: string]: unknown;
+}
+
+function normalizeSymbol(value: string): string {
+  return value.trim().toUpperCase();
+}
+
+function normalizeTimeframe(value: string): string {
+  return value.trim().toUpperCase();
+}
+
+function toFiniteNumberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? parsed : null;
+  }
 
-API CONNECTION
+  return null;
+}
 
-Only connect to an actual signal endpoint if one is confirmed in the repository.
+function toStringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim()
+    ? value
+    : null;
+}
 
-Use:
+function toId(value: unknown): string | number | undefined {
+  if (typeof value === "string" || typeof value === "number") {
+    return value;
+  }
 
-NEXT_PUBLIC_API_BASE_URL
+  return undefined;
+}
 
-Do not search multiple guessed environment variables.
+function isRawSignal(value: unknown): value is RawSignal {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
 
-Do not dynamically import random API modules.
+function normalizeSignal(
+  raw: RawSignal
+): SignalData | null {
+  const rawSymbol = raw.symbol ?? raw.asset;
 
-Do not guess routes such as:
+  if (
+    typeof rawSymbol !== "string" ||
+    !rawSymbol.trim()
+  ) {
+    return null;
+  }
 
-/api/signals
-/api/signal
-/api/trading/signals
-/api/market/signals
+  return {
+    id: toId(raw.id ?? raw.daily_plan_id),
 
-unless the repository confirms the exact route.
+    daily_plan_id:
+      toStringOrNull(raw.daily_plan_id) ?? undefined,
 
-If no real endpoint exists yet:
+    symbol: normalizeSymbol(rawSymbol),
 
-* do not make a request
-* return an empty signal array
-* keep the hook API-ready
-* do not fabricate a successful response
+    timeframe:
+      toStringOrNull(raw.timeframe)?.toUpperCase() ?? null,
 
-AUTHENTICATION
+    direction: toStringOrNull(
+      raw.direction ?? raw.signal
+    ),
 
-If the confirmed signal endpoint requires the logged-in web user:
+    status: toStringOrNull(raw.status),
 
-credentials: "include"
+    entry: toFiniteNumberOrNull(
+      raw.entry ?? raw.entry_price
+    ),
 
-must be used.
+    entry_low: toFiniteNumberOrNull(raw.entry_low),
 
-Do not store authentication tokens in:
+    entry_high: toFiniteNumberOrNull(raw.entry_high),
 
-* localStorage
-* sessionStorage
-* cookies manually from JavaScript
+    stop_loss: toFiniteNumberOrNull(
+      raw.stop_loss ?? raw.sl
+    ),
 
-The existing authentication system uses the web session cookie.
+    take_profit_1: toFiniteNumberOrNull(
+      raw.take_profit_1 ?? raw.tp1
+    ),
 
-Do not access Telegram authentication.
+    take_profit_2: toFiniteNumberOrNull(
+      raw.take_profit_2 ?? raw.tp2
+    ),
 
-REQUEST SAFETY
+    take_profit_3: toFiniteNumberOrNull(
+      raw.take_profit_3 ?? raw.tp3
+    ),
 
-Implement:
+    tp1: toFiniteNumberOrNull(raw.tp1),
 
-* AbortController
-* request ID protection
-* mounted-component protection
-* safe cleanup
-* prevention of stale responses overwriting newer results
+    tp2: toFiniteNumberOrNull(raw.tp2),
 
-If a user switches:
+    tp3: toFiniteNumberOrNull(raw.tp3),
 
-BTC → ETH
+    confidence: toFiniteNumberOrNull(
+      raw.confidence
+    ),
 
-while a BTC request is still pending, an old BTC response must never overwrite the newer state.
+    strength: toFiniteNumberOrNull(
+      raw.strength ?? raw.setup_strength
+    ),
 
-Likewise for timeframe changes.
+    rsi: toFiniteNumberOrNull(raw.rsi),
 
-SYMBOL NORMALIZATION
+    ema9: toFiniteNumberOrNull(raw.ema9),
 
-Normalize symbol values consistently with the existing project.
+    ema21: toFiniteNumberOrNull(raw.ema21),
 
-For example:
+    ema50: toFiniteNumberOrNull(raw.ema50),
 
-BTC
-ETH
-SOL
-XAU/USD
+    atr: toFiniteNumberOrNull(raw.atr),
 
-only if those exact values are already used by the project.
+    created_at: toStringOrNull(raw.created_at),
 
-Do not silently change:
+    updated_at: toStringOrNull(raw.updated_at),
 
-XAU/USD
+    timestamp: toStringOrNull(
+      raw.timestamp ?? raw.created_at
+    ),
 
-into:
+    trading_date: toStringOrNull(
+      raw.trading_date
+    ),
 
-XAUUSDT
+    ...raw,
+  };
+}
 
-or another format unless the existing backend requires that exact transformation.
+function extractSignalArray(
+  value: unknown
+): RawSignal[] {
+  if (Array.isArray(value)) {
+    return value.filter(isRawSignal);
+  }
 
-Preserve the backend’s actual symbol contract.
+  if (
+    typeof value === "object" &&
+    value !== null
+  ) {
+    const object = value as Record<string, unknown>;
 
-TIMEFRAME NORMALIZATION
+    if (Array.isArray(object.signals)) {
+      return object.signals.filter(isRawSignal);
+    }
 
-Use the actual timeframe values already used by the project.
+    if (Array.isArray(object.data)) {
+      return object.data.filter(isRawSignal);
+    }
+  }
 
-The current trading UI may use values such as:
+  return [];
+}
 
-5M
-15M
-1H
-4H
+function sanitizeErrorMessage(message: string): string {
+  return message.replace(
+    /api[_-]?key|token|secret|password/gi,
+    "[redacted]"
+  );
+}
 
-but verify this in the repository first.
+export function useSignals(
+  options: UseSignalsOptions = {}
+): UseSignalsReturn {
+  const initialSymbol = normalizeSymbol(
+    options.symbol ?? "BTC"
+  );
 
-Do not invent additional timeframes.
+  const initialTimeframe = normalizeTimeframe(
+    options.timeframe ?? "15M"
+  );
 
-REFRESH
+  const [symbol, setSymbolState] =
+    useState(initialSymbol);
 
-refresh() should:
+  const [timeframe, setTimeframeState] =
+    useState(initialTimeframe);
 
-1. cancel any previous request if necessary
-2. create a new request
-3. request real signal data only if a confirmed endpoint exists
-4. validate the response
-5. update the signal state
-6. handle errors
-7. clean up safely
+  const [signals, setSignals] =
+    useState<SignalData[]>([]);
 
-Do not silently replace a failed request with fake data.
+  const [isLoading, setIsLoading] =
+    useState(false);
 
-SIGNAL VALIDATION
+  const [error, setError] =
+    useState<string | null>(null);
 
-Validate important fields before exposing them to components.
+  const mountedRef = useRef(false);
 
-For numeric fields:
+  const requestIdRef = useRef(0);
 
-* accept valid finite numbers
-* convert numeric strings only when appropriate
-* convert invalid numeric values to null
+  const abortControllerRef =
+    useRef<AbortController | null>(null);
 
-Do not silently convert invalid values into 0.
+  useEffect(() => {
+    mountedRef.current = true;
 
-For direction/status:
+    return () => {
+      mountedRef.current = false;
 
-* preserve the backend value
-* do not invent a direction when one is missing
+      requestIdRef.current += 1;
 
-ERROR HANDLING
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, []);
 
-Handle:
+  useEffect(() => {
+    if (!options.symbol) {
+      return;
+    }
 
-* 401
-* 403
-* 404
-* 422
-* 429
-* 500+
-* network errors
-* invalid JSON
-* invalid response structure
-* aborted requests
+    const nextSymbol =
+      normalizeSymbol(options.symbol);
 
-Use clear user-facing messages.
-
-Do not expose:
-
-* API keys
-* tokens
-* secrets
-* passwords
-* internal stack traces
-
-Aborted or stale requests must not become visible error messages.
-
-AUTO LOAD
-
-If autoLoad exists:
-
-* respect it
-* do not introduce polling
-* do not create background intervals
-* do not repeatedly call the backend
-
-Only fetch automatically when explicitly requested by the hook options.
-
-NO SIGNAL ENGINE
-
-This hook is not the place to invent or implement the trading strategy.
-
-Do not calculate:
-
-* EMA
-* RSI
-* ATR
-* market structure
-* trend
-* confidence
-* entry
-* SL
-* TP
-
-unless the existing frontend architecture explicitly requires client-side calculations.
-
-The actual signal engine should remain on the backend/AI layer.
-
-The hook should retrieve and expose real signal data.
-
-SIGNAL HISTORY
-
-Do not invent signal history.
-
-If the backend has a confirmed history endpoint and the existing UI needs it, implement it according to the actual API contract.
-
-Otherwise keep history out of this hook.
-
-WEB / TELEGRAM SEPARATION
-
-This hook belongs to the web application.
-
-Never import or access:
-
-* Telegram bot modules
-* Telegram SQLite databases
-* Telegram subscriptions
-* Telegram payment tables
-* Telegram memory
-* Telegram notification systems
-
-The web app will use its own API and Neon-backed architecture.
-
-UI SEPARATION
-
-Do not create JSX.
-
-Do not add Tailwind classes.
-
-Do not add visual components.
-
-The hook should only manage data/state.
-
-The existing visual components handle the cinematic KING ZARRY AI interface.
-
-PERFORMANCE
-
-Keep the hook lightweight.
-
-Do not introduce unnecessary dependencies.
-
-Do not add polling.
-
-Do not add WebSockets unless an existing project implementation already requires them.
-
-Do not add timers unless explicitly required by an existing backend contract.
-
-FILE SCOPE
-
-Modify ONLY:
-
-Fast/frontend/hooks/useSignals.ts
-
-Do not modify:
-
-* api.py
-* database.py
-* web_database.sql
-* frontend/lib/api.ts
-* useMarket.ts
-* useAuth.ts
-* useChat.ts
-* pages
-* components
-* globals.css
-* package.json
-
-FINAL VERIFICATION
-
-After implementing:
-
-1. Run the frontend TypeScript/build check.
-2. Fix all TypeScript errors caused by this file.
-3. Confirm there is no any.
-4. Confirm there are no guessed endpoints.
-5. Confirm there is no fake signal data.
-6. Confirm request cancellation works.
-7. Confirm stale requests cannot overwrite newer requests.
-8. Confirm authenticated requests use the existing web session.
-9. Confirm the hook does not touch Telegram systems.
-10. Confirm it works with the existing Signals page and trading components.
-
-Do not merely describe the implementation.
-
-Actually implement:
-
-Fast/frontend/hooks/useSignals.ts
-
-and verify the result.
+    if (
+      nextSymbol &&
+      nextSymbol !== symbol
+    ) {
+      setSymbolState(nextSymbol);
+    }
+  }, [options.symbol, symbol]);
+
+  useEffect(() => {
+    if (!options.timeframe) {
+      return;
+    }
+
+    const nextTimeframe =
+      normalizeTimeframe(options.timeframe);
+
+    if (
+      nextTimeframe &&
+      nextTimeframe !== timeframe
+    ) {
+      setTimeframeState(nextTimeframe);
+    }
+  }, [options.timeframe, timeframe]);
+
+  const refresh = useCallback(async () => {
+    if (!mountedRef.current) {
+      return;
+    }
+
+    const requestId =
+      ++requestIdRef.current;
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    const controller =
+      new AbortController();
+
+    abortControllerRef.current =
+      controller;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      /*
+       * The web FastAPI backend does not currently
+       * expose a confirmed signal endpoint.
+       *
+       * Do not guess one here.
+       *
+       * The real signal API will be connected once
+       * the backend endpoint and response contract
+       * have been implemented.
+       */
+
+      void symbol;
+      void timeframe;
+      void controller.signal;
+
+      const fetchedSignals: SignalData[] = [];
+
+      if (
+        requestId !== requestIdRef.current ||
+        !mountedRef.current
+      ) {
+        return;
+      }
+
+      setSignals(fetchedSignals);
+    } catch (error: unknown) {
+      if (
+        error instanceof DOMException &&
+        error.name === "AbortError"
+      ) {
+        return;
+      }
+
+      if (
+        requestId !== requestIdRef.current ||
+        !mountedRef.current
+      ) {
+        return;
+      }
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to load signals.";
+
+      setError(
+        sanitizeErrorMessage(message)
+      );
+    } finally {
+      if (
+        requestId === requestIdRef.current &&
+        mountedRef.current
+      ) {
+        setIsLoading(false);
+      }
+
+      if (
+        abortControllerRef.current ===
+        controller
+      ) {
+        abortControllerRef.current = null;
+      }
+    }
+  }, [symbol, timeframe]);
+
+  useEffect(() => {
+    if (options.autoLoad) {
+      void refresh();
+    }
+  }, [options.autoLoad, refresh]);
+
+  const setSymbol = useCallback(
+    (value: string) => {
+      const nextSymbol =
+        normalizeSymbol(value);
+
+      if (!nextSymbol) {
+        return;
+      }
+
+      setSymbolState(nextSymbol);
+    },
+    []
+  );
+
+  const setTimeframe = useCallback(
+    (value: string) => {
+      const nextTimeframe =
+        normalizeTimeframe(value);
+
+      if (!nextTimeframe) {
+        return;
+      }
+
+      setTimeframeState(nextTimeframe);
+    },
+    []
+  );
+
+  return {
+    signals,
+    isLoading,
+    error,
+    symbol,
+    timeframe,
+    refresh,
+    setSymbol,
+    setTimeframe,
+  };
+}
+
+export default useSignals;
