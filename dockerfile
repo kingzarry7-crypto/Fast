@@ -32,8 +32,8 @@ RUN mkdir -p /app/data && \
 
 USER appuser
 
-# Railway supplies the PORT environment variable.
-# The Railway custom Start Command will launch api:app.
+# Railway supplies PORT when needed
 EXPOSE 8000
 
-CMD ["sh", "-c", "python -m uvicorn api:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Start the Telegram bot
+CMD ["python", "bot.py"]
