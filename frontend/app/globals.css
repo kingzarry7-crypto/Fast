@@ -1,0 +1,1041 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================================
+   KING ZARRY AI
+   GLOBAL VISUAL SYSTEM • CINEMATIC COMMAND CENTRE
+   ========================================================================== */
+
+/* ==========================================================================
+   1. ROOT VARIABLES
+   ========================================================================== */
+
+:root {
+  --kz-bg-base: #03060a;
+  --kz-bg-surface: #020914;
+  --kz-bg-surface-elevated: #031322;
+  --kz-bg-panel: rgba(2, 9, 20, 0.85);
+  --kz-bg-panel-hover: rgba(4, 16, 32, 0.95);
+
+  --kz-glass-bg: rgba(3, 12, 24, 0.7);
+  --kz-glass-border: rgba(0, 240, 255, 0.18);
+  --kz-glass-border-hover: rgba(0, 240, 255, 0.4);
+  --kz-glass-blur: blur(16px);
+
+  --kz-cyan-50: #e0fcff;
+  --kz-cyan-100: #b8f8ff;
+  --kz-cyan-200: #7af1ff;
+  --kz-cyan-300: #2ee6ff;
+  --kz-cyan-400: #00f0ff;
+  --kz-cyan-500: #00c2d1;
+  --kz-cyan-600: #009aa6;
+  --kz-cyan-950: #072438;
+
+  --kz-blue-500: #0066ff;
+  --kz-purple-500: #8b5cf6;
+  --kz-indigo-500: #6366f1;
+
+  --kz-text-primary: #ffffff;
+  --kz-text-secondary: #c8e6f5;
+  --kz-text-muted: rgba(0, 240, 255, 0.55);
+  --kz-text-dim: rgba(200, 230, 245, 0.4);
+
+  --kz-success: #10b981;
+  --kz-warning: #f59e0b;
+  --kz-danger: #ef4444;
+
+  --kz-glow-cyan: 0 0 20px rgba(0, 240, 255, 0.25);
+  --kz-glow-cyan-lg: 0 0 35px rgba(0, 240, 255, 0.4);
+  --kz-glow-blue: 0 0 25px rgba(0, 102, 255, 0.3);
+  --kz-glow-purple: 0 0 25px rgba(139, 92, 246, 0.3);
+
+  --kz-shadow-deep:
+    0 10px 30px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(0, 240, 255, 0.1);
+
+  --kz-shadow-panel:
+    0 8px 32px rgba(0, 0, 0, 0.5);
+
+  --kz-radius-sm: 6px;
+  --kz-radius-md: 12px;
+  --kz-radius-lg: 18px;
+  --kz-radius-xl: 24px;
+}
+
+/* ==========================================================================
+   2. GLOBAL RESET
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  border-color: var(--kz-glass-border);
+}
+
+html {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100%;
+  background: var(--kz-bg-base);
+  color-scheme: dark;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100vh;
+  background-color: var(--kz-bg-base);
+  color: var(--kz-text-secondary);
+
+  font-family:
+    var(--font-sans),
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Oxygen,
+    Ubuntu,
+    Cantarell,
+    sans-serif;
+
+  overflow-x: hidden;
+
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  border: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img,
+svg,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+::selection {
+  background: rgba(0, 240, 255, 0.35);
+  color: #ffffff;
+}
+
+/* ==========================================================================
+   3. BACKGROUND SYSTEM
+   ========================================================================== */
+
+.kz-bg-deepspace {
+  position: relative;
+  background:
+    radial-gradient(
+      ellipse at 50% 10%,
+      #072438 0%,
+      #020b14 50%,
+      #010408 100%
+    );
+}
+
+.kz-bg-deepspace::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+
+  background-image:
+    radial-gradient(
+      circle at 20% 30%,
+      rgba(0, 240, 255, 0.05) 0%,
+      transparent 40%
+    ),
+    radial-gradient(
+      circle at 80% 70%,
+      rgba(139, 92, 246, 0.04) 0%,
+      transparent 40%
+    );
+
+  pointer-events: none;
+  z-index: 0;
+}
+
+.kz-vignette {
+  position: fixed;
+  inset: 0;
+
+  box-shadow:
+    inset 0 0 120px rgba(0, 0, 0, 0.9);
+
+  pointer-events: none;
+  z-index: 10;
+}
+
+.kz-scanline {
+  position: fixed;
+  inset: 0;
+
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 240, 255, 0.012) 3px,
+      transparent 4px
+    );
+
+  pointer-events: none;
+  z-index: 12;
+}
+
+/* ==========================================================================
+   4. HOLOGRAPHIC GRID
+   ========================================================================== */
+
+.kz-grid,
+.kz-grid-bg {
+  background-image:
+    linear-gradient(
+      to right,
+      rgba(0, 240, 255, 0.03) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      rgba(0, 240, 255, 0.03) 1px,
+      transparent 1px
+    );
+
+  background-size: 32px 32px;
+}
+
+.kz-hud-grid {
+  background-image:
+    linear-gradient(
+      to right,
+      rgba(0, 240, 255, 0.05) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      rgba(0, 240, 255, 0.05) 1px,
+      transparent 1px
+    );
+
+  background-size: 16px 16px;
+}
+
+/* ==========================================================================
+   5. GLASS / HOLOGRAPHIC PANELS
+   ========================================================================== */
+
+.kz-glass,
+.kz-panel,
+.kz-card,
+.kz-hologram,
+.kz-console {
+  position: relative;
+
+  background: var(--kz-glass-bg);
+
+  backdrop-filter: var(--kz-glass-blur);
+  -webkit-backdrop-filter: var(--kz-glass-blur);
+
+  border: 1px solid var(--kz-glass-border);
+  border-radius: var(--kz-radius-md);
+
+  box-shadow:
+    var(--kz-shadow-panel),
+    inset 0 1px 0 rgba(0, 240, 255, 0.08);
+
+  transition:
+    border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+    background 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.kz-panel:hover,
+.kz-card:hover {
+  border-color: var(--kz-glass-border-hover);
+
+  box-shadow:
+    var(--kz-shadow-panel),
+    var(--kz-glow-cyan);
+}
+
+.kz-console {
+  background: rgba(2, 7, 14, 0.92);
+
+  border-color: rgba(0, 240, 255, 0.25);
+
+  box-shadow:
+    0 15px 40px rgba(0, 0, 0, 0.8),
+    inset 0 0 20px rgba(0, 240, 255, 0.05);
+}
+
+/* ==========================================================================
+   6. GLOW SYSTEM
+   ========================================================================== */
+
+.kz-glow {
+  box-shadow: var(--kz-glow-cyan);
+}
+
+.kz-glow-cyan {
+  box-shadow:
+    0 0 25px rgba(0, 240, 255, 0.35);
+}
+
+.kz-glow-blue {
+  box-shadow: var(--kz-glow-blue);
+}
+
+.kz-glow-purple {
+  box-shadow: var(--kz-glow-purple);
+}
+
+.kz-text-glow {
+  text-shadow:
+    0 0 10px rgba(0, 240, 255, 0.6);
+}
+
+/* ==========================================================================
+   7. AI CORE SYSTEM
+   ========================================================================== */
+
+.kz-core,
+.kz-orb {
+  position: relative;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 9999px;
+
+  background:
+    radial-gradient(
+      circle,
+      rgba(0, 240, 255, 0.2) 0%,
+      rgba(3, 19, 34, 0.8) 70%
+    );
+
+  border: 1px solid rgba(0, 240, 255, 0.5);
+
+  box-shadow:
+    0 0 40px rgba(0, 240, 255, 0.3),
+    inset 0 0 25px rgba(0, 240, 255, 0.4);
+}
+
+.kz-core-ring,
+.kz-orb-ring {
+  position: absolute;
+  inset: -12px;
+
+  border-radius: 9999px;
+  border: 1px dashed rgba(0, 240, 255, 0.35);
+
+  animation: kz-spin 25s linear infinite;
+
+  pointer-events: none;
+}
+
+.kz-core-ring2,
+.kz-orb-ring2 {
+  position: absolute;
+  inset: -24px;
+
+  border-radius: 9999px;
+  border: 1px solid rgba(139, 92, 246, 0.25);
+
+  animation: kz-spin 35s linear infinite reverse;
+
+  pointer-events: none;
+}
+
+.kz-core-pulse {
+  animation: kz-pulse 3s ease-in-out infinite;
+}
+
+.kz-core-energy {
+  position: absolute;
+  inset: 0;
+
+  border-radius: 9999px;
+
+  background:
+    radial-gradient(
+      circle,
+      rgba(0, 240, 255, 0.4) 0%,
+      transparent 70%
+    );
+
+  filter: blur(8px);
+
+  animation: kz-glow-pulse 4s ease-in-out infinite;
+}
+
+/* ==========================================================================
+   8. HUD ELEMENTS
+   ========================================================================== */
+
+.kz-hud {
+  position: relative;
+
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
+
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.kz-hud-line {
+  width: 100%;
+  height: 1px;
+
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(0, 240, 255, 0.4),
+      transparent
+    );
+}
+
+.kz-hud-label {
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
+
+  font-size: 10px;
+
+  color: var(--kz-text-muted);
+
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.kz-hud-value {
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
+
+  color: var(--kz-cyan-200);
+  font-weight: 700;
+}
+
+.kz-hud-corner {
+  position: absolute;
+
+  width: 8px;
+  height: 8px;
+
+  border-color: var(--kz-cyan-400);
+
+  pointer-events: none;
+}
+
+.kz-hud-corner-tl {
+  top: -1px;
+  left: -1px;
+
+  border-top: 2px solid var(--kz-cyan-400);
+  border-left: 2px solid var(--kz-cyan-400);
+}
+
+.kz-hud-corner-tr {
+  top: -1px;
+  right: -1px;
+
+  border-top: 2px solid var(--kz-cyan-400);
+  border-right: 2px solid var(--kz-cyan-400);
+}
+
+.kz-hud-corner-bl {
+  bottom: -1px;
+  left: -1px;
+
+  border-bottom: 2px solid var(--kz-cyan-400);
+  border-left: 2px solid var(--kz-cyan-400);
+}
+
+.kz-hud-corner-br {
+  right: -1px;
+  bottom: -1px;
+
+  border-right: 2px solid var(--kz-cyan-400);
+  border-bottom: 2px solid var(--kz-cyan-400);
+}
+
+.kz-bracket {
+  position: relative;
+  padding: 0.75rem 1rem;
+}
+
+.kz-bracket::before,
+.kz-bracket::after {
+  content: "";
+
+  position: absolute;
+
+  width: 6px;
+  height: 6px;
+
+  border-color: var(--kz-cyan-400);
+}
+
+.kz-bracket::before {
+  top: 0;
+  left: 0;
+
+  border-top: 1px solid var(--kz-cyan-400);
+  border-left: 1px solid var(--kz-cyan-400);
+}
+
+.kz-bracket::after {
+  right: 0;
+  bottom: 0;
+
+  border-right: 1px solid var(--kz-cyan-400);
+  border-bottom: 1px solid var(--kz-cyan-400);
+}
+
+/* ==========================================================================
+   9. TYPOGRAPHY
+   ========================================================================== */
+
+.kz-hero-title {
+  font-size: clamp(2.5rem, 5vw, 4.5rem);
+  font-weight: 900;
+
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+
+  color: var(--kz-text-primary);
+  text-transform: uppercase;
+}
+
+.kz-section-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+
+  letter-spacing: 0.1em;
+
+  color: var(--kz-text-primary);
+  text-transform: uppercase;
+}
+
+.kz-mono {
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
+}
+
+/* ==========================================================================
+   10. BUTTON SYSTEM
+   ========================================================================== */
+
+.kz-button {
+  position: relative;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0.625rem 1.25rem;
+
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
+
+  font-size: 0.75rem;
+  font-weight: 700;
+
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+
+  border-radius: var(--kz-radius-sm);
+
+  cursor: pointer;
+  overflow: hidden;
+
+  transition:
+    background 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.kz-button:active {
+  transform: translateY(1px);
+}
+
+.kz-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
+.kz-button-primary {
+  background: rgba(0, 240, 255, 0.15);
+  color: var(--kz-cyan-200);
+
+  border: 1px solid rgba(0, 240, 255, 0.4);
+
+  box-shadow:
+    0 0 15px rgba(0, 240, 255, 0.15);
+}
+
+.kz-button-primary:hover:not(:disabled) {
+  background: rgba(0, 240, 255, 0.25);
+  border-color: var(--kz-cyan-400);
+
+  box-shadow:
+    0 0 25px rgba(0, 240, 255, 0.35);
+
+  color: var(--kz-text-primary);
+}
+
+.kz-button-secondary {
+  background: rgba(3, 19, 34, 0.6);
+  color: var(--kz-text-secondary);
+
+  border: 1px solid rgba(0, 240, 255, 0.2);
+}
+
+.kz-button-secondary:hover:not(:disabled) {
+  background: rgba(0, 240, 255, 0.1);
+  border-color: rgba(0, 240, 255, 0.4);
+
+  color: var(--kz-cyan-200);
+}
+
+.kz-button-ghost {
+  background: transparent;
+  color: var(--kz-text-muted);
+
+  border: 1px solid transparent;
+}
+
+.kz-button-ghost:hover:not(:disabled) {
+  background: rgba(0, 240, 255, 0.08);
+  border-color: rgba(0, 240, 255, 0.2);
+
+  color: var(--kz-cyan-300);
+}
+
+.kz-button-danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.kz-button-danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: var(--kz-danger);
+
+  box-shadow:
+    0 0 20px rgba(239, 68, 68, 0.3);
+}
+
+/* ==========================================================================
+   11. INPUT / FORM SYSTEM
+   ========================================================================== */
+
+.kz-input,
+.kz-select,
+.kz-textarea {
+  width: 100%;
+
+  padding: 0.75rem 1rem;
+
+  background: rgba(2, 7, 14, 0.8);
+
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  border-radius: var(--kz-radius-sm);
+
+  color: var(--kz-text-primary);
+
+  font-family: var(--font-sans, inherit);
+  font-size: 0.875rem;
+
+  outline: none;
+
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.kz-input:focus,
+.kz-select:focus,
+.kz-textarea:focus {
+  background: rgba(2, 11, 22, 0.95);
+
+  border-color: var(--kz-cyan-400);
+
+  box-shadow:
+    0 0 15px rgba(0, 240, 255, 0.25);
+}
+
+.kz-input::placeholder,
+.kz-textarea::placeholder {
+  color: var(--kz-text-dim);
+}
+
+.kz-select option {
+  background: #020914;
+  color: #ffffff;
+}
+
+/* ==========================================================================
+   12. STATUS INDICATORS
+   ========================================================================== */
+
+.kz-status {
+  display: inline-flex;
+  align-items: center;
+
+  gap: 0.5rem;
+
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
+
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+
+.kz-status-dot {
+  position: relative;
+
+  width: 8px;
+  height: 8px;
+
+  flex: 0 0 auto;
+
+  border-radius: 9999px;
+}
+
+.kz-status-online .kz-status-dot,
+.kz-status-active .kz-status-dot {
+  background-color: var(--kz-success);
+
+  box-shadow:
+    0 0 10px var(--kz-success);
+}
+
+.kz-status-online .kz-status-dot::after,
+.kz-status-active .kz-status-dot::after {
+  content: "";
+
+  position: absolute;
+  inset: -3px;
+
+  border: 1px solid var(--kz-success);
+  border-radius: 9999px;
+
+  animation:
+    kz-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.kz-status-warning .kz-status-dot {
+  background-color: var(--kz-warning);
+
+  box-shadow:
+    0 0 10px var(--kz-warning);
+}
+
+.kz-status-error .kz-status-dot {
+  background-color: var(--kz-danger);
+
+  box-shadow:
+    0 0 10px var(--kz-danger);
+}
+
+.kz-status-offline .kz-status-dot {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+/* ==========================================================================
+   13. ANIMATIONS
+   ========================================================================== */
+
+@keyframes kz-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.7;
+    transform: scale(0.98);
+  }
+}
+
+@keyframes kz-glow-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.95);
+  }
+
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes kz-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes kz-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes kz-scan {
+  0% {
+    transform: translateY(-100%);
+  }
+
+  100% {
+    transform: translateY(1000%);
+  }
+}
+
+@keyframes kz-flicker {
+  0%,
+  19.999%,
+  22%,
+  62.999%,
+  64%,
+  64.999%,
+  70%,
+  100% {
+    opacity: 0.99;
+  }
+
+  20%,
+  21.999%,
+  63%,
+  63.999%,
+  65%,
+  69.999% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes kz-ping {
+  75%,
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+/* ==========================================================================
+   14. SCROLLBARS
+   ========================================================================== */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(2, 6, 12, 0.9);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, 0.25);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 240, 255, 0.5);
+
+  box-shadow:
+    0 0 10px rgba(0, 240, 255, 0.5);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color:
+    rgba(0, 240, 255, 0.25)
+    rgba(2, 6, 12, 0.9);
+}
+
+/* ==========================================================================
+   15. ACCESSIBILITY
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--kz-cyan-400);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   16. UTILITY CLASSES
+   ========================================================================== */
+
+.kz-container {
+  width: 100%;
+  max-width: 1400px;
+
+  margin-left: auto;
+  margin-right: auto;
+
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+
+.kz-section {
+  padding-top: 3rem;
+  padding-bottom: 3rem;
+}
+
+.kz-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.kz-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.kz-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.kz-muted {
+  color: var(--kz-text-muted);
+}
+
+.kz-label {
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
+
+  font-size: 0.6875rem;
+
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+
+  color: var(--kz-text-muted);
+}
+
+.kz-divider {
+  width: 100%;
+  height: 1px;
+
+  background-color: rgba(0, 240, 255, 0.12);
+}
+
+.kz-divider-glow {
+  width: 100%;
+  height: 1px;
+
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(0, 240, 255, 0.5),
+      transparent
+    );
+}
+
+/* ==========================================================================
+   17. RESPONSIVE
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .kz-container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .kz-section {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+  }
+}
