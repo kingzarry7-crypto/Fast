@@ -1,41 +1,31 @@
 import type { Metadata } from "next";
-import { ReactNode } from "react";
 import "./globals.css";
+import Sidebar from "@/components/Sidebar";
+
 export const metadata: Metadata = {
   title: {
     default: "KING ZARRY AI",
     template: "%s | KING ZARRY AI",
   },
   description:
-    "KING ZARRY AI is an intelligent AI command centre for analysis, conversations, market intelligence, and AI-powered tools.",
-  applicationName: "KING ZARRY AI",
-  keywords: [
-    "KING ZARRY AI",
-    "AI assistant",
-    "AI analysis",
-    "market intelligence",
-    "trading analysis",
-  ],
-  authors: [{ name: "KING ZARRY AI" }],
-  creator: "KING ZARRY AI",
-  publisher: "KING ZARRY AI",
-  robots: {
-    index: true,
-    follow: true,
-  },
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-  },
+    "KING ZARRY AI — intelligent AI command centre for analysis, conversations, market intelligence, and AI-powered tools.",
 };
+
 export default function RootLayout({
   children,
 }: {
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <div className="kz-bg-grid" />
+        <div className="kz-bg-radial" />
+        <div className="relative z-10 flex min-h-screen">
+          <Sidebar />
+          <main className="flex-1 min-w-0">{children}</main>
+        </div>
+      </body>
     </html>
   );
 }
