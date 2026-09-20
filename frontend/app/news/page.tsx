@@ -10,7 +10,6 @@ export default function NewsPage() {
         <p className="text-xs font-mono text-cyan-400/40 tracking-widest mb-8">
           NEWS INTELLIGENCE MODULE
         </p>
-
         <div className="kz-panel p-10 text-center">
           <p className="text-sm text-cyan-200/50">
             News module ready. Backend integration pending.
