@@ -1,22 +1,16 @@
-export interface AuthUser {
-  id: string;
-  email: string;
-  username?: string | null;
-  display_name?: string | null;
-  account_status?: string | null;
-  created_at?: string | null;
-}
+// Fast/frontend/types/index.ts
+// Central type barrel for KING ZARRY AI.
 
-export interface AuthResponse {
-  status: string;
-  message?: string;
-  user?: AuthUser;
-}
-
-export interface MeResponse {
-  status: string;
-  user: AuthUser;
-}
+export type {
+  AuthUser,
+  AccountStatus,
+  LoginInput,
+  RegisterInput,
+  AuthResponse,
+  MeResponse,
+  LogoutResponse,
+  AuthState,
+} from "./auth";
 
 export interface ChatResponse {
   status: string;
