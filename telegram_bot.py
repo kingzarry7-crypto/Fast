@@ -1,3 +1,7 @@
+print("=" * 60, flush=True)
+print("🔵 BOOT: bot.py starting...", flush=True)
+print("=" * 60, flush=True)
+
 import os
 import re
 import html
@@ -12,15 +16,20 @@ from io import BytesIO
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, List
 
+print(f"🔵 BOOT: stdlib imports OK | Python {sys.version.split()[0]}", flush=True)
+
 import requests
+print("🔵 BOOT: requests OK", flush=True)
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, FancyArrowPatch
+print("🔵 BOOT: matplotlib OK", flush=True)
 
 from dotenv import load_dotenv
 load_dotenv()
+print("🔵 BOOT: dotenv OK", flush=True)
 
 from telegram import LabeledPrice
 from telegram.ext import (
@@ -32,6 +41,7 @@ from telegram.ext import (
     filters,
 )
 from telegram.error import Forbidden, BadRequest, RetryAfter
+print("🔵 BOOT: python-telegram-bot OK", flush=True)
 
 # ============================================================
 # 👑 KING ZARRY AI - UPGRADED WITH MULTI-TIMEFRAME + NEWS
@@ -41,13 +51,10 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     stream=sys.stdout,
+    force=True,
 )
-# Silence noisy libraries that would leak secrets or spam logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
-logging.getLogger("telegram.ext.Updater").setLevel(logging.WARNING)
-logging.getLogger("telegram.request").setLevel(logging.WARNING)
-logging.getLogger("telegram.bot").setLevel(logging.WARNING)
 logging.getLogger("apscheduler").setLevel(logging.WARNING)
 
 logger = logging.getLogger("king_zarry")
@@ -122,10 +129,66 @@ SUBSCRIPTION_PLANS = {
     "yearly": {"name": "💎 Yearly VIP", "days": 365, "stars": YEARLY_STARS, "description": "365 days King Zarry AI VIP access"},
 }
 
-# CONNECT TO UPGRADED MEMORY + AI ENGINE + NEWS + STT + TAVILY
-from memory import Memory
-from ai_engine import AIEngine
-from news_engine import news_engine
+print(f"🔵 BOOT: TELEGRAM_BOT_TOKEN {'FOUND (len=' + str(len(TELEGRAM_BOT_TOKEN)) + ')' if TELEGRAM_BOT_TOKEN else 'MISSING'}", flush=True)
+
+# ============================================================
+# TELEGRAM TOKEN SANITY CHECK (direct, bypasses library)
+# ============================================================
+def _verify_telegram_token(token: str) -> bool:
+    """Direct getMe call to verify the token works before we build the app."""
+    if not token:
+        print("❌ TELEGRAM_TOKEN CHECK: empty token", flush=True)
+        return False
+    try:
+        url = f"https://api.telegram.org/bot{token}/getMe"
+        r = requests.get(url, timeout=15)
+        data = r.json()
+        if r.status_code == 200 and data.get("ok"):
+            bot_info = data.get("result", {})
+            print(f"✅ TELEGRAM_TOKEN CHECK: valid | bot=@{bot_info.get('username')} id={bot_info.get('id')}", flush=True)
+            return True
+        else:
+            print(f"❌ TELEGRAM_TOKEN CHECK: invalid | status={r.status_code} | response={str(data)[:200]}", flush=True)
+            return False
+    except Exception as e:
+        print(f"❌ TELEGRAM_TOKEN CHECK: request failed | {type(e).__name__}: {str(e)[:200]}", flush=True)
+        return False
+
+_telegram_token_ok = _verify_telegram_token(TELEGRAM_BOT_TOKEN)
+
+if not _telegram_token_ok:
+    print("❌ CRITICAL: Telegram token is invalid. Cannot start Telegram bot.", flush=True)
+    print("➡️ ACTION REQUIRED:", flush=True)
+    print("   1. Open @BotFather in Telegram", flush=True)
+    print("   2. /mybots → your bot → API Token → copy", flush=True)
+    print("   3. Update TELEGRAM_BOT_TOKEN in Railway → Variables", flush=True)
+    print("   4. Railway will auto-redeploy", flush=True)
+    sys.exit(1)
+
+print("🔵 BOOT: proceeding with module imports...", flush=True)
+
+# CONNECT TO MEMORY + AI ENGINE + NEWS + STT + TAVILY
+try:
+    from memory import Memory
+    print("🔵 BOOT: memory imported", flush=True)
+except Exception as e:
+    print(f"❌ BOOT: memory import failed | {e}", flush=True)
+    raise
+
+try:
+    from ai_engine import AIEngine
+    print("🔵 BOOT: ai_engine imported", flush=True)
+except Exception as e:
+    print(f"❌ BOOT: ai_engine import failed | {e}", flush=True)
+    raise
+
+try:
+    from news_engine import news_engine
+    print("🔵 BOOT: news_engine imported", flush=True)
+except Exception as e:
+    print(f"❌ BOOT: news_engine import failed | {e}", flush=True)
+    raise
+
 try:
     import stt_engine
     logger.info(f"🎙️ STT Engine loaded: {stt_engine.provider_status()}")
@@ -144,8 +207,22 @@ except Exception as e:
     tavily_search = None
     logger.info(f"ℹ️ Tavily import failed in Telegram: {e}")
 
-memory_instance = Memory(MEMORY_DB_PATH)
-ai_engine = AIEngine(memory=memory_instance)
+print("🔵 BOOT: initializing Memory instance...", flush=True)
+try:
+    memory_instance = Memory(MEMORY_DB_PATH)
+    print("🔵 BOOT: Memory instance created", flush=True)
+except Exception as e:
+    print(f"❌ BOOT: Memory init failed | {e}", flush=True)
+    raise
+
+print("🔵 BOOT: initializing AIEngine...", flush=True)
+try:
+    ai_engine = AIEngine(memory=memory_instance)
+    print("🔵 BOOT: AIEngine created", flush=True)
+except Exception as e:
+    print(f"❌ BOOT: AIEngine init failed | {e}", flush=True)
+    raise
+
 logger.info("🧠 Memory + 🤖 AIEngine + 📰 NewsEngine loaded")
 
 # Log Agnes media status
@@ -162,7 +239,7 @@ DEFAULT_TIMEFRAME = "15min"
 PRIMARY_EXECUTION_TF = "15min"
 
 # ============================================================
-# 🎨 MEDIA REQUEST DETECTION (used before market intent)
+# 🎨 MEDIA REQUEST DETECTION
 # ============================================================
 _MEDIA_VERB_PATTERN = re.compile(
     r"\b("
@@ -268,6 +345,7 @@ def init_database():
         conn.close()
 
 init_database()
+print("🔵 BOOT: database initialized", flush=True)
 
 # ================= SHARED PERSONAL PRICE ALERTS =================
 try:
@@ -287,8 +365,10 @@ try:
         ensure_price_alerts_table(db_connect())
     except Exception:
         pass
+    print("🔵 BOOT: price_alerts imported (shared)", flush=True)
 except Exception as e:
     logger.warning(f"price_alerts import failed, falling back to local: {e}")
+    print(f"⚠️ BOOT: using local price_alerts fallback | {e}", flush=True)
     def normalize_alert_symbol(raw: str) -> Optional[str]:
         upper = raw.upper().strip()
         mapping = {"XAU": "XAU/USD", "XAUUSD": "XAU/USD", "XAU/USD": "XAU/USD", "GOLD": "XAU/USD", "BTC": "BTC/USD", "BTCUSD": "BTC/USD", "BTC/USD": "BTC/USD", "ETH": "ETH/USD", "ETHUSD": "ETH/USD", "ETH/USD": "ETH/USD", "SOL": "SOL/USD", "SOLUSD": "SOL/USD", "SOL/USD": "SOL/USD"}
@@ -2714,10 +2794,8 @@ async def handle_voice(update, context):
         except Exception:
             pass
 
-# DISCORD INLINE (kept only if discord_bot.py is NOT present)
+# DISCORD INLINE — skip if dedicated discord_bot.py exists
 def start_discord_if_configured():
-    # Skip inline Discord if a dedicated discord_bot.py file exists —
-    # the launcher/separate process handles Discord in that case.
     if os.path.exists("discord_bot.py"):
         logger.info("ℹ️ discord_bot.py detected - skipping inline Discord in bot.py (avoids token conflict)")
         return None
@@ -2746,21 +2824,6 @@ def start_discord_if_configured():
                 except Exception as e:
                     logger.error(f"Discord AI error: {e}")
                     await message.channel.send("⚠️ AI temporarily unavailable.")
-            elif message.content.startswith("!signal") or message.content.startswith("!plan"):
-                try:
-                    parts = message.content.split()
-                    symbol = parts[1] if len(parts) > 1 else "BTC"
-                    symbol_map = {"BTC": "BTC/USD", "ETH": "ETH/USD", "SOL": "SOL/USD", "XAU": "XAU/USD", "GOLD": "XAU/USD"}
-                    full_symbol = symbol_map.get(symbol.upper(), "BTC/USD")
-                    mtf = await asyncio.to_thread(analyze_multi_timeframe, full_symbol)
-                    news = await asyncio.to_thread(news_engine.get_news_for_asset, full_symbol)
-                    mtf = await asyncio.to_thread(ai_confirm_signal_mtf, mtf, news)
-                    sig = mtf.get("mtf_signal", mtf["15m"]["signal"])
-                    text = f"👑 KING ZARRY AI {full_symbol} {sig} | MTF {mtf.get('mtf_bias')} | Strength {mtf.get('mtf_strength')}/100 | News {news.get('risk')} | Entry {mtf['15m']['entry_zone_low']:.2f}-{mtf['15m']['entry_zone_high']:.2f} SL {mtf['15m']['stop_loss']:.2f} TP3 {mtf['15m']['tp3']:.2f}"
-                    await message.channel.send(text[:1900])
-                except Exception as e:
-                    logger.error(f"Discord signal error: {e}")
-                    await message.channel.send("❌ Signal error")
             await bot.process_commands(message)
 
         logger.info("💬 Discord inline integration configured")
@@ -2771,23 +2834,31 @@ def start_discord_if_configured():
 
 # MAIN
 def main():
+    print("🔵 MAIN: entered main()", flush=True)
+
     if not TELEGRAM_BOT_TOKEN:
-        print("❌ CRITICAL ERROR: TELEGRAM_BOT_TOKEN is not configured.")
+        print("❌ CRITICAL ERROR: TELEGRAM_BOT_TOKEN is not configured.", flush=True)
         return
 
-    print("👑 KING ZARRY AI Starting - UPGRADED MTF + NEWS + AGNES MEDIA EDITION...")
-    print(f"📦 Database: {DATABASE_PATH}")
-    print(f"🧠 Memory DB: {MEMORY_DB_PATH}")
-    print(f"🤖 AI Provider: {AI_PROVIDER} (OpenRouter → Groq → Gemini)")
-    print(f"🔑 OPENROUTER: {'Yes' if OPENROUTER_API_KEY else 'No'} | GROQ: {'Yes' if GROQ_API_KEY else 'No'} | GEMINI: {'Yes' if GEMINI_API_KEY else 'No'}")
-    print(f"✅ AI Engine: {'Loaded' if ai_engine else 'FAILED'}")
-    print(f"✅ Memory: {'Loaded' if memory_instance else 'FAILED'}")
-    print(f"📰 News Engine: Loaded")
-    print(f"💳 Plans: Monthly {MONTHLY_STARS} Stars / 3Month {THREE_MONTH_STARS} Stars / Yearly {YEARLY_STARS} Stars")
-    print(f"👮 Admins: {ADMIN_IDS if ADMIN_IDS else 'None configured'}")
-    print(f"📊 Primary TF: {PRIMARY_EXECUTION_TF} | Architecture: 4H→1H→15M→5M")
+    if not _telegram_token_ok:
+        print("❌ CRITICAL ERROR: Telegram token check failed earlier.", flush=True)
+        return
 
+    print("👑 KING ZARRY AI Starting - UPGRADED MTF + NEWS + AGNES MEDIA EDITION...", flush=True)
+    print(f"📦 Database: {DATABASE_PATH}", flush=True)
+    print(f"🧠 Memory DB: {MEMORY_DB_PATH}", flush=True)
+    print(f"🤖 AI Provider: {AI_PROVIDER} (OpenRouter → Groq → Gemini)", flush=True)
+    print(f"🔑 OPENROUTER: {'Yes' if OPENROUTER_API_KEY else 'No'} | GROQ: {'Yes' if GROQ_API_KEY else 'No'} | GEMINI: {'Yes' if GEMINI_API_KEY else 'No'}", flush=True)
+    print(f"✅ AI Engine: {'Loaded' if ai_engine else 'FAILED'}", flush=True)
+    print(f"✅ Memory: {'Loaded' if memory_instance else 'FAILED'}", flush=True)
+    print(f"📰 News Engine: Loaded", flush=True)
+    print(f"💳 Plans: Monthly {MONTHLY_STARS} Stars / 3Month {THREE_MONTH_STARS} Stars / Yearly {YEARLY_STARS} Stars", flush=True)
+    print(f"👮 Admins: {ADMIN_IDS if ADMIN_IDS else 'None configured'}", flush=True)
+    print(f"📊 Primary TF: {PRIMARY_EXECUTION_TF} | Architecture: 4H→1H→15M→5M", flush=True)
+
+    print("🔵 MAIN: building Application...", flush=True)
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    print("🔵 MAIN: Application built OK", flush=True)
 
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
@@ -2827,13 +2898,14 @@ def main():
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))
+    print("🔵 MAIN: all handlers registered", flush=True)
 
     try:
         if application.job_queue:
             application.job_queue.run_repeating(notification_job, interval=60, first=60)
-            print("🔔 Notification job scheduled every 60s")
+            print("🔔 Notification job scheduled every 60s", flush=True)
         else:
-            print("⚠️ JobQueue not available - add python-telegram-bot[job-queue] to requirements.txt")
+            print("⚠️ JobQueue not available - add python-telegram-bot[job-queue] to requirements.txt", flush=True)
     except Exception as e:
         logger.warning(f"JobQueue not available: {e}")
 
@@ -2846,10 +2918,22 @@ def main():
             except Exception as e:
                 logger.error(f"Discord bot crashed: {e}")
         threading.Thread(target=run_discord, daemon=True).start()
-        print("💬 Discord bot thread started (inline)")
+        print("💬 Discord bot thread started (inline)", flush=True)
 
-    print("👑 King Zarry AI Telegram Bot is online - MTF + News + Late Entry + Exhaustion + Planner + Agnes Media")
-    application.run_polling(drop_pending_updates=True, allowed_updates=["message", "pre_checkout_query"])
+    print("🔵 MAIN: about to call run_polling() — Telegram should now be LIVE", flush=True)
+    print("👑 King Zarry AI Telegram Bot is online - MTF + News + Late Entry + Exhaustion + Planner + Agnes Media", flush=True)
+
+    try:
+        application.run_polling(drop_pending_updates=True, allowed_updates=["message", "pre_checkout_query"])
+    except Exception as e:
+        print(f"❌ run_polling() crashed: {type(e).__name__}: {e}", flush=True)
+        raise
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"❌ FATAL: main() crashed with {type(e).__name__}: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
