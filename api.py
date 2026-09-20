@@ -85,6 +85,7 @@ if not allowed_origins:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=[
         "GET",
@@ -360,7 +361,7 @@ def _verify_password(
         return False
 
 # ============================================================
-# SESSION HELPERS - CORRECTED FOR PRODUCTION
+# SESSION HELPERS
 # ============================================================
 
 def _create_raw_session_token() -> str:
@@ -386,12 +387,6 @@ def _set_session_cookie(
     response: Response,
     raw_token: str,
 ) -> None:
-    """
-    FINAL CORRECTION:
-    Production: SameSite=None, Secure=True (required for cross-site Vercel frontend)
-    Local dev: SameSite=Lax, Secure=False
-    Always: HttpOnly, Path=/, 30-day default
-    """
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=raw_token,
@@ -407,11 +402,6 @@ def _set_session_cookie(
 def _clear_session_cookie(
     response: Response,
 ) -> None:
-    """
-    FINAL CORRECTION:
-    Delete cookie must use SAME SameSite and Secure settings as set-cookie,
-    otherwise browser will not delete it correctly in production.
-    """
     response.delete_cookie(
         key=SESSION_COOKIE_NAME,
         httponly=True,
@@ -643,10 +633,10 @@ def health_check():
         return {"status": "ok", "web_db_configured": False, "database": {"status": "unavailable"}}
 
 @app.post("/api/auth/register")
-async def register(request: RegisterRequest, response: Response):
-    email = _normalize_email(request.email)
-    username = _normalize_username(request.username)
-    display_name = _safe_display_name(request.display_name, email.split("@")[0])
+async def register(payload: RegisterRequest, request: Request, response: Response):
+    email = _normalize_email(payload.email)
+    username = _normalize_username(payload.username)
+    display_name = _safe_display_name(payload.display_name, email.split("@")[0])
     try:
         existing_email = await asyncio.to_thread(_find_user_by_email, email)
         if existing_email:
@@ -657,7 +647,7 @@ async def register(request: RegisterRequest, response: Response):
                 existing_username = cur.fetchone()
             if existing_username:
                 raise HTTPException(status_code=409, detail="This username is already taken")
-        user_row = await asyncio.to_thread(_create_user, email, request.password, username, display_name)
+        user_row = await asyncio.to_thread(_create_user, email, payload.password, username, display_name)
         user_id = str(_row_value(user_row, "id", 0))
         raw_token = await asyncio.to_thread(_create_session, user_id, request)
         _set_session_cookie(response, raw_token)
@@ -669,14 +659,14 @@ async def register(request: RegisterRequest, response: Response):
         raise HTTPException(status_code=500, detail="Could not create account")
 
 @app.post("/api/auth/login")
-async def login(request: LoginRequest, response: Response):
-    email = _normalize_email(request.email)
+async def login(payload: LoginRequest, request: Request, response: Response):
+    email = _normalize_email(payload.email)
     try:
         user_row = await asyncio.to_thread(_find_user_by_email, email)
         if not user_row:
             raise HTTPException(status_code=401, detail="Invalid email or password")
         stored_password_hash = _row_value(user_row, "password_hash", 6)
-        password_valid = await asyncio.to_thread(_verify_password, request.password, stored_password_hash)
+        password_valid = await asyncio.to_thread(_verify_password, payload.password, stored_password_hash)
         if not password_valid:
             raise HTTPException(status_code=401, detail="Invalid email or password")
         account_status = _row_value(user_row, "account_status", 4)
