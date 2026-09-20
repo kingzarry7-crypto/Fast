@@ -56,13 +56,16 @@ def monitor_processes():
         time.sleep(3)
 
 def verify_bot_py():
-    """Print bot.py fingerprint so we KNOW which version is deployed."""
+    """
+    Print bot.py fingerprint so we know which version is deployed.
+    NEVER exits — only logs. Launcher continues regardless.
+    """
     print("=" * 60, flush=True)
     print("🔍 LAUNCHER: verifying bot.py...", flush=True)
     print("=" * 60, flush=True)
 
     if not os.path.exists("bot.py"):
-        print("❌ bot.py DOES NOT EXIST", flush=True)
+        print("⚠️ bot.py DOES NOT EXIST — will skip Telegram", flush=True)
         return False
 
     try:
@@ -76,33 +79,38 @@ def verify_bot_py():
         first_line = text.splitlines()[0] if text else "<EMPTY>"
         print(f"📄 bot.py first line: {first_line}", flush=True)
 
-        if "BOOT: bot.py starting" in text:
-            print("✅ bot.py HAS diagnostic markers (new version)", flush=True)
+        # Detect the diagnostic Telegram version
+        if "BOOT: bot.py starting" in text and "from telegram" in text:
+            print("✅ bot.py is the NEW Telegram diagnostic version", flush=True)
             return True
+        # Detect old Discord content masquerading as bot.py
+        elif "import discord" in text and "from telegram" not in text:
+            print("❌ bot.py contains DISCORD code (wrong file!)", flush=True)
+            print("➡️ ACTION: replace bot.py contents on GitHub with the Telegram version.", flush=True)
+            print("➡️ Launcher will CONTINUE anyway so FastAPI/Discord still run.", flush=True)
+            return False
         else:
-            print("❌ bot.py DOES NOT HAVE diagnostic markers (OLD version on disk)", flush=True)
-            print(f"📄 First 300 chars:\n{text[:300]}", flush=True)
+            print("⚠️ bot.py is an unknown version — will try to run anyway", flush=True)
             return False
     except Exception as e:
-        print(f"❌ Cannot read bot.py: {e}", flush=True)
+        print(f"⚠️ Cannot read bot.py: {e} — will try to run anyway", flush=True)
         return False
 
 def main():
     print("=" * 60, flush=True)
-    print("🇳🇬 LAUNCHER-V3-NEW-LOADED 🇳🇬", flush=True)
-    print("👑 KING ZARRY AI MULTI-PLATFORM LAUNCHER v3", flush=True)
+    print("🇳🇬 LAUNCHER-V4-NO-CRASH 🇳🇬", flush=True)
+    print("👑 KING ZARRY AI MULTI-PLATFORM LAUNCHER v4", flush=True)
     print("=" * 60, flush=True)
 
-    # ---- Verify bot.py is the right file ----
+    # ---- Verify bot.py is the right file (NON-FATAL now) ----
     bot_py_ok = verify_bot_py()
     if not bot_py_ok:
-        print("❌ REFUSING to start — bot.py is not the diagnostic version.", flush=True)
-        print("➡️ ACTION: commit and push the new bot.py, force a clean redeploy.", flush=True)
-        sys.exit(1)
+        print("⚠️ bot.py verification failed but launcher will CONTINUE.", flush=True)
+        print("⚠️ FastAPI + Discord will still start. Only Telegram may fail.", flush=True)
 
     # ---- FastAPI ----
     if not os.path.exists("api.py"):
-        print("❌ api.py not found", flush=True)
+        print("❌ api.py not found — aborting (FastAPI is required for Vercel)", flush=True)
         sys.exit(1)
 
     port = os.environ.get("PORT", "8000")
@@ -117,15 +125,18 @@ def main():
 
     time.sleep(3)
 
-    # ---- bot.py ----
-    bot_process = start_process(
-        "TelegramBot",
-        [sys.executable, "-u", "bot.py"],
-    )
-    if bot_process:
-        managed_processes.append(bot_process)
+    # ---- Telegram bot.py ----
+    if os.path.exists("bot.py"):
+        bot_process = start_process(
+            "TelegramBot",
+            [sys.executable, "-u", "bot.py"],
+        )
+        if bot_process:
+            managed_processes.append(bot_process)
+    else:
+        print("ℹ️ bot.py not found — skipping Telegram", flush=True)
 
-    # ---- discord_bot.py (separate) ----
+    # ---- Discord bot ----
     if os.path.exists("discord_bot.py"):
         discord_process = start_process(
             "DiscordBot",
@@ -134,10 +145,10 @@ def main():
         if discord_process:
             managed_processes.append(discord_process)
     else:
-        print("ℹ️ discord_bot.py not found — skipping", flush=True)
+        print("ℹ️ discord_bot.py not found — skipping Discord", flush=True)
 
     if not managed_processes:
-        print("❌ No processes started", flush=True)
+        print("❌ No processes started — exiting", flush=True)
         sys.exit(1)
 
     print("\n" + "=" * 55, flush=True)
