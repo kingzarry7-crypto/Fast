@@ -1,3 +1,4 @@
+print("🇳🇬 BOTPY-V3-NEW-LOADED 🇳🇬", flush=True)
 print("=" * 60, flush=True)
 print("🔵 BOOT: bot.py starting...", flush=True)
 print("=" * 60, flush=True)
@@ -43,10 +44,6 @@ from telegram.ext import (
 from telegram.error import Forbidden, BadRequest, RetryAfter
 print("🔵 BOOT: python-telegram-bot OK", flush=True)
 
-# ============================================================
-# 👑 KING ZARRY AI - UPGRADED WITH MULTI-TIMEFRAME + NEWS
-# ============================================================
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -71,7 +68,6 @@ def env_int(name, default=0):
     except Exception:
         return default
 
-# ENV
 TELEGRAM_BOT_TOKEN = clean_env_str(os.getenv("TELEGRAM_BOT_TOKEN"))
 XAI_API_KEY = clean_env_str(os.getenv("XAI_API_KEY") or os.getenv("GROK_API_KEY"))
 XAI_BASE_URL = clean_env_str(os.getenv("XAI_BASE_URL"), "https://api.x.ai/v1")
@@ -80,15 +76,8 @@ GROQ_API_KEY = clean_env_str(os.getenv("GROQ_API_KEY"))
 GROQ_BASE_URL = clean_env_str(os.getenv("GROQ_BASE_URL"), "https://api.groq.com/openai/v1")
 GROQ_MODEL = clean_env_str(os.getenv("GROQ_MODEL"), "qwen/qwen3-32b")
 OPENROUTER_API_KEY = clean_env_str(os.getenv("OPENROUTER_API_KEY"))
-OPENROUTER_BASE_URL = clean_env_str(
-    os.getenv("OPENROUTER_BASE_URL"),
-    "https://openrouter.ai/api/v1",
-)
-OPENROUTER_MODEL = clean_env_str(
-    os.getenv("OPENROUTER_MODEL"),
-    "openrouter/free",
-)
-
+OPENROUTER_BASE_URL = clean_env_str(os.getenv("OPENROUTER_BASE_URL"), "https://openrouter.ai/api/v1")
+OPENROUTER_MODEL = clean_env_str(os.getenv("OPENROUTER_MODEL"), "openrouter/free")
 OPENAI_API_KEY = OPENROUTER_API_KEY
 OPENAI_BASE_URL = OPENROUTER_BASE_URL
 OPENAI_MODEL = OPENROUTER_MODEL
@@ -131,11 +120,7 @@ SUBSCRIPTION_PLANS = {
 
 print(f"🔵 BOOT: TELEGRAM_BOT_TOKEN {'FOUND (len=' + str(len(TELEGRAM_BOT_TOKEN)) + ')' if TELEGRAM_BOT_TOKEN else 'MISSING'}", flush=True)
 
-# ============================================================
-# TELEGRAM TOKEN SANITY CHECK (direct, bypasses library)
-# ============================================================
 def _verify_telegram_token(token: str) -> bool:
-    """Direct getMe call to verify the token works before we build the app."""
     if not token:
         print("❌ TELEGRAM_TOKEN CHECK: empty token", flush=True)
         return False
@@ -167,7 +152,6 @@ if not _telegram_token_ok:
 
 print("🔵 BOOT: proceeding with module imports...", flush=True)
 
-# CONNECT TO MEMORY + AI ENGINE + NEWS + STT + TAVILY
 try:
     from memory import Memory
     print("🔵 BOOT: memory imported", flush=True)
@@ -225,7 +209,6 @@ except Exception as e:
 
 logger.info("🧠 Memory + 🤖 AIEngine + 📰 NewsEngine loaded")
 
-# Log Agnes media status
 try:
     from ai_engine import AGNES_API_KEY as _AGNES_KEY_CHECK, AGNES_IMAGE_MODEL as _AGNES_IMG, AGNES_VIDEO_MODEL as _AGNES_VID
     if _AGNES_KEY_CHECK:
@@ -238,9 +221,6 @@ except Exception as _agnes_check_err:
 DEFAULT_TIMEFRAME = "15min"
 PRIMARY_EXECUTION_TF = "15min"
 
-# ============================================================
-# 🎨 MEDIA REQUEST DETECTION
-# ============================================================
 _MEDIA_VERB_PATTERN = re.compile(
     r"\b("
     r"draw|sketch|render|illustrate|paint|"
@@ -267,7 +247,6 @@ def _looks_like_media_request(text: str) -> bool:
         return False
     return bool(_MEDIA_VERB_PATTERN.search(text))
 
-# HELPERS
 def clean_ai_response(text):
     if not text:
         return ""
@@ -302,7 +281,6 @@ async def send_long_message(message, text, is_raw_html=False):
         except Exception:
             await message.reply_text(re.sub(r"<[^>]+>", "", chunk), parse_mode=None, disable_web_page_preview=True)
 
-# DB - SUBSCRIPTIONS
 def db_connect():
     conn = sqlite3.connect(DATABASE_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
@@ -347,7 +325,6 @@ def init_database():
 init_database()
 print("🔵 BOOT: database initialized", flush=True)
 
-# ================= SHARED PERSONAL PRICE ALERTS =================
 try:
     from price_alerts import (
         normalize_alert_symbol,
@@ -654,7 +631,6 @@ async def require_subscription(update):
             parse_mode="HTML")
     return False
 
-# AI WRAPPERS
 def ask_ai(prompt: str, user_id: str = "system"):
     if not ai_engine:
         raise RuntimeError("AI Engine not initialized")
@@ -695,9 +671,6 @@ async def create_voice_note_file(text: str) -> BytesIO:
     except Exception as e:
         raise RuntimeError(f"TTS unavailable: {e}")
 
-# ============================================================
-# MARKET DATA & INDICATORS
-# ============================================================
 def get_market_candles(symbol, interval=DEFAULT_TIMEFRAME, outputsize=150):
     if not TWELVE_DATA_API_KEY:
         raise RuntimeError("TWELVE_DATA_API_KEY is not configured.")
@@ -1644,7 +1617,6 @@ TIMEFRAME_MAP={"1m":"1min","5m":"5min","15m":"15min","30m":"30min","1h":"1h","2h
 def normalize_timeframe(timeframe):
     return TIMEFRAME_MAP.get(timeframe.lower().strip(),DEFAULT_TIMEFRAME)
 
-# COMMANDS
 async def start_command(update, context):
     user=update.effective_user
     if user:
@@ -2463,7 +2435,6 @@ async def events_command(update, context):
         logger.error(f"Events error: {e}")
         await update.message.reply_text("❌ Calendar unavailable.", disable_web_page_preview=True)
 
-# MESSAGE HANDLERS
 async def handle_photo(update, context):
     if not await require_subscription(update):
         return
@@ -2507,7 +2478,6 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
                 pass
             break
 
-    # === PRIORITY 0: MEDIA GENERATION / EDITING (Agnes AI) ===
     try:
         if _looks_like_media_request(text):
             logger.info(f"Media request detected, routing to ai_engine: '{text[:60]}'")
@@ -2517,7 +2487,6 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
     except Exception as media_err:
         logger.warning(f"Media intent pre-check failed (non-fatal): {media_err}")
 
-    # === PRIORITY 1: PERSONAL PRICE ALERTS ===
     parsed_alert = parse_alert_request(text)
     if parsed_alert:
         logger.info(f"Personal alert intent detected: '{text}' -> {parsed_alert}")
@@ -2549,7 +2518,6 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
             await update.message.reply_text("❌ Failed to create alert. Please try again with format: Alert me when XAU reaches 4329")
             return
 
-    # === PRIORITY 1b: REMINDER / BRIEFING INTENT ===
     is_notify, notify_type, notify_detail = detect_notification_intent(text)
     if is_notify:
         logger.info(f"Notification intent detected: '{text}' -> {notify_type} {notify_detail}")
@@ -2594,7 +2562,6 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
             )
             return
 
-    # === PRIORITY 2: MARKET ANALYSIS INTENT ===
     is_market, symbol, timeframe = detect_market_intent(text)
     if is_market:
         logger.info(f"Market intent detected: '{text}' -> {symbol} (voice={is_voice_transcription})")
@@ -2654,7 +2621,6 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
             except:
                 pass
 
-    # === PRIORITY 3: NORMAL AI CONVERSATION ===
     answer = await asyncio.to_thread(ai_engine.ask, user_id, text, None)
     await send_long_message(update.message, answer)
     lower = text.lower()
@@ -2679,7 +2645,6 @@ async def handle_text(update, context):
         logger.error(f"Chat Error: {error}")
         await update.message.reply_text("⚠️ AI Service Temporarily Unavailable. Please try again shortly.", disable_web_page_preview=True)
 
-# === VOICE NOTE HANDLER ===
 MAX_VOICE_SIZE = 10 * 1024 * 1024
 
 async def handle_voice(update, context):
@@ -2794,7 +2759,6 @@ async def handle_voice(update, context):
         except Exception:
             pass
 
-# DISCORD INLINE — skip if dedicated discord_bot.py exists
 def start_discord_if_configured():
     if os.path.exists("discord_bot.py"):
         logger.info("ℹ️ discord_bot.py detected - skipping inline Discord in bot.py (avoids token conflict)")
@@ -2832,7 +2796,6 @@ def start_discord_if_configured():
         logger.warning(f"Discord import failed: {e}")
         return None
 
-# MAIN
 def main():
     print("🔵 MAIN: entered main()", flush=True)
 
