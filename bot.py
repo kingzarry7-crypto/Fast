@@ -1,3 +1,5 @@
+print("🇳🇬 DISCORDBOT-V3-LOADED 🇳🇬", flush=True)
+
 import os
 import re
 import io
@@ -58,6 +60,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     stream=sys.stdout,
+    force=True,
 )
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
@@ -208,18 +211,16 @@ def _looks_like_media_request(text: str) -> bool:
         return False
     return bool(_MEDIA_VERB_PATTERN.search(text))
 
-print("\n" + "="*60)
-print("👑 KING ZARRY AI DISCORD - UPGRADED MTF + NEWS + AGNES MEDIA EDITION")
-print("="*60)
-print(f"🔑 Discord token: {'FOUND' if DISCORD_BOT_TOKEN else 'MISSING'}")
-print(f"👑 Admin ID: configured")
-print(f"🏠 Guild ID: configured")
-print(f"🎙️ ElevenLabs: {'ENABLED' if ELEVENLABS_API_KEY else 'MISSING'} | Bella | {_redact(ELEVENLABS_MODEL_ID)}")
-print(f"🧠 Groq: {'FOUND' if GROQ_API_KEY else 'MISSING'}")
-print(f"🎬 Fal.ai: {'FOUND' if FAL_KEY else 'MISSING'} (for /textvideo and /imagevideo commands)")
-print(f"🎨 Agnes AI: {'FOUND' if os.getenv('AGNES_API_KEY') else 'MISSING'} (for natural language media)")
-print(f"💾 DB: {DATABASE_PATH}")
-print("="*60 + "\n")
+print("\n" + "="*60, flush=True)
+print("👑 KING ZARRY AI DISCORD - UPGRADED MTF + NEWS + AGNES MEDIA EDITION", flush=True)
+print("="*60, flush=True)
+print(f"🔑 Discord token: {'FOUND' if DISCORD_BOT_TOKEN else 'MISSING'}", flush=True)
+print(f"🎙️ ElevenLabs: {'ENABLED' if ELEVENLABS_API_KEY else 'MISSING'}", flush=True)
+print(f"🧠 Groq: {'FOUND' if GROQ_API_KEY else 'MISSING'}", flush=True)
+print(f"🎬 Fal.ai: {'FOUND' if FAL_KEY else 'MISSING'}", flush=True)
+print(f"🎨 Agnes AI: {'FOUND' if os.getenv('AGNES_API_KEY') else 'MISSING'}", flush=True)
+print(f"💾 DB: {DATABASE_PATH}", flush=True)
+print("="*60 + "\n", flush=True)
 
 if not DISCORD_BOT_TOKEN:
     raise RuntimeError("DISCORD_BOT_TOKEN missing")
@@ -399,16 +400,9 @@ async def ensure_not_banned(interaction: discord.Interaction) -> bool:
         return False
     return True
 
-async def ensure_not_banned_message(message: discord.Message) -> bool:
-    return not await user_is_banned(message.author.id)
-
 async def track_user(user: discord.abc.User):
     await asyncio.to_thread(remember_user_sync, user.id, str(user))
 
-async def is_premium(user_id: int) -> bool:
-    return (await asyncio.to_thread(get_subscription_sync, user_id)) is not None
-
-# === CENTRALIZED TTS HELPER - Bella + AriaNeural fallback ===
 def generate_elevenlabs_voice(text: str) -> io.BytesIO:
     if not eleven_client:
         raise RuntimeError("ELEVENLABS_API_KEY is not configured.")
@@ -448,7 +442,7 @@ async def generate_edgetts_voice(text: str) -> io.BytesIO:
             except Exception:
                 pass
 
-async def generate_tts_audio(text: str) -> tuple[io.BytesIO, str]:
+async def generate_tts_audio(text: str) -> tuple:
     try:
         if eleven_client and ELEVENLABS_API_KEY:
             audio = await asyncio.to_thread(generate_elevenlabs_voice, text)
@@ -462,17 +456,6 @@ async def generate_tts_audio(text: str) -> tuple[io.BytesIO, str]:
         logger.error(f"EdgeTTS fallback failed: {_redact(str(e))}")
         raise RuntimeError(f"TTS unavailable: {_redact(str(e))}")
 
-async def play_voice_in_channel(voice_client: discord.VoiceClient, text: str):
-    try:
-        audio_stream, provider = await generate_tts_audio(text)
-        audio_source = discord.FFmpegPCMAudio(audio_stream, pipe=True)
-        if voice_client.is_playing():
-            voice_client.stop()
-        voice_client.play(audio_source, after=lambda e: print(f"Finished playing voice ({provider}): {e}") if e else None)
-    except Exception as e:
-        logger.error(f"Voice playback failed: {_redact(str(e))}")
-        raise
-
 def detect_market_and_timeframe(text: str):
     upper = text.upper()
     symbol = "BTC/USD"
@@ -481,8 +464,6 @@ def detect_market_and_timeframe(text: str):
         "BTC/USD": ["BTC/USD", "BTCUSDT", "BTC"],
         "ETH/USD": ["ETH/USD", "ETHUSDT", "ETH"],
         "SOL/USD": ["SOL/USD", "SOLUSDT", "SOL"],
-        "EUR/USD": ["EUR/USD", "EURUSD"],
-        "GBP/USD": ["GBP/USD", "GBPUSD"],
     }
     for market_symbol, names in markets.items():
         if any(name in upper for name in names):
@@ -559,26 +540,26 @@ def parse_alert_request_discord(text: str):
         target_price = float(price_match[-1])
     except:
         return None
-    if target_price <=0:
+    if target_price <= 0:
         return None
     symbol = normalize_alert_symbol_discord(cleaned) or normalize_alert_symbol_discord(original)
     if not symbol:
         return None
     condition = "REACHES"
     if re.search(r"\babove\b|\bgoes above\b", lower):
-        condition = "ABOVE" if "below" not in lower or lower.rfind("above")>lower.rfind("below") else "BELOW"
+        condition = "ABOVE" if "below" not in lower or lower.rfind("above") > lower.rfind("below") else "BELOW"
     if re.search(r"\bbelow\b|\bdrops below\b|\bfalls below\b", lower):
         if "above" in lower and "below" in lower:
-            condition = "ABOVE" if lower.rfind("above")>lower.rfind("below") else "BELOW"
+            condition = "ABOVE" if lower.rfind("above") > lower.rfind("below") else "BELOW"
         else:
             condition = "BELOW"
     cmd_match = re.search(r"(above|below|reaches|reach|hit|hits)", cleaned.lower())
     if cmd_match:
-        w=cmd_match.group(1)
-        if w=="above": condition="ABOVE"
-        elif w=="below": condition="BELOW"
-        else: condition="REACHES"
-    return {"symbol":symbol,"target_price":target_price,"condition":condition,"raw":original}
+        w = cmd_match.group(1)
+        if w == "above": condition = "ABOVE"
+        elif w == "below": condition = "BELOW"
+        else: condition = "REACHES"
+    return {"symbol": symbol, "target_price": target_price, "condition": condition, "raw": original}
 
 def safe_float(val, default=0.0):
     try:
@@ -602,15 +583,12 @@ def build_discord_signal_embed(market_data: Dict[str, Any], news_data: Optional[
     tp3 = safe_float(market_data.get("tp3"))
     support = safe_float(market_data.get("support"))
     resistance = safe_float(market_data.get("resistance"))
-    nearest_support = safe_float(market_data.get("nearest_support", support))
-    nearest_resistance = safe_float(market_data.get("nearest_resistance", resistance))
     rsi = safe_float(market_data.get("rsi"))
     ema9 = safe_float(market_data.get("ema9"))
     ema21 = safe_float(market_data.get("ema21"))
     ema50 = safe_float(market_data.get("ema50"))
     atr = safe_float(market_data.get("atr"))
     structure = market_data.get("structure", "NEUTRAL")
-    timeframe_alignment = market_data.get("timeframe_alignment", "")
     entry_quality = market_data.get("entry_quality", market_data.get("entry_status", ""))
     reasons = market_data.get("reasons", market_data.get("reason", []))
     if isinstance(reasons, str):
@@ -632,62 +610,27 @@ def build_discord_signal_embed(market_data: Dict[str, Any], news_data: Optional[
         color = discord.Color.gold()
         emoji = "🟡"
 
-    entry_status_map = {
-        "EARLY": "🟢 EARLY",
-        "GOOD ENTRY": "🟢 GOOD ENTRY",
-        "ACCEPTABLE": "🟡 ACCEPTABLE",
-        "LATE": "🟠 LATE",
-        "EXTENDED / AVOID": "🔴 EXTENDED / AVOID",
-        "MISSED": "🔴 MISSED",
-        "INVALIDATED": "⚫ INVALIDATED",
-    }
-    entry_display = entry_status_map.get(entry_quality.upper(), entry_quality) if entry_quality else "UNKNOWN"
+    entry_display = {"EARLY": "🟢 EARLY", "GOOD ENTRY": "🟢 GOOD ENTRY", "ACCEPTABLE": "🟡 ACCEPTABLE", "LATE": "🟠 LATE", "EXTENDED / AVOID": "🔴 EXTENDED / AVOID", "MISSED": "🔴 MISSED", "INVALIDATED": "⚫ INVALIDATED"}.get(entry_quality.upper(), entry_quality) if entry_quality else "UNKNOWN"
 
     title = f"👑 KING ZARRY AI • {symbol} SIGNAL"
     desc = f"{emoji} **{signal}** | ⏱ Execution: 15M | {entry_display}"
 
     embed = Embed(title=title, description=desc, color=color)
-    mtf_text = f"4H: {h4_trend or 'NEUTRAL'}\n1H: {h1_trend or 'NEUTRAL'}\n15M: {m15_trend or 'NEUTRAL'}\n5M: {m5_trend or 'NEUTRAL'}"
-    embed.add_field(name="📊 MULTI-TIMEFRAME", value=mtf_text, inline=True)
-    conf_text = f"🔥 Confidence: {confidence} ({mtf_score}/100)\n💪 Strength: {strength}/100\n🧱 Alignment: {timeframe_alignment or mtf_bias}"
-    embed.add_field(name="📈 ASSESSMENT", value=conf_text, inline=True)
-    price_text = f"💰 Price: `${price:,.2f}`\n🎯 Entry: `${entry_low:,.2f} - ${entry_high:,.2f}`\n🛑 SL: `${stop_loss:,.2f}`"
-    embed.add_field(name="💵 PRICE", value=price_text, inline=False)
-    tp_text = f"TP1: `${tp1:,.2f}`\nTP2: `${tp2:,.2f}`\nTP3: `${tp3:,.2f}`\n⚖️ RR: 1:{market_data.get('rr', 3.5)}"
-    embed.add_field(name="🎯 TARGETS", value=tp_text, inline=True)
-    sr_text = f"Support: `${support:,.2f}` (nearest {nearest_support:,.2f})\nResistance: `${resistance:,.2f}` (nearest {nearest_resistance:,.2f})\nStructure: {structure}"
-    embed.add_field(name="🏗 LEVELS", value=sr_text, inline=True)
-    ind_text = f"RSI: {rsi:.1f}\nEMA9: {ema9:,.2f}\nEMA21: {ema21:,.2f}\nEMA50: {ema50:,.2f}\nATR: {atr:,.2f}"
-    embed.add_field(name="📊 INDICATORS", value=ind_text, inline=True)
-    news_risk_emoji = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🟠", "EXTREME": "🔴", "UNKNOWN": "⚪"}.get(news_risk, "⚪")
-    news_val = f"{news_risk_emoji} {news_risk}"
+    embed.add_field(name="📊 MULTI-TIMEFRAME", value=f"4H: {h4_trend or 'NEUTRAL'}\n1H: {h1_trend or 'NEUTRAL'}\n15M: {m15_trend or 'NEUTRAL'}\n5M: {m5_trend or 'NEUTRAL'}", inline=True)
+    embed.add_field(name="📈 ASSESSMENT", value=f"🔥 Confidence: {confidence} ({mtf_score}/100)\n💪 Strength: {strength}/100\n🧱 Alignment: {mtf_bias}", inline=True)
+    embed.add_field(name="💵 PRICE", value=f"💰 Price: `${price:,.2f}`\n🎯 Entry: `${entry_low:,.2f} - ${entry_high:,.2f}`\n🛑 SL: `${stop_loss:,.2f}`", inline=False)
+    embed.add_field(name="🎯 TARGETS", value=f"TP1: `${tp1:,.2f}`\nTP2: `${tp2:,.2f}`\nTP3: `${tp3:,.2f}`\n⚖️ RR: 1:{market_data.get('rr', 3.5)}", inline=True)
+    embed.add_field(name="🏗 LEVELS", value=f"Support: `${support:,.2f}`\nResistance: `${resistance:,.2f}`\nStructure: {structure}", inline=True)
+    embed.add_field(name="📊 INDICATORS", value=f"RSI: {rsi:.1f}\nEMA9: {ema9:,.2f}\nEMA21: {ema21:,.2f}\nEMA50: {ema50:,.2f}\nATR: {atr:,.2f}", inline=True)
+    news_emoji = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🟠", "EXTREME": "🔴"}.get(news_risk, "⚪")
+    news_val = f"{news_emoji} {news_risk}"
     if news_data and news_data.get("events"):
         news_val += f"\n📅 {len(news_data['events'])} events 24H"
-        for ev in news_data["events"][:2]:
-            news_val += f"\n• {ev.get('event','')[:60]}"
-    else:
-        try:
-            from news import provider_status
-            status = provider_status()
-            cal_avail = status.get("calendar_available")
-            news_avail = status.get("news_available")
-            if not cal_avail and not news_avail:
-                news_val += "\n⚠️ Calendar & News: UNAVAILABLE"
-            elif not cal_avail:
-                news_val += "\n📅 Calendar: UNAVAILABLE (public fallback no cache)"
-            elif not news_avail:
-                news_val += "\n📰 Headlines: UNAVAILABLE"
-            else:
-                news_val += "\n📰 No high-impact imminent"
-        except Exception:
-            news_val += "\n📰 Status: checking..."
     embed.add_field(name="📰 NEWS RISK", value=news_val, inline=True)
     embed.add_field(name="🟢 ENTRY STATUS", value=entry_display, inline=True)
     if reasons:
-        reason_text = "\n".join(f"{i+1}. {r}" for i, r in enumerate(reasons[:5]))
-        embed.add_field(name="🧠 Why", value=reason_text[:1024], inline=False)
-    embed.add_field(name="📋 Plan", value=f"Status: {plan_status} | Trading Date: {market_data.get('trading_date', '')} | ID: {str(market_data.get('daily_plan_id',''))[:8]}", inline=False)
-    embed.set_footer(text="⚠️ Multi-timeframe analysis. Not financial advice. Use risk management.")
+        embed.add_field(name="🧠 Why", value="\n".join(f"{i+1}. {r}" for i, r in enumerate(reasons[:5]))[:1024], inline=False)
+    embed.set_footer(text="⚠️ Multi-timeframe analysis. Not financial advice.")
     return embed
 
 def build_discord_signal_chart(symbol: str, timeframe: str, market_data: Dict[str, Any]):
@@ -697,235 +640,146 @@ def build_discord_signal_chart(symbol: str, timeframe: str, market_data: Dict[st
         import matplotlib.pyplot as plt
         from matplotlib.patches import Rectangle, FancyArrowPatch
         from io import BytesIO
-        from datetime import datetime
 
         candles = None
         try:
             candles = market_engine.get_candles(symbol, timeframe, 100)
-        except Exception as ce:
+        except Exception:
             try:
                 candles = market_engine.get_candles(symbol, "15m", 100)
-            except Exception:
-                logger.warning(f"Discord chart: candle fetch failed for {symbol} {timeframe}: {_redact(str(ce))}")
+            except Exception as ce:
+                logger.warning(f"Discord chart: candle fetch failed {symbol}: {_redact(str(ce))}")
                 return None
 
         if not candles or len(candles) < 10:
-            logger.warning(f"Discord chart: insufficient candles for {symbol}")
             return None
 
-        chart_candles = candles[-70:]
-        opens = []
-        highs = []
-        lows = []
-        closes = []
-        times = []
-        for c in chart_candles:
+        cc = candles[-70:]
+        o = []; h = []; l = []; c = []; t = []
+        for x in cc:
             try:
-                opens.append(float(c.get("open", 0)))
-                highs.append(float(c.get("high", 0)))
-                lows.append(float(c.get("low", 0)))
-                closes.append(float(c.get("close", 0)))
-                dt_str = c.get("datetime", "") or c.get("time", "")
-                try:
-                    dt = datetime.fromisoformat(dt_str.replace("Z","").split(".")[0])
-                    times.append(dt)
-                except Exception:
-                    times.append(None)
+                o.append(float(x.get("open", 0))); h.append(float(x.get("high", 0)))
+                l.append(float(x.get("low", 0))); c.append(float(x.get("close", 0)))
+                t.append(None)
             except Exception:
                 continue
-
-        if len(closes) < 10:
+        if len(c) < 10:
             return None
+        xs = list(range(len(c)))
 
-        x = list(range(len(closes)))
-
-        def ema(values, period):
-            if len(values) < period:
-                return [float("nan")]*len(values)
-            result = []
-            mult = 2/(period+1)
-            sma = sum(values[:period])/period
-            for i in range(len(values)):
-                if i < period-1:
-                    result.append(float("nan"))
-                elif i == period-1:
-                    result.append(sma)
+        def ema_local(v, p):
+            if len(v) < p:
+                return [float("nan")]*len(v)
+            r = []; m = 2/(p+1); s = sum(v[:p])/p
+            for i in range(len(v)):
+                if i < p-1: r.append(float("nan"))
+                elif i == p-1: r.append(s)
                 else:
-                    sma = ((values[i] - sma)*mult) + sma
-                    result.append(sma)
-            return result
+                    s = ((v[i] - s)*m) + s
+                    r.append(s)
+            return r
 
-        ema21_vals = ema(closes, 21)
-        ema50_vals = ema(closes, 50)
-
+        e21 = ema_local(c, 21); e50 = ema_local(c, 50)
         fig, ax = plt.subplots(figsize=(14, 8), dpi=140)
-        fig.patch.set_facecolor("#ffffff")
-        ax.set_facecolor("#ffffff")
-
+        fig.patch.set_facecolor("#ffffff"); ax.set_facecolor("#ffffff")
         try:
-            width = 0.58
-            for i in range(len(chart_candles)):
-                o = opens[i]; h = highs[i]; l = lows[i]; c_ = closes[i]
-                candle_color = "#16A34A" if c_ >= o else "#DC2626"
-                ax.vlines(i, l, h, linewidth=0.8, color="#555555")
-                bottom = min(o, c_)
-                height = max(abs(c_ - o), 0.000001)
-                ax.add_patch(Rectangle((i-width/2, bottom), width, height, facecolor=candle_color, edgecolor=candle_color, linewidth=0.5))
-
-            ax.plot(x, ema21_vals, linewidth=1.4, label="EMA 21")
-            ax.plot(x, ema50_vals, linewidth=1.4, label="EMA 50")
-
-            signal = market_data.get("signal", "WAIT")
-            current = safe_float(market_data.get("price") or market_data.get("current_price") or closes[-1])
-            support = safe_float(market_data.get("support"))
-            resistance = safe_float(market_data.get("resistance"))
-            entry_low = safe_float(market_data.get("entry_low"))
-            entry_high = safe_float(market_data.get("entry_high"))
-            sl = safe_float(market_data.get("stop_loss"))
-            tp1 = safe_float(market_data.get("tp1"))
-            tp2 = safe_float(market_data.get("tp2"))
-            tp3 = safe_float(market_data.get("tp3"))
+            w = 0.58
+            for i in range(len(cc)):
+                col = "#16A34A" if c[i] >= o[i] else "#DC2626"
+                ax.vlines(i, l[i], h[i], linewidth=0.8, color="#555555")
+                bt = min(o[i], c[i]); ht = max(abs(c[i] - o[i]), 0.000001)
+                ax.add_patch(Rectangle((i-w/2, bt), w, ht, facecolor=col, edgecolor=col, linewidth=0.5))
+            ax.plot(xs, e21, linewidth=1.4, label="EMA21")
+            ax.plot(xs, e50, linewidth=1.4, label="EMA50")
+            sig = market_data.get("signal", "WAIT")
+            cur = safe_float(market_data.get("price") or market_data.get("current_price") or c[-1])
+            su = safe_float(market_data.get("support")); re_ = safe_float(market_data.get("resistance"))
+            el = safe_float(market_data.get("entry_low")); eh = safe_float(market_data.get("entry_high"))
+            sl = safe_float(market_data.get("stop_loss")); t3 = safe_float(market_data.get("tp3"))
             atr = safe_float(market_data.get("atr"))
-
-            if signal in ["BUY", "SELL"] and entry_low and entry_high and sl and tp3:
-                x0 = max(0, len(x) - 18)
-                box_width = 18
+            lv = []
+            if sig in ["BUY", "SELL"] and el and eh and sl and t3:
+                x0 = max(0, len(xs) - 18); bw = 18
                 try:
-                    if signal == "BUY":
-                        ax.add_patch(Rectangle((x0, entry_low), box_width, entry_high-entry_low, alpha=0.25, color="green"))
-                        ax.add_patch(Rectangle((x0, sl), box_width, entry_low-sl, alpha=0.20, color="red"))
-                        ax.add_patch(Rectangle((x0, entry_high), box_width, tp3-entry_high, alpha=0.15, color="green"))
-                        arrow = FancyArrowPatch((x0+box_width/2, entry_high), (x0+box_width/2, tp3), arrowstyle="->", mutation_scale=18, linewidth=1.5, color="green")
+                    if sig == "BUY":
+                        ax.add_patch(Rectangle((x0, el), bw, eh-el, alpha=0.25, color="green"))
+                        ax.add_patch(Rectangle((x0, sl), bw, el-sl, alpha=0.20, color="red"))
+                        ax.add_patch(Rectangle((x0, eh), bw, t3-eh, alpha=0.15, color="green"))
+                        ar = FancyArrowPatch((x0+bw/2, eh), (x0+bw/2, t3), arrowstyle="->", mutation_scale=18, linewidth=1.5, color="green")
                     else:
-                        ax.add_patch(Rectangle((x0, entry_low), box_width, entry_high-entry_low, alpha=0.25, color="green"))
-                        ax.add_patch(Rectangle((x0, entry_high), box_width, sl-entry_high, alpha=0.20, color="red"))
-                        ax.add_patch(Rectangle((x0, tp3), box_width, entry_low-tp3, alpha=0.15, color="green"))
-                        arrow = FancyArrowPatch((x0+box_width/2, entry_low), (x0+box_width/2, tp3), arrowstyle="->", mutation_scale=18, linewidth=1.5, color="red")
-                    ax.add_patch(arrow)
-                    levels = [(entry_low, "ENTRY LOW"), (entry_high, "ENTRY HIGH"), (sl, "STOP LOSS"), (tp1, "TP1"), (tp2, "TP2"), (tp3, "TP3")]
-                except Exception:
-                    levels = []
+                        ax.add_patch(Rectangle((x0, el), bw, eh-el, alpha=0.25, color="green"))
+                        ax.add_patch(Rectangle((x0, eh), bw, sl-eh, alpha=0.20, color="red"))
+                        ax.add_patch(Rectangle((x0, t3), bw, el-t3, alpha=0.15, color="green"))
+                        ar = FancyArrowPatch((x0+bw/2, el), (x0+bw/2, t3), arrowstyle="->", mutation_scale=18, linewidth=1.5, color="red")
+                    ax.add_patch(ar)
+                    lv = [(el, "ENTRY LOW"), (eh, "ENTRY HIGH"), (sl, "SL"), (market_data.get("tp1", 0), "TP1"), (market_data.get("tp2", 0), "TP2"), (t3, "TP3")]
+                except Exception: lv = []
             else:
-                levels = []
-                if support:
-                    levels.append((support, "SUPPORT"))
-                if resistance:
-                    levels.append((resistance, "RESISTANCE"))
-
-            for level, label in levels:
-                if level is None:
-                    continue
-                ax.axhline(level, linestyle=":", linewidth=0.7, alpha=0.6)
-                try:
-                    ax.text(len(x)+0.8, level, f"{label} {level:,.2f}", fontsize=8, fontweight="bold")
-                except Exception:
-                    pass
-
-            if current:
-                ax.axhline(current, linewidth=1, alpha=0.5)
-                try:
-                    ax.text(len(x)-1, current, f" {current:,.2f}", fontsize=9, fontweight="bold")
-                except Exception:
-                    pass
-
-            title_sig = "🟢 BUY" if signal == "BUY" else "🔴 SELL" if signal == "SELL" else "⚠️ WAIT"
-            mtf_bias = market_data.get("mtf_bias", "")
-            mtf_title = f" MTF {mtf_bias}" if mtf_bias else ""
-            tf_display = timeframe.upper()
-            ax.set_title(f"👑 KING ZARRY AI • {symbol} • {tf_display}{mtf_title} • {title_sig}", fontsize=13, fontweight="bold", loc="left", pad=12)
-
-            try:
-                if times and any(t is not None for t in times):
-                    valid_times = [(i, t) for i, t in enumerate(times) if t is not None]
-                    if len(valid_times) >= 2:
-                        step = max(1, len(valid_times)//7)
-                        ticks = [valid_times[i][0] for i in range(0, len(valid_times), step)]
-                        labels = [valid_times[i][1].strftime("%d %b\n%H:%M") for i in range(0, len(valid_times), step)]
-                        ax.set_xticks(ticks)
-                        ax.set_xticklabels(labels, fontsize=8)
-            except Exception:
-                pass
-
-            try:
-                y_low = min(min(lows), sl) if sl else min(lows)
-                y_high = max(max(highs), tp3) if tp3 else max(highs)
-                if atr:
-                    padding = max((y_high-y_low)*0.08, atr*0.8)
-                else:
-                    padding = (y_high-y_low)*0.08 if y_high != y_low else y_high*0.01
-                ax.set_ylim(y_low-padding, y_high+padding)
-            except Exception:
-                pass
-
-            ax.set_xlim(-1, len(x)+9)
-            ax.grid(True, alpha=0.15, linewidth=0.7)
-            ax.spines["top"].set_visible(False)
-            ax.spines["right"].set_visible(False)
+                if su: lv.append((su, "SUPPORT"))
+                if re_: lv.append((re_, "RESISTANCE"))
+            for l_, lb in lv:
+                if l_ is None: continue
+                ax.axhline(l_, linestyle=":", linewidth=0.7, alpha=0.6)
+                try: ax.text(len(xs)+0.8, l_, f"{lb} {l_:,.2f}", fontsize=8, fontweight="bold")
+                except Exception: pass
+            if cur:
+                ax.axhline(cur, linewidth=1, alpha=0.5)
+                try: ax.text(len(xs)-1, cur, f" {cur:,.2f}", fontsize=9, fontweight="bold")
+                except Exception: pass
+            ti = "🟢 BUY" if sig == "BUY" else "🔴 SELL" if sig == "SELL" else "⚠️ WAIT"
+            mb = market_data.get("mtf_bias", ""); mt = f" MTF {mb}" if mb else ""
+            ax.set_title(f"👑 KING ZARRY AI • {symbol} • {timeframe.upper()}{mt} • {ti}", fontsize=13, fontweight="bold", loc="left", pad=12)
+            ax.set_xlim(-1, len(xs)+9); ax.grid(True, alpha=0.15, linewidth=0.7)
+            ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
             ax.legend(loc="upper left", frameon=False, fontsize=8)
             plt.tight_layout()
-
-            buffer = BytesIO()
-            buffer.name = "king_zarry_signal.png"
-            fig.savefig(buffer, format="png", dpi=140, bbox_inches="tight", facecolor="white")
-            buffer.seek(0)
-            return buffer
-        finally:
-            plt.close(fig)
-
+            buf = BytesIO(); buf.name = "king_zarry_signal.png"
+            fig.savefig(buf, format="png", dpi=140, bbox_inches="tight", facecolor="white")
+            buf.seek(0); return buf
+        finally: plt.close(fig)
     except Exception as e:
-        logger.warning(f"Discord chart generation failed for {symbol}: {_redact(repr(e))}")
+        logger.warning(f"Discord chart failed {symbol}: {_redact(repr(e))}")
         return None
 
 def enhance_text_prompt(user_prompt: str) -> str:
     if not groq_client:
         raise RuntimeError("GROQ_API_KEY is not configured.")
-    system_prompt = "You are King Zarry's professional cinematic AI video prompt engineer. Convert user's simple idea into ONE detailed, high-quality video generation prompt. Include: subject, environment, action, camera movement, lighting, atmosphere, cinematic style, realistic motion, composition. Return ONLY final prompt under 1200 chars."
-    completion = groq_client.chat.completions.create(model=GROQ_TEXT_MODEL, messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], temperature=0.7, max_tokens=500)
-    result = completion.choices[0].message.content
-    if not result:
-        raise RuntimeError("Groq returned empty prompt.")
-    return result.strip()
+    sp = "You are King Zarry's cinematic AI video prompt engineer. Convert idea into ONE detailed high-quality video generation prompt. Include: subject, environment, action, camera, lighting, atmosphere, style, composition. Return ONLY final prompt under 1200 chars."
+    c = groq_client.chat.completions.create(model=GROQ_TEXT_MODEL, messages=[{"role": "system", "content": sp}, {"role": "user", "content": user_prompt}], temperature=0.7, max_tokens=500)
+    r = c.choices[0].message.content
+    if not r: raise RuntimeError("Groq empty prompt")
+    return r.strip()
 
 def enhance_image_prompt(image_bytes: bytes, motion_prompt: str):
     if not groq_client:
         raise RuntimeError("GROQ_API_KEY is not configured.")
-    encoded = base64.b64encode(image_bytes).decode("utf-8")
-    data_url = "data:image/jpeg;base64," + encoded
-    system_prompt = "You are King Zarry's professional image-to-video prompt engineer. Analyze supplied image and requested motion. Create ONE cinematic image-to-video prompt. Preserve subject identities, faces, clothing, objects and overall composition while adding natural movement. Return ONLY final prompt under 1200 chars."
-    user_content = [{"type": "text", "text": "User's requested motion:\n" + motion_prompt}, {"type": "image_url", "image_url": {"url": data_url}}]
-    completion = groq_client.chat.completions.create(model=GROQ_VISION_MODEL, messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_content}], temperature=0.6, max_tokens=600)
-    result = completion.choices[0].message.content
-    if not result:
-        raise RuntimeError("Groq returned empty image prompt.")
-    return result.strip()
+    enc = base64.b64encode(image_bytes).decode("utf-8")
+    du = "data:image/jpeg;base64," + enc
+    sp = "You are King Zarry's image-to-video prompt engineer. Analyze image + requested motion. Create ONE cinematic image-to-video prompt preserving subject identities, faces, clothing, objects, composition. Return ONLY final prompt under 1200 chars."
+    uc = [{"type": "text", "text": "Motion:\n" + motion_prompt}, {"type": "image_url", "image_url": {"url": du}}]
+    c = groq_client.chat.completions.create(model=GROQ_VISION_MODEL, messages=[{"role": "system", "content": sp}, {"role": "user", "content": uc}], temperature=0.6, max_tokens=600)
+    r = c.choices[0].message.content
+    if not r: raise RuntimeError("Groq empty image prompt")
+    return r.strip()
 
 def generate_text_video(prompt: str) -> bytes:
-    if not FAL_KEY:
-        raise RuntimeError("FAL_KEY is not configured.")
-    result = fal_client.subscribe(TEXT_TO_VIDEO_MODEL, arguments={"prompt": prompt})
-    video_url = result.get("video", {}).get("url")
-    if not video_url:
-        raise RuntimeError("Fal.ai returned no video URL.")
-    response = requests.get(video_url, timeout=120)
-    response.raise_for_status()
-    return response.content
+    if not FAL_KEY: raise RuntimeError("FAL_KEY is not configured.")
+    r = fal_client.subscribe(TEXT_TO_VIDEO_MODEL, arguments={"prompt": prompt})
+    vu = r.get("video", {}).get("url")
+    if not vu: raise RuntimeError("Fal.ai no video URL")
+    resp = requests.get(vu, timeout=120); resp.raise_for_status(); return resp.content
 
 def generate_image_video(image_bytes: bytes, prompt: str) -> bytes:
-    if not FAL_KEY:
-        raise RuntimeError("FAL_KEY is not configured.")
-    image_url = fal_client.upload(image_bytes, "image/jpeg")
-    result = fal_client.subscribe(IMAGE_TO_VIDEO_MODEL, arguments={"image_url": image_url, "prompt": prompt})
-    video_url = result.get("video", {}).get("url")
-    if not video_url:
-        raise RuntimeError("Fal.ai returned no video URL.")
-    response = requests.get(video_url, timeout=120)
-    response.raise_for_status()
-    return response.content
+    if not FAL_KEY: raise RuntimeError("FAL_KEY is not configured.")
+    iu = fal_client.upload(image_bytes, "image/jpeg")
+    r = fal_client.subscribe(IMAGE_TO_VIDEO_MODEL, arguments={"image_url": iu, "prompt": prompt})
+    vu = r.get("video", {}).get("url")
+    if not vu: raise RuntimeError("Fal.ai no video URL")
+    resp = requests.get(vu, timeout=120); resp.raise_for_status(); return resp.content
 
 def save_video(video_bytes: bytes):
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
-        temp_file.write(video_bytes)
-        return temp_file.name
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tf:
+        tf.write(video_bytes); return tf.name
 
 class KingZarryAI(discord.Client):
     def __init__(self):
@@ -939,35 +793,21 @@ class KingZarryAI(discord.Client):
             guild = discord.Object(id=DISCORD_GUILD_ID)
             self.tree.copy_global_to(guild=guild)
             synced = await self.tree.sync(guild=guild)
-            print(f"✅ Synced {len(synced)} commands to guild {DISCORD_GUILD_ID}.")
+            print(f"✅ Synced {len(synced)} commands to guild {DISCORD_GUILD_ID}.", flush=True)
         except Exception as e:
-            print(f"❌ COMMAND SYNC ERROR: {_redact(repr(e))}")
+            print(f"❌ COMMAND SYNC ERROR: {_redact(repr(e))}", flush=True)
 
     async def on_ready(self):
-        print("\n" + "="*60)
-        print("👑 KING ZARRY AI DISCORD IS ONLINE - MTF + NEWS + AGNES MEDIA")
-        print("="*60)
-        print(f"🤖 Logged in as: {self.user}")
-        print(f"🆔 Bot ID: {self.user.id}")
-        print(f"👑 Admin ID: configured")
-        print(f"🏠 Guild ID: configured")
-        print("💬 Message Content Intent: ENABLED")
-        print("📸 Vision: ENABLED")
-        print("🧠 Memory: ENABLED")
-        print("📊 Market Engine: market.py analyze_market (daily plan + MTF + news)")
-        print(f"🎙️ ElevenLabs: {'ENABLED | Bella | '+_redact(ELEVENLABS_MODEL_ID) if eleven_client else 'DISABLED'}")
-        print(f"🎬 Fal.ai: {'ENABLED (slash /textvideo and /imagevideo)' if FAL_KEY else 'DISABLED'}")
-        print(f"🎨 Agnes AI: {'ENABLED (natural language image/video)' if os.getenv('AGNES_API_KEY') else 'DISABLED (set AGNES_API_KEY)'}")
-        print("⭐ Premium: ENABLED (Discord Premium separate from Telegram Stars)")
-        print("🛡️ Admin: ENABLED")
-        print("📰 News Engine: ENABLED (news.py + provider_status)")
-        print("="*60 + "\n")
+        print("\n" + "="*60, flush=True)
+        print("👑 KING ZARRY AI DISCORD IS ONLINE", flush=True)
+        print("="*60, flush=True)
+        print(f"🤖 Logged in as: {self.user}", flush=True)
+        print(f"🆔 Bot ID: {self.user.id}", flush=True)
+        print("="*60 + "\n", flush=True)
 
     async def on_message(self, message: discord.Message):
-        if message.author.bot:
-            return
-        if await user_is_banned(message.author.id):
-            return
+        if message.author.bot: return
+        if await user_is_banned(message.author.id): return
         await track_user(message.author)
         content = message.content.strip()
         if self.user:
@@ -977,920 +817,594 @@ class KingZarryAI(discord.Client):
         for a in message.attachments:
             ct = (a.content_type or "").lower()
             name = (a.filename or "").lower()
-            is_audio = ct.startswith("audio/") or name.endswith((".ogg",".mp3",".m4a",".wav",".flac",".mp4",".webm",".opus",".m4a",".aac",".wma"))
-            if is_audio and not ct.startswith("image/"):
-                audio_attachments.append(a)
-        if not content and not images and not audio_attachments:
-            return
+            is_audio = ct.startswith("audio/") or name.endswith((".ogg",".mp3",".m4a",".wav",".flac",".mp4",".webm",".opus",".aac",".wma"))
+            if is_audio and not ct.startswith("image/"): audio_attachments.append(a)
+        if not content and not images and not audio_attachments: return
 
-        # === PRIORITY 0: VOICE/AUDIO -> STT -> transcription becomes content ===
         is_voice_transcription = False
         if audio_attachments and not content:
             if stt_engine is None:
-                await message.reply("🎙️ Voice transcription not configured. Set GROQ_API_KEY or STT_API_KEY.", mention_author=False)
-                return
-            audio_att = audio_attachments[0]
-            if audio_att.size and audio_att.size > 10 * 1024 * 1024:
-                await message.reply("❌ Audio file too large (max 10 MB). Please send shorter clip.", mention_author=False)
-                return
+                await message.reply("🎙️ STT not configured.", mention_author=False); return
+            aa = audio_attachments[0]
+            if aa.size and aa.size > 10 * 1024 * 1024:
+                await message.reply("❌ Audio too large (max 10MB).", mention_author=False); return
             try:
                 async with message.channel.typing():
-                    audio_bytes = await audio_att.read()
-                    filename = audio_att.filename or "voice.ogg"
-                    transcription = await asyncio.to_thread(stt_engine.transcribe_bytes, audio_bytes, filename)
-                    if not transcription or not transcription.strip():
-                        await message.reply("🎙️ I couldn't understand that voice message. Please try again or type your request.", mention_author=False)
-                        return
-                    transcription = transcription.strip()
-                    preview = transcription[:500]
-                    await message.reply(f"🎙️ I heard: {preview}", mention_author=False)
-                    content = transcription
-                    is_voice_transcription = True
+                    ab = await aa.read()
+                    fn = aa.filename or "voice.ogg"
+                    tr = await asyncio.to_thread(stt_engine.transcribe_bytes, ab, fn)
+                    if not tr or not tr.strip():
+                        await message.reply("🎙️ Couldn't understand.", mention_author=False); return
+                    tr = tr.strip()
+                    await message.reply(f"🎙️ I heard: {tr[:500]}", mention_author=False)
+                    content = tr; is_voice_transcription = True
             except Exception as e:
                 logger.warning(f"Discord STT error: {_redact(str(e))}")
-                await message.reply("🎙️ I couldn't understand that voice message. Please try again.", mention_author=False)
-                return
-        elif audio_attachments and content:
-            try:
-                if stt_engine:
-                    async with message.channel.typing():
-                        audio_att = audio_attachments[0]
-                        if audio_att.size and audio_att.size <= 10 * 1024 * 1024:
-                            audio_bytes = await audio_att.read()
-                            filename = audio_att.filename or "voice.ogg"
-                            transcription = await asyncio.to_thread(stt_engine.transcribe_bytes, audio_bytes, filename)
-                            if transcription and transcription.strip():
-                                content = f"{content} {transcription.strip()}".strip()
-                                is_voice_transcription = True
-                                await message.reply(f"🎙️ Audio transcription: {transcription[:500]}", mention_author=False)
-            except Exception as e:
-                logger.warning(f"Discord STT with caption error: {_redact(str(e))}")
+                await message.reply("🎙️ Voice failed.", mention_author=False); return
 
-        # === PRIORITY 1: MEDIA GENERATION / EDITING (Agnes AI) ===
+        # PRIORITY 1: MEDIA
         try:
-            has_image_attachment = bool(images)
-            is_media_edit_with_image = has_image_attachment and _looks_like_media_request(content)
-            is_media_text_only = (not has_image_attachment) and _looks_like_media_request(content)
-
-            if is_media_edit_with_image or is_media_text_only:
-                logger.info(f"Discord media request detected, routing to ai_engine: '{content[:60]}'")
-                image_tuple = None
-                if has_image_attachment:
-                    attachment = images[0]
-                    if attachment.size > MAX_IMAGE_SIZE:
-                        await message.reply("❌ Image must be below 10 MB.", mention_author=False)
-                        return
-                    image_bytes = await attachment.read()
-                    mime_type = attachment.content_type or "image/png"
-                    image_tuple = (mime_type, image_bytes)
+            has_img = bool(images)
+            is_media_edit = has_img and _looks_like_media_request(content)
+            is_media_text = (not has_img) and _looks_like_media_request(content)
+            if is_media_edit or is_media_text:
+                logger.info(f"Media req: '{content[:60]}'")
+                it = None
+                if has_img:
+                    a = images[0]
+                    if a.size > MAX_IMAGE_SIZE:
+                        await message.reply("❌ Image > 10MB.", mention_author=False); return
+                    ib = await a.read()
+                    it = (a.content_type or "image/png", ib)
                 async with message.channel.typing():
-                    answer = await asyncio.to_thread(ai.ask, str(message.author.id), content, image_tuple)
-                if not answer:
-                    answer = "❌ I couldn't complete that request."
-                await send_chunks(message, answer)
+                    ans = await asyncio.to_thread(ai.ask, str(message.author.id), content, it)
+                await send_chunks(message, ans or "❌ No response")
                 return
-        except Exception as media_err:
-            logger.warning(f"Discord media intent pre-check failed (non-fatal): {_redact(str(media_err))}")
+        except Exception as e:
+            logger.warning(f"Media err: {_redact(str(e))}")
 
-        # === PRIORITY 2: PERSONAL PRICE ALERTS (natural language) ===
+        # PRIORITY 2: ALERTS
         try:
-            parsed = parse_alert_request_discord(content)
-            if parsed and not images:
-                user_id = message.author.id
-                symbol = parsed["symbol"]
-                target = parsed["target_price"]
-                condition = parsed["condition"]
-                create_fn = shared_create_alert
-                if create_fn is None:
+            p = parse_alert_request_discord(content)
+            if p and not images:
+                cf = shared_create_alert
+                if cf is None:
                     try:
-                        from telegram_bot import create_price_alert as tg_create
-                        create_fn = tg_create
-                    except Exception:
-                        create_fn = None
-                if create_fn:
-                    result = await asyncio.to_thread(create_fn, user_id, symbol, target, condition)
-                    if result.get("success"):
-                        cond_display = {"ABOVE":"above","BELOW":"below","REACHES":"reaches"}.get(condition, condition)
-                        await message.reply(
-                            f"🔔 **Alert created.**\n\n{symbol}\nCondition: {cond_display} {target}\nI'll monitor it automatically and notify you when the target is reached.\n\n🆔 ID: `{result['id']}` | Use `/alerts` to manage",
-                            mention_author=False
-                        )
+                        from bot import create_price_alert as bc; cf = bc
+                    except Exception: cf = None
+                if cf:
+                    r = await asyncio.to_thread(cf, message.author.id, p["symbol"], p["target_price"], p["condition"])
+                    if r.get("success"):
+                        cd = {"ABOVE":"above","BELOW":"below","REACHES":"reaches"}.get(p["condition"], p["condition"])
+                        await message.reply(f"🔔 Alert created\n{p['symbol']} {cd} {p['target_price']}\nID: `{r['id']}`", mention_author=False)
                         return
-                    elif result.get("duplicate"):
-                        await message.reply(
-                            f"⚠️ You already have an active alert for **{symbol} {condition} {target}**\n\nUse `/alerts` to view it.",
-                            mention_author=False
-                        )
+                    elif r.get("duplicate"):
+                        await message.reply(f"⚠️ Duplicate alert for {p['symbol']} {p['condition']} {p['target_price']}", mention_author=False)
                         return
         except Exception as e:
-            logger.warning(f"Discord alert parse error: {_redact(str(e))}")
+            logger.warning(f"Alert err: {_redact(str(e))}")
 
-        # === PRIORITY 3: MARKET INTENT ROUTING ===
+        # PRIORITY 3: MARKET
         try:
-            is_market, symbol, timeframe = detect_market_intent_discord(content)
-            if is_market and not images:
+            im, sym, tf = detect_market_intent_discord(content)
+            if im and not images:
                 async with message.channel.typing():
                     try:
-                        market_data = await asyncio.to_thread(market_engine.analyze_market, symbol, timeframe)
-                        news_data = await asyncio.to_thread(news_engine.get_news_for_asset, symbol)
-                        embed = build_discord_signal_embed(market_data, news_data)
-                        chart_file = None
+                        md = await asyncio.to_thread(market_engine.analyze_market, sym, tf)
+                        nd = await asyncio.to_thread(news_engine.get_news_for_asset, sym)
+                        emb = build_discord_signal_embed(md, nd)
+                        cf = None
                         try:
-                            chart_buffer = await asyncio.to_thread(build_discord_signal_chart, symbol, timeframe, market_data)
-                            if chart_buffer:
-                                chart_file = File(fp=chart_buffer, filename="king_zarry_signal.png")
-                                embed.set_image(url="attachment://king_zarry_signal.png")
-                        except Exception as chart_e:
-                            logger.warning(f"Discord market intent chart failed: {_redact(repr(chart_e))}")
-                        if chart_file:
-                            await message.reply(embed=embed, file=chart_file, mention_author=False)
-                        else:
-                            await message.reply(embed=embed, mention_author=False)
-
-                        try:
-                            if tavily_search and tavily_search.is_tavily_configured() and tavily_search.should_trigger_tavily(content):
-                                lower_c = content.lower()
-                                needs_fund = any(k in lower_c for k in ["why", "news", "moving", "happened", "today", "now", "reason", "regulation", "fed", "breaking", "latest"])
-                                if needs_fund:
-                                    web_result = await asyncio.to_thread(tavily_search.search_web, content, 5, "basic", True)
-                                    if web_result.get("success") and web_result.get("results"):
-                                        web_ctx = tavily_search.format_for_ai(web_result, max_content_chars=2500)
-                                        combined_prompt = (
-                                            f"User asked: {content}\n\n"
-                                            f"Technical analysis already provided for {symbol} timeframe {timeframe}.\n"
-                                            f"News risk: {news_data.get('risk','LOW') if news_data else 'LOW'}\n\n"
-                                            f"Live web context:\n{web_ctx}\n\n"
-                                            f"Provide concise fundamental explanation for {symbol} move using web context. Mention sources. Do not invent prices."
-                                        )
-                                        fundamental = await asyncio.to_thread(ai.ask, str(message.author.id), combined_prompt, None)
-                                        if fundamental:
-                                            for chunk in [fundamental[i:i+1900] for i in range(0, len(fundamental), 1900)]:
-                                                await message.reply(f"🌐 **Live Web Context {symbol}:**\n{chunk}", mention_author=False)
-                        except Exception as e:
-                            logger.warning(f"Discord Tavily market enhancement failed (non-fatal): {_redact(str(e))}")
-
+                            cb = await asyncio.to_thread(build_discord_signal_chart, sym, tf, md)
+                            if cb:
+                                cf = File(fp=cb, filename="king_zarry_signal.png")
+                                emb.set_image(url="attachment://king_zarry_signal.png")
+                        except Exception as ce:
+                            logger.warning(f"Chart err: {_redact(repr(ce))}")
+                        if cf: await message.reply(embed=emb, file=cf, mention_author=False)
+                        else: await message.reply(embed=emb, mention_author=False)
                         return
                     except Exception as me:
-                        logger.warning(f"Discord market intent failed for {content}: {_redact(str(me))}")
+                        logger.warning(f"Market err: {_redact(str(me))}")
         except Exception as e:
-            logger.warning(f"Market intent detection error: {_redact(str(e))}")
+            logger.warning(f"Market detect err: {_redact(str(e))}")
 
-        # === PRIORITY 4: NEWS INTENT ===
+        # PRIORITY 4: NEWS
         try:
             if detect_news_intent_discord(content) and not images:
                 async with message.channel.typing():
-                    symbol, _ = detect_market_and_timeframe(content)
+                    sym, _ = detect_market_and_timeframe(content)
                     try:
-                        news_data = await asyncio.to_thread(news_engine.get_news_for_asset, symbol)
-                        if news_data:
-                            embed = Embed(title=f"📰 {symbol} News", description=news_data.get("summary","Latest market context")[:1500], color=discord.Color.blue())
-                            risk = news_data.get("risk","LOW")
-                            embed.add_field(name="Risk", value=risk, inline=True)
-                            if news_data.get("events"):
-                                ev_text = "\n".join([f"• {ev.get('event','')[:80]}" for ev in news_data["events"][:3]])
-                                embed.add_field(name="Upcoming Events", value=ev_text[:1024], inline=False)
-                            await message.reply(embed=embed, mention_author=False)
+                        nd = await asyncio.to_thread(news_engine.get_news_for_asset, sym)
+                        if nd:
+                            emb = Embed(title=f"📰 {sym} News", description=nd.get("summary", "Market context")[:1500], color=discord.Color.blue())
+                            emb.add_field(name="Risk", value=nd.get("risk", "LOW"), inline=True)
+                            if nd.get("events"):
+                                ev = "\n".join([f"• {e.get('event','')[:80]}" for e in nd["events"][:3]])
+                                emb.add_field(name="Events", value=ev[:1024], inline=False)
+                            await message.reply(embed=emb, mention_author=False)
                             return
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+                    except Exception: pass
+        except Exception: pass
 
-        # === PRIORITY 5: NORMAL AI CONVERSATION ===
+        # PRIORITY 5: AI
         try:
             async with message.channel.typing():
-                image_tuple = None
+                it = None
                 if images:
-                    attachment = images[0]
-                    if attachment.size > MAX_IMAGE_SIZE:
-                        await message.reply("❌ Image must be below 10 MB.", mention_author=False)
-                        return
-                    image_bytes = await attachment.read()
-                    mime_type = attachment.content_type or "image/png"
-                    image_tuple = (mime_type, image_bytes)
-                    symbol, timeframe = detect_market_and_timeframe(content)
-                    if symbol != "BTC/USD" or any(kw in content.upper() for kw in ["CHART", "SIGNAL", "ANALYSIS"]):
-                        content = f"Analyze this trading chart screenshot. Market: {symbol} Timeframe: {timeframe}. Only use information actually visible in the image. Summarize trend, support/resistance, patterns, EMA/RSI if visible, possible BUY/SELL setup, entry/SL/TP."
+                    a = images[0]
+                    if a.size > MAX_IMAGE_SIZE:
+                        await message.reply("❌ Image > 10MB.", mention_author=False); return
+                    ib = await a.read()
+                    it = (a.content_type or "image/png", ib)
+                    sym, tf = detect_market_and_timeframe(content)
+                    if sym != "BTC/USD" or any(k in content.upper() for k in ["CHART","SIGNAL","ANALYSIS"]):
+                        content = f"Analyze this chart. Market: {sym} TF: {tf}. Only use info visible in image."
                     elif not content:
-                        content = "Analyze this image carefully and explain what you see."
-                full_prompt = SYSTEM_VOICE_PROMPT + "\n\nUser Question: " + content
-                answer = await asyncio.to_thread(ai.ask, str(message.author.id), full_prompt, image_tuple)
-            if not answer:
-                answer = "❌ I couldn't generate a response."
-            voice_triggers = ["use voice", "speak", "send audio", "voice message", "say this", "can you speak", "female voice", "audio"]
-            wants_voice = is_voice_transcription or any(trigger in content.lower() for trigger in voice_triggers)
-            voice_file = None
-            if wants_voice:
+                        content = "Analyze this image."
+                fp = SYSTEM_VOICE_PROMPT + "\n\nUser: " + content
+                ans = await asyncio.to_thread(ai.ask, str(message.author.id), fp, it)
+            if not ans: ans = "❌ No response."
+            vt = ["use voice","speak","send audio","voice message","say this","can you speak","female voice","audio"]
+            wv = is_voice_transcription or any(t in content.lower() for t in vt)
+            vf = None
+            if wv:
                 try:
-                    audio_fp, provider = await generate_tts_audio(answer[:800])
-                    voice_file = File(fp=audio_fp, filename="king_zarry_voice.mp3")
-                except Exception as voice_error:
-                    logger.warning(f"Voice generation error (all providers failed): {_redact(str(voice_error))}")
-                    if is_voice_transcription:
-                        await send_chunks(message, answer)
-                        return
-                    await message.reply("❌ Voice generation failed. Both ElevenLabs Bella and AriaNeural fallback unavailable.", mention_author=False)
-                    await send_chunks(message, answer)
-                    return
-            if voice_file:
-                await message.reply(content=answer[:1900], file=voice_file, mention_author=False)
-            else:
-                await send_chunks(message, answer)
+                    af, pv = await generate_tts_audio(ans[:800])
+                    vf = File(fp=af, filename="king_zarry_voice.mp3")
+                except Exception as ve:
+                    logger.warning(f"Voice err: {_redact(str(ve))}")
+                    await send_chunks(message, ans); return
+            if vf: await message.reply(content=ans[:1900], file=vf, mention_author=False)
+            else: await send_chunks(message, ans)
         except Exception as e:
-            logger.error(f"AI MESSAGE ERROR: {_redact(repr(e))}")
-            try:
-                await message.reply("❌ **King Zarry AI error**\n\n⚠️ AI service is temporarily busy. Please try again shortly.", mention_author=False)
-            except Exception:
-                pass
+            logger.error(f"AI err: {_redact(repr(e))}")
+            try: await message.reply("❌ Error. Try again.", mention_author=False)
+            except Exception: pass
 
 client = KingZarryAI()
 
-# === BACKGROUND PRICE ALERT MONITORING FOR DISCORD ===
 from discord.ext import tasks
 
 @tasks.loop(seconds=60)
 async def discord_price_alert_loop():
     try:
-        get_active_fn = shared_get_all_active
-        get_price_fn = shared_get_price
-        check_fn = shared_check_triggered
-        if not get_active_fn or not get_price_fn or not check_fn:
-            return
-        active_alerts = await asyncio.to_thread(get_active_fn)
-        if not active_alerts:
-            return
+        ga = shared_get_all_active; gp = shared_get_price; ck = shared_check_triggered
+        if not ga or not gp or not ck: return
+        aa = await asyncio.to_thread(ga)
+        if not aa: return
         from collections import defaultdict
-        alerts_by_symbol = defaultdict(list)
-        for a in active_alerts:
-            alerts_by_symbol[a["symbol"]].append(a)
-        for symbol, alerts in alerts_by_symbol.items():
+        by_sym = defaultdict(list)
+        for a in aa: by_sym[a["symbol"]].append(a)
+        for sym, alerts in by_sym.items():
             try:
-                current_price = await asyncio.to_thread(get_price_fn, symbol)
-                if current_price is None:
-                    continue
-                now_iso = datetime.now(timezone.utc).isoformat()
-                for alert in alerts:
+                cp = await asyncio.to_thread(gp, sym)
+                if cp is None: continue
+                ni = datetime.now(timezone.utc).isoformat()
+                for a in alerts:
                     try:
-                        last_price = alert.get("last_checked_price")
-                        triggered = check_fn(current_price=float(current_price), target_price=float(alert["target_price"]), condition=alert["condition"], last_price=last_price)
+                        lp = a.get("last_checked_price")
+                        trg = ck(current_price=float(cp), target_price=float(a["target_price"]), condition=a["condition"], last_price=lp)
                         try:
                             conn = db_connect()
-                            conn.execute("UPDATE price_alerts SET last_checked_price=?, last_checked_at=? WHERE id=?", (current_price, now_iso, alert["id"]))
-                            conn.commit()
-                            conn.close()
-                        except Exception:
-                            pass
-                        if triggered:
-                            user_id = int(alert["user_id"])
-                            target = float(alert["target_price"])
-                            cond = alert["condition"]
-                            cond_display = {"ABOVE": f"Above {target}", "BELOW": f"Below {target}", "REACHES": f"Reached target {target}"}.get(cond, cond)
+                            conn.execute("UPDATE price_alerts SET last_checked_price=?, last_checked_at=? WHERE id=?", (cp, ni, a["id"]))
+                            conn.commit(); conn.close()
+                        except Exception: pass
+                        if trg:
+                            uid = int(a["user_id"]); tgt = float(a["target_price"]); cnd = a["condition"]
+                            cd = {"ABOVE": f"Above {tgt}", "BELOW": f"Below {tgt}", "REACHES": f"Reached {tgt}"}.get(cnd, cnd)
                             try:
-                                user = client.get_user(user_id)
-                                if user is None:
-                                    try:
-                                        user = await client.fetch_user(user_id)
-                                    except Exception:
-                                        user = None
-                                if user:
-                                    embed = Embed(title="🔔 KING ZARRY AI PRICE ALERT", description=f"Your personal price alert has been triggered.", color=discord.Color.gold())
-                                    embed.add_field(name="Asset", value=symbol, inline=True)
-                                    embed.add_field(name="Target", value=str(target), inline=True)
-                                    embed.add_field(name="Current", value=f"{current_price:.2f}", inline=True)
-                                    embed.add_field(name="Condition", value=cond_display, inline=False)
-                                    await user.send(embed=embed)
+                                u = client.get_user(uid)
+                                if u is None:
+                                    try: u = await client.fetch_user(uid)
+                                    except Exception: u = None
+                                if u:
+                                    emb = Embed(title="🔔 PRICE ALERT", description="Your alert triggered.", color=discord.Color.gold())
+                                    emb.add_field(name="Asset", value=sym, inline=True)
+                                    emb.add_field(name="Target", value=str(tgt), inline=True)
+                                    emb.add_field(name="Current", value=f"{cp:.2f}", inline=True)
+                                    emb.add_field(name="Condition", value=cd, inline=False)
+                                    await u.send(embed=emb)
                                 conn = db_connect()
-                                conn.execute("UPDATE price_alerts SET active=0, triggered=1, triggered_at=?, last_checked_price=?, last_checked_at=? WHERE id=?", (now_iso, current_price, now_iso, alert["id"]))
-                                conn.commit()
-                                conn.close()
-                                logger.info(f"Discord alert triggered: id={alert['id']} user={user_id} {symbol} {cond} {target} current={current_price}")
-                            except Exception as send_err:
-                                logger.warning(f"Discord alert send failed for {alert['id']} user {user_id}: {_redact(str(send_err))}")
-                    except Exception as per_alert_err:
-                        logger.warning(f"Discord alert loop per-alert error: {_redact(str(per_alert_err))}")
-                        continue
-            except Exception as per_symbol_err:
-                logger.warning(f"Discord alert loop per-symbol error: {_redact(str(per_symbol_err))}")
-                continue
+                                conn.execute("UPDATE price_alerts SET active=0, triggered=1, triggered_at=?, last_checked_price=?, last_checked_at=? WHERE id=?", (ni, cp, ni, a["id"]))
+                                conn.commit(); conn.close()
+                            except Exception as se:
+                                logger.warning(f"Alert send err: {_redact(str(se))}")
+                    except Exception: continue
+            except Exception: continue
     except Exception as e:
-        logger.warning(f"Discord price alert loop error: {_redact(str(e))}")
+        logger.warning(f"Alert loop err: {_redact(str(e))}")
 
 @discord_price_alert_loop.before_loop
 async def before_alert_loop():
     await client.wait_until_ready()
-    print("🔔 Discord price alert loop starting (60s, shared price_alerts table)")
+    print("🔔 Price alert loop starting", flush=True)
 
-original_on_ready = client.on_ready
+_orig = client.on_ready
 async def enhanced_on_ready():
-    await original_on_ready()
+    await _orig()
     if not discord_price_alert_loop.is_running():
         discord_price_alert_loop.start()
-        print("🔔 Discord price alert background task started")
+        print("🔔 Alert task started", flush=True)
 
 client.on_ready = enhanced_on_ready
 
 async def send_chunks(destination, text: str):
-    if not text:
-        text = "❌ King Zarry AI returned an empty response."
-    chunks = [text[i:i + 1900] for i in range(0, len(text), 1900)]
-    for chunk in chunks:
-        await destination.reply(chunk, mention_author=False)
+    if not text: text = "❌ Empty response"
+    for c in [text[i:i+1900] for i in range(0, len(text), 1900)]:
+        await destination.reply(c, mention_author=False)
 
-async def send_followup_chunks(interaction: discord.Interaction, text: str):
-    if not text:
-        text = "❌ King Zarry AI returned an empty response."
-    chunks = [text[i:i + 1900] for i in range(0, len(text), 1900)]
-    for chunk in chunks:
-        await interaction.followup.send(chunk)
+async def send_followup_chunks(interaction, text: str):
+    if not text: text = "❌ Empty response"
+    for c in [text[i:i+1900] for i in range(0, len(text), 1900)]:
+        await interaction.followup.send(c)
 
+# ============ SLASH COMMANDS ============
 @client.tree.command(name="start", description="Start King Zarry AI")
 async def start(interaction: discord.Interaction):
-    if not await ensure_not_banned(interaction):
-        return
+    if not await ensure_not_banned(interaction): return
     await track_user(interaction.user)
-    embed = Embed(title="👑 KING ZARRY AI IS ONLINE", description="🧠 AI Agent • 📊 Market Intelligence • 📸 Vision • 💾 Memory • 🎙️ Voice • 🎨 Image/Video • ⭐ Premium", color=discord.Color.gold())
-    embed.add_field(name="TRADING", value="`/signal BTC` `/btc` `/eth` `/sol` `/xau` `/plan`", inline=False)
-    embed.add_field(name="ALERTS", value="`/alert` `/alerts` `/cancelalert` - Personal price alerts (shared with Telegram)", inline=False)
-    embed.add_field(name="AI", value="`/ask` `/voice` `/tts`", inline=False)
-    embed.add_field(name="CREATIVE", value="Just type: `Draw a cyberpunk trader`, `Create an image of gold bars`, `Make a video of a sunrise`, or attach a photo with `make it look vintage`", inline=False)
-    embed.add_field(name="VIDEO (Fal.ai)", value="`/textvideo` `/imagevideo` - explicit high-quality video generation", inline=False)
-    embed.add_field(name="NEWS", value="`/news` `/events`", inline=False)
-    embed.add_field(name="PREMIUM", value="`/premium` `/status` - Discord Premium separate from Telegram Stars", inline=False)
-    embed.add_field(name="VOICE", value="`/join` `/say` `/leave`", inline=False)
-    await interaction.response.send_message(embed=embed)
+    e = Embed(title="👑 KING ZARRY AI", description="AI Agent • Market • Vision • Memory • Voice • Image/Video", color=discord.Color.gold())
+    e.add_field(name="Trading", value="`/signal BTC` `/btc` `/eth` `/sol` `/xau` `/plan`", inline=False)
+    e.add_field(name="Alerts", value="`/alert` `/alerts` `/cancelalert`", inline=False)
+    e.add_field(name="AI", value="`/ask` `/voice` `/tts`", inline=False)
+    e.add_field(name="Creative", value="Just type `Draw a cyberpunk trader`", inline=False)
+    e.add_field(name="Video", value="`/textvideo` `/imagevideo`", inline=False)
+    e.add_field(name="News", value="`/news` `/events`", inline=False)
+    await interaction.response.send_message(embed=e)
 
-@client.tree.command(name="help", description="Help for King Zarry AI")
+@client.tree.command(name="help", description="Help")
 async def help_cmd(interaction: discord.Interaction):
-    if not await ensure_not_banned(interaction):
-        return
+    if not await ensure_not_banned(interaction): return
     await track_user(interaction.user)
-    text = (
-        "👑 **KING ZARRY AI HELP**\n\n"
-        "**Trading:**\n"
-        "`/signal BTC` - BTC MTF signal with daily plan\n"
-        "`/btc [timeframe]` `/eth` `/sol` `/xau` `/gold [timeframe]` - Quick analysis\n"
-        "`/plan BTC` - Daily plan status\n"
-        "`/analyze SYMBOL [timeframe]` - Custom symbol\n\n"
-        "**Personal Price Alerts (shared with Telegram):**\n"
-        "`/alert symbol:XAU condition:reaches price:4340`\n"
-        "`/alerts` - List only your alerts\n"
-        "`/cancelalert id:1` or `id:all`\n"
-        "Natural: `Alert me when gold reaches 4340`\n\n"
-        "**AI:**\n"
-        "`/ask` - Ask AI\n"
-        "`/voice` - Voice answer\n"
-        "`/tts TEXT` - Bella voice + AriaNeural fallback\n\n"
-        "**Creative (Agnes AI via natural language):**\n"
-        "`Draw a cyberpunk trader`\n"
-        "`Create an image of gold bars`\n"
-        "`Make a video of a sunrise`\n"
-        "Attach photo + `make it look vintage`\n\n"
-        "**High-quality video (Fal.ai):**\n"
-        "`/textvideo PROMPT`\n"
-        "`/imagevideo IMAGE MOTION`\n\n"
-        "**News:**\n"
-        "`/news` `/events`\n\n"
-        "**Premium:**\n"
-        "`/premium` `/status`\n\n"
-        "**Voice Channel:**\n"
-        "`/join` `/say TEXT` `/leave`"
-    )
-    await interaction.response.send_message(text)
+    await interaction.response.send_message("👑 **HELP**\n\n`/signal BTC` `/btc` `/eth` `/sol` `/xau` `/plan` `/analyze`\n`/alert` `/alerts` `/cancelalert`\n`/ask` `/voice` `/tts`\n`/textvideo` `/imagevideo`\n`/news` `/events`\n`/premium` `/status`\n`/join` `/say` `/leave`")
 
-@client.tree.command(
-    name="ping",
-    description="Check King Zarry AI status"
-)
-async def ping(
-    interaction: discord.Interaction
-):
-    if not await ensure_not_banned(
-        interaction
-    ):
-        return
-    await track_user(
-        interaction.user
-    )
-    await interaction.response.send_message(
-        "👑 **King Zarry AI is online!**\n\n"
-        "🤖 AI: Connected\n"
-        "📊 Market: Connected\n"
-        "📰 News: Connected\n"
-        "🎙️ Voice: Enabled\n"
-        "🎨 Creative: Enabled"
-    )
-
-VALID_TIMEFRAMES = {"1m","5m","15m","30m","1h","2h","4h","1d"}
-
-def normalize_tf(tf: str) -> str:
-    tf = tf.lower().strip()
-    return tf if tf in VALID_TIMEFRAMES else "15m"
-
-async def handle_signal(interaction: discord.Interaction, symbol: str, timeframe: str = "15m", defer: bool = True):
-    if not await ensure_not_banned(interaction):
-        return
+@client.tree.command(name="ping", description="Status check")
+async def ping(interaction: discord.Interaction):
+    if not await ensure_not_banned(interaction): return
     await track_user(interaction.user)
-    if defer:
-        await interaction.response.defer()
+    await interaction.response.send_message("👑 King Zarry AI online!\n🤖 AI: OK\n📊 Market: OK\n📰 News: OK\n🎙️ Voice: OK")
+
+VALID_TF = {"1m","5m","15m","30m","1h","2h","4h","1d"}
+def _ntf(tf): return tf.lower().strip() if tf.lower().strip() in VALID_TF else "15m"
+
+async def handle_signal(interaction, symbol, timeframe="15m", defer=True):
+    if not await ensure_not_banned(interaction): return
+    await track_user(interaction.user)
+    if defer: await interaction.response.defer()
     try:
-        tf = normalize_tf(timeframe)
-        market_data = await asyncio.to_thread(market_engine.analyze_market, symbol, tf)
-        news_data = await asyncio.to_thread(news_engine.get_news_for_asset, symbol)
-        embed = build_discord_signal_embed(market_data, news_data)
-        if tf != timeframe.lower().strip():
-            embed.set_footer(text=f"⚠️ Requested timeframe '{timeframe}' normalized to {tf}. Execution remains daily-plan based. Not financial advice.")
-
-        chart_file = None
+        tf = _ntf(timeframe)
+        md = await asyncio.to_thread(market_engine.analyze_market, symbol, tf)
+        nd = await asyncio.to_thread(news_engine.get_news_for_asset, symbol)
+        emb = build_discord_signal_embed(md, nd)
+        cf = None
         try:
-            chart_buffer = await asyncio.to_thread(build_discord_signal_chart, symbol, tf, market_data)
-            if chart_buffer:
-                chart_file = File(fp=chart_buffer, filename="king_zarry_signal.png")
-                embed.set_image(url="attachment://king_zarry_signal.png")
-        except Exception as chart_e:
-            logger.warning(f"Discord chart attach failed for {symbol} {tf}: {_redact(repr(chart_e))}")
-            chart_file = None
-
-        if defer:
-            if chart_file:
-                await interaction.followup.send(embed=embed, file=chart_file)
-            else:
-                await interaction.followup.send(embed=embed)
-        else:
-            if chart_file:
-                await interaction.response.send_message(embed=embed, file=chart_file)
-            else:
-                await interaction.response.send_message(embed=embed)
+            cb = await asyncio.to_thread(build_discord_signal_chart, symbol, tf, md)
+            if cb:
+                cf = File(fp=cb, filename="king_zarry_signal.png")
+                emb.set_image(url="attachment://king_zarry_signal.png")
+        except Exception as ce:
+            logger.warning(f"Chart err: {_redact(repr(ce))}")
+        if cf: await interaction.followup.send(embed=emb, file=cf)
+        else: await interaction.followup.send(embed=emb)
     except Exception as e:
-        logger.error(f"Signal error for {symbol} {timeframe}: {_redact(repr(e))}")
-        err_msg = "⚠️ AI service is temporarily busy. Please try again shortly."
-        if "TWELVE_DATA_API_KEY" in str(e) or "Twelve" in str(e):
-            err_msg = "❌ Market data provider unavailable. Please check TWELVE_DATA_API_KEY."
-        if defer:
-            await interaction.followup.send(err_msg)
-        else:
-            await interaction.response.send_message(err_msg, ephemeral=True)
+        logger.error(f"Signal err {symbol}: {_redact(repr(e))}")
+        await interaction.followup.send("⚠️ Signal failed. Retry.")
 
-@client.tree.command(name="signal", description="Get MTF trading signal with daily plan")
-@app_commands.describe(symbol="BTC, ETH, SOL, XAU")
+@client.tree.command(name="signal", description="MTF signal")
 @app_commands.choices(symbol=[
     app_commands.Choice(name="BTC/USD", value="BTC/USD"),
     app_commands.Choice(name="ETH/USD", value="ETH/USD"),
     app_commands.Choice(name="SOL/USD", value="SOL/USD"),
     app_commands.Choice(name="XAU/USD Gold", value="XAU/USD"),
 ])
-async def signal_cmd(interaction: discord.Interaction, symbol: str = "BTC/USD"):
+async def signal_cmd(interaction, symbol: str = "BTC/USD"):
     await handle_signal(interaction, symbol, "15m")
 
-@client.tree.command(name="btc", description="Analyze Bitcoin market MTF (daily plan execution 15M)")
-@app_commands.describe(timeframe="Valid: 1m,5m,15m,30m,1h,2h,4h,1d")
-async def btc(interaction: discord.Interaction, timeframe: str = "15m"):
+@client.tree.command(name="btc", description="BTC analysis")
+async def btc(interaction, timeframe: str = "15m"):
     await handle_signal(interaction, "BTC/USD", timeframe)
 
-@client.tree.command(name="eth", description="Analyze Ethereum market MTF")
-async def eth(interaction: discord.Interaction):
+@client.tree.command(name="eth", description="ETH analysis")
+async def eth(interaction):
     await handle_signal(interaction, "ETH/USD", "15m")
 
-@client.tree.command(name="sol", description="Analyze Solana market MTF")
-async def sol(interaction: discord.Interaction):
+@client.tree.command(name="sol", description="SOL analysis")
+async def sol(interaction):
     await handle_signal(interaction, "SOL/USD", "15m")
 
-@client.tree.command(name="xau", description="Analyze Gold XAU/USD market MTF")
-async def xau(interaction: discord.Interaction):
+@client.tree.command(name="xau", description="XAU analysis")
+async def xau(interaction):
     await handle_signal(interaction, "XAU/USD", "15m")
 
-@client.tree.command(name="gold", description="Analyze Gold market MTF (daily plan 15M)")
-@app_commands.describe(timeframe="Valid: 1m,5m,15m,30m,1h,2h,4h,1d")
-async def gold(interaction: discord.Interaction, timeframe: str = "15m"):
+@client.tree.command(name="gold", description="Gold analysis")
+async def gold(interaction, timeframe: str = "15m"):
     await handle_signal(interaction, "XAU/USD", timeframe)
 
-@client.tree.command(name="crypto", description="Check BTC, ETH, SOL and XAU prices")
-async def crypto(interaction: discord.Interaction):
-    if not await ensure_not_banned(interaction):
-        return
+@client.tree.command(name="crypto", description="Crypto prices")
+async def crypto(interaction):
+    if not await ensure_not_banned(interaction): return
     await track_user(interaction.user)
     await interaction.response.defer()
-    try:
-        symbols = ["BTC/USD", "ETH/USD", "SOL/USD", "XAU/USD"]
-        results = []
-        for sym in symbols:
-            try:
-                data = await asyncio.to_thread(market_engine.analyze_market, sym, "15m")
-                price = safe_float(data.get("price"))
-                sig = data.get("signal", "WAIT")
-                results.append(f"**{sym}**: `${price:,.2f}` - {sig}")
-            except Exception as e:
-                results.append(f"**{sym}**: Error - {_redact(str(e))[:50]}")
-        await interaction.followup.send("👑 **CRYPTO PRICES (Daily Plan Engine)**\n\n" + "\n".join(results))
-    except Exception as e:
-        await interaction.followup.send(f"❌ Price fetch failed: {_redact(str(e))[:200]}")
+    res = []
+    for s in ["BTC/USD", "ETH/USD", "SOL/USD", "XAU/USD"]:
+        try:
+            d = await asyncio.to_thread(market_engine.analyze_market, s, "15m")
+            p = safe_float(d.get("price"))
+            sg = d.get("signal", "WAIT")
+            res.append(f"**{s}**: `${p:,.2f}` - {sg}")
+        except Exception as e:
+            res.append(f"**{s}**: Error - {_redact(str(e))[:50]}")
+    await interaction.followup.send("👑 **PRICES**\n\n" + "\n".join(res))
 
-@client.tree.command(name="analyze", description="Analyze custom market")
-@app_commands.describe(symbol="BTC/USD, EUR/USD, XAU/USD, etc.", timeframe="Valid: 1m,5m,15m,30m,1h,2h,4h,1d")
-async def analyze(interaction: discord.Interaction, symbol: str, timeframe: str = "15m"):
+@client.tree.command(name="analyze", description="Custom market")
+async def analyze(interaction, symbol: str, timeframe: str = "15m"):
     await handle_signal(interaction, symbol.upper(), timeframe)
 
-@client.tree.command(name="plan", description="Show daily plan for symbol")
-@app_commands.describe(symbol="BTC/USD, ETH/USD, SOL/USD, XAU/USD")
-async def plan_cmd(interaction: discord.Interaction, symbol: str = "BTC/USD"):
-    if not await ensure_not_banned(interaction):
-        return
+@client.tree.command(name="plan", description="Daily plan")
+async def plan_cmd(interaction, symbol: str = "BTC/USD"):
+    if not await ensure_not_banned(interaction): return
     await track_user(interaction.user)
     await interaction.response.defer()
     try:
-        trading_date = market_engine.get_trading_date()
-        plan = await asyncio.to_thread(market_engine.get_daily_plan, symbol, trading_date)
-        if not plan:
-            await interaction.followup.send(f"📭 No active daily plan for {symbol} on {trading_date}. Use `/signal {symbol}` to create one.")
-            return
-        embed = build_discord_signal_embed(plan, None)
-        embed.title = f"📋 DAILY PLAN • {symbol} • {trading_date}"
-        await interaction.followup.send(embed=embed)
+        td = market_engine.get_trading_date()
+        p = await asyncio.to_thread(market_engine.get_daily_plan, symbol, td)
+        if not p:
+            await interaction.followup.send(f"📭 No plan for {symbol} on {td}."); return
+        e = build_discord_signal_embed(p, None)
+        e.title = f"📋 PLAN • {symbol} • {td}"
+        await interaction.followup.send(embed=e)
     except Exception as e:
-        await interaction.followup.send(f"❌ Plan error: {_redact(str(e))[:300]}")
+        await interaction.followup.send(f"❌ Plan: {_redact(str(e))[:300]}")
 
-@client.tree.command(name="news", description="Check news engine status and upcoming news")
-async def news_cmd(interaction: discord.Interaction):
-    if not await ensure_not_banned(interaction):
-        return
+@client.tree.command(name="news", description="News engine status")
+async def news_cmd(interaction):
+    if not await ensure_not_banned(interaction): return
     await track_user(interaction.user)
     await interaction.response.defer()
     try:
         from news import provider_status, news_health
-        status = provider_status()
-        health = news_health()
-        embed = Embed(title="📰 KING ZARRY NEWS ENGINE", color=discord.Color.blue())
-        embed.add_field(name="Selected News Provider", value=status.get("selected_news_provider", "AUTO"), inline=True)
-        embed.add_field(name="Selected Calendar Provider", value=status.get("selected_calendar_provider", "AUTO"), inline=True)
-        embed.add_field(name="Calendar Available", value="✅ YES" if status.get("calendar_available") else "❌ NO", inline=False)
-        embed.add_field(name="Headlines Available", value="✅ YES" if status.get("news_available") else "❌ NO", inline=False)
-        embed.add_field(name="Health", value=f"Overall: {health.get('status')} | Calendar: {health.get('calendar_status')} | Headlines: {health.get('headline_status')}", inline=False)
-        embed.add_field(name="Providers", value=f"EODHD: {status.get('eodhd')} | TE: {status.get('tradingeconomics')} | Finnhub: {status.get('finnhub')} | Currents: {status.get('currents')} | NewsData: {status.get('newsdata')}", inline=False)
-        try:
-            news_data = await asyncio.to_thread(news_engine.get_news_for_asset, "BTC/USD")
-            risk = news_data.get("risk", "LOW")
-            ev_count = len(news_data.get("events", []))
-            embed.add_field(name="BTC News Sample", value=f"Risk: {risk} | Events: {ev_count} | Headlines: {len(news_data.get('headlines', []))}", inline=False)
-        except Exception as e:
-            embed.add_field(name="BTC News Sample", value=f"Error: {_redact(str(e))[:200]}", inline=False)
-        await interaction.followup.send(embed=embed)
+        s = provider_status(); h = news_health()
+        e = Embed(title="📰 NEWS ENGINE", color=discord.Color.blue())
+        e.add_field(name="Status", value=f"Health: {h.get('status')}", inline=False)
+        e.add_field(name="Calendar", value="✅" if s.get("calendar_available") else "❌", inline=True)
+        e.add_field(name="Headlines", value="✅" if s.get("news_available") else "❌", inline=True)
+        await interaction.followup.send(embed=e)
     except Exception as e:
-        await interaction.followup.send(f"❌ News engine error: {_redact(str(e))[:500]}")
+        await interaction.followup.send(f"❌ News: {_redact(str(e))[:300]}")
 
-@client.tree.command(name="events", description="Upcoming economic events")
-@app_commands.describe(hours="Hours ahead (default 24)")
-async def events_cmd(interaction: discord.Interaction, hours: int = 24):
-    if not await ensure_not_banned(interaction):
-        return
+@client.tree.command(name="events", description="Upcoming events")
+async def events_cmd(interaction, hours: int = 24):
+    if not await ensure_not_banned(interaction): return
     await track_user(interaction.user)
     await interaction.response.defer()
     try:
         from news import get_upcoming_events
-        events = await asyncio.to_thread(get_upcoming_events, hours)
-        if not events:
-            try:
-                from news import provider_status
-                ps = provider_status()
-                logger.info(f"Events empty - provider_status: {_redact(str(ps))}")
-            except Exception as diag_e:
-                logger.info(f"Events empty - provider_status check failed: {_redact(str(diag_e))}")
-            await interaction.followup.send(f"📰 No high-impact economic events are expected in the next {hours} hours.")
-            return
-        embed = Embed(title=f"📅 Upcoming Events ({hours}h)", color=discord.Color.gold())
-        for ev in events[:10]:
-            title = ev.get("event", "Unknown")[:100]
-            time_str = ev.get("time", ev.get("datetime", ""))[:50]
-            impact = ev.get("impact", "medium")
-            embed.add_field(name=f"{impact.upper()} - {time_str}", value=title, inline=False)
-        await interaction.followup.send(embed=embed)
+        ev = await asyncio.to_thread(get_upcoming_events, hours)
+        if not ev:
+            await interaction.followup.send(f"📰 No events in next {hours}h."); return
+        e = Embed(title=f"📅 Events ({hours}h)", color=discord.Color.gold())
+        for x in ev[:10]:
+            e.add_field(name=f"{x.get('impact','medium').upper()} - {x.get('time','')[:50]}", value=x.get("event", "Unknown")[:100], inline=False)
+        await interaction.followup.send(embed=e)
     except Exception as e:
-        await interaction.followup.send(f"❌ Events error: {_redact(str(e))[:400]}")
+        await interaction.followup.send(f"❌ Events: {_redact(str(e))[:300]}")
 
-@client.tree.command(name="premium", description="Check or manage Premium (Discord Premium separate from Telegram Stars)")
-@app_commands.describe(user="Admin: user to grant/revoke", plan="Admin: monthly, 3month, yearly, or revoke")
+@client.tree.command(name="premium", description="Premium status/manage")
 @app_commands.choices(plan=[
     app_commands.Choice(name="monthly - 250 XTR", value="monthly"),
     app_commands.Choice(name="3 months - 600 XTR", value="3month"),
     app_commands.Choice(name="yearly - 2000 XTR", value="yearly"),
-    app_commands.Choice(name="revoke premium", value="revoke"),
+    app_commands.Choice(name="revoke", value="revoke"),
 ])
-async def premium(interaction: discord.Interaction, user: Optional[discord.User] = None, plan: Optional[app_commands.Choice[str]] = None):
-    if not await ensure_not_banned(interaction):
-        return
+async def premium(interaction, user: Optional[discord.User] = None, plan: Optional[app_commands.Choice[str]] = None):
+    if not await ensure_not_banned(interaction): return
     await track_user(interaction.user)
     if user is None and plan is None:
-        subscription = await asyncio.to_thread(get_subscription_sync, interaction.user.id)
-        if not subscription:
-            await interaction.response.send_message("⭐ **KING ZARRY PREMIUM**\n\nYou do not currently have an active Premium subscription.\n\nAvailable plans:\n• Monthly: **250 XTR / 30 days**\n• 3 Months: **600 XTR / 90 days**\n• Yearly: **2000 XTR / 365 days**\n\nDiscord Premium status is separate from Telegram Stars.\nContact administrator to activate.", ephemeral=True)
-            return
-        expires = datetime.fromisoformat(subscription["expires_at"])
-        await interaction.response.send_message(f"⭐ **KING ZARRY PREMIUM**\n\nPlan: **{subscription['plan']}**\nExpires: **{expires:%Y-%m-%d %H:%M UTC}**\n\n✅ Premium is active.\n\nDiscord Premium status is separate from Telegram Stars.", ephemeral=True)
+        sub = await asyncio.to_thread(get_subscription_sync, interaction.user.id)
+        if not sub:
+            await interaction.response.send_message("⭐ No active Premium.", ephemeral=True); return
+        ex = datetime.fromisoformat(sub["expires_at"])
+        await interaction.response.send_message(f"⭐ Premium active\nPlan: {sub['plan']}\nExpires: {ex:%Y-%m-%d}", ephemeral=True)
         return
-    if not await require_admin(interaction):
-        return
+    if not await require_admin(interaction): return
     if user is None or plan is None:
-        await interaction.response.send_message("❌ Admin usage: `/premium @user monthly`", ephemeral=True)
-        return
+        await interaction.response.send_message("❌ Usage: /premium @user monthly", ephemeral=True); return
     if plan.value == "revoke":
-        removed = await asyncio.to_thread(revoke_subscription_sync, user.id)
-        await interaction.response.send_message(f"{'🗑️ Premium revoked for '+user.mention+'.' if removed else f'ℹ️ {user.mention} had no active Premium.'}", ephemeral=True)
-        return
-    expires = await asyncio.to_thread(grant_subscription_sync, user.id, plan.value, interaction.user.id)
-    await interaction.response.send_message(f"⭐ **PREMIUM ACTIVATED**\n\n👤 User: {user.mention}\n📦 Plan: **{plan.value}**\n💳 Price: **{PREMIUM_PLANS[plan.value]['price']}**\n📅 Expires: **{expires:%Y-%m-%d %H:%M UTC}**", ephemeral=True)
-    try:
-        await user.send(f"👑 **KING ZARRY AI PREMIUM ACTIVATED!**\n\n⭐ Plan: **{plan.value}**\n📅 Expires: **{expires:%Y-%m-%d %H:%M UTC}**\n\nYour Premium access is now active.")
-    except discord.HTTPException:
-        pass
+        rm = await asyncio.to_thread(revoke_subscription_sync, user.id)
+        await interaction.response.send_message("🗑️ Revoked" if rm else "ℹ️ No premium", ephemeral=True); return
+    ex = await asyncio.to_thread(grant_subscription_sync, user.id, plan.value, interaction.user.id)
+    await interaction.response.send_message(f"⭐ Premium activated for {user.mention}\nPlan: {plan.value}\nExpires: {ex:%Y-%m-%d}", ephemeral=True)
 
-@client.tree.command(name="status", description="Alias for premium status")
-async def status_cmd(interaction: discord.Interaction):
+@client.tree.command(name="status", description="Premium status alias")
+async def status_cmd(interaction):
     await premium(interaction)
 
-@client.tree.command(name="admin", description="Open admin panel")
-async def admin(interaction: discord.Interaction):
-    if not await require_admin(interaction):
-        return
-    users = await asyncio.to_thread(get_user_count_sync)
-    premium_users = await asyncio.to_thread(get_premium_count_sync)
-    banned = await asyncio.to_thread(get_banned_count_sync)
-    embed = Embed(title="👑 KING ZARRY AI ADMIN PANEL", description="🛡️ Administrator access confirmed.", color=discord.Color.gold())
-    embed.add_field(name="👑 Admin ID", value=f"`{DISCORD_ADMIN_ID}`", inline=False)
-    embed.add_field(name="🏠 Guild", value=f"`{DISCORD_GUILD_ID}`", inline=False)
-    embed.add_field(name="👥 Users", value=str(users), inline=True)
-    embed.add_field(name="⭐ Premium", value=str(premium_users), inline=True)
-    embed.add_field(name="⛔ Banned", value=str(banned), inline=True)
-    embed.add_field(name="🛠️ Admin Commands", value="`/users`\n`/broadcast`\n`/ban`\n`/unban`\n`/premium`\n`/admin`", inline=False)
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+@client.tree.command(name="admin", description="Admin panel")
+async def admin(interaction):
+    if not await require_admin(interaction): return
+    u = await asyncio.to_thread(get_user_count_sync)
+    p = await asyncio.to_thread(get_premium_count_sync)
+    b = await asyncio.to_thread(get_banned_count_sync)
+    e = Embed(title="👑 ADMIN", color=discord.Color.gold())
+    e.add_field(name="Users", value=str(u), inline=True)
+    e.add_field(name="Premium", value=str(p), inline=True)
+    e.add_field(name="Banned", value=str(b), inline=True)
+    await interaction.response.send_message(embed=e, ephemeral=True)
 
-@client.tree.command(name="users", description="View user statistics")
-async def users(interaction: discord.Interaction):
-    if not await require_admin(interaction):
-        return
-    total = await asyncio.to_thread(get_user_count_sync)
-    premium_users = await asyncio.to_thread(get_premium_count_sync)
-    banned = await asyncio.to_thread(get_banned_count_sync)
-    await interaction.response.send_message(f"👑 **KING ZARRY AI USER ANALYTICS**\n\n👥 Total tracked users: **{total}**\n⭐ Active Premium users: **{premium_users}**\n⛔ Banned users: **{banned}**\n🏠 Guilds: **{len(client.guilds)}**", ephemeral=True)
+@client.tree.command(name="users", description="User stats")
+async def users(interaction):
+    if not await require_admin(interaction): return
+    t = await asyncio.to_thread(get_user_count_sync)
+    p = await asyncio.to_thread(get_premium_count_sync)
+    b = await asyncio.to_thread(get_banned_count_sync)
+    await interaction.response.send_message(f"👑 Users: {t}\nPremium: {p}\nBanned: {b}\nGuilds: {len(client.guilds)}", ephemeral=True)
 
-@client.tree.command(name="ban", description="Ban a user from King Zarry AI")
-@app_commands.describe(user="Discord user to ban", reason="Reason for the ban")
-async def ban(interaction: discord.Interaction, user: discord.User, reason: str = "No reason provided"):
-    if not await require_admin(interaction):
-        return
+@client.tree.command(name="ban", description="Ban user")
+async def ban(interaction, user: discord.User, reason: str = "No reason"):
+    if not await require_admin(interaction): return
     if user.id == DISCORD_ADMIN_ID:
-        await interaction.response.send_message("❌ You cannot ban the configured administrator.", ephemeral=True)
-        return
+        await interaction.response.send_message("❌ Can't ban admin.", ephemeral=True); return
     await asyncio.to_thread(ban_user_sync, user.id, reason, interaction.user.id)
-    await interaction.response.send_message(f"⛔ **USER BANNED**\n\n👤 User: {user.mention}\n🆔 ID: `{user.id}`\n📝 Reason: {reason}", ephemeral=True)
-    try:
-        await user.send(f"⛔ You have been banned from King Zarry AI.\n\nReason: {reason}")
-    except discord.HTTPException:
-        pass
+    await interaction.response.send_message(f"⛔ Banned {user.mention}\nReason: {reason}", ephemeral=True)
 
-@client.tree.command(name="unban", description="Remove a ban")
-@app_commands.describe(user_id="Discord user ID to unban")
-async def unban(interaction: discord.Interaction, user_id: str):
-    if not await require_admin(interaction):
-        return
-    try:
-        target_id = int(user_id)
+@client.tree.command(name="unban", description="Unban user")
+async def unban(interaction, user_id: str):
+    if not await require_admin(interaction): return
+    try: tid = int(user_id)
     except ValueError:
-        await interaction.response.send_message("❌ User ID must be a number.", ephemeral=True)
-        return
-    removed = await asyncio.to_thread(unban_user_sync, target_id)
-    await interaction.response.send_message(f"{'✅ User `'+str(target_id)+'` has been unbanned.' if removed else f'ℹ️ User `{target_id}` was not banned.'}", ephemeral=True)
+        await interaction.response.send_message("❌ ID must be number", ephemeral=True); return
+    rm = await asyncio.to_thread(unban_user_sync, tid)
+    await interaction.response.send_message("✅ Unbanned" if rm else "ℹ️ Not banned", ephemeral=True)
 
-@client.tree.command(name="broadcast", description="Broadcast message + optional attachment to tracked users")
-@app_commands.describe(message="Message to send", attachment="Optional image/attachment to broadcast")
-async def broadcast(interaction: discord.Interaction, message: str, attachment: Optional[discord.Attachment] = None):
-    if not await require_admin(interaction):
-        return
+@client.tree.command(name="broadcast", description="Broadcast message")
+async def broadcast(interaction, message: str, attachment: Optional[discord.Attachment] = None):
+    if not await require_admin(interaction): return
     if len(message) > 1900:
-        await interaction.response.send_message("❌ Broadcast must be 1900 characters or less.", ephemeral=True)
-        return
-    ALLOWED_BROADCAST_TYPES = {
-        "image/png",
-        "image/jpeg",
-        "image/webp",
-        "image/gif",
-        "video/mp4",
-    }
-    broadcast_bytes = None
-    broadcast_filename = None
+        await interaction.response.send_message("❌ Max 1900 chars", ephemeral=True); return
+    ABT = {"image/png","image/jpeg","image/webp","image/gif","video/mp4"}
+    bb = None; bf = None
     if attachment:
         if attachment.size > MAX_IMAGE_SIZE:
-            await interaction.response.send_message("❌ Attachment must be below 10 MB.", ephemeral=True)
-            return
-        ctype = attachment.content_type
-        if not ctype or ctype not in ALLOWED_BROADCAST_TYPES:
-            await interaction.response.send_message("❌ Attachment type not allowed. Use PNG/JPEG/WEBP/GIF/MP4.", ephemeral=True)
-            return
-        try:
-            broadcast_bytes = await attachment.read()
-            broadcast_filename = attachment.filename
+            await interaction.response.send_message("❌ Max 10MB", ephemeral=True); return
+        if not attachment.content_type or attachment.content_type not in ABT:
+            await interaction.response.send_message("❌ Bad type", ephemeral=True); return
+        try: bb = await attachment.read(); bf = attachment.filename
         except Exception as e:
-            await interaction.response.send_message(f"❌ Failed to read attachment: {_redact(str(e))[:200]}", ephemeral=True)
-            return
+            await interaction.response.send_message(f"❌ {_redact(str(e))[:200]}", ephemeral=True); return
     await interaction.response.defer(ephemeral=True)
-    user_ids = await asyncio.to_thread(get_all_user_ids_sync)
-    sent = 0
-    failed = 0
-    for user_id in user_ids:
-        if user_id == DISCORD_ADMIN_ID:
-            continue
+    uids = await asyncio.to_thread(get_all_user_ids_sync)
+    sent = 0; fail = 0
+    for uid in uids:
+        if uid == DISCORD_ADMIN_ID: continue
         try:
-            user = client.get_user(user_id)
-            if user is None:
-                user = await client.fetch_user(user_id)
-            if await user_is_banned(user_id):
-                continue
-            if broadcast_bytes:
-                file_obj = discord.File(io.BytesIO(broadcast_bytes), filename=broadcast_filename)
-                await user.send("👑 **KING ZARRY AI ANNOUNCEMENT**\n\n" + message, file=file_obj)
+            u = client.get_user(uid)
+            if u is None: u = await client.fetch_user(uid)
+            if await user_is_banned(uid): continue
+            if bb:
+                f = discord.File(io.BytesIO(bb), filename=bf)
+                await u.send("👑 ANNOUNCEMENT\n\n" + message, file=f)
             else:
-                await user.send("👑 **KING ZARRY AI ANNOUNCEMENT**\n\n" + message)
-            sent += 1
-            await asyncio.sleep(0.5)
-        except Exception as e:
-            logger.warning(f"Broadcast failed for {user_id}: {_redact(str(e))}")
-            failed += 1
-    await interaction.followup.send(f"📢 **BROADCAST COMPLETE**\n\n✅ Sent: **{sent}**\n❌ Failed: **{failed}**\n👥 Tracked: **{len(user_ids)}**\n📎 Attachment: {'Yes - '+broadcast_filename if broadcast_bytes else 'No'}", ephemeral=True)
+                await u.send("👑 ANNOUNCEMENT\n\n" + message)
+            sent += 1; await asyncio.sleep(0.5)
+        except Exception: fail += 1
+    await interaction.followup.send(f"📢 Done\nSent: {sent}\nFailed: {fail}", ephemeral=True)
 
-@client.tree.command(name="ask", description="Ask King Zarry AI anything")
-@app_commands.describe(question="Your question")
-async def ask(interaction: discord.Interaction, question: str):
-    if not await ensure_not_banned(interaction):
-        return
+@client.tree.command(name="ask", description="Ask AI")
+async def ask(interaction, question: str):
+    if not await ensure_not_banned(interaction): return
     await track_user(interaction.user)
     await interaction.response.defer()
     try:
-        answer = await asyncio.to_thread(ai.ask, str(interaction.user.id), question)
-        await send_followup_chunks(interaction, answer)
+        ans = await asyncio.to_thread(ai.ask, str(interaction.user.id), question)
+        await send_followup_chunks(interaction, ans)
     except Exception as e:
-        logger.error(f"/ask ERROR: {_redact(repr(e))}")
-        await interaction.followup.send("⚠️ AI service is temporarily busy. Please try again shortly.")
+        logger.error(f"/ask err: {_redact(repr(e))}")
+        await interaction.followup.send("⚠️ AI busy.")
 
-@client.tree.command(name="voice", description="Ask AI and receive voice (Bella + AriaNeural fallback)")
-@app_commands.describe(question="Your question")
-async def voice_command(interaction: discord.Interaction, question: str):
-    if not await ensure_not_banned(interaction):
-        return
+@client.tree.command(name="voice", description="AI voice answer")
+async def voice_command(interaction, question: str):
+    if not await ensure_not_banned(interaction): return
     await track_user(interaction.user)
     await interaction.response.defer()
     try:
-        full_prompt = SYSTEM_VOICE_PROMPT + "\n\nUser Question: " + question
-        answer = await asyncio.to_thread(ai.ask, str(interaction.user.id), full_prompt)
-        audio_fp, provider = await generate_tts_audio(answer)
-        discord_file = File(fp=audio_fp, filename="king_zarry_voice.mp3")
-        await interaction.followup.send(content=f"🗣️ **King Zarry AI ({provider}):**\n{answer[:1500]}", file=discord_file)
+        fp = SYSTEM_VOICE_PROMPT + "\n\nUser: " + question
+        ans = await asyncio.to_thread(ai.ask, str(interaction.user.id), fp)
+        af, pv = await generate_tts_audio(ans)
+        f = File(fp=af, filename="king_zarry_voice.mp3")
+        await interaction.followup.send(content=f"🗣️ **{pv}:**\n{ans[:1500]}", file=f)
     except Exception as e:
-        logger.error(f"/voice ERROR: {_redact(repr(e))}")
-        await interaction.followup.send("⚠️ Voice service temporarily busy.")
+        logger.error(f"/voice err: {_redact(repr(e))}")
+        await interaction.followup.send("⚠️ Voice busy.")
 
-@client.tree.command(name="tts", description="Text to speech with Bella female voice + AriaNeural fallback")
-@app_commands.describe(text="Text to speak")
-async def tts_cmd(interaction: discord.Interaction, text: str):
-    if not await ensure_not_banned(interaction):
-        return
+@client.tree.command(name="tts", description="Text to speech")
+async def tts_cmd(interaction, text: str):
+    if not await ensure_not_banned(interaction): return
     await track_user(interaction.user)
     await interaction.response.defer()
     try:
-        audio_fp, provider = await generate_tts_audio(text)
-        discord_file = File(fp=audio_fp, filename="king_zarry_tts.mp3")
-        await interaction.followup.send(content=f"🎙️ **TTS {provider}:** {text[:500]}", file=discord_file)
+        af, pv = await generate_tts_audio(text)
+        f = File(fp=af, filename="king_zarry_tts.mp3")
+        await interaction.followup.send(content=f"🎙️ **TTS {pv}:** {text[:500]}", file=f)
     except Exception as e2:
-        await interaction.followup.send(f"❌ TTS unavailable: {_redact(str(e2))[:300]}")
+        await interaction.followup.send(f"❌ TTS: {_redact(str(e2))[:300]}")
 
-@client.tree.command(name="textvideo", description="Generate a video from text (Fal.ai)")
-@app_commands.describe(prompt="Describe the video")
-async def textvideo(interaction: discord.Interaction, prompt: str):
-    if not await ensure_not_banned(interaction):
-        return
-    if len(prompt.strip()) == 0:
-        await interaction.response.send_message("❌ Please provide a prompt.", ephemeral=True)
-        return
+@client.tree.command(name="textvideo", description="Text to video (Fal.ai)")
+async def textvideo(interaction, prompt: str):
+    if not await ensure_not_banned(interaction): return
+    if not prompt.strip():
+        await interaction.response.send_message("❌ Provide prompt", ephemeral=True); return
     if len(prompt) > MAX_PROMPT_LENGTH:
-        await interaction.response.send_message(f"❌ Prompt too long. Max {MAX_PROMPT_LENGTH} characters.", ephemeral=True)
-        return
+        await interaction.response.send_message(f"❌ Max {MAX_PROMPT_LENGTH}", ephemeral=True); return
     await track_user(interaction.user)
     await interaction.response.defer()
-    status_msg = await interaction.followup.send("🧠 **Enhancing your video prompt...**")
-    video_path = None
+    sm = await interaction.followup.send("🧠 Enhancing...")
+    vp = None
     try:
-        enhanced_prompt = await asyncio.to_thread(enhance_text_prompt, prompt.strip())
-        await status_msg.edit(content="🎬 **Generating video with Fal.ai...**\n⏳ Please wait.")
-        video_bytes = await asyncio.to_thread(generate_text_video, enhanced_prompt)
-        if len(video_bytes) > MAX_VIDEO_SIZE:
-            await status_msg.edit(content="⚠️ Generated video exceeds Discord upload limit.")
-            return
-        video_path = save_video(video_bytes)
-        file = discord.File(video_path, filename="king-zarry-video.mp4")
-        embed = Embed(title="👑 King Zarry Video", description="🎬 **Text → Video Complete (Fal.ai)**")
-        embed.add_field(name="Enhanced Prompt", value=enhanced_prompt[:1000], inline=False)
-        await interaction.followup.send(embed=embed, file=file)
-        await status_msg.delete()
-    except fal_client.FalClientHTTPError as err:
-        logger.error(f"Text-to-video Fal error: {_redact(repr(err))} | status={str(getattr(err, 'status_code', 'unknown'))}")
-        try:
-            admin_user = client.get_user(DISCORD_ADMIN_ID)
-            if admin_user is None:
-                admin_user = await client.fetch_user(DISCORD_ADMIN_ID)
-            await admin_user.send(f"⚠️ **Fal.ai text-to-video error (private):**\n{_redact(str(err))[:1500]}")
-        except Exception:
-            pass
-        await status_msg.edit(content="❌ Image/video generation is temporarily unavailable. Please try again later.")
-    except Exception as error:
-        logger.error(f"Text-to-video error: {_redact(repr(error))}")
-        try:
-            admin_user = client.get_user(DISCORD_ADMIN_ID)
-            if admin_user is None:
-                admin_user = await client.fetch_user(DISCORD_ADMIN_ID)
-            await admin_user.send(f"⚠️ **Text-to-video error (private):**\n{_redact(repr(error))[:1500]}")
-        except Exception:
-            pass
-        await status_msg.edit(content="❌ Image/video generation is temporarily unavailable. Please try again later.")
+        ep = await asyncio.to_thread(enhance_text_prompt, prompt.strip())
+        await sm.edit(content="🎬 Generating...")
+        vb = await asyncio.to_thread(generate_text_video, ep)
+        if len(vb) > MAX_VIDEO_SIZE:
+            await sm.edit(content="⚠️ Video too large."); return
+        vp = save_video(vb)
+        f = discord.File(vp, filename="king-zarry-video.mp4")
+        e = Embed(title="👑 Video", description="🎬 Complete")
+        e.add_field(name="Prompt", value=ep[:1000], inline=False)
+        await interaction.followup.send(embed=e, file=f)
+        await sm.delete()
+    except Exception as err:
+        logger.error(f"Text video err: {_redact(repr(err))}")
+        await sm.edit(content="❌ Video gen unavailable.")
     finally:
-        if video_path and os.path.exists(video_path):
-            try:
-                os.remove(video_path)
-            except OSError:
-                pass
+        if vp and os.path.exists(vp):
+            try: os.remove(vp)
+            except OSError: pass
 
-@client.tree.command(name="imagevideo", description="Turn an image into a video (Fal.ai)")
-@app_commands.describe(image="Upload PNG, JPEG or WebP", motion="Describe the desired motion")
-async def imagevideo(interaction: discord.Interaction, image: discord.Attachment, motion: str):
-    if not await ensure_not_banned(interaction):
-        return
+@client.tree.command(name="imagevideo", description="Image to video (Fal.ai)")
+async def imagevideo(interaction, image: discord.Attachment, motion: str):
+    if not await ensure_not_banned(interaction): return
     if image.content_type not in ALLOWED_VIDEO_IMAGE_TYPES:
-        await interaction.response.send_message("❌ Upload PNG, JPEG or WebP.", ephemeral=True)
-        return
+        await interaction.response.send_message("❌ PNG/JPEG/WebP only.", ephemeral=True); return
     if image.size > MAX_IMAGE_SIZE:
-        await interaction.response.send_message("❌ Image must be below 10 MB.", ephemeral=True)
-        return
+        await interaction.response.send_message("❌ Max 10MB.", ephemeral=True); return
     if not motion.strip():
-        await interaction.response.send_message("❌ Describe the motion.", ephemeral=True)
-        return
+        await interaction.response.send_message("❌ Describe motion.", ephemeral=True); return
     await track_user(interaction.user)
     await interaction.response.defer()
-    status_msg = await interaction.followup.send("📥 **Downloading and analyzing image...**")
-    video_path = None
+    sm = await interaction.followup.send("📥 Downloading...")
+    vp = None
     try:
-        image_bytes = await image.read()
-        enhanced_prompt = await asyncio.to_thread(enhance_image_prompt, image_bytes, motion.strip())
-        await status_msg.edit(content="🎬 **Generating image-to-video...**\n⏳ Please wait.")
-        video_bytes = await asyncio.to_thread(generate_image_video, image_bytes, enhanced_prompt)
-        if len(video_bytes) > MAX_VIDEO_SIZE:
-            await status_msg.edit(content="⚠️ Generated video exceeds configured limit.")
-            return
-        video_path = save_video(video_bytes)
-        file = discord.File(video_path, filename="king-zarry-image-video.mp4")
-        embed = Embed(title="👑 King Zarry Video", description="🖼️ **Image → Video Complete (Fal.ai)**")
-        embed.add_field(name="Motion Prompt", value=enhanced_prompt[:1000], inline=False)
-        await interaction.followup.send(embed=embed, file=file)
-        await status_msg.delete()
-    except fal_client.FalClientHTTPError as err:
-        logger.error(f"Image-to-video Fal error: {_redact(repr(err))} | status={str(getattr(err, 'status_code', 'unknown'))}")
-        try:
-            admin_user = client.get_user(DISCORD_ADMIN_ID)
-            if admin_user is None:
-                admin_user = await client.fetch_user(DISCORD_ADMIN_ID)
-            await admin_user.send(f"⚠️ **Fal.ai image-to-video error (private):**\n{_redact(str(err))[:1500]}")
-        except Exception:
-            pass
-        await status_msg.edit(content="❌ Image/video generation is temporarily unavailable. Please try again later.")
-    except Exception as error:
-        logger.error(f"Image-to-video error: {_redact(repr(error))}")
-        try:
-            admin_user = client.get_user(DISCORD_ADMIN_ID)
-            if admin_user is None:
-                admin_user = await client.fetch_user(DISCORD_ADMIN_ID)
-            await admin_user.send(f"⚠️ **Image-to-video error (private):**\n{_redact(repr(error))[:1500]}")
-        except Exception:
-            pass
-        await status_msg.edit(content="❌ Image/video generation is temporarily unavailable. Please try again later.")
+        ib = await image.read()
+        ep = await asyncio.to_thread(enhance_image_prompt, ib, motion.strip())
+        await sm.edit(content="🎬 Generating...")
+        vb = await asyncio.to_thread(generate_image_video, ib, ep)
+        if len(vb) > MAX_VIDEO_SIZE:
+            await sm.edit(content="⚠️ Too large."); return
+        vp = save_video(vb)
+        f = discord.File(vp, filename="king-zarry-image-video.mp4")
+        e = Embed(title="👑 Video", description="🖼️ Complete")
+        e.add_field(name="Motion", value=ep[:1000], inline=False)
+        await interaction.followup.send(embed=e, file=f)
+        await sm.delete()
+    except Exception as err:
+        logger.error(f"Img video err: {_redact(repr(err))}")
+        await sm.edit(content="❌ Unavailable.")
     finally:
-        if video_path and os.path.exists(video_path):
-            try:
-                os.remove(video_path)
-            except OSError:
-                pass
+        if vp and os.path.exists(vp):
+            try: os.remove(vp)
+            except OSError: pass
 
-@client.tree.command(name="clear_memory", description="Clear your AI conversation memory")
-async def clear_memory(interaction: discord.Interaction):
-    if not await ensure_not_banned(interaction):
-        return
+@client.tree.command(name="clear_memory", description="Clear memory")
+async def clear_memory(interaction):
+    if not await ensure_not_banned(interaction): return
     await interaction.response.defer(ephemeral=True)
     try:
         await asyncio.to_thread(memory.clear_history, str(interaction.user.id))
-        await interaction.followup.send("🧹 Your AI memory has been cleared.", ephemeral=True)
+        await interaction.followup.send("🧹 Memory cleared.", ephemeral=True)
     except Exception as e:
-        await interaction.followup.send(f"❌ Memory error:\n`{_redact(str(e))[:1200]}`", ephemeral=True)
+        await interaction.followup.send(f"❌ {_redact(str(e))[:1200]}", ephemeral=True)
 
-# === DISCORD PERSONAL PRICE ALERTS - SLASH COMMANDS ===
-@client.tree.command(name="alert", description="Create a personal price alert (same system as Telegram)")
-@app_commands.describe(
-    symbol="Asset: XAU, BTC, ETH, SOL",
-    condition="Condition: above, below, reaches",
-    price="Target price, e.g. 4340"
-)
+@client.tree.command(name="alert", description="Create alert")
 @app_commands.choices(
     symbol=[
         app_commands.Choice(name="XAU/USD Gold", value="XAU/USD"),
@@ -1904,279 +1418,155 @@ async def clear_memory(interaction: discord.Interaction):
         app_commands.Choice(name="reaches", value="REACHES"),
     ]
 )
-async def alert_slash(interaction: discord.Interaction, symbol: str, condition: str, price: float):
-    if not await ensure_not_banned(interaction):
-        return
+async def alert_slash(interaction, symbol: str, condition: str, price: float):
+    if not await ensure_not_banned(interaction): return
     await track_user(interaction.user)
     await interaction.response.defer(ephemeral=True)
     try:
-        user_id = interaction.user.id
-        norm_symbol = normalize_alert_symbol_discord(symbol)
-        if not norm_symbol:
-            await interaction.followup.send(f"❌ Unsupported symbol `{symbol}`. Use XAU, BTC, ETH, SOL.", ephemeral=True)
-            return
+        ns = normalize_alert_symbol_discord(symbol)
+        if not ns:
+            await interaction.followup.send(f"❌ Unsupported {symbol}", ephemeral=True); return
         if price <= 0:
-            await interaction.followup.send("❌ Price must be > 0", ephemeral=True)
-            return
-        cond_upper = condition.upper()
-        if cond_upper not in ["ABOVE","BELOW","REACHES"]:
-            await interaction.followup.send("❌ Condition must be ABOVE, BELOW, or REACHES", ephemeral=True)
-            return
-        create_fn = shared_create_alert
-        if create_fn is None:
+            await interaction.followup.send("❌ Price > 0", ephemeral=True); return
+        cu = condition.upper()
+        if cu not in ["ABOVE","BELOW","REACHES"]:
+            await interaction.followup.send("❌ Bad condition", ephemeral=True); return
+        cf = shared_create_alert
+        if cf is None:
             try:
-                from telegram_bot import create_price_alert as tg_create
-                create_fn = tg_create
-            except Exception:
-                create_fn = None
-        if not create_fn:
-            await interaction.followup.send("❌ Alert system unavailable.", ephemeral=True)
-            return
-        result = await asyncio.to_thread(create_fn, user_id, norm_symbol, float(price), cond_upper)
-        if result.get("success"):
-            cond_display = {"ABOVE":"above","BELOW":"below","REACHES":"reaches"}.get(cond_upper, cond_upper)
-            embed = Embed(title="🔔 Alert Created", description=f"I'll monitor it automatically and notify you when the target is reached.", color=discord.Color.gold())
-            embed.add_field(name="Asset", value=norm_symbol, inline=True)
-            embed.add_field(name="Condition", value=f"{cond_display} {price}", inline=True)
-            embed.add_field(name="ID", value=f"`{result['id']}` | Use `/alerts` to manage", inline=False)
-            await interaction.followup.send(embed=embed, ephemeral=True)
-        elif result.get("duplicate"):
-            await interaction.followup.send(f"⚠️ You already have an active alert for **{norm_symbol} {cond_upper} {price}**\n\nUse `/alerts` to view it. ID: `{result['id']}`", ephemeral=True)
+                from bot import create_price_alert as bc; cf = bc
+            except Exception: cf = None
+        if not cf:
+            await interaction.followup.send("❌ Alerts unavailable", ephemeral=True); return
+        r = await asyncio.to_thread(cf, interaction.user.id, ns, float(price), cu)
+        if r.get("success"):
+            e = Embed(title="🔔 Alert Created", description="Monitoring...", color=discord.Color.gold())
+            e.add_field(name="Asset", value=ns, inline=True)
+            e.add_field(name="Condition", value=f"{cu} {price}", inline=True)
+            e.add_field(name="ID", value=f"`{r['id']}`", inline=False)
+            await interaction.followup.send(embed=e, ephemeral=True)
+        elif r.get("duplicate"):
+            await interaction.followup.send(f"⚠️ Duplicate: {ns} {cu} {price}", ephemeral=True)
         else:
-            await interaction.followup.send("❌ Failed to create alert. Try again.", ephemeral=True)
+            await interaction.followup.send("❌ Failed", ephemeral=True)
     except Exception as e:
-        logger.error(f"/alert error: {_redact(repr(e))}")
-        await interaction.followup.send(f"❌ Alert error: {_redact(str(e))[:300]}", ephemeral=True)
+        logger.error(f"/alert err: {_redact(repr(e))}")
+        await interaction.followup.send(f"❌ {_redact(str(e))[:300]}", ephemeral=True)
 
-@client.tree.command(name="alerts", description="List your personal price alerts (only yours)")
-async def alerts_slash(interaction: discord.Interaction):
-    if not await ensure_not_banned(interaction):
-        return
+@client.tree.command(name="alerts", description="List your alerts")
+async def alerts_slash(interaction):
+    if not await ensure_not_banned(interaction): return
     await track_user(interaction.user)
     await interaction.response.defer(ephemeral=True)
     try:
-        get_fn = shared_get_alerts
-        if get_fn is None:
+        gf = shared_get_alerts
+        if gf is None:
             try:
-                from telegram_bot import get_user_price_alerts as tg_get
-                get_fn = tg_get
-            except Exception:
-                get_fn = None
-        if not get_fn:
-            await interaction.followup.send("❌ Alert system unavailable.", ephemeral=True)
-            return
-        user_id = interaction.user.id
-        alerts = await asyncio.to_thread(get_fn, user_id, True)
-        if not alerts:
-            await interaction.followup.send("📭 No active personal price alerts.\n\nCreate one: `/alert symbol:XAU condition:reaches price:4340` or say `Alert me when gold reaches 4340`", ephemeral=True)
-            return
-        embed = Embed(title="🔔 Your Price Alerts", description=f"You have {len(alerts)} active alert(s) - only visible to you", color=discord.Color.gold())
-        for idx, a in enumerate(alerts[:10], 1):
-            cond_symbol = {"ABOVE":"≥","BELOW":"≤","REACHES":"≈"}.get(a["condition"], a["condition"])
-            embed.add_field(name=f"{idx}. {a['symbol']} {cond_symbol} {a['target_price']}", value=f"ID: `{a['id']}` | {a['condition']} | Active", inline=False)
-        if len(alerts) > 10:
-            embed.set_footer(text=f"Showing 10 of {len(alerts)}. Use /cancelalert to manage.")
-        await interaction.followup.send(embed=embed, ephemeral=True)
+                from bot import get_user_price_alerts as bg; gf = bg
+            except Exception: gf = None
+        if not gf:
+            await interaction.followup.send("❌ Alerts unavailable", ephemeral=True); return
+        aa = await asyncio.to_thread(gf, interaction.user.id, True)
+        if not aa:
+            await interaction.followup.send("📭 No alerts. /alert", ephemeral=True); return
+        e = Embed(title="🔔 Your Alerts", description=f"{len(aa)} active", color=discord.Color.gold())
+        for i, a in enumerate(aa[:10], 1):
+            cs = {"ABOVE":"≥","BELOW":"≤","REACHES":"≈"}.get(a["condition"], a["condition"])
+            e.add_field(name=f"{i}. {a['symbol']} {cs} {a['target_price']}", value=f"ID `{a['id']}` | {a['condition']}", inline=False)
+        await interaction.followup.send(embed=e, ephemeral=True)
     except Exception as e:
-        logger.error(f"/alerts error: {_redact(repr(e))}")
-        await interaction.followup.send(f"❌ Error listing alerts: {_redact(str(e))[:300]}", ephemeral=True)
+        await interaction.followup.send(f"❌ {_redact(str(e))[:300]}", ephemeral=True)
 
-@client.tree.command(name="cancelalert", description="Cancel a personal price alert (only yours)")
-@app_commands.describe(alert_id="Alert ID to cancel, or 'all' to cancel all")
-async def cancelalert_slash(interaction: discord.Interaction, alert_id: str):
-    if not await ensure_not_banned(interaction):
-        return
+@client.tree.command(name="cancelalert", description="Cancel alert(s)")
+async def cancelalert_slash(interaction, alert_id: str):
+    if not await ensure_not_banned(interaction): return
     await track_user(interaction.user)
     await interaction.response.defer(ephemeral=True)
     try:
-        user_id = interaction.user.id
+        uid = interaction.user.id
         if alert_id.lower().strip() == "all":
-            cancel_all_fn = shared_cancel_all
-            if cancel_all_fn is None:
+            caf = shared_cancel_all
+            if caf is None:
                 try:
-                    from telegram_bot import cancel_all_user_alerts as tg_cancel_all
-                    cancel_all_fn = tg_cancel_all
-                except Exception:
-                    cancel_all_fn = None
-            if not cancel_all_fn:
-                await interaction.followup.send("❌ Cancel system unavailable.", ephemeral=True)
-                return
-            count = await asyncio.to_thread(cancel_all_fn, user_id)
-            await interaction.followup.send(f"✅ Cancelled {count} personal alert(s).", ephemeral=True)
-            return
-        try:
-            aid = int(alert_id.strip())
+                    from bot import cancel_all_user_alerts as bc; caf = bc
+                except Exception: caf = None
+            if not caf:
+                await interaction.followup.send("❌ Cancel unavailable", ephemeral=True); return
+            n = await asyncio.to_thread(caf, uid)
+            await interaction.followup.send(f"✅ Cancelled {n}", ephemeral=True); return
+        try: aid = int(alert_id.strip())
         except ValueError:
-            await interaction.followup.send("❌ Invalid ID. Use `/alerts` to see your IDs, or use `all` to cancel all.", ephemeral=True)
-            return
-        cancel_fn = shared_cancel_alert
-        if cancel_fn is None:
+            await interaction.followup.send("❌ Bad ID", ephemeral=True); return
+        cf = shared_cancel_alert
+        if cf is None:
             try:
-                from telegram_bot import cancel_user_alert as tg_cancel
-                cancel_fn = tg_cancel
-            except Exception:
-                cancel_fn = None
-        if not cancel_fn:
-            await interaction.followup.send("❌ Cancel system unavailable.", ephemeral=True)
-            return
-        success = await asyncio.to_thread(cancel_fn, user_id, aid)
-        if success:
-            await interaction.followup.send(f"✅ Alert {aid} cancelled.", ephemeral=True)
-        else:
-            await interaction.followup.send(f"❌ Alert {aid} not found or not yours.", ephemeral=True)
+                from bot import cancel_user_alert as bc; cf = bc
+            except Exception: cf = None
+        if not cf:
+            await interaction.followup.send("❌ Cancel unavailable", ephemeral=True); return
+        ok = await asyncio.to_thread(cf, uid, aid)
+        await interaction.followup.send("✅ Cancelled" if ok else "❌ Not found", ephemeral=True)
     except Exception as e:
-        logger.error(f"/cancelalert error: {_redact(repr(e))}")
-        await interaction.followup.send(f"❌ Error: {_redact(str(e))[:300]}", ephemeral=True)
+        await interaction.followup.send(f"❌ {_redact(str(e))[:300]}", ephemeral=True)
 
-@client.tree.command(name="join", description="Join your current voice channel")
-async def join(interaction: discord.Interaction):
-    if not await ensure_not_banned(interaction):
-        return
+@client.tree.command(name="join", description="Join voice channel")
+async def join(interaction):
+    if not await ensure_not_banned(interaction): return
     if not interaction.user.voice:
-        await interaction.response.send_message("❌ Join a voice channel first.", ephemeral=True)
-        return
-    channel = interaction.user.voice.channel
+        await interaction.response.send_message("❌ Join VC first", ephemeral=True); return
+    ch = interaction.user.voice.channel
     if interaction.guild.voice_client:
-        await interaction.guild.voice_client.move_to(channel)
+        await interaction.guild.voice_client.move_to(ch)
     else:
-        await channel.connect()
-    await interaction.response.send_message(f"🔊 Joined **{channel.name}**.")
+        await ch.connect()
+    await interaction.response.send_message(f"🔊 Joined {ch.name}")
 
-@client.tree.command(name="say", description="Speak text in your current voice channel")
-@app_commands.describe(text="What King Zarry AI should say")
-async def say(interaction: discord.Interaction, text: str):
-    if not await ensure_not_banned(interaction):
-        return
+@client.tree.command(name="say", description="Speak in VC")
+async def say(interaction, text: str):
+    if not await ensure_not_banned(interaction): return
     await interaction.response.defer()
-    voice_client = interaction.guild.voice_client
-    if not voice_client:
+    vc = interaction.guild.voice_client
+    if not vc:
         if interaction.user.voice and interaction.user.voice.channel:
-            voice_client = await interaction.user.voice.channel.connect()
+            vc = await interaction.user.voice.channel.connect()
         else:
-            await interaction.followup.send("❌ Join a voice channel first.")
-            return
+            await interaction.followup.send("❌ Join VC first"); return
     try:
-        audio_stream, provider = await generate_tts_audio(text)
-        await interaction.followup.send(f"🎙️ **Speaking with {provider}:** {text[:500]}")
-        audio_source = discord.FFmpegPCMAudio(audio_stream, pipe=True)
-        if voice_client.is_playing():
-            voice_client.stop()
-        voice_client.play(audio_source, after=lambda e: print(f"Finished playing voice ({provider}): {e}") if e else None)
+        aus, pv = await generate_tts_audio(text)
+        await interaction.followup.send(f"🎙️ Speaking with {pv}: {text[:500]}")
+        src = discord.FFmpegPCMAudio(aus, pipe=True)
+        if vc.is_playing(): vc.stop()
+        vc.play(src)
     except Exception as e:
-        logger.error(f"/say voice failed: {_redact(str(e))}")
-        await interaction.followup.send(f"❌ TTS failed: {_redact(str(e))[:300]}")
+        logger.error(f"/say err: {_redact(str(e))}")
+        await interaction.followup.send(f"❌ {_redact(str(e))[:300]}")
 
-@client.tree.command(name="leave", description="Leave the voice channel")
-async def leave(interaction: discord.Interaction):
-    if not await ensure_not_banned(interaction):
-        return
+@client.tree.command(name="leave", description="Leave VC")
+async def leave(interaction):
+    if not await ensure_not_banned(interaction): return
     if interaction.guild.voice_client:
         await interaction.guild.voice_client.disconnect()
-        await interaction.response.send_message("👋 Disconnected from the voice channel.")
+        await interaction.response.send_message("👋 Disconnected")
     else:
-        await interaction.response.send_message("⚠️ I am not in a voice channel.", ephemeral=True)
+        await interaction.response.send_message("⚠️ Not in VC", ephemeral=True)
 
-@client.tree.command(
-    name="adminstatus",
-    description="Admin-only detailed diagnostics"
-)
-async def adminstatus(
-    interaction: discord.Interaction
-):
-    if not await require_admin(
-        interaction
-    ):
-        await interaction.response.send_message(
-            "❌ You are not authorized to use this command.",
-            ephemeral=True
-        )
-        return
+@client.tree.command(name="adminstatus", description="Admin diagnostics")
+async def adminstatus(interaction):
+    if not await require_admin(interaction):
+        await interaction.response.send_message("❌ Not authorized", ephemeral=True); return
     try:
         from news import provider_status, news_health
-        try:
-            p_status = provider_status()
-        except Exception as e:
-            p_status = {"error": _redact(str(e))}
-        try:
-            health = news_health()
-        except Exception as e:
-            health = {"status": "error", "error": _redact(str(e))}
-        eleven_status = "ENABLED" if eleven_client else "DISABLED"
-        groq_status = "ENABLED" if groq_client else "DISABLED"
-        fal_status = "ENABLED" if FAL_KEY else "DISABLED (FAL_KEY missing)"
-        agnes_status = "ENABLED" if os.getenv("AGNES_API_KEY") else "DISABLED (AGNES_API_KEY missing)"
-        try:
-            conn = db_connect()
-            conn.execute("SELECT 1").fetchone()
-            conn.close()
-            db_status = "Connected"
-        except Exception as e:
-            db_status = f"Error: {_redact(str(e))[:200]}"
-        try:
-            import os as _os
-            mem_exists = _os.path.exists(MEMORY_DB_PATH)
-            mem_status = f"{MEMORY_DB_PATH} ({'found' if mem_exists else 'missing'})"
-        except Exception as e:
-            mem_status = _redact(str(e))
-        embed = Embed(
-            title="🛠️ ADMIN DIAGNOSTICS - KING ZARRY AI",
-            description="Private detailed status",
-            color=discord.Color.red()
-        )
-        embed.add_field(
-            name="🎙️ ElevenLabs",
-            value=f"{eleven_status} | Model: {_redact(ELEVENLABS_MODEL_ID)}",
-            inline=False
-        )
-        embed.add_field(
-            name="🧠 Groq",
-            value=f"{groq_status} | Vision: {GROQ_VISION_MODEL} | Text: {GROQ_TEXT_MODEL}",
-            inline=False
-        )
-        embed.add_field(
-            name="🎬 Fal.ai",
-            value=f"{fal_status} | Text2Video: {TEXT_TO_VIDEO_MODEL} | Image2Video: {IMAGE_TO_VIDEO_MODEL}",
-            inline=False
-        )
-        embed.add_field(
-            name="🎨 Agnes AI (natural language media)",
-            value=f"{agnes_status}",
-            inline=False
-        )
-        embed.add_field(
-            name="💾 Database",
-            value=f"{db_status}\nMemory: {mem_status}",
-            inline=False
-        )
-        embed.add_field(
-            name="📰 News Engine",
-            value=f"Status: {p_status}\nHealth: {health}",
-            inline=False
-        )
-        embed.add_field(
-            name="⭐ Premium / Users",
-            value=f"DB: {DATABASE_PATH}",
-            inline=False
-        )
-        embed.add_field(
-            name="🔑 Env Check",
-            value=(
-                f"DISCORD_TOKEN: {'FOUND' if DISCORD_BOT_TOKEN else 'MISSING'}\n"
-                f"ELEVENLABS_API_KEY: {'FOUND' if ELEVENLABS_API_KEY else 'MISSING'}\n"
-                f"GROQ_API_KEY: {'FOUND' if GROQ_API_KEY else 'MISSING'}\n"
-                f"FAL_KEY: {'FOUND' if FAL_KEY else 'MISSING'}\n"
-                f"AGNES_API_KEY: {'FOUND' if os.getenv('AGNES_API_KEY') else 'MISSING'}\n"
-                f"TWELVE_DATA_API_KEY: {'FOUND' if os.getenv('TWELVE_DATA_API_KEY') else 'MISSING'}"
-            ),
-            inline=False
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        ps = provider_status(); h = news_health()
+        e = Embed(title="🛠️ DIAGNOSTICS", color=discord.Color.red())
+        e.add_field(name="ElevenLabs", value="ENABLED" if eleven_client else "DISABLED", inline=True)
+        e.add_field(name="Groq", value="ENABLED" if groq_client else "DISABLED", inline=True)
+        e.add_field(name="Fal", value="ENABLED" if FAL_KEY else "DISABLED", inline=True)
+        e.add_field(name="Agnes", value="ENABLED" if os.getenv("AGNES_API_KEY") else "DISABLED", inline=True)
+        e.add_field(name="News", value=f"{ps}\n{h}", inline=False)
+        await interaction.response.send_message(embed=e, ephemeral=True)
     except Exception as e:
-        logger.error("adminstatus error: " + _redact(repr(e)))
-        await interaction.response.send_message(
-            f"❌ Admin diagnostic error: {_redact(str(e))[:500]}",
-            ephemeral=True
-        )
+        logger.error(f"adminstatus: {_redact(repr(e))}")
+        await interaction.response.send_message(f"❌ {_redact(str(e))[:500]}", ephemeral=True)
 
 if __name__ == "__main__":
     client.run(DISCORD_BOT_TOKEN)
