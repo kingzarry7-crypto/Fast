@@ -1,51 +1,7 @@
-// ==========================================================================
-// Shared types — re-exported from here so other modules can import from "@/lib/api"
-// ==========================================================================
-export interface AuthUser {
-  id: string;
-  email: string;
-  username?: string | null;
-  display_name?: string | null;
-  account_status?: string | null;
-  created_at?: string | null;
-}
+// Fast/frontend/lib/api.ts
+// KING ZARRY AI — API client.
+// Uses only types from "@/types". No local interface declarations.
 
-export interface AuthResponse {
-  status: string;
-  message?: string;
-  user?: AuthUser;
-}
-
-export interface MeResponse {
-  status: string;
-  user: AuthUser;
-}
-
-export interface ChatResponse {
-  status: string;
-  reply: string;
-  conversation_id: string;
-}
-
-export interface ChatMessage {
-  id: string;
-  role: "user" | "assistant" | "system";
-  text: string;
-  timestamp: string;
-  status?: string;
-  capability?: string;
-}
-
-export interface ApiErrorData {
-  status: number;
-  message: string;
-  detail?: string;
-  raw?: unknown;
-}
-
-// ==========================================================================
-// KING ZARRY AI — API Client
-// ==========================================================================
 import type {
   AuthUser,
   AuthResponse,
@@ -180,7 +136,10 @@ async function request<T>(
 
 // AUTH
 export async function getCurrentUser(signal?: AbortSignal): Promise<AuthUser> {
-  const data = await request<MeResponse>("/api/auth/me", { method: "GET", signal });
+  const data = await request<MeResponse>("/api/auth/me", {
+    method: "GET",
+    signal,
+  });
   if (!data?.user) {
     throw new ApiError({ status: 500, message: "Invalid user response" });
   }
@@ -277,12 +236,11 @@ export const api = {
   healthCheck,
 };
 
-// Re-export shared types so `import { AuthUser } from "@/lib/api"` works
+// Re-export types so `import type { AuthUser } from "@/lib/api"` also works
 export type {
   AuthUser,
   AuthResponse,
   MeResponse,
   ChatResponse,
-  ChatMessage,
   ApiErrorData,
-};
+} from "@/types";
