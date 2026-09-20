@@ -1,6 +1,7 @@
 import os
 import re
 import html
+import sys
 import asyncio
 import base64
 import sqlite3
@@ -36,7 +37,19 @@ from telegram.error import Forbidden, BadRequest, RetryAfter
 # 👑 KING ZARRY AI - UPGRADED WITH MULTI-TIMEFRAME + NEWS
 # ============================================================
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    stream=sys.stdout,
+)
+# Silence noisy libraries that would leak secrets or spam logs
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("telegram.ext.Updater").setLevel(logging.WARNING)
+logging.getLogger("telegram.request").setLevel(logging.WARNING)
+logging.getLogger("telegram.bot").setLevel(logging.WARNING)
+logging.getLogger("apscheduler").setLevel(logging.WARNING)
+
 logger = logging.getLogger("king_zarry")
 
 def clean_env_str(value, default=""):
@@ -151,8 +164,6 @@ PRIMARY_EXECUTION_TF = "15min"
 # ============================================================
 # 🎨 MEDIA REQUEST DETECTION (used before market intent)
 # ============================================================
-# Clear generation verbs that should override market keyword routing.
-# Example: "Draw a BTC chart" -> image generation, not market analysis.
 _MEDIA_VERB_PATTERN = re.compile(
     r"\b("
     r"draw|sketch|render|illustrate|paint|"
@@ -175,7 +186,6 @@ _MEDIA_VERB_PATTERN = re.compile(
 )
 
 def _looks_like_media_request(text: str) -> bool:
-    """True if the message clearly asks to generate/edit an image or video."""
     if not text:
         return False
     return bool(_MEDIA_VERB_PATTERN.search(text))
@@ -187,7 +197,6 @@ def clean_ai_response(text):
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<think>.*$", "", text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<\|.*?\|>", "", text)
-    # Final defense - strip raw tool markup if leaked
     text = re.sub(r"<tool_call>.*?</tool_call>", "", text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<tool_call>|</tool_call>|<function_calls>|</function_calls>", "", text, flags=re.IGNORECASE)
     text = re.sub(r"SELECT\s+.*FROM\s+price_alerts.*", "", text, flags=re.IGNORECASE | re.DOTALL)
@@ -239,7 +248,6 @@ def init_database():
         cur.execute("""CREATE TABLE IF NOT EXISTS notifications (
             id INTEGER PRIMARY KEY AUTOINCREMENT, admin_id INTEGER, message TEXT,
             interval_seconds INTEGER, next_run TEXT, active INTEGER DEFAULT 1, created_at TEXT)""")
-        # Personal price alerts - separate from admin broadcasts
         cur.execute("""CREATE TABLE IF NOT EXISTS price_alerts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -261,7 +269,7 @@ def init_database():
 
 init_database()
 
-# ================= SHARED PERSONAL PRICE ALERTS (from price_alerts.py) =================
+# ================= SHARED PERSONAL PRICE ALERTS =================
 try:
     from price_alerts import (
         normalize_alert_symbol,
@@ -608,7 +616,7 @@ async def create_voice_note_file(text: str) -> BytesIO:
         raise RuntimeError(f"TTS unavailable: {e}")
 
 # ============================================================
-# MARKET DATA & INDICATORS - PRESERVED + ENHANCED
+# MARKET DATA & INDICATORS
 # ============================================================
 def get_market_candles(symbol, interval=DEFAULT_TIMEFRAME, outputsize=150):
     if not TWELVE_DATA_API_KEY:
@@ -717,20 +725,13 @@ def detect_volatility_spike(highs, lows, closes):
         return False
     return recent_atr>baseline_atr*1.8
 
-# ============================================================
-# NEW: ADVANCED EXHAUSTION & LATE ENTRY DETECTION
-# ============================================================
 def detect_exhaustion_advanced(price, ema9, ema21, ema50, current_atr, current_rsi, highs, lows, closes, opens):
-    """Enhanced exhaustion detection"""
     warnings = []
-    score = 0  # 0-100 exhaustion score
-
+    score = 0
     if current_atr <= 0:
         return {"exhausted": False, "score": 0, "warnings": []}
-
     distance_ema21 = abs(price - ema21) / current_atr
     distance_ema50 = abs(price - ema50) / current_atr if ema50 else 0
-
     if current_rsi >= 78:
         warnings.append(f"RSI overbought {current_rsi:.1f}")
         score += 30
@@ -739,18 +740,15 @@ def detect_exhaustion_advanced(price, ema9, ema21, ema50, current_atr, current_r
         score += 30
     elif current_rsi >= 72 or current_rsi <= 28:
         score += 15
-
     if distance_ema21 >= 3.0:
         warnings.append(f"Price extremely extended from EMA21 ({distance_ema21:.1f} ATR)")
         score += 35
     elif distance_ema21 >= 2.2:
         warnings.append(f"Price extended from EMA21 ({distance_ema21:.1f} ATR)")
         score += 20
-
     if distance_ema50 >= 4.0:
         warnings.append(f"Far from EMA50 major trend ({distance_ema50:.1f} ATR)")
         score += 20
-
     if len(closes) >= 7:
         bullish_run = 0
         bearish_run = 0
@@ -776,14 +774,12 @@ def detect_exhaustion_advanced(price, ema9, ema21, ema50, current_atr, current_r
         if bearish_run >= 5:
             warnings.append(f"{bearish_run} consecutive bearish candles - exhaustion risk")
             score += 25
-
     if len(closes) >= 15:
         recent_range = highs[-1] - lows[-1]
         avg_range = sum(highs[i]-lows[i] for i in range(-15, -1)) / 14 if len(highs) >= 15 else recent_range
         if avg_range > 0 and recent_range > avg_range * 2.5:
             warnings.append(f"Abnormal candle expansion ({recent_range/avg_range:.1f}x avg)")
             score += 20
-
     if len(highs) >= 20:
         recent_high = max(highs[-20:-1])
         recent_low = min(lows[-20:-1])
@@ -793,7 +789,6 @@ def detect_exhaustion_advanced(price, ema9, ema21, ema50, current_atr, current_r
         if price < recent_low and closes[-1] > recent_low:
             warnings.append("Failed bearish breakdown - wick rejection")
             score += 25
-
     return {
         "exhausted": score >= 50,
         "score": min(score, 100),
@@ -805,7 +800,6 @@ def detect_exhaustion_advanced(price, ema9, ema21, ema50, current_atr, current_r
 def detect_late_entry_status(data_15m, data_5m=None, data_1h=None):
     if not data_15m:
         return {"status": "UNKNOWN", "emoji": "⚪", "reasons": [], "action": "WAIT"}
-
     price = data_15m["price"]
     atr_val = data_15m.get("atr", 0)
     rsi_val = data_15m.get("rsi", 50)
@@ -813,13 +807,10 @@ def detect_late_entry_status(data_15m, data_5m=None, data_1h=None):
     support = data_15m.get("support", price)
     resistance = data_15m.get("resistance", price)
     signal = data_15m.get("signal", "WAIT")
-
     if atr_val <= 0:
         atr_val = price * 0.002
-
     score = 0
     reasons = []
-
     dist_ema = abs(price - ema21) / atr_val if atr_val else 0
     if dist_ema >= 3.5:
         score += 40
@@ -827,7 +818,6 @@ def detect_late_entry_status(data_15m, data_5m=None, data_1h=None):
     elif dist_ema >= 2.0:
         score += 20
         reasons.append(f"Price {dist_ema:.1f} ATR from EMA21")
-
     if signal == "BUY":
         dist_from_support = (price - support) / atr_val if atr_val else 0
         if dist_from_support >= 4.0:
@@ -842,11 +832,9 @@ def detect_late_entry_status(data_15m, data_5m=None, data_1h=None):
         if dist_from_resistance >= 4.0:
             score += 30
             reasons.append(f"Already {dist_from_resistance:.1f} ATR below resistance - late")
-
     if (signal == "BUY" and rsi_val >= 72) or (signal == "SELL" and rsi_val <= 28):
         score += 20
         reasons.append(f"RSI {rsi_val:.1f} suggests late entry")
-
     if data_5m:
         if data_5m.get("signal") != signal and signal != "WAIT":
             score += 15
@@ -854,7 +842,6 @@ def detect_late_entry_status(data_15m, data_5m=None, data_1h=None):
         if data_5m.get("exhaustion_advanced", {}).get("exhausted"):
             score += 20
             reasons.append("5M shows exhaustion")
-
     entry = data_15m.get("entry", price)
     tp3 = data_15m.get("tp3", price)
     sl = data_15m.get("stop_loss", price)
@@ -868,7 +855,6 @@ def detect_late_entry_status(data_15m, data_5m=None, data_1h=None):
             elif remaining_rr < 1.5:
                 score += 15
                 reasons.append(f"Only {remaining_rr:.1f}R left")
-
     if score >= 70:
         status = "EXTENDED / AVOID"
         emoji = "🔴"
@@ -885,12 +871,10 @@ def detect_late_entry_status(data_15m, data_5m=None, data_1h=None):
         status = "EARLY"
         emoji = "🟢"
         action = "EARLY - GOOD ENTRY WINDOW"
-
     if signal == "WAIT":
         status = "NO SETUP"
         emoji = "⚪"
         action = "WAIT"
-
     return {
         "status": status,
         "emoji": emoji,
@@ -900,9 +884,6 @@ def detect_late_entry_status(data_15m, data_5m=None, data_1h=None):
         "dist_ema": dist_ema
     }
 
-# ============================================================
-# SINGLE TIMEFRAME ANALYSIS
-# ============================================================
 def analyze_market(closes, highs, lows, opens, symbol, interval=DEFAULT_TIMEFRAME):
     price=closes[-1]
     ema9=ema(closes,9)
@@ -916,9 +897,7 @@ def analyze_market(closes, highs, lows, opens, symbol, interval=DEFAULT_TIMEFRAM
     fresh_cross,cross_direction=detect_fresh_cross(closes)
     is_exhausted=detect_exhaustion(price,ema21,current_atr,current_rsi)
     is_volatile_spike=detect_volatility_spike(highs,lows,closes)
-
     exhaustion_adv = detect_exhaustion_advanced(price, ema9, ema21, ema50, current_atr, current_rsi, highs, lows, closes, opens)
-
     bullish_score=0.0
     bearish_score=0.0
     reasons_buy=[]
@@ -1099,9 +1078,6 @@ def analyze_symbol(symbol, interval=DEFAULT_TIMEFRAME):
     result["candles"]=candles
     return result
 
-# ============================================================
-# MULTI-TIMEFRAME ANALYSIS 4H → 1H → 15M → 5M
-# ============================================================
 def analyze_single_timeframe_safe(symbol, interval, outputsize=150):
     try:
         candles = get_market_candles(symbol, interval, outputsize)
@@ -1122,21 +1098,16 @@ def analyze_multi_timeframe(symbol):
     tf_1h = analyze_single_timeframe_safe(symbol, "1h", 150)
     tf_15m = analyze_single_timeframe_safe(symbol, "15min", 150)
     tf_5m = analyze_single_timeframe_safe(symbol, "5min", 150)
-
     signals = [tf_4h.get("signal"), tf_1h.get("signal"), tf_15m.get("signal"), tf_5m.get("signal")]
     trends = [tf_4h.get("trend"), tf_1h.get("trend"), tf_15m.get("trend"), tf_5m.get("trend")]
-
     bullish_count = sum(1 for s in signals if s == "BUY") + sum(1 for t in trends if t == "BULLISH")
     bearish_count = sum(1 for s in signals if s == "SELL") + sum(1 for t in trends if t == "BEARISH")
-
     regime_4h = tf_4h.get("trend", "NEUTRAL")
     if tf_4h.get("signal") == "BUY" and tf_4h.get("trend") == "BULLISH":
         regime_4h = "BULLISH"
     elif tf_4h.get("signal") == "SELL" and tf_4h.get("trend") == "BEARISH":
         regime_4h = "BEARISH"
-
     confirm_1h = tf_1h.get("trend", "NEUTRAL")
-
     if bullish_count >= 5:
         mtf_bias = "BULLISH"
         mtf_signal = "BUY"
@@ -1152,13 +1123,11 @@ def analyze_multi_timeframe(symbol):
     else:
         mtf_bias = "NEUTRAL"
         mtf_signal = "WAIT"
-
     conflict = False
     if tf_4h.get("trend") == "BULLISH" and tf_1h.get("trend") == "BEARISH":
         conflict = True
     if tf_4h.get("trend") == "BEARISH" and tf_1h.get("trend") == "BULLISH":
         conflict = True
-
     base_strength = tf_15m.get("strength", 0)
     mtf_strength = base_strength
     if mtf_bias != "NEUTRAL" and tf_15m.get("signal") == mtf_signal:
@@ -1168,38 +1137,25 @@ def analyze_multi_timeframe(symbol):
             mtf_strength = min(100, base_strength + 7)
     elif conflict:
         mtf_strength = max(0, base_strength - 20)
-
     return {
-        "symbol": symbol,
-        "4h": tf_4h,
-        "1h": tf_1h,
-        "15m": tf_15m,
-        "5m": tf_5m,
-        "mtf_bias": mtf_bias,
-        "mtf_signal": mtf_signal,
-        "bullish_count": bullish_count,
-        "bearish_count": bearish_count,
-        "conflict": conflict,
-        "regime_4h": regime_4h,
-        "confirm_1h": confirm_1h,
-        "mtf_strength": mtf_strength,
-        "primary": tf_15m
+        "symbol": symbol, "4h": tf_4h, "1h": tf_1h, "15m": tf_15m, "5m": tf_5m,
+        "mtf_bias": mtf_bias, "mtf_signal": mtf_signal,
+        "bullish_count": bullish_count, "bearish_count": bearish_count,
+        "conflict": conflict, "regime_4h": regime_4h, "confirm_1h": confirm_1h,
+        "mtf_strength": mtf_strength, "primary": tf_15m
     }
 
 def ai_confirm_signal_mtf(mtf_data, news_data=None):
     data_15m = mtf_data.get("15m", {})
     if data_15m.get("signal") == "WAIT" and mtf_data.get("mtf_signal") == "WAIT":
         return mtf_data
-
     try:
         tf_4h = mtf_data["4h"]
         tf_1h = mtf_data["1h"]
         tf_15m = mtf_data["15m"]
         tf_5m = mtf_data["5m"]
-
         late_entry = detect_late_entry_status(tf_15m, tf_5m, tf_1h)
         exhaustion = tf_15m.get("exhaustion_advanced", {})
-
         summary = f"""
 You are King Zarry AI trading decision engine. Analyze MULTI-TIMEFRAME data and give final verdict.
 
@@ -1257,7 +1213,6 @@ or UNSURE - 12 words max reason
         verdict = reply.split()[0].upper().strip(":-")
         mtf_data["ai_verdict"] = reply
         mtf_data["ai_verdict_raw"] = reply
-
         if verdict == "REJECT":
             mtf_data["15m"]["signal"] = "WAIT"
             mtf_data["15m"]["confidence"] = "LOW"
@@ -1296,20 +1251,16 @@ def ai_confirm_signal(data):
         logger.warning(f"AI cross-check skipped: {error}")
     return data
 
-# FORMAT IMPROVED SIGNAL WITH MTF + NEWS
 def format_signal_mtf(mtf_data, news_data=None):
     tf_15m = mtf_data.get("15m", {})
     tf_4h = mtf_data.get("4h", {})
     tf_1h = mtf_data.get("1h", {})
     tf_5m = mtf_data.get("5m", {})
-
     signal = mtf_data.get("mtf_signal", tf_15m.get("signal", "WAIT"))
     data = tf_15m
     data["signal"] = signal
-
     late_entry = detect_late_entry_status(tf_15m, tf_5m, tf_1h)
     exhaustion_adv = tf_15m.get("exhaustion_advanced", {})
-
     if signal == "BUY":
         emoji = "🟢"
         action = "BUY"
@@ -1319,9 +1270,7 @@ def format_signal_mtf(mtf_data, news_data=None):
     else:
         emoji = "⏳"
         action = "WAIT / NO TRADE"
-
     confidence_emoji = {"HIGH": "🔥", "MEDIUM": "⚡", "LOW": "⚠️"}.get(data.get("confidence", "LOW"), "⚠️")
-
     def tf_icon(tf_data):
         s = tf_data.get("signal", "WAIT")
         t = tf_data.get("trend", "NEUTRAL")
@@ -1331,9 +1280,7 @@ def format_signal_mtf(mtf_data, news_data=None):
             return "🔴 BEARISH"
         else:
             return "⚪ NEUTRAL"
-
     mtf_block = f"4H: {tf_icon(tf_4h)} (Major Regime)\n1H: {tf_icon(tf_1h)} (Directional)\n15M: {tf_icon(tf_15m)} (Primary Setup)\n5M: {tf_icon(tf_5m)} (Entry Timing)"
-
     news_block = ""
     if news_data:
         risk_emoji = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🟠", "EXTREME": "🔴"}.get(news_data.get("risk", "LOW"), "⚪")
@@ -1346,24 +1293,18 @@ def format_signal_mtf(mtf_data, news_data=None):
             news_block += "⚠️ High volatility expected - reduce size\n"
     else:
         news_block = "📰 NEWS RISK: LOW\n📅 No high-impact events\n📰 Status: NEWS DATA UNAVAILABLE\n"
-
     late_block = f"{late_entry['emoji']} ENTRY STATUS: {late_entry['status']}\n📍 Action: {late_entry['action']}\n"
     if late_entry["reasons"]:
         late_block += f"Reasons: {'; '.join(late_entry['reasons'][:2])}\n"
-
     exh_block = ""
     if exhaustion_adv.get("exhausted"):
         exh_block = f"⚠️ EXHAUSTION WARNING (Score {exhaustion_adv.get('score',0)}/100)\n"
         for w in exhaustion_adv.get("warnings", [])[:2]:
             exh_block += f"• {w}\n"
-
     ai_verdict = mtf_data.get("ai_verdict", data.get("ai_verdict"))
     ai_line = (f"🧠 <b>AI VERDICT:</b>\n{html.escape(ai_verdict)}\n\n" if ai_verdict else "")
-
     reasons = "\n".join(f"{i+1}. {reason}" for i, reason in enumerate(data.get("reasons", [])[:5]))
-
     interval_display = "15M"
-
     if signal == "WAIT":
         next_trigger = ""
         if mtf_data.get("conflict"):
@@ -1372,7 +1313,6 @@ def format_signal_mtf(mtf_data, news_data=None):
             next_trigger = "Next trigger: Wait for 15M reclaim above EMA21 and 5M bullish confirmation."
         else:
             next_trigger = f"Next trigger: Wait for 15M {mtf_data.get('mtf_bias')} reclaim and 5M confirmation."
-
         return (f"👑 <b>KING ZARRY AI • {data.get('symbol','')} SIGNAL</b>\n\n{emoji} <b>STATUS: {action}</b>\n⏱ Execution: <b>{interval_display}</b>\n\n"
                 f"📊 <b>MULTI-TIMEFRAME</b>\n{mtf_block}\n\n"
                 f"💰 Current price:\n<code>{data.get('price',0):,.2f}</code>\n\n"
@@ -1387,7 +1327,6 @@ def format_signal_mtf(mtf_data, news_data=None):
                 f"💡 {next_trigger}\n\n"
                 f"{ai_line}"
                 f"⚠️ <i>Multi-timeframe analysis. Use appropriate risk management.</i>")
-
     return (f"👑 <b>KING ZARRY AI • {data.get('symbol','')} SIGNAL</b>\n\n{emoji} <b>{action}</b>\n⏱ Execution: <b>{interval_display}</b>\n\n"
             f"📊 <b>MULTI-TIMEFRAME</b>\n{mtf_block}\n\n"
             f"{confidence_emoji} Confidence: <b>{data.get('confidence','LOW')} ({mtf_data.get('mtf_strength', data.get('strength',0))}/100)</b>\n"
@@ -1554,11 +1493,9 @@ def detect_market_intent(text: str):
         return False, "XAU/USD", "15m"
     upper = text.upper()
     lower = text.lower()
-
     has_market = any(kw in upper for kw in ["XAU/USD","XAUUSD","XAU","GOLD","BTC/USD","BTCUSDT","BTC","ETH/USD","ETHUSDT","ETH","SOL/USD","SOLUSDT","SOL"])
     if not has_market:
         return False, "XAU/USD", "15m"
-
     intent_keywords = [
         "analy", "signal", "trend", "check", "price", "forecast", "predict",
         "buy", "sell", "support", "resist", "chart", "outlook", "market",
@@ -1568,12 +1505,9 @@ def detect_market_intent(text: str):
         "give me", "show me", "tell me"
     ]
     is_short_market = len(text.strip()) < 35 and has_market
-
     has_intent = any(kw in lower for kw in intent_keywords) or is_short_market
-
     if not has_intent:
         return False, "XAU/USD", "15m"
-
     symbol, timeframe = detect_market_and_timeframe(text)
     return True, symbol, timeframe
 
@@ -1581,7 +1515,6 @@ def detect_notification_intent(text: str):
     if not text:
         return False, "", ""
     lower = text.lower()
-
     price_patterns = [
         r"alert me when",
         r"notify me when",
@@ -1606,11 +1539,9 @@ def detect_notification_intent(text: str):
         r"every hour",
         r"every day",
     ]
-
     is_price_alert = any(re.search(p, lower) for p in price_patterns)
     is_reminder = any(re.search(p, lower) for p in reminder_patterns)
     is_briefing = any(re.search(p, lower) for p in briefing_patterns)
-
     if is_price_alert:
         upper = text.upper()
         symbol = "BTC/USD"
@@ -1627,7 +1558,6 @@ def detect_notification_intent(text: str):
         return True, "reminder", text
     if is_briefing:
         return True, "briefing", text
-
     return False, "", ""
 
 TIMEFRAME_MAP={"1m":"1min","5m":"5min","15m":"15min","30m":"30min","1h":"1h","2h":"2h","4h":"4h","1d":"1day"}
@@ -2021,7 +1951,6 @@ async def check_personal_price_alerts_job(context: ContextTypes.DEFAULT_TYPE):
         alerts_by_symbol = defaultdict(list)
         for alert in active_alerts:
             alerts_by_symbol[alert["symbol"]].append(alert)
-
         for symbol, alerts in alerts_by_symbol.items():
             try:
                 current_price = await asyncio.to_thread(get_current_price_for_alert, symbol)
@@ -2050,7 +1979,6 @@ async def check_personal_price_alerts_job(context: ContextTypes.DEFAULT_TYPE):
                                 conn.close()
                         except Exception as db_err:
                             logger.warning(f"Failed to update last_checked for alert {alert['id']}: {db_err}")
-
                         if triggered:
                             user_id = int(alert["user_id"])
                             target = float(alert["target_price"])
@@ -2099,7 +2027,6 @@ async def check_personal_price_alerts_job(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.warning(f"check_personal_price_alerts_job failed: {e}")
 
-# PERSONAL PRICE ALERT COMMANDS
 async def alert_command(update, context):
     if not await require_subscription(update):
         return
@@ -2214,7 +2141,6 @@ async def cancelalert_command(update, context):
     else:
         await update.message.reply_text(f"❌ Alert {alert_id} not found or not yours.")
 
-# AI COMMANDS
 async def ask_command(update, context):
     if not await require_subscription(update):
         return
@@ -2252,7 +2178,6 @@ async def tts_command(update, context):
         logger.error(f"TTS Error: {error}")
         await update.message.reply_text("❌ TTS Error: Unable to generate voice note.",disable_web_page_preview=True)
 
-# SIGNALS WITH MTF + NEWS
 async def quick_symbol_command(symbol, update, context):
     if not await require_subscription(update):
         return
@@ -2262,12 +2187,10 @@ async def quick_symbol_command(symbol, update, context):
         mtf_data = await asyncio.to_thread(analyze_multi_timeframe, symbol)
         news_data = await asyncio.to_thread(news_engine.get_news_for_asset, symbol)
         mtf_data = await asyncio.to_thread(ai_confirm_signal_mtf, mtf_data, news_data)
-
         try:
             memory_instance.save_trading_preferences(str(update.effective_user.id), preferred_assets=symbol)
         except:
             pass
-
         await send_long_message(update.message, format_signal_mtf(mtf_data, news_data), is_raw_html=True)
         try:
             chart=await asyncio.to_thread(build_signal_chart, mtf_data)
@@ -2342,13 +2265,11 @@ async def plan_command(update, context):
         mtf_data = await asyncio.to_thread(analyze_multi_timeframe, symbol)
         news_data = await asyncio.to_thread(news_engine.get_news_for_asset, symbol)
         mtf_data = await asyncio.to_thread(ai_confirm_signal_mtf, mtf_data, news_data)
-
         tf_15m = mtf_data["15m"]
         tf_4h = mtf_data["4h"]
         tf_1h = mtf_data["1h"]
         tf_5m = mtf_data["5m"]
         late_entry = detect_late_entry_status(tf_15m, tf_5m, tf_1h)
-
         planner_prompt = f"""
 Create ONE-DAY TRADE PLAN for {symbol}
 
@@ -2394,7 +2315,6 @@ IMPORTANT: This is a plan, not a guarantee. Use risk management.
 Do NOT invent prices - use provided numbers.
 """
         ai_plan = await asyncio.to_thread(ai_engine.ask, str(update.effective_user.id), planner_prompt, None)
-
         await send_long_message(update.message, ai_plan, is_raw_html=False)
         try:
             chart=await asyncio.to_thread(build_signal_chart, mtf_data)
@@ -2489,12 +2409,7 @@ async def handle_photo(update, context):
         logger.error(f"Vision Error: {error}")
         await update.message.reply_text("❌ <b>Vision Analysis Error</b>\n\nUnable to analyze image. Ensure vision API keys are valid.",parse_mode="HTML")
 
-# === CORE TEXT PROCESSING PIPELINE (shared by text + voice transcription) ===
 async def _process_telegram_text_pipeline(update, context, text: str, is_voice_transcription: bool = False):
-    """
-    Central pipeline: text (from user typing OR voice transcription) ->
-    media generation -> price alerts -> notification intent -> market intent -> normal AI
-    """
     if not text or not text.strip():
         return
     text = text.strip()
@@ -2503,8 +2418,6 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
     if not await require_subscription(update):
         return
     user_id = str(update.effective_user.id)
-
-    # Auto-detect trading intent for memory
     upper = text.upper()
     for kw in ["BTC", "ETH", "SOL", "XAU", "GOLD"]:
         if kw in upper and len(text) < 80:
@@ -2630,8 +2543,6 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
                 await status_msg.delete()
             except Exception:
                 pass
-
-            # === OPTIONAL TAVILY WEB CONTEXT ===
             try:
                 if tavily_search and tavily_search.should_trigger_tavily(text) and tavily_search.is_tavily_configured():
                     lower_text = text.lower()
@@ -2655,7 +2566,6 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
                                 await send_long_message(update.message, f"🌐 <b>LIVE WEB CONTEXT for {symbol}</b>\n\n{fundamental_answer}", is_raw_html=False)
             except Exception as e:
                 logger.warning(f"Tavily market enhancement failed (non-fatal): {e}")
-
             return
         except Exception as market_error:
             logger.warning(f"Market routing failed for '{text}': {market_error}, falling back to AI")
@@ -2697,7 +2607,6 @@ async def handle_voice(update, context):
         return
     if not await require_subscription(update):
         return
-
     telegram_file = None
     file_name = "voice.ogg"
     is_voice = False
@@ -2719,12 +2628,10 @@ async def handle_voice(update, context):
     else:
         logger.warning("handle_voice called without voice/audio")
         return
-
     if stt_engine is None:
         logger.error("STT engine not loaded - cannot transcribe voice")
         await update.message.reply_text("🎙️ Voice transcription service is currently unavailable. Please type your request instead. (STT engine not loaded)")
         return
-
     try:
         status = stt_engine.provider_status()
         if not status.get("has_key"):
@@ -2733,7 +2640,6 @@ async def handle_voice(update, context):
             return
     except Exception as e:
         logger.warning(f"STT status check failed: {e}")
-
     await update.message.chat.send_action("typing")
     temp_dir = None
     temp_path = None
@@ -2746,7 +2652,6 @@ async def handle_voice(update, context):
             logger.error(f"A. Telegram get_file failed: {e}")
             await update.message.reply_text("🎙️ I couldn't download that voice message (Telegram file error). Please try again or type your request.")
             return
-
         temp_dir = tempfile.mkdtemp(prefix="kingzarry_voice_")
         temp_path = os.path.join(temp_dir, file_name)
         try:
@@ -2757,23 +2662,19 @@ async def handle_voice(update, context):
             logger.error(f"A. Telegram download_to_drive failed: {e}")
             await update.message.reply_text("🎙️ I couldn't download that voice message (download failed). Please try again.")
             return
-
         if not os.path.exists(temp_path):
             logger.error("B. Downloaded file does not exist after download")
             await update.message.reply_text("🎙️ Downloaded voice file is missing. Please try again.")
             return
-
         file_size = os.path.getsize(temp_path)
         if file_size < 100:
             logger.warning(f"B. Voice file too small/invalid: {file_size} bytes")
             await update.message.reply_text("🎙️ Voice message appears empty or too short. Please speak for at least 1 second and try again.")
             return
-
         if file_size > MAX_VOICE_SIZE:
             logger.warning(f"B. Voice file exceeds limit after download: {file_size}")
             await update.message.reply_text("❌ Voice message too large after download.")
             return
-
         await update.message.chat.send_action("typing")
         logger.info(f"🎙️ Sending audio to Groq STT: {file_name} {file_size} bytes")
         try:
@@ -2782,18 +2683,14 @@ async def handle_voice(update, context):
             logger.error(f"C. STT provider exception: {e}")
             await update.message.reply_text("🎙️ Voice transcription service failed (provider error). Please try again or type your request.")
             return
-
         if not transcription or not transcription.strip():
             logger.warning(f"D. STT returned empty transcription for {file_name} size={file_size}")
             await update.message.reply_text("🎙️ I heard your voice but couldn't understand the words. Please speak clearly in English or type your request.")
             return
-
         transcription = transcription.strip()
         logger.info(f"✅ STT transcription received: {len(transcription)} chars, routing to pipeline")
-
         preview = transcription[:500]
         await update.message.reply_text(f"🎙️ I heard: {preview}", parse_mode=None)
-
         logger.info(f"🔄 Routing transcription through existing message pipeline: {transcription[:60]}...")
         try:
             await _process_telegram_text_pipeline(update, context, transcription, is_voice_transcription=True)
@@ -2801,7 +2698,6 @@ async def handle_voice(update, context):
         except Exception as e:
             logger.error(f"E. AI processing failure after transcription: {e}")
             await update.message.reply_text("⚠️ I understood your voice but failed to process the request. Please try typing it.")
-
     except Exception as e:
         logger.error(f"Voice handler unexpected error: {e}")
         await update.message.reply_text("🎙️ An unexpected error occurred with voice processing. Please type your request.", disable_web_page_preview=True)
@@ -2818,8 +2714,13 @@ async def handle_voice(update, context):
         except Exception:
             pass
 
-# DISCORD
+# DISCORD INLINE (kept only if discord_bot.py is NOT present)
 def start_discord_if_configured():
+    # Skip inline Discord if a dedicated discord_bot.py file exists —
+    # the launcher/separate process handles Discord in that case.
+    if os.path.exists("discord_bot.py"):
+        logger.info("ℹ️ discord_bot.py detected - skipping inline Discord in bot.py (avoids token conflict)")
+        return None
     if not DISCORD_BOT_TOKEN:
         return None
     try:
@@ -2862,7 +2763,7 @@ def start_discord_if_configured():
                     await message.channel.send("❌ Signal error")
             await bot.process_commands(message)
 
-        logger.info("💬 Discord integration configured")
+        logger.info("💬 Discord inline integration configured")
         return bot
     except Exception as e:
         logger.warning(f"Discord import failed: {e}")
@@ -2945,7 +2846,7 @@ def main():
             except Exception as e:
                 logger.error(f"Discord bot crashed: {e}")
         threading.Thread(target=run_discord, daemon=True).start()
-        print("💬 Discord bot thread started")
+        print("💬 Discord bot thread started (inline)")
 
     print("👑 King Zarry AI Telegram Bot is online - MTF + News + Late Entry + Exhaustion + Planner + Agnes Media")
     application.run_polling(drop_pending_updates=True, allowed_updates=["message", "pre_checkout_query"])
