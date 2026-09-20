@@ -1,84 +1,38 @@
-// Fast/frontend/types/auth.ts
-// Auth data contracts for KING ZARRY AI web frontend.
-// Types only. No React, logic, API calls, or side effects.
+// Fast/frontend/lib/auth.ts
+// Authentication state and helpers.
+// Types come from "@/types" — no re-exporting from "./api".
 
-/**
- * Authenticated user.
- *
- * Never contains passwords, password hashes, tokens,
- * API keys, or other secrets.
- */
-export interface AuthUser {
-  id: string;
-  email: string;
-  username: string | null;
-  display_name: string | null;
-  account_status: string | null;
-  created_at: string | null;
-}
+import type { AuthUser } from "@/types";
+import { ApiError } from "./api";
 
-/**
- * Known account statuses.
- *
- * The broader AuthUser.account_status remains a string
- * so the frontend does not reject future backend values.
- */
-export type AccountStatus =
-  | "active"
-  | "inactive"
-  | "suspended"
-  | "pending";
+export type { AuthUser };
 
-/**
- * Login form/request data.
- */
-export interface LoginInput {
-  email: string;
-  password: string;
-}
-
-/**
- * Registration form/request data.
- */
-export interface RegisterInput {
-  email: string;
-  password: string;
-  username?: string;
-  display_name?: string;
-}
-
-/**
- * Authentication response.
- */
-export interface AuthResponse {
-  status?: string;
-  message?: string;
-  user: AuthUser | null;
-}
-
-/**
- * Current authenticated-user response.
- */
-export interface MeResponse {
-  status?: string;
-  user: AuthUser | null;
-}
-
-/**
- * Logout response.
- */
-export interface LogoutResponse {
-  status?: string;
-  message?: string;
-  success?: boolean;
-}
-
-/**
- * Shared authentication state shape.
- */
-export interface AuthState {
+export interface AuthSessionState {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+}
+
+export const initialAuthState: AuthSessionState = {
+  user: null,
+  isAuthenticated: false,
+  isLoading: true,
+  error: null,
+};
+
+export function isAuthError(err: unknown): err is ApiError {
+  return err instanceof ApiError;
+}
+
+export function getAuthErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 0) return "Cannot reach the server. Check your connection.";
+    if (err.status === 401) return "Session expired. Please sign in again.";
+    if (err.status === 403) return "Access denied.";
+    if (err.status === 404) return "Account not found.";
+    return err.detail || err.message;
+  }
+  if (err instanceof Error) return err.message;
+  return "Something went wrong. Please try again.";
 }
