@@ -22,9 +22,9 @@ Security principles:
 import json
 import threading
 import uuid
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
+from enum import Enum
 from typing import Any, Dict, Iterable, Optional, Set, Tuple
 
 from database import get_db_connection
@@ -110,7 +110,7 @@ def _json_safe(value: Any) -> Any:
     if isinstance(value, uuid.UUID):
         return str(value)
 
-    if isinstance(value, EnumLike):
+    if isinstance(value, Enum):
         return value.value
 
     if isinstance(value, dict):
@@ -132,18 +132,10 @@ def _json_safe(value: Any) -> Any:
     )
 
 
-class EnumLike:
-    """
-    Internal marker used only for safe conversion.
-
-    Enum values are handled explicitly below as well. This class
-    intentionally has no runtime instances.
-    """
-
-    value: Any
-
-
 def _enum_value(value: Any) -> str:
+    if isinstance(value, Enum):
+        return str(value.value)
+
     if hasattr(value, "value"):
         return str(value.value)
 
@@ -620,8 +612,6 @@ class WebPermissionStore:
             try:
                 operation_set.add(Operation(str(value)))
             except Exception:
-                # Unknown stored operations are ignored rather than
-                # being converted into executable capabilities.
                 continue
 
         return PermissionRecord(
@@ -963,8 +953,6 @@ class WebApprovalStore:
             amount=amount,
         )
 
-        # Never trust the database fingerprint blindly.
-        # The canonical action must produce the same fingerprint.
         calculated_fingerprint = action.fingerprint()
 
         if calculated_fingerprint != str(stored_fingerprint):
