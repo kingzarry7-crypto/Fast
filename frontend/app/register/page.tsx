@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { signUp } = useAuth();
+  const { register } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
@@ -20,7 +20,7 @@ export default function RegisterPage() {
     setError(null);
     setLoading(true);
     try {
-      await signUp(email, password, username, displayName);
+      await register(email, password, username, displayName);
       router.replace("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
@@ -46,25 +46,52 @@ export default function RegisterPage() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {[
-            { label: "EMAIL", value: email, set: setEmail, type: "email", required: true },
-            { label: "PASSWORD", value: password, set: setPassword, type: "password", required: true },
-            { label: "USERNAME (OPTIONAL)", value: username, set: setUsername, type: "text", required: false },
-            { label: "DISPLAY NAME (OPTIONAL)", value: displayName, set: setDisplayName, type: "text", required: false },
-          ].map((f) => (
-            <div key={f.label}>
-              <label className="block text-[10px] font-mono text-cyan-400/50 tracking-widest mb-1.5">
-                {f.label}
-              </label>
-              <input
-                type={f.type}
-                value={f.value}
-                onChange={(e) => f.set(e.target.value)}
-                required={f.required}
-                className="w-full bg-[#031322]/80 border border-cyan-500/20 focus:border-cyan-500/50 rounded-lg px-4 py-3 text-sm text-white outline-none transition-colors"
-              />
-            </div>
-          ))}
+          <div>
+            <label className="block text-[10px] font-mono text-cyan-400/50 tracking-widest mb-1.5">
+              EMAIL
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full bg-[#031322]/80 border border-cyan-500/20 focus:border-cyan-500/50 rounded-lg px-4 py-3 text-sm text-white outline-none transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-mono text-cyan-400/50 tracking-widest mb-1.5">
+              PASSWORD
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="w-full bg-[#031322]/80 border border-cyan-500/20 focus:border-cyan-500/50 rounded-lg px-4 py-3 text-sm text-white outline-none transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-mono text-cyan-400/50 tracking-widest mb-1.5">
+              USERNAME (OPTIONAL)
+            </label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full bg-[#031322]/80 border border-cyan-500/20 focus:border-cyan-500/50 rounded-lg px-4 py-3 text-sm text-white outline-none transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-mono text-cyan-400/50 tracking-widest mb-1.5">
+              DISPLAY NAME (OPTIONAL)
+            </label>
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              className="w-full bg-[#031322]/80 border border-cyan-500/20 focus:border-cyan-500/50 rounded-lg px-4 py-3 text-sm text-white outline-none transition-colors"
+            />
+          </div>
           <button
             type="submit"
             disabled={loading}
