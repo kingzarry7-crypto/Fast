@@ -1,6 +1,3 @@
-// ==========================================================================
-// AUTH
-// ==========================================================================
 export interface AuthUser {
   id: string;
   email: string;
@@ -21,9 +18,6 @@ export interface MeResponse {
   user: AuthUser;
 }
 
-// ==========================================================================
-// CHAT
-// ==========================================================================
 export interface ChatResponse {
   status: string;
   reply: string;
@@ -39,9 +33,6 @@ export interface ChatMessage {
   capability?: string;
 }
 
-// ==========================================================================
-// API ERROR
-// ==========================================================================
 export interface ApiErrorData {
   status: number;
   message: string;
