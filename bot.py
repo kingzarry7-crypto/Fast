@@ -1,6 +1,7 @@
 import os
 import re
 import io
+import sys
 import asyncio
 import tempfile
 import base64
@@ -50,7 +51,21 @@ except Exception as e:
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+# ============================================================
+# LOGGING — stdout (Railway-safe) + silence noisy libraries
+# ============================================================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    stream=sys.stdout,
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("discord.gateway").setLevel(logging.WARNING)
+logging.getLogger("discord.client").setLevel(logging.WARNING)
+logging.getLogger("discord.http").setLevel(logging.WARNING)
+logging.getLogger("apscheduler").setLevel(logging.WARNING)
+
 logger = logging.getLogger("king_zarry_discord")
 
 # STT Engine - shared with Telegram (after logger)
@@ -167,8 +182,6 @@ SYSTEM_VOICE_PROMPT = (
 # ============================================================
 # 🎨 MEDIA REQUEST DETECTION (runs before market intent)
 # ============================================================
-# Clear generation verbs that should override market keyword routing.
-# Example: "Draw a BTC chart" -> image generation, not market analysis.
 _MEDIA_VERB_PATTERN = re.compile(
     r"\b("
     r"draw|sketch|render|illustrate|paint|"
@@ -191,7 +204,6 @@ _MEDIA_VERB_PATTERN = re.compile(
 )
 
 def _looks_like_media_request(text: str) -> bool:
-    """True if the message clearly asks to generate/edit an image or video."""
     if not text:
         return False
     return bool(_MEDIA_VERB_PATTERN.search(text))
@@ -514,7 +526,6 @@ def detect_news_intent_discord(text: str):
             return True
     return False
 
-# === PRICE ALERT HELPERS FOR DISCORD (reuse shared) ===
 def normalize_alert_symbol_discord(raw: str):
     if shared_normalize_symbol:
         try:
@@ -1016,9 +1027,6 @@ class KingZarryAI(discord.Client):
                 logger.warning(f"Discord STT with caption error: {_redact(str(e))}")
 
         # === PRIORITY 1: MEDIA GENERATION / EDITING (Agnes AI) ===
-        # Runs BEFORE price alerts and market intent so "Draw a BTC chart" generates
-        # an image instead of triggering market analysis.
-        # Also handles photo + caption with media verbs (e.g. "make this look vintage").
         try:
             has_image_attachment = bool(images)
             is_media_edit_with_image = has_image_attachment and _looks_like_media_request(content)
@@ -1160,8 +1168,6 @@ class KingZarryAI(discord.Client):
                     image_bytes = await attachment.read()
                     mime_type = attachment.content_type or "image/png"
                     image_tuple = (mime_type, image_bytes)
-                    # Only override content with chart-analysis template if the caption
-                    # is NOT a media edit request (media edit was already handled at PRIORITY 1)
                     symbol, timeframe = detect_market_and_timeframe(content)
                     if symbol != "BTC/USD" or any(kw in content.upper() for kw in ["CHART", "SIGNAL", "ANALYSIS"]):
                         content = f"Analyze this trading chart screenshot. Market: {symbol} Timeframe: {timeframe}. Only use information actually visible in the image. Summarize trend, support/resistance, patterns, EMA/RSI if visible, possible BUY/SELL setup, entry/SL/TP."
