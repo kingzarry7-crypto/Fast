@@ -1,3 +1,51 @@
+// ==========================================================================
+// Shared types — re-exported from here so other modules can import from "@/lib/api"
+// ==========================================================================
+export interface AuthUser {
+  id: string;
+  email: string;
+  username?: string | null;
+  display_name?: string | null;
+  account_status?: string | null;
+  created_at?: string | null;
+}
+
+export interface AuthResponse {
+  status: string;
+  message?: string;
+  user?: AuthUser;
+}
+
+export interface MeResponse {
+  status: string;
+  user: AuthUser;
+}
+
+export interface ChatResponse {
+  status: string;
+  reply: string;
+  conversation_id: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant" | "system";
+  text: string;
+  timestamp: string;
+  status?: string;
+  capability?: string;
+}
+
+export interface ApiErrorData {
+  status: number;
+  message: string;
+  detail?: string;
+  raw?: unknown;
+}
+
+// ==========================================================================
+// KING ZARRY AI — API Client
+// ==========================================================================
 import type {
   AuthUser,
   AuthResponse,
@@ -227,4 +275,14 @@ export const api = {
   logout,
   sendChatMessage,
   healthCheck,
+};
+
+// Re-export shared types so `import { AuthUser } from "@/lib/api"` works
+export type {
+  AuthUser,
+  AuthResponse,
+  MeResponse,
+  ChatResponse,
+  ChatMessage,
+  ApiErrorData,
 };
