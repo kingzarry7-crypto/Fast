@@ -21,7 +21,10 @@ export default function SettingsPage() {
               <Row label="Username" value={user?.username || "—"} />
               <Row label="Display Name" value={user?.display_name || "—"} />
               <Row label="Account Status" value={user?.account_status || "—"} />
-              <Row label="Member Since" value={user?.created_at?.slice(0, 10) || "—"} />
+              <Row
+                label="Member Since"
+                value={user?.created_at?.slice(0, 10) || "—"}
+              />
             </div>
           </div>
         </div>
