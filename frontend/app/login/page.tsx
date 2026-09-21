@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AICore from "@/components/AICore";
@@ -14,6 +14,25 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [booted, setBooted] = useState(false);
+
+  // Play boot sound on first interaction (browsers block autoplay)
+  useEffect(() => {
+    const unlock = () => {
+      setBooted(true);
+      window.removeEventListener("click", unlock);
+      window.removeEventListener("touchstart", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+    window.addEventListener("click", unlock);
+    window.addEventListener("touchstart", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("click", unlock);
+      window.removeEventListener("touchstart", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,7 +54,11 @@ export default function LoginPage() {
 
       <div className="relative z-10 w-full max-w-md">
         <div className="flex flex-col items-center mb-4">
-          <AICore state={loading ? "thinking" : "idle"} size={220} />
+          <AICore
+            state={loading ? "thinking" : "idle"}
+            size={220}
+            bootSound={booted}
+          />
           <h1 className="font-display text-2xl font-bold text-white kz-glow-text mt-12 tracking-wider">
             KING ZARRY AI
           </h1>
