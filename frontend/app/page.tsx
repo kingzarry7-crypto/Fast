@@ -1,107 +1,267 @@
 "use client";
 
-import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import AICore from "@/components/AICore";
-import HeroRings from "@/components/HeroRings";
-import StatCard from "@/components/StatCard";
+import { useChat } from "@/hooks/useChat";
+import { useAuth } from "@/hooks/useAuth";
+import { useVoice } from "@/hooks/useVoice";
 
-export default function LandingPage() {
+type CoreState = "idle" | "thinking" | "speaking" | "listening" | "error";
+
+const capabilities = [
+  { name: "AI", desc: "Core Intelligence" },
+  { name: "VISION", desc: "Spatial Analysis" },
+  { name: "VOICE", desc: "Acoustic Interface" },
+  { name: "MEMORY", desc: "Neural Context" },
+  { name: "REASONING", desc: "Cognitive Processing" },
+  { name: "AGENTS", desc: "Autonomous Units" },
+  { name: "TOOLS", desc: "System Integrations" },
+  { name: "MARKETS", desc: "Market Data" },
+  { name: "SIGNALS", desc: "Pattern Detection" },
+  { name: "NEWS", desc: "External Information" },
+];
+
+export default function ChatPage() {
+  const { user } = useAuth();
+  const { messages, sending, error, send } = useChat();
+  const { speak, stop, speaking, listening, listen, supported } = useVoice();
+
+  const [input, setInput] = useState("");
+  const [capability, setCapability] = useState("AI");
+  const [coreState, setCoreState] = useState<CoreState>("idle");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [voiceOn, setVoiceOn] = useState(true);
+  const endRef = useRef<HTMLDivElement>(null);
+  const lastSpokenRef = useRef<string | null>(null);
+
+  // Sync core visual state
+  useEffect(() => {
+    if (sending) setCoreState("thinking");
+    else if (speaking) setCoreState("speaking");
+    else if (listening) setCoreState("listening");
+    else setCoreState("idle");
+  }, [sending, speaking, listening]);
+
+  // Auto-scroll
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, sending]);
+
+  // Speak the newest assistant message
+  useEffect(() => {
+    if (!voiceOn) return;
+    if (!supported) return;
+    const last = messages[messages.length - 1];
+    if (!last) return;
+    if (last.role !== "assistant") return;
+    if (last.id.startsWith("error")) return;
+    if (lastSpokenRef.current === last.id) return;
+    lastSpokenRef.current = last.id;
+    speak(last.text);
+  }, [messages, voiceOn, supported, speak]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const text = input.trim();
+    if (!text || sending) return;
+    stop();
+    setInput("");
+    await send(text, capability);
+  };
+
+  const handleMic = () => {
+    if (!supported) return;
+    listen((transcript) => {
+      if (transcript) setInput(transcript);
+    });
+  };
+
   return (
-    <div className="relative min-h-screen overflow-hidden">
-      {/* Background decor */}
-      <HeroRings size={720} />
-
-      {/* Navbar */}
-      <nav className="relative z-10 flex items-center justify-between px-6 lg:px-10 py-5 border-b border-cyan-500/10 backdrop-blur-sm">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-[0_0_20px_rgba(0,240,255,0.4)]">
-            <span className="font-bold text-black text-xs">KZ</span>
+    <ProtectedRoute>
+      <div className="flex flex-col h-screen">
+        {/* Top bar */}
+        <div className="border-b border-cyan-500/10 px-6 py-3 flex items-center justify-between bg-[#020914]/60 backdrop-blur-xl">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen((v) => !v)}
+              className="xl:hidden w-8 h-8 flex items-center justify-center rounded-md border border-cyan-500/30 text-cyan-300 text-xs"
+              aria-label="Toggle modules"
+            >
+              ≡
+            </button>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/80">
+              AI CORE {coreState.toUpperCase()}
+            </span>
           </div>
-          <p className="font-display font-bold text-white text-sm tracking-wider">
-            KING ZARRY{" "}
-            <span className="text-cyan-400 kz-glow-soft">AI</span>
-          </p>
+          <div className="flex items-center gap-3">
+            {supported && (
+              <button
+                onClick={() => {
+                  setVoiceOn((v) => !v);
+                  if (voiceOn) stop();
+                }}
+                className={`px-3 py-1.5 rounded-md font-mono-tech text-[9px] tracking-widest border transition-all ${
+                  voiceOn
+                    ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-300"
+                    : "border-cyan-500/20 text-cyan-400/40"
+                }`}
+              >
+                {voiceOn ? "VOICE ON" : "VOICE OFF"}
+              </button>
+            )}
+            {user?.email && (
+              <span className="hidden sm:inline font-mono-tech text-[9px] tracking-widest text-cyan-400/40">
+                {user.email}
+              </span>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/login"
-            className="text-[10px] font-mono-tech tracking-widest text-cyan-400/70 hover:text-cyan-300 px-3 py-2"
-          >
-            SIGN IN
-          </Link>
-          <Link
-            href="/register"
-            className="text-[10px] font-mono-tech tracking-widest text-black bg-cyan-400 hover:bg-cyan-300 px-4 py-2 rounded-md shadow-[0_0_20px_rgba(0,240,255,0.4)] transition-all"
-          >
-            ENTER
-          </Link>
-        </div>
-      </nav>
 
-      {/* Floating panels — desktop only */}
-      <div className="hidden lg:block">
-        <StatCard
-          title="INTELLIGENCE CORE"
-          value="ONLINE"
-          sub="Neural links stable"
-          className="absolute top-32 left-10 w-56 kz-slow-pulse"
-        />
-        <StatCard
-          title="HUMAN INTELLIGENCE CORE"
-          value="SYSTEM ACTIVE"
-          sub="MARKET ANALYSIS"
-          color="#10b981"
-          showChart
-          className="absolute top-1/2 left-10 -translate-y-1/2 w-64"
-        />
-        <StatCard
-          title="NEURAL NETWORK"
-          value="42 NODES"
-          sub="Live wireframe"
-          color="#8b5cf6"
-          showChart
-          className="absolute top-1/2 right-10 -translate-y-1/2 w-64"
-        />
+        <div className="flex flex-1 overflow-hidden">
+          {/* Module sidebar */}
+          <div
+            className={`${
+              sidebarOpen ? "flex" : "hidden"
+            } xl:flex w-52 flex-col border-r border-cyan-500/10 p-3 overflow-y-auto kz-scroll absolute xl:relative inset-y-0 left-0 z-20 bg-[#020914] xl:bg-transparent`}
+          >
+            <p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/30 px-2 mb-2">
+              AI MODULES
+            </p>
+            {capabilities.map((cap) => (
+              <button
+                key={cap.name}
+                onClick={() => {
+                  setCapability(cap.name);
+                  setSidebarOpen(false);
+                }}
+                className={`text-left px-3 py-2 rounded-md mb-0.5 transition-all ${
+                  capability === cap.name
+                    ? "bg-cyan-500/15 border border-cyan-500/40 text-white"
+                    : "border border-transparent text-cyan-400/50 hover:text-cyan-200 hover:bg-cyan-950/30"
+                }`}
+              >
+                <p className="font-mono-tech text-[10px] tracking-widest">
+                  {cap.name}
+                </p>
+                <p className="font-mono-tech text-[9px] tracking-wider text-cyan-400/30">
+                  {cap.desc}
+                </p>
+              </button>
+            ))}
+          </div>
+
+          {/* Chat area */}
+          <div className="flex-1 flex flex-col min-w-0">
+            <div className="flex-1 overflow-y-auto kz-scroll px-6 py-6 space-y-5">
+              {messages.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <AICore state="idle" size={180} />
+                  <p className="mt-12 font-mono-tech text-[10px] tracking-[0.4em] text-cyan-400/40">
+                    AWAITING INPUT
+                  </p>
+                </div>
+              )}
+
+              {messages.map((m) => (
+                <div
+                  key={m.id}
+                  className={`flex ${
+                    m.role === "user" ? "justify-end" : "justify-start"
+                  }`}
+                >
+                  <div
+                    className={`max-w-[80%] rounded-xl px-4 py-3 ${
+                      m.role === "user"
+                        ? "bg-cyan-500/15 border border-cyan-500/30"
+                        : m.id.startsWith("error")
+                        ? "bg-red-500/10 border border-red-500/30"
+                        : "kz-glass"
+                    }`}
+                  >
+                    {m.status && (
+                      <p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/40 mb-1.5">
+                        {m.status}
+                      </p>
+                    )}
+                    <p className="text-sm text-white/90 whitespace-pre-wrap leading-relaxed">
+                      {m.text}
+                    </p>
+                    <div className="flex items-center justify-between mt-2 gap-4">
+                      {m.capability && (
+                        <span className="font-mono-tech text-[9px] tracking-widest text-cyan-400/30">
+                          {m.capability}
+                        </span>
+                      )}
+                      <span className="font-mono-tech text-[9px] tracking-widest text-cyan-400/30">
+                        {m.timestamp}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {sending && (
+                <div className="flex justify-start">
+                  <div className="kz-glass rounded-xl px-5 py-4 flex items-center gap-2">
+                    <span className="kz-typing-dot w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                    <span className="kz-typing-dot w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                    <span className="kz-typing-dot w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                  </div>
+                </div>
+              )}
+
+              <div ref={endRef} />
+            </div>
+
+            {error && (
+              <div className="px-6 pb-2">
+                <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2 text-xs text-red-300 font-mono-tech">
+                  {error}
+                </div>
+              </div>
+            )}
+
+            <form
+              onSubmit={handleSubmit}
+              className="border-t border-cyan-500/10 p-4 bg-[#020914]/60 backdrop-blur-xl"
+            >
+              <div className="flex items-center gap-2">
+                {supported && (
+                  <button
+                    type="button"
+                    onClick={handleMic}
+                    disabled={sending || listening}
+                    className={`px-3 py-3 rounded-lg border font-mono-tech text-xs tracking-widest transition-all ${
+                      listening
+                        ? "bg-amber-500/20 border-amber-500/50 text-amber-300"
+                        : "border-cyan-500/25 text-cyan-400/60 hover:text-cyan-300 hover:border-cyan-500/50"
+                    }`}
+                    aria-label="Voice input"
+                  >
+                    🎙
+                  </button>
+                )}
+                <input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder={`Message KING ZARRY AI [${capability}]...`}
+                  disabled={sending}
+                  className="flex-1 bg-black/40 border border-cyan-500/25 focus:border-cyan-400 rounded-lg px-4 py-3 text-sm text-white placeholder-cyan-400/30 outline-none transition-colors disabled:opacity-50 font-mono-tech tracking-wider"
+                />
+                <button
+                  type="submit"
+                  disabled={sending || !input.trim()}
+                  className="px-5 py-3 rounded-lg bg-cyan-400 text-black font-display text-xs font-bold tracking-[0.2em] hover:bg-cyan-300 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  SEND
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       </div>
-
-      {/* Hero */}
-      <main className="relative z-10 flex flex-col items-center justify-center px-6 pt-10 pb-24 min-h-[calc(100vh-80px)]">
-        <div className="flex flex-col items-center">
-          <AICore state="idle" size={320} />
-        </div>
-
-        <div className="mt-24 text-center">
-          <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold text-white kz-glow-text tracking-wider">
-            KING ZARRY AI
-          </h1>
-          <p className="font-mono-tech text-[11px] sm:text-xs tracking-[0.5em] text-cyan-400/70 mt-4">
-            YOUR INTELLIGENCE. AMPLIFIED.
-          </p>
-        </div>
-
-        <div className="mt-10 flex flex-col sm:flex-row items-center gap-4">
-          <Link
-            href="/login"
-            className="w-64 sm:w-auto px-8 py-4 rounded-md bg-cyan-400 text-black font-display font-bold text-xs tracking-[0.3em] text-center shadow-[0_0_30px_rgba(0,240,255,0.5)] hover:shadow-[0_0_50px_rgba(0,240,255,0.8)] hover:bg-cyan-300 transition-all kz-slow-pulse"
-          >
-            ENTER SYSTEM
-          </Link>
-          <Link
-            href="/register"
-            className="w-64 sm:w-auto px-8 py-4 rounded-md border border-cyan-400/60 text-cyan-300 font-display font-bold text-xs tracking-[0.3em] text-center hover:bg-cyan-500/10 hover:border-cyan-300 transition-all"
-          >
-            EXPLORE INTELLIGENCE
-          </Link>
-        </div>
-
-        {/* Mobile-only stat cards */}
-        <div className="lg:hidden w-full max-w-sm mt-14 grid grid-cols-2 gap-3">
-          <StatCard title="CORE" value="ONLINE" />
-          <StatCard title="DATABASE" value="NEON" />
-          <StatCard title="SIGNALS" value="LIVE" color="#10b981" />
-          <StatCard title="AI MODEL" value="v2.5" color="#8b5cf6" />
-        </div>
-      </main>
-    </div>
+    </ProtectedRoute>
   );
 }
