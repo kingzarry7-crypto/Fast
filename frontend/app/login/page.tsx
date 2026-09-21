@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import AICore from "@/components/AICore";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function LoginPage() {
@@ -30,12 +31,12 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="kz-panel w-full max-w-md p-8">
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center mx-auto mb-4 shadow-[0_0_30px_rgba(0,240,255,0.3)]">
-            <span className="font-bold text-black">KZ</span>
-          </div>
-          <h1 className="text-xl font-bold text-white">KING ZARRY AI</h1>
-          <p className="text-[10px] font-mono text-cyan-400/50 tracking-widest mt-1">
+        <div className="flex flex-col items-center mb-8">
+          <AICore state={loading ? "thinking" : "idle"} size={200} />
+          <h1 className="text-2xl font-bold text-white kz-glow-text mt-10">
+            KING ZARRY AI
+          </h1>
+          <p className="text-[10px] font-mono text-cyan-400/50 tracking-[0.4em] mt-2">
             SECURE ACCESS
           </p>
         </div>
@@ -56,6 +57,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              autoComplete="email"
               className="w-full bg-[#031322]/80 border border-cyan-500/20 focus:border-cyan-500/50 rounded-lg px-4 py-3 text-sm text-white outline-none transition-colors"
             />
           </div>
@@ -68,6 +70,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              autoComplete="current-password"
               className="w-full bg-[#031322]/80 border border-cyan-500/20 focus:border-cyan-500/50 rounded-lg px-4 py-3 text-sm text-white outline-none transition-colors"
             />
           </div>
