@@ -37,7 +37,10 @@ export function useChat() {
       abortRef.current = new AbortController();
 
       try {
-        const res = await api.sendChatMessage(trimmed, abortRef.current.signal);
+        const res = await api.sendChatMessage(
+          trimmed,
+          abortRef.current.signal
+        );
         const aiMsg: ChatMessage = {
           id: `ai-${Date.now()}`,
           role: "assistant",
