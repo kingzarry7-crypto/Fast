@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 
+const PUBLIC_ROUTES = ["/", "/login", "/register"];
+
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: "◆" },
   { label: "Chat", href: "/chat", icon: "◆" },
@@ -19,6 +21,11 @@ export default function Sidebar() {
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
+
+  // Don't show sidebar on public pages
+  if (PUBLIC_ROUTES.includes(pathname)) {
+    return null;
+  }
 
   return (
     <>
