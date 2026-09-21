@@ -31,8 +31,8 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <div className="kz-panel p-10 mb-8 flex flex-col items-center">
-          <AICore state="idle" size={180} />
+        <div className="kz-panel p-12 mb-8 flex flex-col items-center">
+          <AICore state="idle" size={260} />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -70,9 +70,7 @@ export default function DashboardPage() {
                 <p className="text-sm font-bold text-white group-hover:text-cyan-300 transition-colors">
                   {link.label}
                 </p>
-                <p className="text-xs text-cyan-200/40 mt-1">
-                  {link.desc}
-                </p>
+                <p className="text-xs text-cyan-200/40 mt-1">{link.desc}</p>
               </Link>
             ))}
           </div>
