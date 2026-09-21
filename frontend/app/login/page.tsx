@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AICore from "@/components/AICore";
@@ -16,7 +16,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [booted, setBooted] = useState(false);
 
-  // Play boot sound on first interaction (browsers block autoplay)
   useEffect(() => {
     const unlock = () => {
       setBooted(true);
@@ -54,11 +53,7 @@ export default function LoginPage() {
 
       <div className="relative z-10 w-full max-w-md">
         <div className="flex flex-col items-center mb-4">
-          <AICore
-            state={loading ? "thinking" : "idle"}
-            size={220}
-            bootSound={booted}
-          />
+          <AICore state={loading ? "thinking" : "idle"} size={220} bootSound={booted} />
           <h1 className="font-display text-2xl font-bold text-white kz-glow-text mt-12 tracking-wider">
             KING ZARRY AI
           </h1>
@@ -84,8 +79,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                autoComplete="email"
-                className="w-full bg-black/40 border border-cyan-500/25 focus:border-cyan-400 rounded-md px-4 py-3 text-sm text-white outline-none transition-colors font-mono-tech tracking-wider"
+                className="w-full bg-black/40 border border-cyan-500/25 focus:border-cyan-400 rounded-md px-4 py-3 text-sm text-white outline-none font-mono-tech tracking-wider"
               />
             </div>
             <div>
@@ -97,14 +91,13 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                autoComplete="current-password"
-                className="w-full bg-black/40 border border-cyan-500/25 focus:border-cyan-400 rounded-md px-4 py-3 text-sm text-white outline-none transition-colors font-mono-tech tracking-wider"
+                className="w-full bg-black/40 border border-cyan-500/25 focus:border-cyan-400 rounded-md px-4 py-3 text-sm text-white outline-none font-mono-tech tracking-wider"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 rounded-md bg-cyan-400 text-black font-display font-bold text-xs tracking-[0.3em] shadow-[0_0_25px_rgba(0,240,255,0.5)] hover:bg-cyan-300 hover:shadow-[0_0_40px_rgba(0,240,255,0.7)] transition-all disabled:opacity-50 disabled:shadow-none"
+              className="w-full py-3 rounded-md bg-cyan-400 text-black font-display font-bold text-xs tracking-[0.3em] shadow-[0_0_25px_rgba(0,240,255,0.5)] hover:bg-cyan-300 transition-all disabled:opacity-50"
             >
               {loading ? "AUTHENTICATING..." : "SIGN IN"}
             </button>
@@ -113,10 +106,7 @@ export default function LoginPage() {
 
         <p className="text-center font-mono-tech text-[10px] tracking-widest text-cyan-400/40 mt-6">
           NO ACCOUNT?{" "}
-          <Link
-            href="/register"
-            className="text-cyan-400 hover:text-cyan-300 kz-glow-soft"
-          >
+          <Link href="/register" className="text-cyan-400 hover:text-cyan-300">
             REGISTER
           </Link>
         </p>
