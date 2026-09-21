@@ -18,9 +18,7 @@ export function useAuth() {
       const me = await api.getCurrentUser();
       setUser(me);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        setUser(null);
-      } else if (err instanceof ApiError && err.status === 0) {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 0)) {
         setUser(null);
       } else {
         setError(err instanceof Error ? err.message : "Session check failed");
@@ -46,12 +44,7 @@ export function useAuth() {
   );
 
   const register = useCallback(
-    async (
-      email: string,
-      password: string,
-      username?: string,
-      displayName?: string
-    ) => {
+    async (email: string, password: string, username?: string, displayName?: string) => {
       const res = await api.register(email, password, username, displayName);
       if (res.user) setUser(res.user);
       else await refresh();
