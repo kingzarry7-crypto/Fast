@@ -1,3 +1,15 @@
+useEffect(() => {
+  if (typeof window === "undefined") return;
+  if (!("speechSynthesis" in window)) return;
+  // Warm up the voices list — Chrome loads voices asynchronously
+  window.speechSynthesis.getVoices();
+  const onVoices = () => window.speechSynthesis.getVoices();
+  window.speechSynthesis.addEventListener("voiceschanged", onVoices);
+  return () => {
+    window.speechSynthesis.removeEventListener("voiceschanged", onVoices);
+  };
+}, []);
+
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
