@@ -39,11 +39,7 @@ export default function DashboardPage() {
           {[
             { label: "AI CORE", value: "ACTIVE", color: "text-emerald-400" },
             { label: "DATABASE", value: "NEON", color: "text-cyan-400" },
-            {
-              label: "SESSION",
-              value: user ? "AUTHENTICATED" : "—",
-              color: "text-cyan-400",
-            },
+            { label: "SESSION", value: user ? "AUTHENTICATED" : "—", color: "text-cyan-400" },
           ].map((s) => (
             <div key={s.label} className="kz-panel p-5">
               <p className="font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/40 mb-2">
