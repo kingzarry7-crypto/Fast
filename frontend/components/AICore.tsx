@@ -33,7 +33,7 @@ export default function AICore({
       className="relative flex items-center justify-center"
       style={{ width: size, height: size }}
     >
-      {/* Outer pulse rings (only when active) */}
+      {/* Outer pulsing rings when active */}
       {active && (
         <>
           <span
@@ -56,13 +56,13 @@ export default function AICore({
         }}
       />
 
-      {/* Faster counter-rotating middle ring */}
+      {/* Counter-rotating middle ring */}
       <span
         className="kz-core-rotate-reverse absolute rounded-full"
         style={{
           inset: size * 0.1,
           border: `1px solid ${color}55`,
-          boxShadow: `0 0 20px ${color}22, inset 0 0 20px ${color}11`,
+          boxShadow: `0 0 24px ${color}22, inset 0 0 24px ${color}11`,
         }}
       />
 
@@ -77,8 +77,8 @@ export default function AICore({
         <span
           className="absolute rounded-full"
           style={{
-            width: size * 0.03,
-            height: size * 0.03,
+            width: size * 0.028,
+            height: size * 0.028,
             background: color,
             boxShadow: `0 0 12px ${color}, 0 0 24px ${color}`,
             top: 0,
@@ -98,7 +98,7 @@ export default function AICore({
         }}
       />
 
-      {/* Mid-ring detail */}
+      {/* Mid detail ring */}
       <div
         className="absolute rounded-full"
         style={{
@@ -133,7 +133,7 @@ export default function AICore({
       {/* Status label */}
       <div className="absolute -bottom-8 left-1/2 -translate-x-1/2">
         <span
-          className="font-mono text-[10px] tracking-[0.4em] uppercase"
+          className="font-mono-tech text-[10px] tracking-[0.4em] uppercase"
           style={{ color, textShadow: `0 0 10px ${color}88` }}
         >
           {stateLabels[state]}
