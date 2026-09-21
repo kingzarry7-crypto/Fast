@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+
 type CoreState = "idle" | "thinking" | "speaking" | "listening" | "error";
 
 const stateColors: Record<CoreState, string> = {
@@ -18,13 +20,61 @@ const stateLabels: Record<CoreState, string> = {
   error: "ERROR",
 };
 
+function playBootChime() {
+  try {
+    const AudioCtx =
+      (window as unknown as { AudioContext?: typeof AudioContext })
+        .AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+
+    const play = (freq: number, start: number, duration: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+      gain.gain.setValueAtTime(0, ctx.currentTime + start);
+      gain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(
+        0.0001,
+        ctx.currentTime + start + duration
+      );
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + start);
+      osc.stop(ctx.currentTime + start + duration);
+    };
+
+    // Three-note ascending chime
+    play(440, 0, 0.4);
+    play(660, 0.18, 0.4);
+    play(880, 0.36, 0.6);
+
+    setTimeout(() => ctx.close(), 1500);
+  } catch {
+    // Audio blocked by browser until first interaction
+  }
+}
+
 export default function AICore({
   state = "idle",
   size = 220,
+  bootSound = false,
 }: {
   state?: CoreState;
   size?: number;
+  bootSound?: boolean;
 }) {
+  const hasPlayed = useRef(false);
+
+  useEffect(() => {
+    if (!bootSound || hasPlayed.current) return;
+    hasPlayed.current = true;
+    playBootChime();
+  }, [bootSound]);
+
   const color = stateColors[state];
   const active = state !== "idle";
 
@@ -33,7 +83,6 @@ export default function AICore({
       className="relative flex items-center justify-center"
       style={{ width: size, height: size }}
     >
-      {/* Outer pulsing rings when active */}
       {active && (
         <>
           <span
@@ -47,16 +96,11 @@ export default function AICore({
         </>
       )}
 
-      {/* Slow-rotating outer dashed ring */}
       <span
         className="kz-core-rotate absolute rounded-full"
-        style={{
-          inset: size * 0.02,
-          border: `1px dashed ${color}33`,
-        }}
+        style={{ inset: size * 0.02, border: `1px dashed ${color}33` }}
       />
 
-      {/* Counter-rotating middle ring */}
       <span
         className="kz-core-rotate-reverse absolute rounded-full"
         style={{
@@ -66,7 +110,6 @@ export default function AICore({
         }}
       />
 
-      {/* Orbiting dot */}
       <span
         className="kz-orbit absolute rounded-full"
         style={{
@@ -88,7 +131,6 @@ export default function AICore({
         />
       </span>
 
-      {/* Inner glow halo */}
       <div
         className="kz-core-pulse absolute rounded-full"
         style={{
@@ -98,7 +140,6 @@ export default function AICore({
         }}
       />
 
-      {/* Mid detail ring */}
       <div
         className="absolute rounded-full"
         style={{
@@ -108,7 +149,6 @@ export default function AICore({
         }}
       />
 
-      {/* Solid core */}
       <div
         className="relative rounded-full"
         style={{
@@ -119,7 +159,6 @@ export default function AICore({
         }}
       />
 
-      {/* Center bright dot */}
       <div
         className="absolute rounded-full"
         style={{
@@ -130,7 +169,6 @@ export default function AICore({
         }}
       />
 
-      {/* Status label */}
       <div className="absolute -bottom-8 left-1/2 -translate-x-1/2">
         <span
           className="font-mono-tech text-[10px] tracking-[0.4em] uppercase"
