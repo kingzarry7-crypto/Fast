@@ -194,20 +194,39 @@ export async function logout(
 }
 
 // CHAT
+// NEW: optional image payload. Send raw base64 (no "data:" prefix).
+export interface SendImagePayload {
+  base64: string;
+  mime: string;
+}
+
 export async function sendChatMessage(
   message: string,
+  image?: SendImagePayload,
   signal?: AbortSignal
 ): Promise<ChatResponse> {
   const trimmed = message.trim();
-  if (!trimmed) {
+  const hasImage = !!(image && image.base64);
+
+  // Allow image-only messages (auto-fallback text is applied in useChat)
+  if (!trimmed && !hasImage) {
     throw new ApiError({ status: 400, message: "Message required" });
   }
   if (trimmed.length > 4000) {
     throw new ApiError({ status: 400, message: "Message too long" });
   }
+
+  const body: Record<string, unknown> = {
+    message: trimmed || "What do you see in this image?",
+  };
+  if (hasImage) {
+    body.image_base64 = image!.base64;
+    body.image_mime = image!.mime || "image/jpeg";
+  }
+
   const data = await request<ChatResponse>("/api/chat", {
     method: "POST",
-    body: { message: trimmed },
+    body,
     signal,
   });
   if (!data?.reply) {
