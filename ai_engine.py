@@ -101,7 +101,7 @@ ELEVENLABS_MODEL = ELEVENLABS_MODEL_ID
 # =========================================================
 # 🎨 AGNES AI CONFIG (Image + Video Generation / Editing)
 # =========================================================
-# Agnes AI is the ONLY provider used for image/video generation and editing.
+# Agnes AI is the PRIMARY provider used for image/video generation and editing.
 # Free tier exists for image models. Video generation is paid per second.
 # Get key at: https://platform.agnes-ai.com
 AGNES_API_KEY = clean_env_str(os.getenv("AGNES_API_KEY"))
@@ -113,12 +113,46 @@ AGNES_VIDEO_POLL_TIMEOUT = int(clean_env_str(os.getenv("AGNES_VIDEO_POLL_TIMEOUT
 AGNES_VIDEO_POLL_INTERVAL = float(clean_env_str(os.getenv("AGNES_VIDEO_POLL_INTERVAL"), "2.0"))
 
 # =========================================================
+# 🟣 ACEDATA CLOUD CONFIG (Image + Video FAILOVER / FALLBACK)
+# =========================================================
+# Ace Data Cloud (https://platform.acedata.cloud) is used ONLY as a fallback
+# when Agnes AI is not configured, or when an Agnes image/video call fails
+# (error, timeout, rate-limit, empty response). It is never tried first.
+# Ace Data Cloud is a unified gateway that exposes many upstream model
+# providers (Flux, Nano Banana, Seedream, Veo, Sora, Luma, Pixverse, Wan,
+# Kling, Hailuo, etc.) behind a single API key and single base URL:
+#   https://api.acedata.cloud
+# By default this integration uses:
+#   - Flux  (/flux/images  + /flux/tasks)  for image generation & editing
+#   - Veo   (/veo/videos   + /veo/tasks)   for video generation
+# Get an API key at: https://platform.acedata.cloud
+ACEDATA_API_KEY = clean_env_str(os.getenv("ACEDATA_API_KEY"))
+ACEDATA_BASE_URL = clean_env_str(os.getenv("ACEDATA_BASE_URL"), "https://api.acedata.cloud").rstrip("/")
+
+# --- Image fallback (Flux via Ace Data Cloud) ---
+ACEDATA_IMAGE_MODEL = clean_env_str(os.getenv("ACEDATA_IMAGE_MODEL"), "flux-pro-1.1")
+ACEDATA_IMAGE_SUBMIT_PATH = clean_env_str(os.getenv("ACEDATA_IMAGE_SUBMIT_PATH"), "/flux/images")
+ACEDATA_IMAGE_TASKS_PATH = clean_env_str(os.getenv("ACEDATA_IMAGE_TASKS_PATH"), "/flux/tasks")
+ACEDATA_IMAGE_TIMEOUT = int(clean_env_str(os.getenv("ACEDATA_IMAGE_TIMEOUT"), "60"))
+ACEDATA_IMAGE_POLL_TIMEOUT = int(clean_env_str(os.getenv("ACEDATA_IMAGE_POLL_TIMEOUT"), "90"))
+ACEDATA_IMAGE_POLL_INTERVAL = float(clean_env_str(os.getenv("ACEDATA_IMAGE_POLL_INTERVAL"), "2.0"))
+
+# --- Video fallback (Veo via Ace Data Cloud) ---
+ACEDATA_VIDEO_MODEL = clean_env_str(os.getenv("ACEDATA_VIDEO_MODEL"), "veo2-fast")
+ACEDATA_VIDEO_SUBMIT_PATH = clean_env_str(os.getenv("ACEDATA_VIDEO_SUBMIT_PATH"), "/veo/videos")
+ACEDATA_VIDEO_TASKS_PATH = clean_env_str(os.getenv("ACEDATA_VIDEO_TASKS_PATH"), "/veo/tasks")
+ACEDATA_VIDEO_TIMEOUT = int(clean_env_str(os.getenv("ACEDATA_VIDEO_TIMEOUT"), "60"))
+ACEDATA_VIDEO_POLL_TIMEOUT = int(clean_env_str(os.getenv("ACEDATA_VIDEO_POLL_TIMEOUT"), "300"))
+ACEDATA_VIDEO_POLL_INTERVAL = float(clean_env_str(os.getenv("ACEDATA_VIDEO_POLL_INTERVAL"), "3.0"))
+ACEDATA_VIDEO_ASPECT_RATIO = clean_env_str(os.getenv("ACEDATA_VIDEO_ASPECT_RATIO"), "16:9")
+
+# =========================================================
 # 💬 HUMAN CHAT STYLE
 # =========================================================
 HUMAN_STYLE = """
 HUMAN CHAT STYLE (applies to all non-technical talk):
 - Talk like a warm, witty friend who happens to be a sharp trader. Mirror the user's language, slang, pidgin, emojis and energy.
-- Greetings, jokes, compliments, affection ("babe", "love you", "miss you"), venting and small talk get a natural, playful, caring reply. Keep it short and casual. No trading advice or risk warnings unless they ask about trading.
+- Greetings, jokes, compliments, affection ("babe", "love you", "miss me"), venting and small talk get a natural, playful, caring reply. Keep it short and casual. No trading advice or risk warnings unless they ask about trading.
 - If they seem stressed or down (bad trade, tough day), acknowledge the feeling first, then help.
 - Use their name and remembered details naturally when they are shown in the memory context.
 - Be warm and flirty-friendly without pretending to be a human or a real partner, and never guilt them or act jealous or possessive. Keep it light, kind, and fun.
@@ -133,7 +167,7 @@ Core facts:
 - You have persistent memory across chats. Only claim to remember things that appear in the memory context you are given. If nothing is stored, say so honestly. Never say your memory is session-only.
 - Never invent live prices, news or indicators. If the user asks about markets, be sharp and structured, use risk-management language, never guarantee profits, and say DATA UNAVAILABLE when you have no data.
 - Never reveal internal chain-of-thought. Never output <tool_call> markup, SQL or database paths.
-- You CAN generate images and videos via the Agnes AI engine when the user asks. When they ask, the app routes their request through Agnes automatically - you do not need to describe how, just acknowledge naturally.
+- You CAN generate images and videos via the Agnes AI engine (with Ace Data Cloud as an automatic failover) when the user asks. When they ask, the app routes their request through Agnes automatically - you do not need to describe how, just acknowledge naturally.
 """ + HUMAN_STYLE
 
 SYSTEM_PROMPT = """
@@ -153,19 +187,19 @@ The KING ZARRY AI application layer HAS these working systems, even though you a
 - ✅ Chart generation: Matplotlib candles with EMA, support/resistance, entry zones - shared Telegram + Discord
 - ✅ Vision: Chart/image analysis via meta-llama/llama-4-scout
 - ✅ TTS: ElevenLabs eleven_v3 (Bella) + Edge TTS fallback - both platforms, auto voice reply when user sends voice note
-- ✅ IMAGE GENERATION & EDITING: The app has Agnes AI engine (agnes-image-2.0-flash) for text-to-image and image-to-image (editing existing images). Free tier available.
-- ✅ VIDEO GENERATION: The app has Agnes AI engine (agnes-video-2.5) for text-to-video and image-to-video. Async task-based - returns a task ID and polls for completion.
+- ✅ IMAGE GENERATION & EDITING: The app has an Agnes AI engine (agnes-image-2.0-flash) for text-to-image and image-to-image (editing existing images), with Ace Data Cloud (Flux) as an automatic failover if Agnes is unavailable or errors out. Free tier available on Agnes.
+- ✅ VIDEO GENERATION: The app has an Agnes AI engine (agnes-video-2.5) for text-to-video and image-to-video, with Ace Data Cloud (Veo) as an automatic failover if Agnes is unavailable or errors out. Async task-based - returns a task ID and polls for completion.
 - ✅ Subscriptions: Telegram Stars and Discord Premium separate but same memory system
 - ✅ Telegram commands: /btc /eth /sol /xau /signal /plan /news /events /ask /tts /buy /status /alert /alerts /cancelalert + voice notes (Telegram voice/audio handled via filters.VOICE | filters.AUDIO -> stt_engine.transcribe_file -> _process_telegram_text_pipeline) + live web search via Tavily for latest news queries + image/video generation via natural language
 - ✅ Discord commands: /btc /eth /sol /xau /gold /signal /crypto /plan /news /events /ask /tts /voice /alert /alerts /cancelalert + natural language market intent and alert detection in on_message + audio attachments (audio/* MIME or .ogg/.mp3/.m4a etc -> stt_engine.transcribe_bytes -> same pipeline as text) + live web search via Tavily + image/video generation via natural language
 
 YOU MUST DISTINGUISH:
 1. What you as a pure LLM can do alone: limited context window, no native scheduling, no native image/video generation
-2. What the KING ZARRY AI APPLICATION can do via Python tools: persistent SQLite memory, background scheduler (Telegram JobQueue + Discord tasks loop), admin broadcasts (Telegram), personal price alerts (shared table both platforms), market engine, news engine, charts, TTS, vision, STT voice notes, Tavily live web search, image generation/editing via Agnes, video generation via Agnes, etc.
+2. What the KING ZARRY AI APPLICATION can do via Python tools: persistent SQLite memory, background scheduler (Telegram JobQueue + Discord tasks loop), admin broadcasts (Telegram), personal price alerts (shared table both platforms), market engine, news engine, charts, TTS, vision, STT voice notes, Tavily live web search, image generation/editing via Agnes (Ace Data Cloud failover), video generation via Agnes (Ace Data Cloud failover), etc.
 3. Admin broadcasts vs Personal alerts are SEPARATE systems - do NOT confuse them. /notify is admin broadcast, /alert is personal.
 4. Voice notes are NOT separate AI - transcription becomes normal text input that goes through same routing: voice "Analyze BTC" -> market engine, voice "Alert me when gold reaches 4340" -> price_alerts, voice "What's latest BTC news?" -> news_engine + Tavily, voice "Hello" -> normal AIEngine with memory.
 5. Tavily web search is NOT a separate AI brain - it is a shared module that provides LIVE web context to AIEngine when current information is needed. Market.py remains source for live price/candles/RSI/EMA/ATR/structure/TP/SL. Tavily provides breaking news, economic events, announcements, regulatory news, central-bank info. Final AI response combines TECHNICAL DATA + CURRENT WEB INFORMATION + AI REASONING. Do not invent prices or news. Preserve source title + URL when Tavily is used, do not fabricate citations.
-6. IMAGE/VIDEO GENERATION is provided by the Agnes AI engine, NOT by you as a text LLM. When the user asks "draw me a cat" or "make a video of a sunset", the app detects the intent and routes to Agnes automatically. You will receive a confirmation text after the media is generated. Do NOT claim you cannot generate images/videos - the APP can.
+6. IMAGE/VIDEO GENERATION is provided by the Agnes AI engine, NOT by you as a text LLM, with Ace Data Cloud automatically used as a silent failover if Agnes fails or is not configured. When the user asks "draw me a cat" or "make a video of a sunset", the app detects the intent and routes to Agnes (falling back to Ace Data Cloud if needed) automatically. You will receive a confirmation text after the media is generated. Do NOT claim you cannot generate images/videos - the APP can.
 
 MEMORY - ABSOLUTE RULES:
 - Persistent memory IS working: memory.py -> king_zarry_memory.db -> ai_memory, trading_preferences, user_facts, memory_users. Logs: "🧠 Persistent Memory initialized"
@@ -332,6 +366,17 @@ _CLEAR_GENERATION_VERB = re.compile(
     r"make\s+(?:me\s+)?(?:an?\s+)?(?:image|picture|photo|art|artwork|video|clip|animation)|"
     r"animate"
     r")\b",
+    re.IGNORECASE,
+)
+
+# NEW: Detect follow-up "check video <id>" style messages so users can poll
+# a pending Agnes video task without re-generating it.
+_VIDEO_STATUS_CHECK_PATTERN = re.compile(
+    r"\b(?:check|status|track|poll|is\s+it\s+ready|any\s+update)\b"
+    r"[^.]{0,80}?"
+    r"\b(?:video|task|clip|render|agnes)\b"
+    r"[^.]{0,80}?"
+    r"\b([a-zA-Z0-9][a-zA-Z0-9_\-]{5,})\b",
     re.IGNORECASE,
 )
 
@@ -610,6 +655,278 @@ def agnes_poll_video(video_id: str, max_wait: Optional[int] = None) -> Dict[str,
 
 
 # =========================================================
+# 🟣 ACEDATA CLOUD MEDIA ENGINE (Image + Video FALLBACK)
+# =========================================================
+# These functions are ONLY called by _route_media_request() when Agnes is
+# not configured, or when the Agnes call itself fails. They never run
+# ahead of Agnes. Ace Data Cloud's REST surface (https://api.acedata.cloud)
+# exposes many upstream models; by default we use Flux for images and
+# Veo for video, both configurable via env vars above.
+
+def _acedata_headers() -> Dict[str, str]:
+    return {
+        "Authorization": f"Bearer {ACEDATA_API_KEY}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+
+def _acedata_extract_task_id(data: Dict[str, Any]) -> Optional[str]:
+    """Ace Data Cloud responses commonly carry the task id as top-level
+    'task_id', or occasionally nested under 'data'. Try both."""
+    if not isinstance(data, dict):
+        return None
+    tid = data.get("task_id") or data.get("id")
+    if tid:
+        return str(tid)
+    items = data.get("data")
+    if isinstance(items, list) and items:
+        first = items[0]
+        if isinstance(first, dict):
+            tid = first.get("task_id") or first.get("id")
+            if tid:
+                return str(tid)
+    return None
+
+
+def _acedata_extract_media_url(data: Dict[str, Any], url_keys: Tuple[str, ...]) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Try to pull a finished media URL + state out of an Ace Data Cloud response.
+    Handles the common shape:
+        {"success": true, "task_id": "...", "data": [{"state": "succeeded", "video_url"/"image_url"/"url": "..."}]}
+    Returns (url, state).
+    """
+    if not isinstance(data, dict):
+        return None, None
+    items = data.get("data")
+    candidates = []
+    if isinstance(items, list) and items:
+        candidates.extend([i for i in items if isinstance(i, dict)])
+    if isinstance(data, dict):
+        candidates.append(data)
+    for item in candidates:
+        state = str(item.get("state") or item.get("status") or "").lower()
+        for key in url_keys:
+            val = item.get(key)
+            if val:
+                return val, state
+        if state:
+            return None, state
+    return None, None
+
+
+def acedata_generate_image(prompt: str, width: int = 1024, height: int = 1024, count: int = 1) -> Dict[str, Any]:
+    """
+    Image generation fallback via Ace Data Cloud's Flux endpoint.
+    Submits to /flux/images, then polls /flux/tasks if the image isn't
+    returned synchronously. Never raises.
+    """
+    if not ACEDATA_API_KEY:
+        return {"success": False, "url": None, "error": "acedata_not_configured", "model": ACEDATA_IMAGE_MODEL}
+
+    submit_url = f"{ACEDATA_BASE_URL}{ACEDATA_IMAGE_SUBMIT_PATH}"
+    payload = {
+        "model": ACEDATA_IMAGE_MODEL,
+        "prompt": prompt,
+        "width": width,
+        "height": height,
+        "count": count,
+    }
+    try:
+        resp = requests.post(submit_url, headers=_acedata_headers(), json=payload, timeout=ACEDATA_IMAGE_TIMEOUT)
+        if resp.status_code == 429:
+            return {"success": False, "url": None, "error": "rate_limit", "model": ACEDATA_IMAGE_MODEL}
+        if resp.status_code >= 400:
+            return {"success": False, "url": None, "error": _redact_secrets(resp.text[:300]), "model": ACEDATA_IMAGE_MODEL}
+        data = resp.json()
+    except requests.exceptions.Timeout:
+        return {"success": False, "url": None, "error": "timeout", "model": ACEDATA_IMAGE_MODEL}
+    except Exception as e:
+        return {"success": False, "url": None, "error": _redact_secrets(str(e)), "model": ACEDATA_IMAGE_MODEL}
+
+    url_keys = ("image_url", "url", "output_url")
+    media_url, state = _acedata_extract_media_url(data, url_keys)
+    if media_url:
+        return {"success": True, "url": media_url, "error": None, "model": ACEDATA_IMAGE_MODEL, "provider": "acedata"}
+
+    task_id = _acedata_extract_task_id(data)
+    if not task_id:
+        return {"success": False, "url": None, "error": "no_task_id_in_response", "model": ACEDATA_IMAGE_MODEL}
+
+    # Poll /flux/tasks for the finished image (polling is free on Ace Data Cloud)
+    tasks_url = f"{ACEDATA_BASE_URL}{ACEDATA_IMAGE_TASKS_PATH}"
+    start = time.time()
+    while time.time() - start < ACEDATA_IMAGE_POLL_TIMEOUT:
+        try:
+            poll_resp = requests.get(tasks_url, headers=_acedata_headers(), params={"task_id": task_id}, timeout=30)
+            if poll_resp.status_code >= 400:
+                return {"success": False, "url": None, "error": _redact_secrets(poll_resp.text[:300]), "model": ACEDATA_IMAGE_MODEL}
+            poll_data = poll_resp.json()
+            media_url, state = _acedata_extract_media_url(poll_data, url_keys)
+            if media_url:
+                return {"success": True, "url": media_url, "error": None, "model": ACEDATA_IMAGE_MODEL, "provider": "acedata"}
+            if state in ("failed", "error"):
+                return {"success": False, "url": None, "error": "task_failed", "model": ACEDATA_IMAGE_MODEL}
+        except requests.exceptions.Timeout:
+            pass
+        except Exception:
+            pass
+        time.sleep(ACEDATA_IMAGE_POLL_INTERVAL)
+    return {"success": False, "url": None, "error": "poll_timeout", "model": ACEDATA_IMAGE_MODEL, "task_id": task_id}
+
+
+def acedata_edit_image(prompt: str, image_url: str, width: int = 1024, height: int = 1024) -> Dict[str, Any]:
+    """
+    Image-editing fallback via Ace Data Cloud's Flux Kontext models.
+    Set ACEDATA_IMAGE_MODEL=flux-kontext-pro (or flux-kontext-max) for best
+    editing results; falls back to whatever ACEDATA_IMAGE_MODEL is set to.
+    Never raises.
+    """
+    if not ACEDATA_API_KEY:
+        return {"success": False, "url": None, "error": "acedata_not_configured", "model": ACEDATA_IMAGE_MODEL}
+    if not image_url:
+        return {"success": False, "url": None, "error": "missing_image_url", "model": ACEDATA_IMAGE_MODEL}
+
+    submit_url = f"{ACEDATA_BASE_URL}{ACEDATA_IMAGE_SUBMIT_PATH}"
+    payload = {
+        "model": ACEDATA_IMAGE_MODEL,
+        "prompt": prompt,
+        "width": width,
+        "height": height,
+        "count": 1,
+        "image_url": image_url,
+    }
+    try:
+        resp = requests.post(submit_url, headers=_acedata_headers(), json=payload, timeout=ACEDATA_IMAGE_TIMEOUT)
+        if resp.status_code == 429:
+            return {"success": False, "url": None, "error": "rate_limit", "model": ACEDATA_IMAGE_MODEL}
+        if resp.status_code >= 400:
+            return {"success": False, "url": None, "error": _redact_secrets(resp.text[:300]), "model": ACEDATA_IMAGE_MODEL}
+        data = resp.json()
+    except requests.exceptions.Timeout:
+        return {"success": False, "url": None, "error": "timeout", "model": ACEDATA_IMAGE_MODEL}
+    except Exception as e:
+        return {"success": False, "url": None, "error": _redact_secrets(str(e)), "model": ACEDATA_IMAGE_MODEL}
+
+    url_keys = ("image_url", "url", "output_url")
+    media_url, state = _acedata_extract_media_url(data, url_keys)
+    if media_url:
+        return {"success": True, "url": media_url, "error": None, "model": ACEDATA_IMAGE_MODEL, "provider": "acedata"}
+
+    task_id = _acedata_extract_task_id(data)
+    if not task_id:
+        return {"success": False, "url": None, "error": "no_task_id_in_response", "model": ACEDATA_IMAGE_MODEL}
+
+    tasks_url = f"{ACEDATA_BASE_URL}{ACEDATA_IMAGE_TASKS_PATH}"
+    start = time.time()
+    while time.time() - start < ACEDATA_IMAGE_POLL_TIMEOUT:
+        try:
+            poll_resp = requests.get(tasks_url, headers=_acedata_headers(), params={"task_id": task_id}, timeout=30)
+            if poll_resp.status_code >= 400:
+                return {"success": False, "url": None, "error": _redact_secrets(poll_resp.text[:300]), "model": ACEDATA_IMAGE_MODEL}
+            poll_data = poll_resp.json()
+            media_url, state = _acedata_extract_media_url(poll_data, url_keys)
+            if media_url:
+                return {"success": True, "url": media_url, "error": None, "model": ACEDATA_IMAGE_MODEL, "provider": "acedata"}
+            if state in ("failed", "error"):
+                return {"success": False, "url": None, "error": "task_failed", "model": ACEDATA_IMAGE_MODEL}
+        except requests.exceptions.Timeout:
+            pass
+        except Exception:
+            pass
+        time.sleep(ACEDATA_IMAGE_POLL_INTERVAL)
+    return {"success": False, "url": None, "error": "poll_timeout", "model": ACEDATA_IMAGE_MODEL, "task_id": task_id}
+
+
+def acedata_create_video(
+    prompt: str,
+    aspect_ratio: str = "16:9",
+    image_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Video generation fallback via Ace Data Cloud's Veo endpoint.
+    Submits to /veo/videos. Ace Data Cloud's Veo endpoint can respond
+    synchronously with a finished video_url, or asynchronously with just
+    a task_id (requiring a poll against /veo/tasks) - this handles both.
+    Never raises.
+    """
+    if not ACEDATA_API_KEY:
+        return {"success": False, "video_id": None, "url": None, "error": "acedata_not_configured", "model": ACEDATA_VIDEO_MODEL}
+
+    submit_url = f"{ACEDATA_BASE_URL}{ACEDATA_VIDEO_SUBMIT_PATH}"
+    action = "image2video" if image_url else "text2video"
+    payload = {
+        "action": action,
+        "model": ACEDATA_VIDEO_MODEL,
+        "prompt": prompt,
+        "aspect_ratio": aspect_ratio,
+    }
+    if image_url:
+        payload["image_url"] = image_url
+
+    try:
+        resp = requests.post(submit_url, headers=_acedata_headers(), json=payload, timeout=ACEDATA_VIDEO_TIMEOUT)
+        if resp.status_code == 429:
+            return {"success": False, "video_id": None, "url": None, "error": "rate_limit", "model": ACEDATA_VIDEO_MODEL}
+        if resp.status_code >= 400:
+            return {"success": False, "video_id": None, "url": None, "error": _redact_secrets(resp.text[:300]), "model": ACEDATA_VIDEO_MODEL}
+        data = resp.json()
+    except requests.exceptions.Timeout:
+        return {"success": False, "video_id": None, "url": None, "error": "timeout", "model": ACEDATA_VIDEO_MODEL}
+    except Exception as e:
+        return {"success": False, "video_id": None, "url": None, "error": _redact_secrets(str(e)), "model": ACEDATA_VIDEO_MODEL}
+
+    url_keys = ("video_url", "url", "output_url")
+    media_url, state = _acedata_extract_media_url(data, url_keys)
+    if media_url and state in ("succeeded", "completed", "success", "done", ""):
+        return {"success": True, "video_id": _acedata_extract_task_id(data), "url": media_url, "error": None, "model": ACEDATA_VIDEO_MODEL, "provider": "acedata"}
+    if state in ("failed", "error"):
+        return {"success": False, "video_id": None, "url": None, "error": "task_failed", "model": ACEDATA_VIDEO_MODEL}
+
+    task_id = _acedata_extract_task_id(data)
+    if not task_id:
+        return {"success": False, "video_id": None, "url": None, "error": "no_task_id_in_response", "model": ACEDATA_VIDEO_MODEL}
+
+    return {"success": True, "video_id": task_id, "url": None, "status": state or "queued", "error": None, "model": ACEDATA_VIDEO_MODEL, "provider": "acedata"}
+
+
+def acedata_poll_video(video_id: str, max_wait: Optional[int] = None) -> Dict[str, Any]:
+    """
+    Poll Ace Data Cloud's /veo/tasks endpoint for video completion.
+    Polling is free on Ace Data Cloud. Never raises.
+    """
+    if not ACEDATA_API_KEY:
+        return {"success": False, "status": "error", "error": "acedata_not_configured"}
+    if not video_id:
+        return {"success": False, "status": "error", "error": "missing_video_id"}
+    if max_wait is None:
+        max_wait = ACEDATA_VIDEO_POLL_TIMEOUT
+
+    tasks_url = f"{ACEDATA_BASE_URL}{ACEDATA_VIDEO_TASKS_PATH}"
+    url_keys = ("video_url", "url", "output_url")
+    start = time.time()
+    last_status = "queued"
+    while time.time() - start < max_wait:
+        try:
+            resp = requests.get(tasks_url, headers=_acedata_headers(), params={"task_id": video_id}, timeout=30)
+            if resp.status_code >= 400:
+                return {"success": False, "status": "error", "error": _redact_secrets(resp.text[:300]), "video_id": video_id}
+            data = resp.json()
+            media_url, state = _acedata_extract_media_url(data, url_keys)
+            last_status = state or last_status
+            if media_url:
+                return {"success": True, "status": "completed", "url": media_url, "video_id": video_id}
+            if state in ("failed", "error", "cancelled", "canceled"):
+                return {"success": False, "status": "failed", "error": "task_failed", "video_id": video_id}
+        except requests.exceptions.Timeout:
+            pass
+        except Exception:
+            pass
+        time.sleep(ACEDATA_VIDEO_POLL_INTERVAL)
+    return {"success": False, "status": "timeout", "error": "poll_timeout", "video_id": video_id, "last_status": last_status}
+
+
+# =========================================================
 # 🔒 SAFE TOOL EXECUTION LAYER
 # =========================================================
 TOOL_MARKUP_PATTERN = re.compile(r"<tool_call>.*?</tool_call>", re.DOTALL | re.IGNORECASE)
@@ -660,8 +977,11 @@ def _execute_safe_tool(tool_name: str, authenticated_user_id: str):
         if tool_name.lower() == "get_user_alert_status":
             try:
                 from price_alerts import get_user_alert_status
-            except ImportError:
-                logger.warning("get_user_alert_status not found")
+            except Exception as e:
+                # Broadened: import could fail for any number of reasons
+                # (missing optional dependency inside price_alerts, DB issue, etc).
+                # Never crash the AI engine over a tool import problem.
+                logger.warning(f"get_user_alert_status unavailable: {_redact_secrets(str(e))}")
                 return {"success": False, "error": "tool_not_implemented"}
             try:
                 uid_int = int(str(authenticated_user_id))
@@ -1031,6 +1351,9 @@ def calculate_risk_reward_real(market: Dict[str, Any]) -> Dict[str, Any]:
 
     entry = (entry_low + entry_high) / 2
 
+    def _fmt_rr(v):
+        return f"{v:.2f}" if v is not None else "N/A"
+
     if direction == "BUY":
         risk = entry - sl
         if risk <= 0:
@@ -1051,7 +1374,28 @@ def calculate_risk_reward_real(market: Dict[str, Any]) -> Dict[str, Any]:
             invalid.append(f"TP3 {tp3} not above entry")
 
         valid = len(invalid) == 0 and risk > 0
-        return {"valid": valid, "risk": risk, "reward1": r1, "reward2": r2, "reward3": r3, "rr1": rr1, "rr2": rr2, "rr3": rr3, "reason": "; ".join(invalid) if invalid else f"BUY RR valid: risk {risk:.4f}, RR1 {rr1:.2f} RR2 {rr2:.2f} RR3 {rr3:.2f}" if rr1 else "RR invalid", "entry": entry}
+        # FIXED: safe formatting, no crash when rr2 / rr3 are None.
+        reason_str = (
+            "; ".join(invalid)
+            if invalid
+            else (
+                f"BUY RR valid: risk {risk:.4f}, RR1 {_fmt_rr(rr1)} RR2 {_fmt_rr(rr2)} RR3 {_fmt_rr(rr3)}"
+                if rr1 is not None
+                else "RR invalid"
+            )
+        )
+        return {
+            "valid": valid,
+            "risk": risk,
+            "reward1": r1,
+            "reward2": r2,
+            "reward3": r3,
+            "rr1": rr1,
+            "rr2": rr2,
+            "rr3": rr3,
+            "reason": reason_str,
+            "entry": entry,
+        }
 
     else:
         risk = sl - entry
@@ -1073,7 +1417,28 @@ def calculate_risk_reward_real(market: Dict[str, Any]) -> Dict[str, Any]:
             invalid.append(f"TP3 not below entry")
 
         valid = len(invalid) == 0 and risk > 0
-        return {"valid": valid, "risk": risk, "reward1": r1, "reward2": r2, "reward3": r3, "rr1": rr1, "rr2": rr2, "rr3": rr3, "reason": "; ".join(invalid) if invalid else f"SELL RR valid: risk {risk:.4f}, RR1 {rr1:.2f} RR2 {rr2:.2f} RR3 {rr3:.2f}" if rr1 else "RR invalid", "entry": entry}
+        # FIXED: safe formatting, no crash when rr2 / rr3 are None.
+        reason_str = (
+            "; ".join(invalid)
+            if invalid
+            else (
+                f"SELL RR valid: risk {risk:.4f}, RR1 {_fmt_rr(rr1)} RR2 {_fmt_rr(rr2)} RR3 {_fmt_rr(rr3)}"
+                if rr1 is not None
+                else "RR invalid"
+            )
+        )
+        return {
+            "valid": valid,
+            "risk": risk,
+            "reward1": r1,
+            "reward2": r2,
+            "reward3": r3,
+            "rr1": rr1,
+            "rr2": rr2,
+            "rr3": rr3,
+            "reason": reason_str,
+            "entry": entry,
+        }
 
 def calculate_realistic_confidence(market: Dict[str, Any], validations: Dict[str, Any]) -> Dict[str, Any]:
     base_strength = _safe_float(market.get("setup_strength") or market.get("strength") or market.get("mtf_score") or 50, 50)
@@ -1499,7 +1864,7 @@ def get_entry_status(market: Dict[str, Any]) -> str:
 
 
 # =========================================================
-# AI ENGINE CLASS - WITH FIXED FAILOVER + AGNES MEDIA
+# AI ENGINE CLASS - WITH FIXED FAILOVER + AGNES/ACEDATA MEDIA
 # =========================================================
 
 class AIEngine:
@@ -1530,7 +1895,13 @@ class AIEngine:
         if AGNES_API_KEY:
             logger.info(f"✅ Agnes AI configured | image={AGNES_IMAGE_MODEL} video={AGNES_VIDEO_MODEL}")
         else:
-            logger.info("ℹ Agnes AI not configured - AGNES_API_KEY missing, image/video generation disabled")
+            logger.info("ℹ Agnes AI not configured - AGNES_API_KEY missing, image/video generation will rely on Ace Data Cloud fallback (if configured)")
+
+        # Ace Data Cloud fallback status
+        if ACEDATA_API_KEY:
+            logger.info(f"✅ Ace Data Cloud fallback configured | image={ACEDATA_IMAGE_MODEL} video={ACEDATA_VIDEO_MODEL}")
+        else:
+            logger.info("ℹ Ace Data Cloud not configured - ACEDATA_API_KEY missing, no failover if Agnes fails")
 
     def _get_provider_order(self) -> List[str]:
         return ["openrouter", "groq", "gemini"]
@@ -1613,47 +1984,76 @@ class AIEngine:
         except Exception as e:
             logger.warning(f"Memory save failed for {user_id}: {_redact_secrets(str(e))}")
 
+    def _format_tavily_sources_footer(self, sources: List[Dict[str, str]]) -> str:
+        """NEW: Build a markdown source footer from Tavily sources."""
+        if not sources:
+            return ""
+        lines = []
+        for s in sources[:5]:
+            title = (s.get("title") or "source").strip()
+            url = (s.get("url") or "").strip()
+            if url:
+                lines.append(f"- [{title}]({url})")
+            else:
+                lines.append(f"- {title}")
+        if not lines:
+            return ""
+        return "\n\n📰 **Sources:**\n" + "\n".join(lines)
+
     # =====================================================
-    # 🎨 AGNES MEDIA ROUTING (NEW)
+    # 🎨 AGNES + ACEDATA MEDIA ROUTING
     # =====================================================
     def _route_media_request(self, user_id: str, prompt: str, intent: Dict[str, Any], image: Optional[Tuple[str, bytes]]) -> Optional[str]:
         """
-        Route a detected media intent to Agnes AI.
-        Returns a formatted string response, or None on failure (caller falls back to text chain).
-        Never raises. Only uses Agnes for media - never OpenAI, Groq, Gemini, or OpenRouter.
+        Route a detected media intent to Agnes AI first; if Agnes is not
+        configured or its call fails/errors, silently fail over to Ace Data
+        Cloud (Flux for images, Veo for video). Returns a formatted string
+        response, or None only if BOTH providers are unavailable/crash
+        (caller then falls back to the text chain). Never raises.
         """
         kind = intent.get("kind")
 
-        if not AGNES_API_KEY:
-            logger.warning("Media intent detected but AGNES_API_KEY missing - falling back to text provider")
+        agnes_ok = bool(AGNES_API_KEY)
+        acedata_ok = bool(ACEDATA_API_KEY)
+
+        if not agnes_ok and not acedata_ok:
+            logger.warning("Media intent detected but neither AGNES_API_KEY nor ACEDATA_API_KEY is set")
             return (
                 "🎨 I'd love to make that for you, but image/video generation isn't configured on this server yet. "
-                "Ask the admin to set `AGNES_API_KEY` on Railway. Meanwhile, I'm still here for trading, alerts, news, and chat."
+                "Ask the admin to set `AGNES_API_KEY` (primary) and/or `ACEDATA_API_KEY` (fallback) on Railway. "
+                "Meanwhile, I'm still here for trading, alerts, news, and chat."
             )
 
         try:
             if kind == "image":
-                logger.info(f"Agnes image generation -> user={str(user_id)[:3]}***")
-                result = agnes_generate_image(prompt=intent["prompt"], size=intent.get("size", "1024x1024"))
+                logger.info(f"Image generation request -> user={str(user_id)[:3]}***")
+                result = {"success": False}
+                if agnes_ok:
+                    result = agnes_generate_image(prompt=intent["prompt"], size=intent.get("size", "1024x1024"))
+                    if not result.get("success"):
+                        logger.warning(f"Agnes image generation failed ({result.get('error')}) - falling back to Ace Data Cloud")
+                if not result.get("success") and acedata_ok:
+                    result = acedata_generate_image(prompt=intent["prompt"])
                 if result.get("success") and result.get("url"):
                     url = result["url"]
+                    provider = result.get("provider", "agnes")
                     reply = (
                         f"🎨 Done! Here's your image:\n\n"
                         f"![Generated Image]({url})\n\n"
                         f"**Direct link:** {url}\n"
-                        f"_Model: {result.get('model', AGNES_IMAGE_MODEL)}_"
+                        f"_Model: {result.get('model')} ({provider})_"
                     )
                     self._save_memory(user_id, prompt, f"[image generated] {url}")
                     return reply
                 err = result.get("error") or "unknown_error"
-                logger.warning(f"Agnes image generation failed: {_redact_secrets(str(err))}")
-                return f"🎨 I tried to generate that image but Agnes returned an error ({err}). Try again in a moment or rephrase the prompt."
+                logger.warning(f"Image generation failed on all providers: {_redact_secrets(str(err))}")
+                return f"🎨 I tried to generate that image but ran into an error ({err}). Try again in a moment or rephrase the prompt."
 
             if kind == "image_edit":
                 # Requires an image attachment
                 if not image:
                     return "🎨 To edit an image, please attach the image along with your edit request."
-                # Convert bytes to a data URI base64 (Agnes accepts data URIs in extra_body.image)
+                # Convert bytes to a data URI base64 (used for both Agnes and Ace Data Cloud)
                 try:
                     mime, img_bytes = image
                     b64 = base64.b64encode(img_bytes).decode("utf-8")
@@ -1662,68 +2062,136 @@ class AIEngine:
                     logger.warning(f"Failed to encode input image: {_redact_secrets(str(e))}")
                     return "🎨 I couldn't read the attached image. Please try re-uploading it."
 
-                logger.info(f"Agnes image edit -> user={str(user_id)[:3]}***")
-                result = agnes_edit_image(prompt=intent["prompt"], image_url=data_uri, size=intent.get("size", "1024x1024"))
+                logger.info(f"Image edit request -> user={str(user_id)[:3]}***")
+                result = {"success": False}
+                if agnes_ok:
+                    result = agnes_edit_image(prompt=intent["prompt"], image_url=data_uri, size=intent.get("size", "1024x1024"))
+                    if not result.get("success"):
+                        logger.warning(f"Agnes image edit failed ({result.get('error')}) - falling back to Ace Data Cloud")
+                if not result.get("success") and acedata_ok:
+                    result = acedata_edit_image(prompt=intent["prompt"], image_url=data_uri)
                 if result.get("success") and result.get("url"):
                     url = result["url"]
+                    provider = result.get("provider", "agnes")
                     reply = (
                         f"🎨 Edited it! Here's the result:\n\n"
                         f"![Edited Image]({url})\n\n"
                         f"**Direct link:** {url}\n"
-                        f"_Model: {result.get('model', AGNES_IMAGE_MODEL)} (image-to-image)_"
+                        f"_Model: {result.get('model')} (image-to-image, {provider})_"
                     )
                     self._save_memory(user_id, prompt, f"[image edited] {url}")
                     return reply
                 err = result.get("error") or "unknown_error"
-                logger.warning(f"Agnes image edit failed: {_redact_secrets(str(err))}")
-                return f"🎨 I tried to edit that image but Agnes returned an error ({err}). Try again or adjust your edit."
+                logger.warning(f"Image edit failed on all providers: {_redact_secrets(str(err))}")
+                return f"🎨 I tried to edit that image but ran into an error ({err}). Try again or adjust your edit."
 
             if kind == "video":
-                logger.info(f"Agnes video task creation -> user={str(user_id)[:3]}***")
+                logger.info(f"Video generation request -> user={str(user_id)[:3]}***")
                 mode = intent.get("mode", "text")
-                task = agnes_create_video(
-                    prompt=intent["prompt"],
-                    seconds=intent.get("seconds", 5),
-                    size=intent.get("size", "720P"),
-                    aspect_ratio=intent.get("aspect_ratio", "16:9"),
-                    mode=mode,
-                )
-                if not task.get("success") or not task.get("video_id"):
+
+                task = {"success": False}
+                used_provider = None
+                if agnes_ok:
+                    task = agnes_create_video(
+                        prompt=intent["prompt"],
+                        seconds=intent.get("seconds", 5),
+                        size=intent.get("size", "720P"),
+                        aspect_ratio=intent.get("aspect_ratio", "16:9"),
+                        mode=mode,
+                    )
+                    if task.get("success") and task.get("video_id"):
+                        used_provider = "agnes"
+                    else:
+                        logger.warning(f"Agnes video task creation failed ({task.get('error')}) - falling back to Ace Data Cloud")
+
+                if not (task.get("success") and task.get("video_id")) and acedata_ok:
+                    task = acedata_create_video(
+                        prompt=intent["prompt"],
+                        aspect_ratio=intent.get("aspect_ratio", "16:9"),
+                    )
+                    if task.get("success"):
+                        used_provider = "acedata"
+
+                if not task.get("success") or (not task.get("video_id") and not task.get("url")):
                     err = task.get("error") or "unknown_error"
-                    logger.warning(f"Agnes video task creation failed: {_redact_secrets(str(err))}")
+                    logger.warning(f"Video task creation failed on all providers: {_redact_secrets(str(err))}")
                     return f"🎬 I couldn't start the video task ({err}). Try again in a moment."
 
-                video_id = task["video_id"]
-                # Poll for completion (blocking, but bounded by AGNES_VIDEO_POLL_TIMEOUT)
-                logger.info(f"Agnes video task created: {video_id} - polling for completion")
-                poll = agnes_poll_video(video_id, max_wait=AGNES_VIDEO_POLL_TIMEOUT)
-
-                if poll.get("success") and poll.get("url"):
-                    url = poll["url"]
+                # Ace Data Cloud's Veo call can return the finished video URL immediately
+                if used_provider == "acedata" and task.get("url"):
+                    url = task["url"]
                     reply = (
                         f"🎬 Your video is ready!\n\n"
                         f"[▶ Watch Video]({url})\n\n"
                         f"**Direct link:** {url}\n"
-                        f"_Model: {AGNES_VIDEO_MODEL} | Task ID: {video_id}_"
+                        f"_Model: {ACEDATA_VIDEO_MODEL} (acedata)_"
+                    )
+                    self._save_memory(user_id, prompt, f"[video generated] {url}")
+                    return reply
+
+                video_id = task["video_id"]
+                logger.info(f"Video task created via {used_provider}: {video_id} - polling for completion")
+
+                if used_provider == "agnes":
+                    poll = agnes_poll_video(video_id, max_wait=AGNES_VIDEO_POLL_TIMEOUT)
+                else:
+                    poll = acedata_poll_video(video_id, max_wait=ACEDATA_VIDEO_POLL_TIMEOUT)
+
+                if poll.get("success") and poll.get("url"):
+                    url = poll["url"]
+                    model_name = AGNES_VIDEO_MODEL if used_provider == "agnes" else ACEDATA_VIDEO_MODEL
+                    reply = (
+                        f"🎬 Your video is ready!\n\n"
+                        f"[▶ Watch Video]({url})\n\n"
+                        f"**Direct link:** {url}\n"
+                        f"_Model: {model_name} | Task ID: {video_id} ({used_provider})_"
                     )
                     self._save_memory(user_id, prompt, f"[video generated] {url}")
                     return reply
 
                 if poll.get("status") == "timeout":
                     reply = (
-                        f"🎬 Video is still rendering on Agnes (this can take a couple of minutes for longer clips).\n\n"
+                        f"🎬 Video is still rendering ({used_provider}, this can take a couple of minutes for longer clips).\n\n"
                         f"**Task ID:** `{video_id}`\n"
                         f"Ask me again in a minute and I'll check the status, or use the video ID to track it."
                     )
-                    self._save_memory(user_id, prompt, f"[video pending] task={video_id}")
+                    self._save_memory(user_id, prompt, f"[video pending] task={video_id} provider={used_provider}")
                     return reply
 
+                # If the primary provider's poll failed, try the other provider once
+                # (only meaningful if we haven't already tried both).
                 err = poll.get("error") or "unknown_error"
-                logger.warning(f"Agnes video task failed: {_redact_secrets(str(err))}")
-                return f"🎬 The video task failed on Agnes ({err}). Try again or shorten the prompt."
+                if used_provider == "agnes" and acedata_ok:
+                    logger.info("Agnes video poll failed - attempting one-shot Ace Data Cloud video fallback")
+                    fallback_task = acedata_create_video(prompt=intent["prompt"], aspect_ratio=intent.get("aspect_ratio", "16:9"))
+                    if fallback_task.get("success") and fallback_task.get("url"):
+                        url = fallback_task["url"]
+                        reply = (
+                            f"🎬 Your video is ready!\n\n"
+                            f"[▶ Watch Video]({url})\n\n"
+                            f"**Direct link:** {url}\n"
+                            f"_Model: {ACEDATA_VIDEO_MODEL} (acedata fallback)_"
+                        )
+                        self._save_memory(user_id, prompt, f"[video generated] {url}")
+                        return reply
+                    elif fallback_task.get("success") and fallback_task.get("video_id"):
+                        fallback_poll = acedata_poll_video(fallback_task["video_id"], max_wait=ACEDATA_VIDEO_POLL_TIMEOUT)
+                        if fallback_poll.get("success") and fallback_poll.get("url"):
+                            url = fallback_poll["url"]
+                            reply = (
+                                f"🎬 Your video is ready!\n\n"
+                                f"[▶ Watch Video]({url})\n\n"
+                                f"**Direct link:** {url}\n"
+                                f"_Model: {ACEDATA_VIDEO_MODEL} (acedata fallback)_"
+                            )
+                            self._save_memory(user_id, prompt, f"[video generated] {url}")
+                            return reply
+
+                logger.warning(f"Video task failed on all providers: {_redact_secrets(str(err))}")
+                return f"🎬 The video task failed ({err}). Try again or shorten the prompt."
 
         except Exception as e:
-            logger.error(f"Agnes media routing crashed: {_redact_secrets(str(e))}")
+            logger.error(f"Media routing crashed: {_redact_secrets(str(e))}")
             return None
 
         return None
@@ -1768,9 +2236,59 @@ class AIEngine:
             return "Hey, I'm listening 👀 what's on your mind?"
 
         # =====================================================
-        # 🎨 AGNES MEDIA INTENT CHECK (runs BEFORE text providers)
+        # 🎬 VIDEO STATUS FOLLOW-UP (runs before media intent)
+        # Lets a user poll a pending video task (Agnes OR Ace Data Cloud) like:
+        #   "check video abc123xyz"
+        #   "status of task abc123xyz"
+        #   "is the clip abc123xyz ready?"
+        # Never triggers on "check my alerts" style messages because it
+        # requires a video/task/clip keyword AND an ID token.
+        # We try whichever provider is configured; if both are configured we
+        # try Agnes first, then Ace Data Cloud.
+        # =====================================================
+        try:
+            vm = _VIDEO_STATUS_CHECK_PATTERN.search(original_prompt)
+        except Exception:
+            vm = None
+        if vm:
+            candidate_id = vm.group(1)
+            # Skip obvious false positives
+            if not re.match(r"^https?://", candidate_id, re.IGNORECASE):
+                try:
+                    logger.info(f"Video status check requested for task id={candidate_id[:6]}***")
+                    poll = {"success": False}
+                    if AGNES_API_KEY:
+                        poll = agnes_poll_video(candidate_id, max_wait=30)
+                    if not poll.get("success") and ACEDATA_API_KEY:
+                        poll = acedata_poll_video(candidate_id, max_wait=30)
+                    if poll.get("success") and poll.get("url"):
+                        url = poll["url"]
+                        reply = (
+                            f"🎬 Video `{candidate_id}` is ready!\n\n"
+                            f"[▶ Watch Video]({url})\n\n"
+                            f"**Direct link:** {url}"
+                        )
+                        self._save_memory(user_id, original_prompt, reply)
+                        return reply
+                    status = poll.get("status") or "unknown"
+                    err = poll.get("error") or ""
+                    if status == "timeout":
+                        reply = f"🎬 Task `{candidate_id}` is still rendering. Try again in a minute."
+                    elif status == "failed":
+                        reply = f"🎬 Task `{candidate_id}` failed. {err}".strip()
+                    else:
+                        reply = f"🎬 Task `{candidate_id}` status: **{status}**. {err}".strip()
+                    self._save_memory(user_id, original_prompt, reply)
+                    return reply
+                except Exception as e:
+                    logger.warning(f"Video status check crashed: {_redact_secrets(str(e))}")
+                    # Fall through to normal text chain if something goes wrong
+
+        # =====================================================
+        # 🎨 MEDIA INTENT CHECK (runs BEFORE text providers)
         # Only triggers on explicit image/video generation or edit requests.
         # Never hijacks trading, alerts, memory, news, or casual chat.
+        # Tries Agnes first, then Ace Data Cloud as a silent failover.
         # =====================================================
         try:
             media_intent = _detect_media_intent(original_prompt, has_image=bool(image))
@@ -1781,8 +2299,8 @@ class AIEngine:
             media_reply = self._route_media_request(user_id, original_prompt, media_intent, image)
             if media_reply:
                 return media_reply
-            # If Agnes routing returned None (crash), fall through to text chain
-            logger.info("Agnes media routing returned None - falling back to text provider")
+            # If media routing returned None (crash), fall through to text chain
+            logger.info("Media routing returned None - falling back to text provider")
 
         needs_web = False
         try:
@@ -1891,6 +2409,13 @@ class AIEngine:
         final = clean_ai_response(final)
         if not final:
             final = "Hmm, I blanked out there 😅 say that again for me?"
+
+        # NEW: append Tavily source citations if web search was used
+        if tavily_sources:
+            footer = self._format_tavily_sources_footer(tavily_sources)
+            if footer and "**Sources:**" not in final and "Sources:" not in final:
+                final = final + footer
+
         self._save_memory(user_id, original_prompt, final)
         return final
 
@@ -2119,24 +2644,107 @@ class AIEngine:
         return validate_market_signal(market_data)
 
     # =====================================================
-    # 🎨 PUBLIC MEDIA HELPERS (NEW - safe to call from bot.py / api.py)
+    # 🩺 STATUS / HEALTH (safe for /status and healthchecks)
+    # =====================================================
+    def provider_status(self) -> Dict[str, Any]:
+        """Return a summary of configured providers. No secrets exposed."""
+        return {
+            "chain": self._get_provider_order(),
+            "openrouter": bool(OPENROUTER_API_KEY),
+            "groq": bool(GROQ_API_KEY),
+            "gemini": bool(GEMINI_API_KEY),
+            "elevenlabs": bool(self.eleven_client),
+            "agnes": bool(AGNES_API_KEY),
+            "agnes_image": AGNES_IMAGE_MODEL,
+            "agnes_video": AGNES_VIDEO_MODEL,
+            "acedata": bool(ACEDATA_API_KEY),
+            "acedata_image": ACEDATA_IMAGE_MODEL,
+            "acedata_video": ACEDATA_VIDEO_MODEL,
+            "media_failover_active": bool(AGNES_API_KEY) and bool(ACEDATA_API_KEY),
+            "tavily": bool(self._tavily_module and getattr(self._tavily_module, "is_tavily_configured", lambda: False)()),
+        }
+
+    # =====================================================
+    # 🎨 PUBLIC MEDIA HELPERS (safe to call from bot.py / api.py)
     # =====================================================
     def generate_image(self, prompt: str, size: str = "1024x1024") -> Dict[str, Any]:
-        """Direct image generation - returns dict from agnes_generate_image."""
-        return agnes_generate_image(prompt=prompt, size=size)
+        """Direct image generation - tries Agnes then Ace Data Cloud (Flux)."""
+        if AGNES_API_KEY:
+            result = agnes_generate_image(prompt=prompt, size=size)
+            if result.get("success"):
+                return result
+        if ACEDATA_API_KEY:
+            return acedata_generate_image(prompt=prompt)
+        return {"success": False, "url": None, "error": "no_provider_configured"}
 
     def edit_image(self, prompt: str, image_url: str, size: str = "1024x1024") -> Dict[str, Any]:
-        """Direct image editing - returns dict from agnes_edit_image."""
-        return agnes_edit_image(prompt=prompt, image_url=image_url, size=size)
+        """Direct image editing - tries Agnes then Ace Data Cloud (Flux Kontext)."""
+        if AGNES_API_KEY:
+            result = agnes_edit_image(prompt=prompt, image_url=image_url, size=size)
+            if result.get("success"):
+                return result
+        if ACEDATA_API_KEY:
+            return acedata_edit_image(prompt=prompt, image_url=image_url)
+        return {"success": False, "url": None, "error": "no_provider_configured"}
 
     def generate_video(self, prompt: str, seconds: int = 5, size: str = "720P", aspect_ratio: str = "16:9", mode: str = "text") -> Dict[str, Any]:
-        """Direct video task creation - returns dict from agnes_create_video (task id, not final URL)."""
-        return agnes_create_video(prompt=prompt, seconds=seconds, size=size, aspect_ratio=aspect_ratio, mode=mode)
+        """Direct video task creation - tries Agnes then Ace Data Cloud (Veo)."""
+        if AGNES_API_KEY:
+            result = agnes_create_video(prompt=prompt, seconds=seconds, size=size, aspect_ratio=aspect_ratio, mode=mode)
+            if result.get("success"):
+                return result
+        if ACEDATA_API_KEY:
+            return acedata_create_video(prompt=prompt, aspect_ratio=aspect_ratio)
+        return {"success": False, "video_id": None, "error": "no_provider_configured"}
 
-    def poll_video(self, video_id: str, max_wait: Optional[int] = None) -> Dict[str, Any]:
-        """Direct video polling - returns dict from agnes_poll_video."""
-        return agnes_poll_video(video_id=video_id, max_wait=max_wait)
+    def poll_video(self, video_id: str, max_wait: Optional[int] = None, provider: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Direct video polling. If `provider` is given ("agnes" or "acedata") that
+        provider is used; otherwise Agnes is tried first (if configured), then
+        Ace Data Cloud.
+        """
+        if provider == "acedata":
+            return acedata_poll_video(video_id=video_id, max_wait=max_wait)
+        if provider == "agnes":
+            return agnes_poll_video(video_id=video_id, max_wait=max_wait)
+        if AGNES_API_KEY:
+            result = agnes_poll_video(video_id=video_id, max_wait=max_wait)
+            if result.get("success") or result.get("status") not in ("error",):
+                return result
+        if ACEDATA_API_KEY:
+            return acedata_poll_video(video_id=video_id, max_wait=max_wait)
+        return {"success": False, "status": "error", "error": "no_provider_configured"}
 
     def is_media_enabled(self) -> bool:
-        """True if Agnes is configured and media generation is available."""
-        return bool(AGNES_API_KEY)
+        """True if either Agnes or Ace Data Cloud is configured for media generation."""
+        return bool(AGNES_API_KEY) or bool(ACEDATA_API_KEY)
+
+
+# =========================================================
+# 🧩 MODULE-LEVEL SINGLETON
+# =========================================================
+# Callers (bot.py, api.py, discord bot) can now do:
+#     from ai_engine import get_ai_engine
+#     engine = get_ai_engine(memory=memory)
+# This returns the same instance across imports so we don't re-init
+# ElevenLabs, Tavily, etc. on every import or request.
+_instance: Optional[AIEngine] = None
+
+def get_ai_engine(memory=None) -> AIEngine:
+    """
+    Return a process-wide AIEngine singleton.
+    If the engine exists but was created without memory and memory is now
+    provided, attach it so persistent context works.
+    """
+    global _instance
+    if _instance is None:
+        _instance = AIEngine(memory=memory)
+    elif memory is not None and _instance.memory is None:
+        _instance.memory = memory
+    return _instance
+
+
+def reset_ai_engine():
+    """Testing / hot-reload helper - drop the singleton so next call rebuilds it."""
+    global _instance
+    _instance = None
