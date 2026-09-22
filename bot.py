@@ -257,6 +257,16 @@ def clean_ai_response(text):
     text = re.sub(r"<tool_call>|</tool_call>|<function_calls>|</function_calls>", "", text, flags=re.IGNORECASE)
     text = re.sub(r"SELECT\s+.*FROM\s+price_alerts.*", "", text, flags=re.IGNORECASE | re.DOTALL)
     text = re.sub(r"king_zarry.*\.db", "", text, flags=re.IGNORECASE)
+    # --- LINK REMOVAL (fix: stop attaching/citing links in signals & AI replies) ---
+    # Strip markdown-style links [label](url) -> keep label text only
+    text = re.sub(r"\[([^\]]+)\]\((?:https?://|www\.)[^\)]+\)", r"\1", text, flags=re.IGNORECASE)
+    # Strip any raw URLs (http/https/www.)
+    text = re.sub(r"(?:https?://|www\.)\S+", "", text, flags=re.IGNORECASE)
+    # Strip a trailing "Sources:" / "📰 Sources:" section and everything after it
+    text = re.sub(r"(?im)^\s*(📰\s*)?\*{0,2}sources?:?\*{0,2}\s*$.*", "", text, flags=re.DOTALL)
+    # Collapse leftover empty markdown bullets / double blank lines created by stripping links
+    text = re.sub(r"(?m)^[•\-\*]\s*$", "", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
 def escape_html(text):
@@ -2606,7 +2616,7 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
                                 f"MTF Signal: {mtf_data.get('mtf_signal')} Bias: {mtf_data.get('mtf_bias')} Strength: {mtf_data.get('mtf_strength')}\n"
                                 f"News Risk: {news_data.get('risk')}\n\n"
                                 f"Live web context:\n{web_ctx}\n\n"
-                                f"Provide a concise fundamental explanation for why {symbol} is moving, using the web context. Mention sources by title/URL. Do not invent prices. Keep it short (3-5 bullet points)."
+                                f"Provide a concise fundamental explanation for why {symbol} is moving, using the web context. Do NOT include any URLs, links, or a sources list in your reply - just plain text explanation. Do not invent prices. Keep it short (3-5 bullet points)."
                             )
                             fundamental_answer = await asyncio.to_thread(ai_engine.ask, user_id, combined_prompt, None)
                             if fundamental_answer:
