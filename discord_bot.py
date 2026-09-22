@@ -144,7 +144,8 @@ DISCORD_BOT_TOKEN = clean_env_str(os.getenv("DISCORD_BOT_TOKEN"))
 DISCORD_GUILD_ID = int(clean_env_str(os.getenv("DISCORD_GUILD_ID"), "1537104053207568394") or "1537104053207568394")
 DISCORD_ADMIN_ID = int(clean_env_str(os.getenv("DISCORD_ADMIN_ID"), "1404253218808139807") or "1404253218808139807")
 
-DATABASE_PATH = clean_env_str(os.getenv("DATABASE_PATH"), "king_zarry_memory.db")
+# FIX 2: shares king_zarry.db with bot.py so price_alerts updates hit the right table
+DATABASE_PATH = clean_env_str(os.getenv("DATABASE_PATH"), "king_zarry.db")
 MEMORY_DB_PATH = clean_env_str(os.getenv("MEMORY_DB_PATH"), "king_zarry_memory.db")
 
 ELEVENLABS_API_KEY = clean_env_str(os.getenv("ELEVENLABS_API_KEY"))
@@ -154,7 +155,8 @@ ELEVENLABS_MODEL_ID = clean_env_str(os.getenv("ELEVENLABS_MODEL_ID") or os.geten
 GROQ_API_KEY = clean_env_str(os.getenv("GROQ_API_KEY"))
 FAL_KEY = clean_env_str(os.getenv("FAL_KEY"))
 
-GROQ_VISION_MODEL = clean_env_str(os.getenv("GROQ_VISION_MODEL"), "qwen/qwen3.6-27b")
+# FIX 3: valid Groq vision model default
+GROQ_VISION_MODEL = clean_env_str(os.getenv("GROQ_VISION_MODEL"), "meta-llama/llama-4-scout-17b-16e-instruct")
 GROQ_TEXT_MODEL = clean_env_str(os.getenv("GROQ_TEXT_MODEL"), "llama-3.3-70b-versatile")
 
 TEXT_TO_VIDEO_MODEL = clean_env_str(os.getenv("TEXT_TO_VIDEO_MODEL"), "fal-ai/ltx-video")
@@ -211,6 +213,9 @@ def _looks_like_media_request(text: str) -> bool:
         return False
     return bool(_MEDIA_VERB_PATTERN.search(text))
 
+# ============================================================
+# FIX 4: Enhanced boot log (Agnes + AceData + GDELT + CryptoVision)
+# ============================================================
 print("\n" + "="*60, flush=True)
 print("👑 KING ZARRY AI DISCORD - UPGRADED MTF + NEWS + AGNES MEDIA EDITION", flush=True)
 print("="*60, flush=True)
@@ -218,8 +223,36 @@ print(f"🔑 Discord token: {'FOUND' if DISCORD_BOT_TOKEN else 'MISSING'}", flus
 print(f"🎙️ ElevenLabs: {'ENABLED' if ELEVENLABS_API_KEY else 'MISSING'}", flush=True)
 print(f"🧠 Groq: {'FOUND' if GROQ_API_KEY else 'MISSING'}", flush=True)
 print(f"🎬 Fal.ai: {'FOUND' if FAL_KEY else 'MISSING'}", flush=True)
-print(f"🎨 Agnes AI: {'FOUND' if os.getenv('AGNES_API_KEY') else 'MISSING'}", flush=True)
+
+try:
+    from ai_engine import (
+        AGNES_API_KEY as _AGNES_KEY,
+        AGNES_IMAGE_MODEL as _AGNES_IMG,
+        AGNES_VIDEO_MODEL as _AGNES_VID,
+        ACEDATA_API_KEY as _ACEDATA_KEY,
+        ACEDATA_IMAGE_MODEL as _ACEDATA_IMG,
+        ACEDATA_VIDEO_MODEL as _ACEDATA_VID,
+    )
+    if _AGNES_KEY:
+        print(f"🎨 Agnes AI (primary): ENABLED | image={_AGNES_IMG} video={_AGNES_VID}", flush=True)
+    else:
+        print("🎨 Agnes AI (primary): DISABLED (set AGNES_API_KEY)", flush=True)
+    if _ACEDATA_KEY:
+        print(f"🎬 AceData Cloud (fallback): ENABLED | image={_ACEDATA_IMG} video={_ACEDATA_VID}", flush=True)
+    else:
+        print("🎬 AceData Cloud (fallback): DISABLED (set ACEDATA_API_KEY)", flush=True)
+except Exception as _e:
+    print(f"ℹ️ Media provider status skipped: {_e}", flush=True)
+
+try:
+    from ai_engine import GDELT_DOC_API_URL as _GDELT_URL, CRYPTOVISION_BASE_URL as _CV_URL
+    print(f"🌍 GDELT 2.0 DOC API: ENABLED | {_GDELT_URL}", flush=True)
+    print(f"📰 Crypto Vision: ENABLED | {_CV_URL}", flush=True)
+except Exception as _e:
+    print(f"ℹ️ Intel provider status skipped: {_e}", flush=True)
+
 print(f"💾 DB: {DATABASE_PATH}", flush=True)
+print(f"🧠 Memory DB: {MEMORY_DB_PATH}", flush=True)
 print("="*60 + "\n", flush=True)
 
 if not DISCORD_BOT_TOKEN:
@@ -781,6 +814,105 @@ def save_video(video_bytes: bytes):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tf:
         tf.write(video_bytes); return tf.name
 
+# ============================================================
+# FIX 1: Media-aware send helpers (Discord)
+# ============================================================
+_MEDIA_IMAGE_RE = re.compile(r"!\[[^\]]*\]\((https?://[^\s)]+)\)")
+_MEDIA_VIDEO_LINK_RE = re.compile(r"\[▶ Watch Video\]\((https?://[^\s)]+)\)")
+_MEDIA_DIRECT_LINK_RE = re.compile(r"\*\*Direct link:\*\*\s*(https?://[^\s\n]+)")
+
+def _extract_media_from_response(text: str) -> Dict[str, List[str]]:
+    if not text:
+        return {"images": [], "videos": []}
+    images = list(dict.fromkeys(_MEDIA_IMAGE_RE.findall(text)))
+    videos = list(dict.fromkeys(_MEDIA_VIDEO_LINK_RE.findall(text)))
+    for url in _MEDIA_DIRECT_LINK_RE.findall(text):
+        low = url.lower()
+        if any(ext in low for ext in [".mp4", ".webm", ".mov", "video"]):
+            if url not in videos:
+                videos.append(url)
+        elif url not in images:
+            images.append(url)
+    return {"images": images, "videos": videos}
+
+async def send_chunks(destination, text: str):
+    if not text: text = "❌ Empty response"
+    for c in [text[i:i+1900] for i in range(0, len(text), 1900)]:
+        await destination.reply(c, mention_author=False)
+
+async def send_ai_response(message: discord.Message, text: str):
+    """
+    Send an AI response with auto-render of generated images/videos.
+    Falls back to send_chunks() for plain text.
+    """
+    if not text:
+        await send_chunks(message, "❌ Empty response")
+        return
+
+    media = _extract_media_from_response(text)
+
+    # Clean the text for display (strip raw markdown image tags)
+    display = text
+    display = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", display)
+    display = re.sub(r"\*\*Direct link:\*\*\s*https?://[^\s\n]+", "", display)
+    display = re.sub(r"\n{3,}", "\n\n", display).strip()
+
+    # --- Images ---
+    if media["images"]:
+        sent_any = False
+        for idx, url in enumerate(media["images"][:5]):
+            try:
+                e = Embed(color=discord.Color.gold())
+                e.set_image(url=url)
+                if idx == 0 and display:
+                    e.description = display[:2000]
+                await message.reply(embed=e, mention_author=False)
+                sent_any = True
+            except Exception as ex:
+                logger.warning(f"Discord image embed failed: {_redact(str(ex))}")
+                try:
+                    await message.reply(url, mention_author=False)
+                    sent_any = True
+                except Exception:
+                    pass
+        if sent_any:
+            # If we couldn't fit the text in the embed, send it as follow-up
+            if not display:
+                pass
+            elif len(display) > 2000:
+                for chunk in [display[i:i+1900] for i in range(2000, len(display), 1900)]:
+                    try:
+                        await message.reply(chunk, mention_author=False)
+                    except Exception:
+                        pass
+            # Also send any video links
+            if media["videos"]:
+                for url in media["videos"][:3]:
+                    try:
+                        await message.reply(url, mention_author=False)
+                    except Exception:
+                        pass
+            return
+
+    # --- Videos ---
+    if media["videos"]:
+        header = display[:1800] if display else "🎬 Generated video"
+        await send_chunks(message, header)
+        for url in media["videos"][:3]:
+            try:
+                await message.reply(url, mention_author=False)
+            except Exception as ex:
+                logger.warning(f"Discord video send failed: {_redact(str(ex))}")
+        return
+
+    # --- Plain text ---
+    await send_chunks(message, text)
+
+async def send_followup_chunks(interaction, text: str):
+    if not text: text = "❌ Empty response"
+    for c in [text[i:i+1900] for i in range(0, len(text), 1900)]:
+        await interaction.followup.send(c)
+
 class KingZarryAI(discord.Client):
     def __init__(self):
         intents = discord.Intents.default()
@@ -858,7 +990,8 @@ class KingZarryAI(discord.Client):
                     it = (a.content_type or "image/png", ib)
                 async with message.channel.typing():
                     ans = await asyncio.to_thread(ai.ask, str(message.author.id), content, it)
-                await send_chunks(message, ans or "❌ No response")
+                # FIX 1: media-aware sender
+                await send_ai_response(message, ans or "❌ No response")
                 return
         except Exception as e:
             logger.warning(f"Media err: {_redact(str(e))}")
@@ -954,9 +1087,13 @@ class KingZarryAI(discord.Client):
                     vf = File(fp=af, filename="king_zarry_voice.mp3")
                 except Exception as ve:
                     logger.warning(f"Voice err: {_redact(str(ve))}")
-                    await send_chunks(message, ans); return
-            if vf: await message.reply(content=ans[:1900], file=vf, mention_author=False)
-            else: await send_chunks(message, ans)
+                    # FIX 1: media-aware sender
+                    await send_ai_response(message, ans); return
+            if vf:
+                await message.reply(content=ans[:1900], file=vf, mention_author=False)
+            else:
+                # FIX 1: media-aware sender
+                await send_ai_response(message, ans)
         except Exception as e:
             logger.error(f"AI err: {_redact(repr(e))}")
             try: await message.reply("❌ Error. Try again.", mention_author=False)
@@ -1020,24 +1157,14 @@ async def before_alert_loop():
     await client.wait_until_ready()
     print("🔔 Price alert loop starting", flush=True)
 
-_orig = client.on_ready
+_orig_on_ready = client.on_ready
 async def enhanced_on_ready():
-    await _orig()
+    await _orig_on_ready()
     if not discord_price_alert_loop.is_running():
         discord_price_alert_loop.start()
         print("🔔 Alert task started", flush=True)
 
 client.on_ready = enhanced_on_ready
-
-async def send_chunks(destination, text: str):
-    if not text: text = "❌ Empty response"
-    for c in [text[i:i+1900] for i in range(0, len(text), 1900)]:
-        await destination.reply(c, mention_author=False)
-
-async def send_followup_chunks(interaction, text: str):
-    if not text: text = "❌ Empty response"
-    for c in [text[i:i+1900] for i in range(0, len(text), 1900)]:
-        await interaction.followup.send(c)
 
 # ============ SLASH COMMANDS ============
 @client.tree.command(name="start", description="Start King Zarry AI")
@@ -1297,7 +1424,28 @@ async def ask(interaction, question: str):
     await interaction.response.defer()
     try:
         ans = await asyncio.to_thread(ai.ask, str(interaction.user.id), question)
-        await send_followup_chunks(interaction, ans)
+        # FIX 1: send media-aware follow-up
+        media = _extract_media_from_response(ans or "")
+        if media["images"] or media["videos"]:
+            # text portion first
+            display = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", ans or "")
+            display = re.sub(r"\n{3,}", "\n\n", display).strip()
+            if display:
+                for c in [display[i:i+1900] for i in range(0, len(display), 1900)]:
+                    await interaction.followup.send(c)
+            for url in media["images"][:5]:
+                try:
+                    e = Embed(color=discord.Color.gold())
+                    e.set_image(url=url)
+                    await interaction.followup.send(embed=e)
+                except Exception:
+                    try: await interaction.followup.send(url)
+                    except Exception: pass
+            for url in media["videos"][:3]:
+                try: await interaction.followup.send(url)
+                except Exception: pass
+        else:
+            await send_followup_chunks(interaction, ans)
     except Exception as e:
         logger.error(f"/ask err: {_redact(repr(e))}")
         await interaction.followup.send("⚠️ AI busy.")
@@ -1562,6 +1710,7 @@ async def adminstatus(interaction):
         e.add_field(name="Groq", value="ENABLED" if groq_client else "DISABLED", inline=True)
         e.add_field(name="Fal", value="ENABLED" if FAL_KEY else "DISABLED", inline=True)
         e.add_field(name="Agnes", value="ENABLED" if os.getenv("AGNES_API_KEY") else "DISABLED", inline=True)
+        e.add_field(name="AceData", value="ENABLED" if os.getenv("ACEDATA_API_KEY") else "DISABLED", inline=True)
         e.add_field(name="News", value=f"{ps}\n{h}", inline=False)
         await interaction.response.send_message(embed=e, ephemeral=True)
     except Exception as e:
