@@ -209,14 +209,37 @@ except Exception as e:
 
 logger.info("🧠 Memory + 🤖 AIEngine + 📰 NewsEngine loaded")
 
+# ============================================================
+# FIX D: Media provider + intelligence provider status check
+# ============================================================
 try:
-    from ai_engine import AGNES_API_KEY as _AGNES_KEY_CHECK, AGNES_IMAGE_MODEL as _AGNES_IMG, AGNES_VIDEO_MODEL as _AGNES_VID
-    if _AGNES_KEY_CHECK:
-        logger.info(f"🎨 Agnes AI ready | image={_AGNES_IMG} video={_AGNES_VID}")
+    from ai_engine import (
+        AGNES_API_KEY as _AGNES_KEY,
+        AGNES_IMAGE_MODEL as _AGNES_IMG,
+        AGNES_VIDEO_MODEL as _AGNES_VID,
+        ACEDATA_API_KEY as _ACEDATA_KEY,
+        ACEDATA_IMAGE_MODEL as _ACEDATA_IMG,
+        ACEDATA_VIDEO_MODEL as _ACEDATA_VID,
+    )
+    if _AGNES_KEY:
+        logger.info(f"🎨 Agnes AI (primary) ready | image={_AGNES_IMG} video={_AGNES_VID}")
     else:
-        logger.info("ℹ️ Agnes AI not configured - media generation disabled (set AGNES_API_KEY to enable)")
-except Exception as _agnes_check_err:
-    logger.info(f"ℹ️ Agnes status check skipped: {_agnes_check_err}")
+        logger.info("ℹ️ Agnes AI not configured - primary media disabled")
+    if _ACEDATA_KEY:
+        logger.info(f"🎬 AceData Cloud (fallback) ready | image={_ACEDATA_IMG} video={_ACEDATA_VID}")
+    else:
+        logger.info("ℹ️ AceData Cloud fallback not configured - set ACEDATA_API_KEY for failover")
+    if not _AGNES_KEY and not _ACEDATA_KEY:
+        logger.warning("⚠️ No media provider configured - image/video generation disabled")
+except Exception as _media_check_err:
+    logger.info(f"ℹ️ Media provider status check skipped: {_media_check_err}")
+
+try:
+    from ai_engine import GDELT_DOC_API_URL as _GDELT_URL, CRYPTOVISION_BASE_URL as _CV_URL
+    logger.info(f"🌍 GDELT 2.0 DOC API ready (free, no key) | {_GDELT_URL}")
+    logger.info(f"📰 Crypto Vision ready (free tier) | {_CV_URL}")
+except Exception as _intel_check_err:
+    logger.info(f"ℹ️ Intelligence provider status check skipped: {_intel_check_err}")
 
 DEFAULT_TIMEFRAME = "15min"
 PRIMARY_EXECUTION_TF = "15min"
@@ -259,13 +282,30 @@ def clean_ai_response(text):
     text = re.sub(r"king_zarry.*\.db", "", text, flags=re.IGNORECASE)
     return text.strip()
 
+# ============================================================
+# FIX A: link-aware escape_html + strip markdown image syntax
+# ============================================================
 def escape_html(text):
     if not text:
         return ""
+    # Strip markdown image syntax — handled by send_ai_response()
+    text = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
     text = html.escape(text)
-    text = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", text)
-    text = re.sub(r"\*(.*?)\*", r"<i>\1</i>", text)
-    text = re.sub(r"`(.*?)`", r"<code>\1</code>", text)
+
+    # Bold
+    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text, flags=re.DOTALL)
+    # Italic (avoid clashing with bold)
+    text = re.sub(r"(?<!\*)\*([^*\n]+?)\*(?!\*)", r"<i>\1</i>", text)
+    # Inline code
+    text = re.sub(r"`([^`]+?)`", r"<code>\1</code>", text)
+    # Markdown links [text](url) -> clickable HTML anchor
+    text = re.sub(
+        r"\[([^\]]+?)\]\((https?://[^\s)]+)\)",
+        r'<a href="\2">\1</a>',
+        text,
+    )
     return text
 
 async def send_long_message(message, text, is_raw_html=False):
@@ -280,6 +320,96 @@ async def send_long_message(message, text, is_raw_html=False):
             await message.reply_text(chunk, parse_mode="HTML", disable_web_page_preview=True)
         except Exception:
             await message.reply_text(re.sub(r"<[^>]+>", "", chunk), parse_mode=None, disable_web_page_preview=True)
+
+# ============================================================
+# FIX B: media-aware response sender
+# ============================================================
+_MEDIA_IMAGE_RE = re.compile(r"!\[[^\]]*\]\((https?://[^\s)]+)\)")
+_MEDIA_VIDEO_LINK_RE = re.compile(r"\[▶ Watch Video\]\((https?://[^\s)]+)\)")
+_MEDIA_DIRECT_LINK_RE = re.compile(r"\*\*Direct link:\*\*\s*(https?://[^\s\n]+)")
+
+def _extract_media_from_response(text: str) -> Dict[str, List[str]]:
+    """Pull image/video URLs out of an AI response."""
+    if not text:
+        return {"images": [], "videos": []}
+
+    images = list(dict.fromkeys(_MEDIA_IMAGE_RE.findall(text)))
+    videos = list(dict.fromkeys(_MEDIA_VIDEO_LINK_RE.findall(text)))
+
+    for url in _MEDIA_DIRECT_LINK_RE.findall(text):
+        low = url.lower()
+        if any(ext in low for ext in [".mp4", ".webm", ".mov", "video"]):
+            if url not in videos:
+                videos.append(url)
+        elif url not in images:
+            images.append(url)
+
+    return {"images": images, "videos": videos}
+
+async def send_ai_response(message, text, is_raw_html=False):
+    """
+    Send an AI response. Auto-detects generated images/videos and sends
+    them via reply_photo / reply_video so they actually render in Telegram.
+    Falls back to send_long_message() for plain text.
+    """
+    if is_raw_html:
+        await send_long_message(message, text, is_raw_html=True)
+        return
+
+    cleaned = clean_ai_response(text) or "King Zarry AI returned an empty response."
+    media = _extract_media_from_response(cleaned)
+
+    # --- Images ---
+    if media["images"]:
+        caption_source = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", cleaned)
+        caption_source = re.sub(r"\*\*Direct link:\*\*\s*https?://[^\s\n]+", "", caption_source)
+        caption_source = re.sub(r"\n{3,}", "\n\n", caption_source).strip() or "🎨 Generated image"
+        caption = caption_source[:1000]
+
+        sent_any = False
+        for url in media["images"][:5]:
+            try:
+                await message.reply_photo(
+                    photo=url,
+                    caption=escape_html(caption) if not sent_any else None,
+                    parse_mode="HTML" if not sent_any else None,
+                )
+                sent_any = True
+            except Exception as e:
+                logger.warning(f"reply_photo failed for {url}: {e}")
+                try:
+                    await message.reply_text(f"🖼 Image link: {url}")
+                    sent_any = True
+                except Exception:
+                    pass
+        if sent_any:
+            return
+
+    # --- Videos ---
+    if media["videos"]:
+        sent_any = False
+        for url in media["videos"][:3]:
+            try:
+                await message.reply_video(
+                    video=url,
+                    caption="🎬 Generated video" if not sent_any else None,
+                    supports_streaming=True,
+                )
+                sent_any = True
+            except Exception as e:
+                logger.warning(f"reply_video failed for {url}: {e}")
+                try:
+                    await message.reply_text(
+                        f"🎬 Video: {url}", disable_web_page_preview=False
+                    )
+                    sent_any = True
+                except Exception:
+                    pass
+        if sent_any:
+            return
+
+    # --- Plain text ---
+    await send_long_message(message, cleaned, is_raw_html=False)
 
 def db_connect():
     conn = sqlite3.connect(DATABASE_PATH, timeout=30)
@@ -2211,7 +2341,8 @@ async def ask_command(update, context):
                     pass
                 break
         answer=await asyncio.to_thread(ai_engine.ask, user_id, question, None)
-        await send_long_message(update.message, answer)
+        # FIX C: use media-aware sender so images/videos render properly
+        await send_ai_response(update.message, answer)
     except Exception as error:
         logger.error(f"ask_ai Error: {error}")
         await update.message.reply_text("⚠️ <b>AI Service Temporarily Unavailable</b>\n\nPlease try again in a few seconds.",parse_mode="HTML")
@@ -2367,7 +2498,8 @@ IMPORTANT: This is a plan, not a guarantee. Use risk management.
 Do NOT invent prices - use provided numbers.
 """
         ai_plan = await asyncio.to_thread(ai_engine.ask, str(update.effective_user.id), planner_prompt, None)
-        await send_long_message(update.message, ai_plan, is_raw_html=False)
+        # FIX C: use media-aware sender
+        await send_ai_response(update.message, ai_plan)
         try:
             chart=await asyncio.to_thread(build_signal_chart, mtf_data)
             await update.message.reply_photo(photo=chart, caption=f"👑 KING ZARRY AI - ONE DAY PLAN {symbol} - {mtf_data.get('mtf_bias')} - {news_data.get('risk')} News Risk")
@@ -2455,7 +2587,8 @@ async def handle_photo(update, context):
                 mime_type="image/jpeg"
         user_id=str(update.effective_user.id)
         analysis=await asyncio.to_thread(ai_engine.ask, user_id, prompt, (mime_type, image_bytes))
-        await send_long_message(update.message, analysis)
+        # FIX C: media-aware sender (image edit results will render properly)
+        await send_ai_response(update.message, analysis)
     except Exception as error:
         logger.error(f"Vision Error: {error}")
         await update.message.reply_text("❌ <b>Vision Analysis Error</b>\n\nUnable to analyze image. Ensure vision API keys are valid.",parse_mode="HTML")
@@ -2482,7 +2615,8 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
         if _looks_like_media_request(text):
             logger.info(f"Media request detected, routing to ai_engine: '{text[:60]}'")
             answer = await asyncio.to_thread(ai_engine.ask, user_id, text, None)
-            await send_long_message(update.message, answer)
+            # FIX C: media-aware sender (images/videos render as actual media)
+            await send_ai_response(update.message, answer)
             return
     except Exception as media_err:
         logger.warning(f"Media intent pre-check failed (non-fatal): {media_err}")
@@ -2610,7 +2744,8 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
                             )
                             fundamental_answer = await asyncio.to_thread(ai_engine.ask, user_id, combined_prompt, None)
                             if fundamental_answer:
-                                await send_long_message(update.message, f"🌐 <b>LIVE WEB CONTEXT for {symbol}</b>\n\n{fundamental_answer}", is_raw_html=False)
+                                # FIX C: media-aware sender
+                                await send_ai_response(update.message, f"🌐 <b>LIVE WEB CONTEXT for {symbol}</b>\n\n{fundamental_answer}")
             except Exception as e:
                 logger.warning(f"Tavily market enhancement failed (non-fatal): {e}")
             return
@@ -2622,7 +2757,8 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
                 pass
 
     answer = await asyncio.to_thread(ai_engine.ask, user_id, text, None)
-    await send_long_message(update.message, answer)
+    # FIX C: media-aware sender so generated images/videos render properly
+    await send_ai_response(update.message, answer)
     lower = text.lower()
     should_voice_reply = is_voice_transcription or any(k in lower for k in ["voice note", "send voice", "can you speak", "say it in voice", "talk to me"])
     if should_voice_reply:
