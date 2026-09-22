@@ -4,6 +4,11 @@ import { useCallback, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type { ChatMessage } from "@/types";
 
+export interface SendImage {
+  base64: string;
+  mime: string;
+}
+
 export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
@@ -19,14 +24,19 @@ export function useChat() {
   };
 
   const send = useCallback(
-    async (text: string, capability = "AI") => {
+    async (text: string, capability = "AI", image?: SendImage) => {
       const trimmed = text.trim();
-      if (!trimmed || sending) return;
+      const hasImage = !!(image && image.base64);
+
+      // Allow image-only messages
+      if ((!trimmed && !hasImage) || sending) return;
+
+      const effectiveText = trimmed || (hasImage ? "What do you see in this image?" : "");
 
       const userMsg: ChatMessage = {
         id: `user-${Date.now()}`,
         role: "user",
-        text: trimmed,
+        text: effectiveText,
         timestamp: now(),
       };
       setMessages((prev) => [...prev, userMsg]);
@@ -38,7 +48,8 @@ export function useChat() {
 
       try {
         const res = await api.sendChatMessage(
-          trimmed,
+          effectiveText,
+          image,
           abortRef.current.signal
         );
         const aiMsg: ChatMessage = {
