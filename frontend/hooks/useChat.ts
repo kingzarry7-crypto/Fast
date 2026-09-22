@@ -7,6 +7,8 @@ import type { ChatMessage } from "@/types";
 export interface SendImage {
   base64: string;
   mime: string;
+  previewUrl?: string;
+  name?: string;
 }
 
 export function useChat() {
@@ -27,17 +29,19 @@ export function useChat() {
     async (text: string, capability = "AI", image?: SendImage) => {
       const trimmed = text.trim();
       const hasImage = !!(image && image.base64);
-
-      // Allow image-only messages
       if ((!trimmed && !hasImage) || sending) return;
 
-      const effectiveText = trimmed || (hasImage ? "What do you see in this image?" : "");
+      const effectiveText =
+        trimmed || (hasImage ? "What do you see in this image?" : "");
 
       const userMsg: ChatMessage = {
         id: `user-${Date.now()}`,
         role: "user",
         text: effectiveText,
         timestamp: now(),
+        // NEW ↓ — attach preview + filename to the user's message
+        imagePreviewUrl: image?.previewUrl,
+        imageName: image?.name,
       };
       setMessages((prev) => [...prev, userMsg]);
       setSending(true);
@@ -49,9 +53,10 @@ export function useChat() {
       try {
         const res = await api.sendChatMessage(
           effectiveText,
-          image,
+          image ? { base64: image.base64, mime: image.mime } : undefined,
           abortRef.current.signal
         );
+
         const aiMsg: ChatMessage = {
           id: `ai-${Date.now()}`,
           role: "assistant",
@@ -67,13 +72,10 @@ export function useChat() {
 
         let message =
           err instanceof Error ? err.message : "Unable to reach backend.";
-
-        if (err instanceof ApiError && err.status === 401) {
+        if (err instanceof ApiError && err.status === 401)
           message = "Session expired. Please sign in again.";
-        }
-        if (err instanceof ApiError && err.status === 403) {
+        if (err instanceof ApiError && err.status === 403)
           message = err.detail || "Access denied.";
-        }
 
         setError(message);
         setMessages((prev) => [
