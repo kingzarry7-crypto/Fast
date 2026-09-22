@@ -10,6 +10,9 @@ WEB ONLY - Secure Neon authentication and web chat
 - Uses HttpOnly session cookies
 - Protects /api/chat with authentication
 - Uses a web-only memory adapter for AIEngine
+- NEW: Injects live market data for BTC/ETH/SOL/XAU
+- NEW: Supports image upload via base64 in /api/chat
+- FIXED: WebMemoryAdapter.add_message now writes to web_messages (matches get_history)
 """
 
 import os
@@ -21,7 +24,7 @@ import secrets
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -135,6 +138,9 @@ class ChatRequest(BaseModel):
         min_length=1,
         max_length=4000,
     )
+    # NEW: Optional image upload support via base64
+    image_base64: Optional[str] = None
+    image_mime: Optional[str] = "image/jpeg"
 
 # ============================================================
 # GENERAL HELPERS
@@ -486,9 +492,32 @@ class WebMemoryAdapter:
             return 0
 
     def add_message(self, user_id: str, role: str, content: str):
+        """FIXED: Now writes to web_messages (same table get_history reads from)."""
         try:
             with get_db_cursor(commit=True) as cur:
-                cur.execute("INSERT INTO web_ai_memories (user_id, role, content, memory_type) VALUES (%s, %s, %s, 'conversation')", (self.web_user_id, str(role)[:50], str(content)[:8000]))
+                # Get or create the user's most recent conversation
+                cur.execute(
+                    "SELECT id FROM web_conversations WHERE user_id = %s ORDER BY updated_at DESC LIMIT 1",
+                    (self.web_user_id,),
+                )
+                row = cur.fetchone()
+                if row:
+                    conv_id = str(_row_value(row, "id", 0))
+                else:
+                    cur.execute(
+                        "INSERT INTO web_conversations (user_id, title) VALUES (%s, 'Web Chat') RETURNING id",
+                        (self.web_user_id,),
+                    )
+                    conv_id = str(_row_value(cur.fetchone(), "id", 0))
+
+                cur.execute(
+                    "INSERT INTO web_messages (conversation_id, role, content) VALUES (%s, %s, %s)",
+                    (conv_id, str(role)[:50], str(content)[:8000]),
+                )
+                cur.execute(
+                    "UPDATE web_conversations SET updated_at = NOW() WHERE id = %s",
+                    (conv_id,),
+                )
         except Exception as exc:
             logger.warning("WebMemoryAdapter.add_message failed: %s", type(exc).__name__)
 
@@ -604,13 +633,66 @@ def _save_web_message(conversation_id: str, role: str, content: str) -> str:
     return str(_row_value(row, "id", 0))
 
 # ============================================================
+# MARKET DATA INJECTION (NEW)
+# ============================================================
+
+def _enrich_with_market_data(message: str) -> str:
+    """
+    Detect if the user is asking about a supported asset and inject
+    live price data into the prompt before sending it to the AI.
+    This prevents the AI from saying "I don't have live market data".
+    """
+    msg_lower = message.lower()
+    asset = None
+    if "xau" in msg_lower or "gold" in msg_lower:
+        asset = "XAU/USD"
+    elif "btc" in msg_lower or "bitcoin" in msg_lower:
+        asset = "BTC/USD"
+    elif "eth" in msg_lower or "ethereum" in msg_lower:
+        asset = "ETH/USD"
+    elif "sol" in msg_lower or "solana" in msg_lower:
+        asset = "SOL/USD"
+
+    if not asset:
+        return message
+
+    try:
+        import market
+        price = None
+        if hasattr(market, "get_price"):
+            price = market.get_price(asset)
+        elif hasattr(market, "analyze_market"):
+            analysis = market.analyze_market(asset)
+            if analysis and isinstance(analysis, dict):
+                price = analysis.get("price") or analysis.get("current_price")
+
+        if price:
+            return (
+                f"{message}\n\n"
+                f"[LIVE MARKET DATA - INJECTED BY APP]: "
+                f"{asset} current price is {price}. "
+                f"Use this data for your analysis. "
+                f"Do NOT say you don't have live data."
+            )
+    except Exception as e:
+        logger.warning(f"Could not fetch market data for {asset}: {e}")
+
+    return message
+
+# ============================================================
 # AI
 # ============================================================
 
-async def _run_web_ai(user_id: str, message: str) -> str:
+async def _run_web_ai(user_id: str, message: str, image_data: Optional[Tuple[str, bytes]] = None) -> str:
+    """Run the AI engine with optional image data."""
     web_memory = WebMemoryAdapter(user_id)
     request_engine = AIEngine(memory=web_memory)
-    response_text = await asyncio.to_thread(request_engine.ask, user_id, message, None)
+    response_text = await asyncio.to_thread(
+        request_engine.ask,
+        user_id,
+        message,
+        image_data,
+    )
     if not response_text:
         return "AI temporarily unavailable. Please try again."
     return str(response_text)[:8000]
@@ -705,11 +787,24 @@ async def chat_endpoint(request: Request, chat: ChatRequest):
     message = str(chat.message or "").strip()
     if not message:
         raise HTTPException(status_code=400, detail="Message required")
+
+    # NEW: Decode image if provided
+    image_data = None
+    if chat.image_base64:
+        try:
+            img_bytes = base64.b64decode(chat.image_base64)
+            image_data = (chat.image_mime or "image/jpeg", img_bytes)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid base64 image data")
+
+    # NEW: Inject live market data if the message mentions a supported asset
+    enriched_message = _enrich_with_market_data(message)
+
     try:
         conversation_id = await asyncio.to_thread(_get_or_create_conversation, user_id)
-        await asyncio.to_thread(_save_web_message, conversation_id, "user", message)
-        response_text = await _run_web_ai(user_id, message)
-        await asyncio.to_thread(_save_web_message, conversation_id, "assistant", response_text)
+        # NOTE: Do NOT call _save_web_message here. The AIEngine's WebMemoryAdapter
+        # now handles saving both user and assistant messages to web_messages.
+        response_text = await _run_web_ai(user_id, enriched_message, image_data)
         return {"status": "success", "reply": response_text, "conversation_id": conversation_id}
     except HTTPException:
         raise
