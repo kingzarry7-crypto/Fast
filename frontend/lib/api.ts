@@ -1,6 +1,5 @@
 // Fast/frontend/lib/api.ts
 // KING ZARRY AI — API client.
-// Uses only types from "@/types". No local interface declarations.
 
 import type {
   AuthUser,
@@ -134,7 +133,6 @@ async function request<T>(
   }
 }
 
-// AUTH
 export async function getCurrentUser(signal?: AbortSignal): Promise<AuthUser> {
   const data = await request<MeResponse>("/api/auth/me", {
     method: "GET",
@@ -193,8 +191,6 @@ export async function logout(
   return request("/api/auth/logout", { method: "POST", signal });
 }
 
-// CHAT
-// NEW: optional image payload. Send raw base64 (no "data:" prefix).
 export interface SendImagePayload {
   base64: string;
   mime: string;
@@ -203,12 +199,12 @@ export interface SendImagePayload {
 export async function sendChatMessage(
   message: string,
   image?: SendImagePayload,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  conversationId?: string | null
 ): Promise<ChatResponse> {
   const trimmed = message.trim();
   const hasImage = !!(image && image.base64);
 
-  // Allow image-only messages (auto-fallback text is applied in useChat)
   if (!trimmed && !hasImage) {
     throw new ApiError({ status: 400, message: "Message required" });
   }
@@ -219,6 +215,9 @@ export async function sendChatMessage(
   const body: Record<string, unknown> = {
     message: trimmed || "What do you see in this image?",
   };
+  if (conversationId) {
+    body.conversation_id = conversationId;
+  }
   if (hasImage) {
     body.image_base64 = image!.base64;
     body.image_mime = image!.mime || "image/jpeg";
@@ -235,7 +234,6 @@ export async function sendChatMessage(
   return data;
 }
 
-// HEALTH
 export async function healthCheck(): Promise<{
   status: string;
   database?: { status: string };
@@ -275,6 +273,51 @@ export async function getAdminStats(
   return request("/api/admin/stats", { method: "GET", signal });
 }
 
+export interface ConversationItem {
+  id: string;
+  title: string;
+  preview?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export async function listConversations(
+  signal?: AbortSignal
+): Promise<ConversationItem[]> {
+  const data = await request<{ status: string; conversations: ConversationItem[] }>(
+    "/api/conversations",
+    { method: "GET", signal }
+  );
+  return data?.conversations || [];
+}
+
+export async function createConversation(
+  signal?: AbortSignal
+): Promise<ConversationItem> {
+  const data = await request<{ status: string; conversation: ConversationItem }>(
+    "/api/conversations",
+    { method: "POST", signal }
+  );
+  if (!data?.conversation?.id) {
+    throw new ApiError({ status: 500, message: "Could not create conversation" });
+  }
+  return data.conversation;
+}
+
+export async function getConversationMessages(
+  conversationId: string,
+  signal?: AbortSignal
+): Promise<{ role: string; content: string; created_at?: string; id?: string }[]> {
+  const data = await request<{
+    status: string;
+    messages: { role: string; content: string; created_at?: string; id?: string }[];
+  }>(`/api/conversations/${encodeURIComponent(conversationId)}/messages`, {
+    method: "GET",
+    signal,
+  });
+  return data?.messages || [];
+}
+
 export const api = {
   buildUrl,
   getBaseUrl,
@@ -287,9 +330,11 @@ export const api = {
   healthCheck,
   createCheckoutSession,
   getAdminStats,
+  listConversations,
+  createConversation,
+  getConversationMessages,
 };
 
-// Re-export types so `import type { AuthUser } from "@/lib/api"` also works
 export type {
   AuthUser,
   AuthResponse,
