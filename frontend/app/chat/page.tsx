@@ -60,6 +60,7 @@ export default function ChatPage() {
   const [attached, setAttached] = useState<AttachedImage | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [autoSpeak, setAutoSpeak] = useState(false);
+  const [voicePanelOpen, setVoicePanelOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {
@@ -514,70 +515,121 @@ export default function ChatPage() {
             )}
 
             {voiceSupported && (
-              <div className="px-4 pb-2 flex flex-wrap items-center gap-2 justify-center sm:justify-start">
-                <span className="text-[10px] tracking-widest text-cyan-400/50 font-mono-tech uppercase">
-                  Voice
-                </span>
+              <div className="px-4 pb-2 relative flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setVoice("bella")}
-                  className={`px-2.5 py-1 rounded-md text-[10px] font-mono-tech tracking-wider border ${
-                    voiceCharacter === "bella"
-                      ? "border-pink-400/60 bg-pink-500/10 text-pink-200"
-                      : "border-cyan-500/20 text-cyan-400/50 hover:text-cyan-300"
+                  onClick={() => setVoicePanelOpen((v) => !v)}
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-mono-tech tracking-widest border transition-colors ${
+                    voicePanelOpen
+                      ? "border-cyan-400 bg-cyan-500/15 text-cyan-200"
+                      : "border-cyan-500/30 text-cyan-400/80 hover:text-cyan-200 hover:border-cyan-400/50"
                   }`}
-                  title="ElevenLabs Bella"
+                  aria-expanded={voicePanelOpen}
+                  aria-label="Voice settings"
+                  title="Voice settings"
                 >
-                  BELLA
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+                  </svg>
+                  VOICE
+                  <span className="text-cyan-500/50">
+                    {voiceCharacter === "male" ? "MALE" : "BELLA"} · {voiceStyle.toUpperCase()}
+                  </span>
+                  <span className="text-cyan-500/40">{voicePanelOpen ? "▲" : "▼"}</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setVoice("male")}
-                  className={`px-2.5 py-1 rounded-md text-[10px] font-mono-tech tracking-wider border ${
-                    voiceCharacter === "male"
-                      ? "border-sky-400/60 bg-sky-500/10 text-sky-200"
-                      : "border-cyan-500/20 text-cyan-400/50 hover:text-cyan-300"
-                  }`}
-                  title="ElevenLabs male (Adam)"
-                >
-                  MALE
-                </button>
-                <span className="text-cyan-500/30">|</span>
-                {(["slow", "normal", "human", "fast"] as VoiceStyle[]).map(
-                  (s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setVoiceStyle(s)}
-                      className={`px-2.5 py-1 rounded-md text-[10px] font-mono-tech tracking-wider border transition-colors ${
-                        voiceStyle === s
-                          ? "border-cyan-400 bg-cyan-500/15 text-cyan-200"
-                          : "border-cyan-500/20 text-cyan-400/50 hover:text-cyan-300"
-                      }`}
-                    >
-                      {s.toUpperCase()}
-                    </button>
-                  )
-                )}
-                <button
-                  type="button"
-                  onClick={() => setAutoSpeak((v) => !v)}
-                  className={`px-2.5 py-1 rounded-md text-[10px] font-mono-tech tracking-wider border ${
-                    autoSpeak
-                      ? "border-emerald-400/50 bg-emerald-500/10 text-emerald-300"
-                      : "border-cyan-500/20 text-cyan-400/50"
-                  }`}
-                >
-                  {autoSpeak ? "AUTO ON" : "AUTO OFF"}
-                </button>
+
                 {isSpeaking && (
                   <button
                     type="button"
                     onClick={stopSpeaking}
-                    className="px-2.5 py-1 rounded-md text-[10px] font-mono-tech tracking-wider border border-red-500/40 text-red-300"
+                    className="px-2.5 py-1.5 rounded-lg text-[10px] font-mono-tech tracking-wider border border-red-500/40 text-red-300"
                   >
                     STOP
                   </button>
+                )}
+
+                {voicePanelOpen && (
+                  <>
+                    <button
+                      type="button"
+                      className="fixed inset-0 z-40 cursor-default bg-transparent"
+                      aria-label="Close voice settings"
+                      onClick={() => setVoicePanelOpen(false)}
+                    />
+                    <div className="absolute bottom-full left-4 mb-2 z-50 w-64 rounded-xl border border-cyan-500/30 bg-[#020914] shadow-[0_0_30px_rgba(6,182,212,0.15)] p-3 space-y-3">
+                      <div>
+                        <p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/40 mb-1.5">
+                          CHARACTER
+                        </p>
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setVoice("bella")}
+                            className={`flex-1 px-2.5 py-2 rounded-lg text-[10px] font-mono-tech tracking-wider border ${
+                              voiceCharacter === "bella"
+                                ? "border-pink-400/60 bg-pink-500/10 text-pink-200"
+                                : "border-cyan-500/20 text-cyan-400/60 hover:text-cyan-200"
+                            }`}
+                          >
+                            BELLA
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setVoice("male")}
+                            className={`flex-1 px-2.5 py-2 rounded-lg text-[10px] font-mono-tech tracking-wider border ${
+                              voiceCharacter === "male"
+                                ? "border-sky-400/60 bg-sky-500/10 text-sky-200"
+                                : "border-cyan-500/20 text-cyan-400/60 hover:text-cyan-200"
+                            }`}
+                          >
+                            MALE
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/40 mb-1.5">
+                          SPEED
+                        </p>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {(["slow", "normal", "human", "fast"] as VoiceStyle[]).map(
+                            (s) => (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => setVoiceStyle(s)}
+                                className={`px-2.5 py-2 rounded-lg text-[10px] font-mono-tech tracking-wider border ${
+                                  voiceStyle === s
+                                    ? "border-cyan-400 bg-cyan-500/15 text-cyan-200"
+                                    : "border-cyan-500/20 text-cyan-400/60 hover:text-cyan-200"
+                                }`}
+                              >
+                                {s.toUpperCase()}
+                              </button>
+                            )
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/40 mb-1.5">
+                          AUTO READ
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setAutoSpeak((v) => !v)}
+                          className={`w-full px-2.5 py-2 rounded-lg text-[10px] font-mono-tech tracking-wider border ${
+                            autoSpeak
+                              ? "border-emerald-400/50 bg-emerald-500/10 text-emerald-300"
+                              : "border-cyan-500/20 text-cyan-400/60"
+                          }`}
+                        >
+                          {autoSpeak ? "AUTO ON" : "AUTO OFF"}
+                        </button>
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
             )}
