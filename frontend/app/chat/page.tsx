@@ -5,6 +5,11 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AICore from "@/components/AICore";
 import { useChat } from "@/hooks/useChat";
 import { useAuth } from "@/hooks/useAuth";
+import Link from "next/link";
+import {
+  getMembershipSnapshot,
+  type MembershipSnapshot,
+} from "@/lib/membership";
 
 type CoreState = "idle" | "thinking" | "speaking" | "listening" | "error";
 
@@ -28,11 +33,15 @@ const capabilities = [
   { name: "NEWS", desc: "External Information" },
 ];
 
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8 MB
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 export default function ChatPage() {
   const { user } = useAuth();
-  const { messages, sending, error, send } = useChat();
+  const { messages, sending, error, send } = useChat(
+    user?.id,
+    user?.is_subscribed
+  );
+  const [membership, setMembership] = useState<MembershipSnapshot | null>(null);
   const [input, setInput] = useState("");
   const [capability, setCapability] = useState("AI");
   const [coreState, setCoreState] = useState<CoreState>("idle");
@@ -41,6 +50,16 @@ export default function ChatPage() {
   const [attachError, setAttachError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const refreshMembership = () =>
+    setMembership(getMembershipSnapshot(user?.id));
+
+  useEffect(() => {
+    refreshMembership();
+    window.addEventListener("kz-membership-change", refreshMembership);
+    return () =>
+      window.removeEventListener("kz-membership-change", refreshMembership);
+  }, [user?.id]);
 
   useEffect(() => {
     setCoreState(sending ? "thinking" : "idle");
@@ -116,21 +135,27 @@ export default function ChatPage() {
     if ((!text && !hasImage) || sending) return;
 
     const payloadImage = attached
-      ? { base64: attached.base64, mime: attached.mime }
+      ? {
+          base64: attached.base64,
+          mime: attached.mime,
+          previewUrl: attached.previewUrl,
+          name: attached.name,
+        }
       : undefined;
 
     setInput("");
     clearAttachment();
 
-    // Send image along with the message; text defaults to a sensible prompt if empty
-    const effectiveText = text || (hasImage ? "What do you see in this image?" : "");
+    const effectiveText =
+      text || (hasImage ? "What do you see in this image?" : "");
     await send(effectiveText, capability, payloadImage);
   };
+
+  const isVip = Boolean(user?.is_subscribed || membership?.isVip);
 
   return (
     <ProtectedRoute>
       <div className="flex flex-col h-screen">
-        {/* Top bar */}
         <div className="border-b border-cyan-500/10 px-6 py-3 flex items-center justify-between bg-[#020914]/60 backdrop-blur-xl">
           <div className="flex items-center gap-3">
             <button
@@ -151,8 +176,35 @@ export default function ChatPage() {
           </div>
         </div>
 
+        {!isVip && membership && (
+          <div className="px-6 py-2 border-b border-cyan-500/10 bg-cyan-950/30 flex flex-wrap items-center justify-between gap-2">
+            <p className="font-mono-tech text-[10px] tracking-wider text-cyan-300/80">
+              FREE · {membership.freeMessagesRemaining}/
+              {membership.freeDailyLimit} messages left today · Signals require
+              VIP
+            </p>
+            <Link
+              href="/pricing"
+              className="font-mono-tech text-[10px] tracking-widest text-cyan-400 hover:text-cyan-200"
+            >
+              UPGRADE →
+            </Link>
+          </div>
+        )}
+
+        {isVip && (
+          <div className="px-6 py-2 border-b border-cyan-500/10 bg-cyan-500/5">
+            <p className="font-mono-tech text-[10px] tracking-wider text-cyan-300/80">
+              VIP ACTIVE
+              {membership?.plan || user?.plan
+                ? ` · ${String(membership?.plan || user?.plan).toUpperCase()}`
+                : ""}{" "}
+              · Unlimited chat & signals
+            </p>
+          </div>
+        )}
+
         <div className="flex flex-1 overflow-hidden">
-          {/* Module sidebar */}
           <div
             className={`${
               sidebarOpen ? "flex" : "hidden"
@@ -184,9 +236,7 @@ export default function ChatPage() {
             ))}
           </div>
 
-          {/* Chat area */}
           <div className="flex-1 flex flex-col min-w-0">
-            {/* Messages */}
             <div className="flex-1 overflow-y-auto kz-scroll px-6 py-6 space-y-5">
               {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-full text-center">
@@ -264,7 +314,6 @@ export default function ChatPage() {
               </div>
             )}
 
-            {/* Attachment preview */}
             {attached && (
               <div className="px-6 pb-2">
                 <div className="inline-flex items-center gap-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg px-3 py-2">
@@ -294,13 +343,11 @@ export default function ChatPage() {
               </div>
             )}
 
-            {/* Input */}
             <form
               onSubmit={handleSubmit}
               className="border-t border-cyan-500/10 p-4 bg-[#020914]/60 backdrop-blur-xl"
             >
               <div className="flex items-center gap-2">
-                {/* Hidden file input */}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -316,7 +363,6 @@ export default function ChatPage() {
                   aria-label="Attach image"
                   title="Attach image"
                 >
-                  {/* paperclip icon */}
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="18"
