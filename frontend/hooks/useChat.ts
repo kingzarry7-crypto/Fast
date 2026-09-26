@@ -21,17 +21,24 @@ export interface SendImage {
   name?: string;
 }
 
-export function useChat(userId?: string | null, serverSubscribed?: boolean) {
+export function useChat(
+  userId?: string | null,
+  serverSubscribed?: boolean,
+  conversationId?: string | null
+) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const conversationIdRef = useRef<string | null | undefined>(conversationId);
+  conversationIdRef.current = conversationId;
 
   const now = () => {
     const d = new Date();
     return `${d.getHours().toString().padStart(2, "0")}:${d
       .getMinutes()
-      .toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
+      .toString()
+      .padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
   };
 
   const send = useCallback(
@@ -101,11 +108,16 @@ export function useChat(userId?: string | null, serverSubscribed?: boolean) {
         const res = await api.sendChatMessage(
           effectiveText,
           image ? { base64: image.base64, mime: image.mime } : undefined,
-          abortRef.current.signal
+          abortRef.current.signal,
+          conversationIdRef.current || undefined
         );
 
         if (!isVip) {
           incrementFreeMessageCount(userId);
+        }
+
+        if (res.conversation_id && !conversationIdRef.current) {
+          conversationIdRef.current = res.conversation_id;
         }
 
         const aiMsg: ChatMessage = {
@@ -153,5 +165,5 @@ export function useChat(userId?: string | null, serverSubscribed?: boolean) {
     setError(null);
   }, []);
 
-  return { messages, sending, error, send, clear };
+  return { messages, setMessages, sending, error, send, clear };
 }
