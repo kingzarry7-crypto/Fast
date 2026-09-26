@@ -28,6 +28,7 @@ export function ChatMessage({
   imagePreviewUrl,
   onCopy,
   onRegenerate,
+  onSpeak,
   className = "",
 }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
@@ -190,6 +191,12 @@ export function ChatMessage({
               <BookmarkIcon filled={saved} />
             </ActionBtn>
 
+            {onSpeak && (
+              <ActionBtn title="Speak" onClick={onSpeak}>
+                <SpeakerIcon />
+              </ActionBtn>
+            )}
+
             {onRegenerate && (
               <ActionBtn title="Regenerate" onClick={onRegenerate}>
                 <RefreshIcon />
@@ -290,6 +297,15 @@ function BookmarkIcon({ filled }: { filled?: boolean }) {
   );
 }
 
+function SpeakerIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+      <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+    </svg>
+  );
+}
+
 function RefreshIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
@@ -299,7 +315,6 @@ function RefreshIcon() {
   );
 }
 
-/** Thinking / reading indicator */
 export function ThinkingIndicator({
   phase = "thinking",
 }: {
