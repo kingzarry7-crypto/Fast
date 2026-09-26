@@ -1,37 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { api, ApiError } from "@/lib/api";
-import type { AuthUser } from "@/types";
+import { api } from "@/lib/api";
+import { useAuthContext } from "@/components/providers/AppProviders";
 
 export function useAuth() {
   const router = useRouter();
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const me = await api.getCurrentUser();
-      setUser(me);
-    } catch (err) {
-      if (err instanceof ApiError && (err.status === 401 || err.status === 0)) {
-        setUser(null);
-      } else {
-        setError(err instanceof Error ? err.message : "Session check failed");
-        setUser(null);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  const { user, isLoading, error, refresh, setUser } = useAuthContext();
 
   const login = useCallback(
     async (email: string, password: string) => {
@@ -40,17 +16,22 @@ export function useAuth() {
       else await refresh();
       return res;
     },
-    [refresh]
+    [refresh, setUser]
   );
 
   const register = useCallback(
-    async (email: string, password: string, username?: string, displayName?: string) => {
+    async (
+      email: string,
+      password: string,
+      username?: string,
+      displayName?: string
+    ) => {
       const res = await api.register(email, password, username, displayName);
       if (res.user) setUser(res.user);
       else await refresh();
       return res;
     },
-    [refresh]
+    [refresh, setUser]
   );
 
   const logout = useCallback(async () => {
@@ -61,7 +42,7 @@ export function useAuth() {
     }
     setUser(null);
     router.replace("/login");
-  }, [router]);
+  }, [router, setUser]);
 
   return {
     user,
