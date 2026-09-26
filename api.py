@@ -1343,5 +1343,118 @@ try:
 except Exception as _exc:
     logger.warning("web_billing install skipped: %s", type(_exc).__name__)
 
+
+# ============================================================
+# WEB TTS (ElevenLabs)
+# ============================================================
+
+class TtsRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2500)
+    style: Optional[str] = "human"  # slow | normal | human | fast
+    voice: Optional[str] = "bella"  # bella | male
+
+
+# Default ElevenLabs voice IDs (override via env)
+# Bella (female): hpp4J3VqNfWAUOO0d1Us  — same default as ai_engine / bot
+# Adam (male):    pNInz6obpgDQGcFmaJgB
+_DEFAULT_VOICE_BELLA = "hpp4J3VqNfWAUOO0d1Us"
+_DEFAULT_VOICE_MALE = "pNInz6obpgDQGcFmaJgB"
+
+
+def _resolve_elevenlabs_voice_id(voice: str = "bella") -> str:
+    v = (voice or "bella").strip().lower()
+    if v in ("male", "man", "adam", "guy"):
+        return (
+            os.getenv("ELEVENLABS_VOICE_ID_MALE")
+            or os.getenv("ELEVENLABS_MALE_VOICE_ID")
+            or _DEFAULT_VOICE_MALE
+        ).strip()
+    # bella / female / default
+    return (
+        os.getenv("ELEVENLABS_VOICE_ID_BELLA")
+        or os.getenv("ELEVENLABS_VOICE_ID")
+        or _DEFAULT_VOICE_BELLA
+    ).strip()
+
+
+def _elevenlabs_tts_bytes(text: str, style: str = "human", voice: str = "bella") -> bytes:
+    """Generate MP3 via ElevenLabs (Bella or male). Raises HTTPException on failure."""
+    api_key = (os.getenv("ELEVENLABS_API_KEY") or "").strip()
+    if not api_key:
+        raise HTTPException(status_code=503, detail="ElevenLabs not configured")
+    voice_id = _resolve_elevenlabs_voice_id(voice)
+    model_id = (
+        os.getenv("ELEVENLABS_MODEL_ID")
+        or os.getenv("ELEVENLABS_MODEL")
+        or "eleven_multilingual_v2"
+    ).strip()
+    speed_map = {"slow": 0.8, "normal": 1.0, "human": 0.95, "fast": 1.15}
+    speed = speed_map.get((style or "human").lower(), 0.95)
+    clean = " ".join(str(text).split())[:2000]
+    if not clean:
+        raise HTTPException(status_code=400, detail="Text empty")
+
+    import urllib.request
+    import json as _json
+
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+    payload = {
+        "text": clean,
+        "model_id": model_id,
+        "voice_settings": {
+            "stability": 0.45,
+            "similarity_boost": 0.8,
+            "style": 0.35 if style == "human" else 0.2,
+            "use_speaker_boost": True,
+            "speed": speed,
+        },
+    }
+
+    req = urllib.request.Request(
+        url,
+        data=_json.dumps(payload).encode("utf-8"),
+        headers={
+            "xi-api-key": api_key,
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=45) as resp:
+            data = resp.read()
+            if not data:
+                raise HTTPException(status_code=502, detail="Empty TTS audio")
+            return data
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("ElevenLabs TTS failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="TTS generation failed")
+
+
+@app.post("/api/tts")
+async def tts_endpoint(request: Request, body: TtsRequest):
+    """Authenticated web TTS — ElevenLabs Bella or male voice, returns audio/mpeg."""
+    await asyncio.to_thread(_require_current_user, request)
+    style = (body.style or "human").lower()
+    if style not in ("slow", "normal", "human", "fast"):
+        style = "human"
+    voice = (body.voice or "bella").lower()
+    if voice not in ("bella", "female", "male", "man", "adam", "guy"):
+        voice = "bella"
+    audio = await asyncio.to_thread(
+        _elevenlabs_tts_bytes, body.text, style, voice
+    )
+    return Response(
+        content=audio,
+        media_type="audio/mpeg",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": "inline; filename=kz-voice.mp3",
+        },
+    )
+
+
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=int(os.getenv("PORT", "8000")), reload=False)
