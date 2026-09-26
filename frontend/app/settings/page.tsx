@@ -1,10 +1,42 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  clearVipLocal,
+  getMembershipSnapshot,
+  getTelegramVipStartUrl,
+  setVipLocal,
+  type MembershipSnapshot,
+} from "@/lib/membership";
 
 export default function SettingsPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, refresh: refreshAuth } = useAuth();
+  const [membership, setMembership] = useState<MembershipSnapshot | null>(
+    null
+  );
+
+  const refresh = () => setMembership(getMembershipSnapshot(user?.id));
+
+  useEffect(() => {
+    refresh();
+    window.addEventListener("kz-membership-change", refresh);
+    return () => window.removeEventListener("kz-membership-change", refresh);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("checkout") === "success") {
+      const plan = params.get("plan");
+      if (plan) setVipLocal(plan);
+      refreshAuth?.();
+      refresh();
+      window.history.replaceState({}, "", "/settings");
+    }
+  }, [refreshAuth]);
 
   return (
     <ProtectedRoute>
@@ -30,6 +62,89 @@ export default function SettingsPage() {
                 label="MEMBER SINCE"
                 value={user?.created_at?.slice(0, 10) || "—"}
               />
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-cyan-500/10 space-y-4">
+            <p className="font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/40">
+              MEMBERSHIP
+            </p>
+            <div className="space-y-3">
+              <Row
+                label="PLAN"
+                value={
+                  user?.is_subscribed || membership?.isVip
+                    ? String(
+                        user?.plan || membership?.plan || "VIP"
+                      ).toUpperCase()
+                    : "FREE"
+                }
+              />
+              <Row
+                label="STATUS"
+                value={
+                  user?.is_subscribed || membership?.isVip
+                    ? "ACTIVE"
+                    : "FREE TIER"
+                }
+              />
+              <Row
+                label="FREE MSGS TODAY"
+                value={
+                  membership
+                    ? `${membership.freeMessagesUsedToday} / ${membership.freeDailyLimit}`
+                    : "—"
+                }
+              />
+              {user?.subscription_expires_at && (
+                <Row
+                  label="EXPIRES"
+                  value={String(user.subscription_expires_at).slice(0, 10)}
+                />
+              )}
+            </div>
+            <p className="text-xs text-cyan-400/50 leading-relaxed">
+              Web VIP unlocks after Stripe payment (webhook). Telegram Stars stay
+              on the bot; you can mark local VIP here after paying on Telegram.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <a
+                href={getTelegramVipStartUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 rounded-md font-mono-tech text-[10px] tracking-widest text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/10 transition-all"
+              >
+                OPEN TELEGRAM VIP
+              </a>
+              <Link
+                href="/pricing"
+                className="px-4 py-2 rounded-md font-mono-tech text-[10px] tracking-widest text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/10 transition-all"
+              >
+                VIEW PRICING
+              </Link>
+              {!membership?.isVip ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVipLocal("telegram");
+                    refresh();
+                  }}
+                  className="px-4 py-2 rounded-md font-mono-tech text-[10px] tracking-widest text-black bg-cyan-400 hover:bg-cyan-300 transition-all"
+                >
+                  I PAID ON TELEGRAM — ACTIVATE VIP
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearVipLocal();
+                    refresh();
+                  }}
+                  className="px-4 py-2 rounded-md font-mono-tech text-[10px] tracking-widest text-amber-300/90 border border-amber-500/30 hover:bg-amber-500/10 transition-all"
+                >
+                  CLEAR LOCAL VIP
+                </button>
+              )}
             </div>
           </div>
 
