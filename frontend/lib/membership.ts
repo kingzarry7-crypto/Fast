@@ -1,7 +1,6 @@
 /**
- * Frontend-only membership helpers.
- * Backend is not modified — VIP is stored in localStorage until web billing
- * is wired. Users who pay on Telegram can confirm VIP in Settings.
+ * Frontend membership helpers.
+ * Server is_subscribed from /api/auth/me is preferred; localStorage is fallback.
  */
 
 export const FREE_DAILY_MESSAGE_LIMIT = 25;
@@ -81,7 +80,6 @@ export function getMembershipSnapshot(userId?: string | null): MembershipSnapsho
   };
 }
 
-/** Public bot link for Stars checkout (override with env). */
 export function getTelegramBotUrl(): string {
   if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_TELEGRAM_BOT_URL) {
     return process.env.NEXT_PUBLIC_TELEGRAM_BOT_URL;
@@ -95,7 +93,6 @@ export function getTelegramVipStartUrl(): string {
   return `${base}?start=vip`;
 }
 
-/** Prefer server subscription from /api/auth/me; fall back to local flag. */
 export function isVipFromUser(user?: { is_subscribed?: boolean } | null): boolean {
   if (user?.is_subscribed) return true;
   return getIsVip();

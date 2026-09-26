@@ -22,6 +22,9 @@ const baseNavItems = [
   { label: "Markets", href: "/markets", icon: "◆" },
   { label: "Signals", href: "/signals", icon: "◆" },
   { label: "News", href: "/news", icon: "◆" },
+  { label: "Alerts", href: "/alerts", icon: "◆" },
+  { label: "History", href: "/history", icon: "◆" },
+  { label: "Pricing", href: "/pricing", icon: "◆" },
   { label: "Settings", href: "/settings", icon: "◆" },
 ];
 
