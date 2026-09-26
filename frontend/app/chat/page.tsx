@@ -72,6 +72,8 @@ export default function ChatPage() {
     supported: voiceSupported,
     style: voiceStyle,
     setVoiceStyle,
+    voiceCharacter,
+    setVoice,
   } = useVoice();
 
   const refreshConversations = async () => {
@@ -271,8 +273,9 @@ export default function ChatPage() {
         {!isVip && membership && (
           <div className="border-b border-amber-500/20 bg-amber-950/30 px-4 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <p className="font-mono-tech text-[10px] tracking-wider text-amber-200/90">
-              FREE TIER · Normal chat allowed · Signals require VIP ·{" "}
-              {membership.freeMessagesRemaining}/{membership.freeDailyLimit} left today
+              FREE TIER · Normal chat allowed · Signals / plans / alerts require
+              VIP · {membership.freeMessagesRemaining}/
+              {membership.freeDailyLimit} messages left today
             </p>
             <Link
               href="/pricing"
@@ -300,6 +303,7 @@ export default function ChatPage() {
               onClick={() => setHistoryOpen((v) => !v)}
               className="md:hidden w-8 h-8 flex items-center justify-center rounded-md border border-cyan-500/30 text-cyan-300 text-xs"
               aria-label="Toggle history"
+              title="Chat history"
             >
               ☰
             </button>
@@ -320,6 +324,13 @@ export default function ChatPage() {
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/80">
               AI CORE {coreState.toUpperCase()}
+              {coreState === "thinking"
+                ? thinkingPhase === "reading"
+                  ? " · READING"
+                  : thinkingPhase === "responding"
+                    ? " · RESPONDING"
+                    : " · THINKING"
+                : ""}
             </span>
           </div>
           <div className="hidden sm:flex items-center gap-4 font-mono-tech text-[9px] tracking-widest text-cyan-400/40">
@@ -329,6 +340,7 @@ export default function ChatPage() {
         </div>
 
         <div className="flex flex-1 overflow-hidden">
+          {/* History */}
           <div
             className={`${
               historyOpen ? "flex" : "hidden"
@@ -343,13 +355,22 @@ export default function ChatPage() {
               >
                 + NEW CHAT
               </button>
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(false)}
+                className="md:hidden w-full font-mono-tech text-[10px] text-cyan-400/50"
+              >
+                CLOSE
+              </button>
             </div>
             <div className="flex-1 overflow-y-auto kz-scroll p-2 space-y-0.5">
               <p className="px-2 py-1 font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/30">
                 HISTORY
               </p>
               {conversations.length === 0 && (
-                <p className="px-2 py-3 text-xs text-cyan-400/40">No past chats yet.</p>
+                <p className="px-2 py-3 text-xs text-cyan-400/40">
+                  No past chats yet.
+                </p>
               )}
               {conversations.map((c) => (
                 <button
@@ -362,15 +383,20 @@ export default function ChatPage() {
                       : "border border-transparent text-cyan-400/60 hover:bg-cyan-950/40 hover:text-cyan-200"
                   }`}
                 >
-                  <p className="font-mono-tech text-[11px] tracking-wide truncate">{c.title || "Chat"}</p>
+                  <p className="font-mono-tech text-[11px] tracking-wide truncate">
+                    {c.title || "Chat"}
+                  </p>
                   {c.preview && (
-                    <p className="text-[10px] text-cyan-400/35 truncate mt-0.5">{c.preview}</p>
+                    <p className="text-[10px] text-cyan-400/35 truncate mt-0.5">
+                      {c.preview}
+                    </p>
                   )}
                 </button>
               ))}
             </div>
           </div>
 
+          {/* Modules */}
           <div
             className={`${
               sidebarOpen ? "flex" : "hidden"
@@ -392,12 +418,17 @@ export default function ChatPage() {
                     : "border border-transparent text-cyan-400/50 hover:text-cyan-200 hover:bg-cyan-950/30"
                 }`}
               >
-                <p className="font-mono-tech text-[10px] tracking-widest">{cap.name}</p>
-                <p className="font-mono-tech text-[9px] tracking-wider text-cyan-400/30">{cap.desc}</p>
+                <p className="font-mono-tech text-[10px] tracking-widest">
+                  {cap.name}
+                </p>
+                <p className="font-mono-tech text-[9px] tracking-wider text-cyan-400/30">
+                  {cap.desc}
+                </p>
               </button>
             ))}
           </div>
 
+          {/* Chat */}
           <div className="flex-1 flex flex-col min-w-0">
             <div className="flex-1 overflow-y-auto kz-scroll px-6 py-6 space-y-5">
               {messages.length === 0 && !historyLoading && (
@@ -421,14 +452,17 @@ export default function ChatPage() {
                   imagePreviewUrl={m.imagePreviewUrl}
                   onSpeak={
                     m.role === "assistant"
-                      ? () => (isSpeaking ? stopSpeaking() : speak(m.text || ""))
+                      ? () =>
+                          isSpeaking ? stopSpeaking() : speak(m.text || "")
                       : undefined
                   }
                 />
               ))}
 
               {historyLoading && (
-                <p className="font-mono-tech text-xs text-cyan-400/50">Loading chat…</p>
+                <p className="font-mono-tech text-xs text-cyan-400/50">
+                  Loading chat…
+                </p>
               )}
               {sending && <ThinkingIndicator phase={thinkingPhase} />}
               <div ref={endRef} />
@@ -463,11 +497,14 @@ export default function ChatPage() {
                     <span className="font-mono-tech text-[10px] tracking-widest text-cyan-200 truncate max-w-[200px]">
                       {attached.name}
                     </span>
+                    <span className="font-mono-tech text-[9px] tracking-widest text-cyan-400/40">
+                      {attached.mime}
+                    </span>
                   </div>
                   <button
                     type="button"
                     onClick={clearAttachment}
-                    className="ml-2 w-6 h-6 flex items-center justify-center rounded-md border border-cyan-500/30 text-cyan-300 text-xs"
+                    className="ml-2 w-6 h-6 flex items-center justify-center rounded-md border border-cyan-500/30 text-cyan-300 hover:bg-cyan-950/40 text-xs"
                     aria-label="Remove attachment"
                   >
                     ✕
@@ -477,30 +514,57 @@ export default function ChatPage() {
             )}
 
             {voiceSupported && (
-              <div className="px-4 pb-2 flex flex-wrap items-center gap-2">
+              <div className="px-4 pb-2 flex flex-wrap items-center gap-2 justify-center sm:justify-start">
                 <span className="text-[10px] tracking-widest text-cyan-400/50 font-mono-tech uppercase">
                   Voice
                 </span>
-                {(["slow", "normal", "human", "fast"] as VoiceStyle[]).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setVoiceStyle(s)}
-                    className={`px-2.5 py-1 rounded-md text-[10px] font-mono-tech tracking-wider border ${
-                      voiceStyle === s
-                        ? "border-cyan-400 bg-cyan-500/15 text-cyan-200"
-                        : "border-cyan-500/20 text-cyan-400/50"
-                    }`}
-                  >
-                    {s.toUpperCase()}
-                  </button>
-                ))}
+                <button
+                  type="button"
+                  onClick={() => setVoice("bella")}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-mono-tech tracking-wider border ${
+                    voiceCharacter === "bella"
+                      ? "border-pink-400/60 bg-pink-500/10 text-pink-200"
+                      : "border-cyan-500/20 text-cyan-400/50 hover:text-cyan-300"
+                  }`}
+                  title="ElevenLabs Bella"
+                >
+                  BELLA
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVoice("male")}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-mono-tech tracking-wider border ${
+                    voiceCharacter === "male"
+                      ? "border-sky-400/60 bg-sky-500/10 text-sky-200"
+                      : "border-cyan-500/20 text-cyan-400/50 hover:text-cyan-300"
+                  }`}
+                  title="ElevenLabs male (Adam)"
+                >
+                  MALE
+                </button>
+                <span className="text-cyan-500/30">|</span>
+                {(["slow", "normal", "human", "fast"] as VoiceStyle[]).map(
+                  (s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setVoiceStyle(s)}
+                      className={`px-2.5 py-1 rounded-md text-[10px] font-mono-tech tracking-wider border transition-colors ${
+                        voiceStyle === s
+                          ? "border-cyan-400 bg-cyan-500/15 text-cyan-200"
+                          : "border-cyan-500/20 text-cyan-400/50 hover:text-cyan-300"
+                      }`}
+                    >
+                      {s.toUpperCase()}
+                    </button>
+                  )
+                )}
                 <button
                   type="button"
                   onClick={() => setAutoSpeak((v) => !v)}
                   className={`px-2.5 py-1 rounded-md text-[10px] font-mono-tech tracking-wider border ${
                     autoSpeak
-                      ? "border-emerald-400/50 text-emerald-300"
+                      ? "border-emerald-400/50 bg-emerald-500/10 text-emerald-300"
                       : "border-cyan-500/20 text-cyan-400/50"
                   }`}
                 >
@@ -510,7 +574,7 @@ export default function ChatPage() {
                   <button
                     type="button"
                     onClick={stopSpeaking}
-                    className="px-2.5 py-1 rounded-md text-[10px] font-mono-tech border border-red-500/40 text-red-300"
+                    className="px-2.5 py-1 rounded-md text-[10px] font-mono-tech tracking-wider border border-red-500/40 text-red-300"
                   >
                     STOP
                   </button>
@@ -534,10 +598,21 @@ export default function ChatPage() {
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={sending}
-                  className="w-11 h-11 flex items-center justify-center rounded-lg border border-cyan-500/25 text-cyan-300 disabled:opacity-30"
+                  className="w-11 h-11 flex items-center justify-center rounded-lg border border-cyan-500/25 text-cyan-300 hover:border-cyan-400 hover:bg-cyan-950/40 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                   aria-label="Attach image"
+                  title="Attach image"
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                   </svg>
                 </button>
@@ -549,18 +624,28 @@ export default function ChatPage() {
                       if (listening) stopListening();
                       else
                         listen((text) => {
-                          setInput((prev) => (prev ? `${prev} ${text}` : text));
+                          setInput((prev) =>
+                            prev ? `${prev} ${text}` : text
+                          );
                         });
                     }}
                     disabled={sending}
-                    className={`w-11 h-11 flex items-center justify-center rounded-lg border disabled:opacity-30 ${
+                    className={`w-11 h-11 flex items-center justify-center rounded-lg border transition-colors disabled:opacity-30 ${
                       listening
-                        ? "border-emerald-400 bg-emerald-500/20 text-emerald-300"
-                        : "border-cyan-500/25 text-cyan-300"
+                        ? "border-emerald-400 bg-emerald-500/20 text-emerald-300 animate-pulse"
+                        : "border-cyan-500/25 text-cyan-300 hover:border-cyan-400 hover:bg-cyan-950/40"
                     }`}
-                    aria-label="Voice input"
+                    aria-label={listening ? "Stop listening" : "Voice input"}
+                    title={listening ? "Stop" : "Speak to type"}
                   >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
                       <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8" />
                     </svg>
@@ -573,16 +658,20 @@ export default function ChatPage() {
                   onPaste={handlePaste}
                   placeholder={`Message KING ZARRY AI [${capability}]...`}
                   disabled={sending}
-                  className="flex-1 bg-black/40 border border-cyan-500/25 focus:border-cyan-400 rounded-lg px-4 py-3 text-sm text-white placeholder-cyan-400/30 outline-none disabled:opacity-50 font-mono-tech tracking-wider"
+                  className="flex-1 bg-black/40 border border-cyan-500/25 focus:border-cyan-400 rounded-lg px-4 py-3 text-sm text-white placeholder-cyan-400/30 outline-none transition-colors disabled:opacity-50 font-mono-tech tracking-wider"
                 />
                 <button
                   type="submit"
                   disabled={sending || (!input.trim() && !attached)}
-                  className="px-5 py-3 rounded-lg bg-cyan-400 text-black font-display text-xs font-bold tracking-[0.2em] hover:bg-cyan-300 disabled:opacity-30"
+                  className="px-5 py-3 rounded-lg bg-cyan-400 text-black font-display text-xs font-bold tracking-[0.2em] hover:bg-cyan-300 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   SEND
                 </button>
               </div>
+              <p className="mt-2 font-mono-tech text-[9px] tracking-widest text-cyan-400/30">
+                Tip: paste an image (Ctrl+V) or click 📎 · Mic to dictate · Max 8
+                MB
+              </p>
             </form>
           </div>
         </div>
