@@ -5,6 +5,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AICore from "@/components/AICore";
 import ChatMessage, { ThinkingIndicator } from "@/components/chat/ChatMessage";
 import { useChat } from "@/hooks/useChat";
+import { api, type ConversationItem } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
 import {
@@ -34,36 +35,100 @@ const capabilities = [
   { name: "NEWS", desc: "External Information" },
 ];
 
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8 MB
 
 export default function ChatPage() {
   const { user } = useAuth();
-  const { messages, sending, error, send } = useChat(
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<ConversationItem[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const { messages, setMessages, sending, error, send, clear } = useChat(
     user?.id,
-    user?.is_subscribed
+    user?.is_subscribed,
+    conversationId
   );
   const [membership, setMembership] = useState<MembershipSnapshot | null>(null);
+
+  const refreshConversations = async () => {
+    try {
+      const list = await api.listConversations();
+      setConversations(list);
+    } catch {
+      /* API may not be ready */
+    }
+  };
+
+  useEffect(() => {
+    const refresh = () => setMembership(getMembershipSnapshot(user?.id));
+    refresh();
+    window.addEventListener("kz-membership-change", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("kz-membership-change", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user?.id) refreshConversations();
+  }, [user?.id]);
+
+  const handleNewChat = async () => {
+    clear();
+    setConversationId(null);
+    try {
+      const conv = await api.createConversation();
+      setConversationId(conv.id);
+      await refreshConversations();
+    } catch {
+      setConversationId(null);
+    }
+  };
+
+  const handleOpenConversation = async (id: string) => {
+    if (sending) return;
+    setHistoryLoading(true);
+    setConversationId(id);
+    clear();
+    try {
+      const msgs = await api.getConversationMessages(id);
+      setMessages(
+        msgs.map((m, i) => ({
+          id: m.id || `hist-${id}-${i}`,
+          role: (m.role === "user" ? "user" : "assistant") as
+            | "user"
+            | "assistant",
+          text: m.content || "",
+          timestamp: m.created_at
+            ? String(m.created_at).slice(11, 19) || ""
+            : "",
+        }))
+      );
+    } catch {
+      setMessages([
+        {
+          id: `err-${Date.now()}`,
+          role: "assistant",
+          text: "Could not load this chat. Try again.",
+          timestamp: "",
+          status: "HISTORY ERROR",
+        },
+      ]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   const [input, setInput] = useState("");
   const [capability, setCapability] = useState("AI");
   const [coreState, setCoreState] = useState<CoreState>("idle");
-  const [thinkingPhase, setThinkingPhase] = useState<
-    "reading" | "thinking" | "responding"
-  >("thinking");
+  const [thinkingPhase, setThinkingPhase] = useState<"reading" | "thinking" | "responding">("thinking");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [attached, setAttached] = useState<AttachedImage | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const refreshMembership = () =>
-    setMembership(getMembershipSnapshot(user?.id));
-
-  useEffect(() => {
-    refreshMembership();
-    window.addEventListener("kz-membership-change", refreshMembership);
-    return () =>
-      window.removeEventListener("kz-membership-change", refreshMembership);
-  }, [user?.id]);
 
   useEffect(() => {
     if (!sending) {
@@ -150,86 +215,147 @@ export default function ChatPage() {
     if ((!text && !hasImage) || sending) return;
 
     const payloadImage = attached
-      ? {
-          base64: attached.base64,
-          mime: attached.mime,
-          previewUrl: attached.previewUrl,
-          name: attached.name,
-        }
+      ? { base64: attached.base64, mime: attached.mime }
       : undefined;
 
     setInput("");
     clearAttachment();
 
-    const effectiveText =
-      text || (hasImage ? "What do you see in this image?" : "");
-    await send(effectiveText, capability, payloadImage);
+    // Send image along with the message; text defaults to a sensible prompt if empty
+    const effectiveText = text || (hasImage ? "What do you see in this image?" : "");
+    const res = await send(effectiveText, capability, payloadImage);
+    if (res && (res as { conversation_id?: string }).conversation_id) {
+      const cid = (res as { conversation_id: string }).conversation_id;
+      setConversationId(cid);
+      refreshConversations();
+    }
   };
-
-  const isVip = Boolean(user?.is_subscribed || membership?.isVip);
 
   return (
     <ProtectedRoute>
-      <div className="flex flex-col h-screen bg-[#0a0a0b] text-zinc-100">
-        <div className="border-b border-zinc-800/80 px-6 py-3 flex items-center justify-between bg-[#0a0a0b]/90 backdrop-blur-xl">
+      <div className="flex flex-col h-screen">
+        {membership && !(membership.isVip || user?.is_subscribed) && (
+          <div className="border-b border-amber-500/20 bg-amber-950/30 px-4 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <p className="font-mono-tech text-[10px] tracking-wider text-amber-200/90">
+              FREE TIER · Normal chat allowed · Signals / plans / alerts require VIP ·{" "}
+              {membership.freeMessagesRemaining}/{membership.freeDailyLimit} messages left today
+            </p>
+            <Link
+              href="/pricing"
+              className="font-mono-tech text-[10px] tracking-widest text-cyan-300 hover:text-cyan-200 underline underline-offset-2 shrink-0"
+            >
+              UPGRADE →
+            </Link>
+          </div>
+        )}
+        {(membership?.isVip || user?.is_subscribed) && (
+          <div className="border-b border-cyan-500/20 bg-cyan-950/20 px-4 py-2">
+            <p className="font-mono-tech text-[10px] tracking-wider text-cyan-300/90">
+              VIP ACTIVE{membership.plan ? ` · ${membership.plan.toUpperCase()}` : ""} · Unlimited chat & signals
+            </p>
+          </div>
+        )}
+        {/* Top bar */}
+        <div className="border-b border-cyan-500/10 px-6 py-3 flex items-center justify-between bg-[#020914]/60 backdrop-blur-xl">
           <div className="flex items-center gap-3">
             <button
+              onClick={() => setHistoryOpen((v) => !v)}
+              className="md:hidden w-8 h-8 flex items-center justify-center rounded-md border border-cyan-500/30 text-cyan-300 text-xs"
+              aria-label="Toggle history"
+              title="Chat history"
+            >
+              ☰
+            </button>
+            <button
               onClick={() => setSidebarOpen((v) => !v)}
-              className="xl:hidden w-8 h-8 flex items-center justify-center rounded-md border border-zinc-700 text-zinc-300 text-xs"
+              className="xl:hidden w-8 h-8 flex items-center justify-center rounded-md border border-cyan-500/30 text-cyan-300 text-xs"
               aria-label="Toggle modules"
             >
               ≡
             </button>
+            <button
+              type="button"
+              onClick={handleNewChat}
+              className="hidden sm:inline-flex px-3 py-1.5 rounded-md font-mono-tech text-[10px] tracking-widest text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/10"
+            >
+              + NEW
+            </button>
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[11px] tracking-wide text-zinc-400">
-              {coreState === "thinking"
-                ? thinkingPhase === "reading"
-                  ? "Reading…"
-                  : thinkingPhase === "responding"
-                    ? "Responding…"
-                    : "Thinking…"
-                : "Ready"}
+            <span className="font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/80">
+              AI CORE {coreState.toUpperCase()}
             </span>
           </div>
-          <div className="hidden sm:flex items-center gap-4 text-[11px] text-zinc-500">
+          <div className="hidden sm:flex items-center gap-4 font-mono-tech text-[9px] tracking-widest text-cyan-400/40">
+            <span>NEON MEMORY</span>
             {user?.email && <span>{user.email}</span>}
           </div>
         </div>
 
-        {!isVip && membership && (
-          <div className="px-6 py-2 border-b border-zinc-800/80 bg-zinc-900/40 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[11px] text-zinc-400">
-              Free · {membership.freeMessagesRemaining}/
-              {membership.freeDailyLimit} messages left today · Signals need VIP
-            </p>
-            <Link
-              href="/pricing"
-              className="text-[11px] text-cyan-400 hover:text-cyan-300"
-            >
-              Upgrade →
-            </Link>
-          </div>
-        )}
-
-        {isVip && (
-          <div className="px-6 py-2 border-b border-zinc-800/80 bg-zinc-900/20">
-            <p className="text-[11px] text-zinc-400">
-              VIP active
-              {membership?.plan || user?.plan
-                ? ` · ${String(membership?.plan || user?.plan)}`
-                : ""}
-            </p>
-          </div>
-        )}
-
         <div className="flex flex-1 overflow-hidden">
+          {/* Chat history */}
+          <div
+            className={`${
+              historyOpen ? "flex" : "hidden"
+            } md:flex w-56 flex-col border-r border-cyan-500/10 bg-[#020914] shrink-0 z-30`}
+          >
+            <div className="p-3 border-b border-cyan-500/10 space-y-2">
+              <button
+                type="button"
+                onClick={handleNewChat}
+                disabled={sending}
+                className="w-full rounded-lg bg-cyan-400 text-black font-display text-xs font-bold tracking-widest py-2.5 hover:bg-cyan-300 disabled:opacity-40"
+              >
+                + NEW CHAT
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(false)}
+                className="md:hidden w-full font-mono-tech text-[10px] text-cyan-400/50"
+              >
+                CLOSE
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto kz-scroll p-2 space-y-0.5">
+              <p className="px-2 py-1 font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/30">
+                HISTORY
+              </p>
+              {conversations.length === 0 && (
+                <p className="px-2 py-3 text-xs text-cyan-400/40">
+                  No past chats yet.
+                </p>
+              )}
+              {conversations.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => handleOpenConversation(c.id)}
+                  className={`w-full text-left rounded-lg px-3 py-2.5 transition-all ${
+                    conversationId === c.id
+                      ? "bg-cyan-500/15 border border-cyan-500/40 text-white"
+                      : "border border-transparent text-cyan-400/60 hover:bg-cyan-950/40 hover:text-cyan-200"
+                  }`}
+                >
+                  <p className="font-mono-tech text-[11px] tracking-wide truncate">
+                    {c.title || "Chat"}
+                  </p>
+                  {c.preview && (
+                    <p className="text-[10px] text-cyan-400/35 truncate mt-0.5">
+                      {c.preview}
+                    </p>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Module sidebar */}
           <div
             className={`${
               sidebarOpen ? "flex" : "hidden"
-            } xl:flex w-52 flex-col border-r border-zinc-800/80 p-3 overflow-y-auto absolute xl:relative inset-y-0 left-0 z-20 bg-[#0a0a0b] xl:bg-transparent`}
+            } xl:flex w-44 flex-col border-r border-cyan-500/10 p-3 overflow-y-auto kz-scroll absolute xl:relative inset-y-0 left-0 z-20 bg-[#020914] xl:bg-transparent`}
           >
-            <p className="text-[10px] tracking-widest text-zinc-600 px-2 mb-2 uppercase">
-              Modules
+            <p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/30 px-2 mb-2">
+              AI MODULES
             </p>
             {capabilities.map((cap) => (
               <button
@@ -238,25 +364,31 @@ export default function ChatPage() {
                   setCapability(cap.name);
                   setSidebarOpen(false);
                 }}
-                className={`text-left px-3 py-2 rounded-lg mb-0.5 transition-all text-sm ${
+                className={`text-left px-3 py-2 rounded-md mb-0.5 transition-all ${
                   capability === cap.name
-                    ? "bg-zinc-800 text-white"
-                    : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900"
+                    ? "bg-cyan-500/15 border border-cyan-500/40 text-white"
+                    : "border border-transparent text-cyan-400/50 hover:text-cyan-200 hover:bg-cyan-950/30"
                 }`}
               >
-                <p className="font-medium">{cap.name}</p>
-                <p className="text-[10px] text-zinc-600">{cap.desc}</p>
+                <p className="font-mono-tech text-[10px] tracking-widest">
+                  {cap.name}
+                </p>
+                <p className="font-mono-tech text-[9px] tracking-wider text-cyan-400/30">
+                  {cap.desc}
+                </p>
               </button>
             ))}
           </div>
 
+          {/* Chat area */}
           <div className="flex-1 flex flex-col min-w-0">
-            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 space-y-4">
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto kz-scroll px-6 py-6 space-y-5">
               {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-full text-center">
                   <AICore state="idle" size={180} />
-                  <p className="mt-10 text-sm text-zinc-500">
-                    How can King Zarry AI help you today?
+                  <p className="mt-12 font-mono-tech text-[10px] tracking-[0.4em] text-cyan-400/40">
+                    AWAITING INPUT
                   </p>
                 </div>
               )}
@@ -274,6 +406,9 @@ export default function ChatPage() {
                 />
               ))}
 
+              {historyLoading && (
+                <p className="font-mono-tech text-xs text-cyan-400/50">Loading chat…</p>
+              )}
               {sending && <ThinkingIndicator phase={thinkingPhase} />}
 
               <div ref={endRef} />
@@ -281,7 +416,7 @@ export default function ChatPage() {
 
             {error && (
               <div className="px-6 pb-2">
-                <div className="bg-red-950/40 border border-red-500/30 rounded-lg px-4 py-2 text-xs text-red-300">
+                <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2 text-xs text-red-300 font-mono-tech">
                   {error}
                 </div>
               </div>
@@ -289,31 +424,34 @@ export default function ChatPage() {
 
             {attachError && (
               <div className="px-6 pb-2">
-                <div className="bg-amber-950/30 border border-amber-500/30 rounded-lg px-4 py-2 text-xs text-amber-200">
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-2 text-xs text-amber-300 font-mono-tech">
                   {attachError}
                 </div>
               </div>
             )}
 
+            {/* Attachment preview */}
             {attached && (
               <div className="px-6 pb-2">
-                <div className="inline-flex items-center gap-3 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2">
+                <div className="inline-flex items-center gap-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg px-3 py-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={attached.previewUrl}
                     alt="attachment preview"
-                    className="w-12 h-12 object-cover rounded-md"
+                    className="w-12 h-12 object-cover rounded-md border border-cyan-500/20"
                   />
                   <div className="flex flex-col min-w-0">
-                    <span className="text-xs text-zinc-300 truncate max-w-[200px]">
+                    <span className="font-mono-tech text-[10px] tracking-widest text-cyan-200 truncate max-w-[200px]">
                       {attached.name}
                     </span>
-                    <span className="text-[10px] text-zinc-600">{attached.mime}</span>
+                    <span className="font-mono-tech text-[9px] tracking-widest text-cyan-400/40">
+                      {attached.mime}
+                    </span>
                   </div>
                   <button
                     type="button"
                     onClick={clearAttachment}
-                    className="ml-2 w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-800 text-xs"
+                    className="ml-2 w-6 h-6 flex items-center justify-center rounded-md border border-cyan-500/30 text-cyan-300 hover:bg-cyan-950/40 text-xs"
                     aria-label="Remove attachment"
                   >
                     ✕
@@ -322,11 +460,13 @@ export default function ChatPage() {
               </div>
             )}
 
+            {/* Input */}
             <form
               onSubmit={handleSubmit}
-              className="border-t border-zinc-800/80 p-4 bg-[#0a0a0b]"
+              className="border-t border-cyan-500/10 p-4 bg-[#020914]/60 backdrop-blur-xl"
             >
-              <div className="flex items-end gap-2 max-w-3xl mx-auto">
+              <div className="flex items-center gap-2">
+                {/* Hidden file input */}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -338,10 +478,11 @@ export default function ChatPage() {
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={sending}
-                  className="w-10 h-10 flex items-center justify-center rounded-xl border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 disabled:opacity-30"
+                  className="w-11 h-11 flex items-center justify-center rounded-lg border border-cyan-500/25 text-cyan-300 hover:border-cyan-400 hover:bg-cyan-950/40 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                   aria-label="Attach image"
                   title="Attach image"
                 >
+                  {/* paperclip icon */}
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="18"
@@ -361,20 +502,20 @@ export default function ChatPage() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onPaste={handlePaste}
-                  placeholder="Message King Zarry AI…"
+                  placeholder={`Message KING ZARRY AI [${capability}]...`}
                   disabled={sending}
-                  className="flex-1 bg-zinc-900 border border-zinc-700 focus:border-zinc-500 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none disabled:opacity-50"
+                  className="flex-1 bg-black/40 border border-cyan-500/25 focus:border-cyan-400 rounded-lg px-4 py-3 text-sm text-white placeholder-cyan-400/30 outline-none transition-colors disabled:opacity-50 font-mono-tech tracking-wider"
                 />
                 <button
                   type="submit"
                   disabled={sending || (!input.trim() && !attached)}
-                  className="px-4 py-3 rounded-xl bg-zinc-100 text-zinc-900 text-sm font-semibold hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="px-5 py-3 rounded-lg bg-cyan-400 text-black font-display text-xs font-bold tracking-[0.2em] hover:bg-cyan-300 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                 >
-                  Send
+                  SEND
                 </button>
               </div>
-              <p className="mt-2 text-center text-[10px] text-zinc-600">
-                Paste an image or click 📎 · Max 8 MB
+              <p className="mt-2 font-mono-tech text-[9px] tracking-widest text-cyan-400/30">
+                Tip: paste an image (Ctrl+V) or click 📎 to attach. Max 8 MB.
               </p>
             </form>
           </div>
