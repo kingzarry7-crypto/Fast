@@ -15,6 +15,9 @@ export interface AuthUser {
   display_name: string | null;
   account_status: string | null;
   created_at: string | null;
+  is_subscribed?: boolean;
+  plan?: string | null;
+  subscription_expires_at?: string | null;
 }
 
 /**

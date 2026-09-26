@@ -25,6 +25,8 @@ export interface ChatMessage {
   timestamp: string;
   status?: string;
   capability?: string;
+  imagePreviewUrl?: string;
+  imageName?: string;
 }
 
 export interface ApiErrorData {
