@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, type TtsVoice } from "@/lib/api";
 
 export type VoiceStyle = "normal" | "fast" | "slow" | "human";
 
@@ -71,13 +71,16 @@ export function useVoice() {
   const [listening, setListening] = useState(false);
   const [supported, setSupported] = useState(true);
   const [style, setStyle] = useState<VoiceStyle>("human");
+  const [voiceCharacter, setVoiceCharacter] = useState<TtsVoice>("bella");
   const [provider, setProvider] = useState<"elevenlabs" | "browser">("elevenlabs");
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const styleRef = useRef<VoiceStyle>("human");
+  const voiceRef = useRef<TtsVoice>("bella");
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const objectUrlRef = useRef<string | null>(null);
   styleRef.current = style;
+  voiceRef.current = voiceCharacter;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -95,6 +98,11 @@ export function useVoice() {
     try {
       const saved = localStorage.getItem("kz_voice_style") as VoiceStyle | null;
       if (saved && RATE_MAP[saved] != null) setStyle(saved);
+      const savedVoice = localStorage.getItem("kz_voice_character") as TtsVoice | null;
+      if (savedVoice === "bella" || savedVoice === "male") {
+        setVoiceCharacter(savedVoice);
+        voiceRef.current = savedVoice;
+      }
     } catch {
       /* ignore */
     }
@@ -105,6 +113,16 @@ export function useVoice() {
     styleRef.current = s;
     try {
       localStorage.setItem("kz_voice_style", s);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const setVoice = useCallback((v: TtsVoice) => {
+    setVoiceCharacter(v);
+    voiceRef.current = v;
+    try {
+      localStorage.setItem("kz_voice_character", v);
     } catch {
       /* ignore */
     }
@@ -161,7 +179,8 @@ export function useVoice() {
         const blob = await api.synthesizeSpeech(
           clean,
           mode,
-          abortRef.current.signal
+          abortRef.current.signal,
+          voiceRef.current
         );
         const url = URL.createObjectURL(blob);
         objectUrlRef.current = url;
@@ -245,6 +264,8 @@ export function useVoice() {
     supported,
     style,
     setVoiceStyle,
+    voiceCharacter,
+    setVoice,
     provider,
   };
 }
