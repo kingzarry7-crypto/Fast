@@ -4,9 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 
-const PUBLIC_ROUTES = ["/", "/login", "/register"];
+const PUBLIC_ROUTES = ["/", "/login", "/register", "/signup"];
 
-const navItems = [
+function isAdminEmail(email?: string | null): boolean {
+  if (!email) return false;
+  const raw = process.env.NEXT_PUBLIC_ADMIN_EMAILS || "";
+  return raw
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(email.trim().toLowerCase());
+}
+
+const baseNavItems = [
   { label: "Dashboard", href: "/dashboard", icon: "◆" },
   { label: "Chat", href: "/chat", icon: "◆" },
   { label: "Markets", href: "/markets", icon: "◆" },
@@ -18,18 +28,22 @@ const navItems = [
 export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const navItems = [
+    ...baseNavItems,
+    ...(isAdminEmail(user?.email)
+      ? [{ label: "Admin", href: "/admin", icon: "◆" as const }]
+      : []),
+  ];
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
-  // Don't show sidebar on public pages
   if (PUBLIC_ROUTES.includes(pathname)) {
     return null;
   }
 
   return (
     <>
-      {/* Mobile top bar */}
       <div className="lg:hidden sticky top-0 z-50 border-b border-cyan-500/10 bg-[#020914]/95 backdrop-blur-xl">
         <div className="flex items-center justify-between px-4 py-3">
           <Link href="/dashboard" className="flex items-center gap-2">
@@ -69,7 +83,6 @@ export default function Sidebar() {
         </nav>
       </div>
 
-      {/* Desktop sidebar */}
       <aside className="hidden lg:flex w-64 flex-col border-r border-cyan-500/10 bg-[#020914]/80 backdrop-blur-xl flex-shrink-0">
         <Link
           href="/dashboard"
