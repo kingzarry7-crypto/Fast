@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "@/lib/api";
 
 export type VoiceStyle = "normal" | "fast" | "slow" | "human";
 
@@ -49,15 +50,16 @@ function cleanForSpeech(text: string): string {
     .replace(/https?:\/\/\S+/g, "")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, 4000);
+    .slice(0, 2000);
 }
 
 function pickVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
   if (!voices.length) return null;
   return (
-    voices.find((v) => /daniel|google uk english male|microsoft david/i.test(v.name)) ||
+    voices.find((v) =>
+      /daniel|google uk english male|microsoft david/i.test(v.name)
+    ) ||
     voices.find((v) => /male/i.test(v.name) && v.lang.startsWith("en")) ||
-    voices.find((v) => /samantha|google us english|microsoft aria|jenny/i.test(v.name)) ||
     voices.find((v) => v.lang.startsWith("en")) ||
     voices[0] ||
     null
@@ -67,19 +69,20 @@ function pickVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null 
 export function useVoice() {
   const [speaking, setSpeaking] = useState(false);
   const [listening, setListening] = useState(false);
-  const [supported, setSupported] = useState(false);
+  const [supported, setSupported] = useState(true);
   const [style, setStyle] = useState<VoiceStyle>("human");
+  const [provider, setProvider] = useState<"elevenlabs" | "browser">("elevenlabs");
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const styleRef = useRef<VoiceStyle>("human");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
   styleRef.current = style;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const hasSynth = "speechSynthesis" in window;
-    const hasRecog =
-      "SpeechRecognition" in window || "webkitSpeechRecognition" in window;
-    setSupported(hasSynth || hasRecog);
-    if (hasSynth) {
+    setSupported(true);
+    if ("speechSynthesis" in window) {
       window.speechSynthesis.getVoices();
       const onVoices = () => window.speechSynthesis.getVoices();
       window.speechSynthesis.addEventListener("voiceschanged", onVoices);
@@ -107,39 +110,85 @@ export function useVoice() {
     }
   }, []);
 
-  const speak = useCallback((text: string, overrideStyle?: VoiceStyle) => {
-    if (typeof window === "undefined") return;
-    if (!("speechSynthesis" in window)) return;
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current = null;
+    }
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    setSpeaking(false);
+  }, []);
 
+  const speakBrowser = useCallback((text: string, mode: VoiceStyle) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
-
-    const clean = cleanForSpeech(text);
-    if (!clean) return;
-
-    const mode = overrideStyle || styleRef.current;
-    const utterance = new SpeechSynthesisUtterance(clean);
+    const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = RATE_MAP[mode] ?? 1;
     utterance.pitch = PITCH_MAP[mode] ?? 1;
     utterance.volume = 1;
     utterance.lang = "en-US";
-
-    const voices = window.speechSynthesis.getVoices();
-    const preferred = pickVoice(voices);
+    const preferred = pickVoice(window.speechSynthesis.getVoices());
     if (preferred) utterance.voice = preferred;
-
     utterance.onstart = () => setSpeaking(true);
     utterance.onend = () => setSpeaking(false);
     utterance.onerror = () => setSpeaking(false);
-
     window.speechSynthesis.speak(utterance);
+    setProvider("browser");
   }, []);
 
-  const stop = useCallback(() => {
-    if (typeof window === "undefined") return;
-    if (!("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
-    setSpeaking(false);
-  }, []);
+  const speak = useCallback(
+    async (text: string, overrideStyle?: VoiceStyle) => {
+      const clean = cleanForSpeech(text);
+      if (!clean) return;
+
+      stop();
+
+      const mode = overrideStyle || styleRef.current;
+      abortRef.current = new AbortController();
+
+      try {
+        setSpeaking(true);
+        setProvider("elevenlabs");
+        const blob = await api.synthesizeSpeech(
+          clean,
+          mode,
+          abortRef.current.signal
+        );
+        const url = URL.createObjectURL(blob);
+        objectUrlRef.current = url;
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        audio.onended = () => {
+          setSpeaking(false);
+          if (objectUrlRef.current) {
+            URL.revokeObjectURL(objectUrlRef.current);
+            objectUrlRef.current = null;
+          }
+        };
+        audio.onerror = () => {
+          setSpeaking(false);
+          speakBrowser(clean, mode);
+        };
+        await audio.play();
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          setSpeaking(false);
+          return;
+        }
+        speakBrowser(clean, mode);
+      }
+    },
+    [stop, speakBrowser]
+  );
 
   const listen = useCallback((onResult: (text: string) => void) => {
     if (typeof window === "undefined") return;
@@ -196,6 +245,7 @@ export function useVoice() {
     supported,
     style,
     setVoiceStyle,
+    provider,
   };
 }
 
