@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { KING_ZARRY_CORE_IMAGE } from "@/lib/coreImage";
 
 type CoreState = "idle" | "thinking" | "speaking" | "listening" | "error";
 
@@ -161,7 +162,7 @@ export default function AICore({
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/images/king-zarry-core.jpg"
+          src={KING_ZARRY_CORE_IMAGE}
           alt="King Zarry AI Core"
           width={faceSize}
           height={faceSize}
