@@ -138,6 +138,8 @@ class ChatRequest(BaseModel):
         min_length=1,
         max_length=4000,
     )
+    # Optional: continue a specific conversation (new chat = omit or null)
+    conversation_id: Optional[str] = None
     # NEW: Optional image upload support via base64
     image_base64: Optional[str] = None
     image_mime: Optional[str] = "image/jpeg"
@@ -401,8 +403,9 @@ def _clear_session_cookie(
 # ============================================================
 
 class WebMemoryAdapter:
-    def __init__(self, web_user_id: str):
+    def __init__(self, web_user_id: str, conversation_id: Optional[str] = None):
         self.web_user_id = str(web_user_id)
+        self.conversation_id = str(conversation_id) if conversation_id else None
 
     def get_history(self, user_id: str, limit: int = 20) -> List[Dict[str, str]]:
         try:
@@ -414,10 +417,11 @@ class WebMemoryAdapter:
                     FROM web_messages m
                     JOIN web_conversations c ON m.conversation_id = c.id
                     WHERE c.user_id = %s
+                      AND (%s IS NULL OR m.conversation_id = %s)
                     ORDER BY m.created_at DESC
                     LIMIT %s
                     """,
-                    (self.web_user_id, limit),
+                    (self.web_user_id, self.conversation_id, self.conversation_id, limit),
                 )
                 rows = cur.fetchall()
             result = []
@@ -475,21 +479,29 @@ class WebMemoryAdapter:
         """FIXED: Now writes to web_messages (same table get_history reads from)."""
         try:
             with get_db_cursor(commit=True) as cur:
-                # Get or create the user's most recent conversation
-                cur.execute(
-                    "SELECT id FROM web_conversations WHERE user_id = %s ORDER BY updated_at DESC LIMIT 1",
-                    (self.web_user_id,),
-                )
-                row = cur.fetchone()
-                if row:
-                    conv_id = str(_row_value(row, "id", 0))
-                else:
+                conv_id = self.conversation_id
+                if conv_id:
                     cur.execute(
-                        "INSERT INTO web_conversations (user_id, title) VALUES (%s, 'Web Chat') RETURNING id",
+                        "SELECT id FROM web_conversations WHERE id = %s AND user_id = %s LIMIT 1",
+                        (conv_id, self.web_user_id),
+                    )
+                    if not cur.fetchone():
+                        conv_id = None
+                if not conv_id:
+                    cur.execute(
+                        "SELECT id FROM web_conversations WHERE user_id = %s ORDER BY updated_at DESC LIMIT 1",
                         (self.web_user_id,),
                     )
-                    conv_id = str(_row_value(cur.fetchone(), "id", 0))
-
+                    row = cur.fetchone()
+                    if row:
+                        conv_id = str(_row_value(row, "id", 0))
+                    else:
+                        cur.execute(
+                            "INSERT INTO web_conversations (user_id, title) VALUES (%s, 'New chat') RETURNING id",
+                            (self.web_user_id,),
+                        )
+                        conv_id = str(_row_value(cur.fetchone(), "id", 0))
+                self.conversation_id = conv_id
                 cur.execute(
                     "INSERT INTO web_messages (conversation_id, role, content) VALUES (%s, %s, %s)",
                     (conv_id, str(role)[:50], str(content)[:8000]),
@@ -594,16 +606,129 @@ def _require_current_user(request: Request) -> Any:
 # CONVERSATIONS
 # ============================================================
 
-def _get_or_create_conversation(user_id: str) -> str:
+def _get_or_create_conversation(user_id: str, conversation_id: Optional[str] = None) -> str:
+    """Return an existing conversation owned by the user, or create a new one."""
+    if conversation_id:
+        with get_db_cursor(commit=False) as cur:
+            cur.execute(
+                "SELECT id FROM web_conversations WHERE id = %s AND user_id = %s LIMIT 1",
+                (str(conversation_id), user_id),
+            )
+            row = cur.fetchone()
+        if row:
+            return str(_row_value(row, "id", 0))
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    # Prefer most recent; create if none
     with get_db_cursor(commit=False) as cur:
-        cur.execute("SELECT id FROM web_conversations WHERE user_id = %s ORDER BY updated_at DESC LIMIT 1", (user_id,))
+        cur.execute(
+            "SELECT id FROM web_conversations WHERE user_id = %s ORDER BY updated_at DESC LIMIT 1",
+            (user_id,),
+        )
         row = cur.fetchone()
     if row:
         return str(_row_value(row, "id", 0))
     with get_db_cursor(commit=True) as cur:
-        cur.execute("INSERT INTO web_conversations (user_id, title) VALUES (%s, %s) RETURNING id", (user_id, "Web Chat"))
+        cur.execute(
+            "INSERT INTO web_conversations (user_id, title) VALUES (%s, %s) RETURNING id",
+            (user_id, "New chat"),
+        )
         row = cur.fetchone()
     return str(_row_value(row, "id", 0))
+
+
+def _create_conversation(user_id: str, title: str = "New chat") -> dict:
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO web_conversations (user_id, title) VALUES (%s, %s) RETURNING id, title, created_at, updated_at",
+            (user_id, (title or "New chat")[:200]),
+        )
+        row = cur.fetchone()
+    return {
+        "id": str(_row_value(row, "id", 0)),
+        "title": _row_value(row, "title", 1) or "New chat",
+        "created_at": str(_row_value(row, "created_at", 2) or ""),
+        "updated_at": str(_row_value(row, "updated_at", 3) or ""),
+    }
+
+
+def _list_conversations(user_id: str, limit: int = 50) -> list:
+    limit = max(1, min(int(limit), 100))
+    with get_db_cursor(commit=False) as cur:
+        cur.execute(
+            """
+            SELECT c.id, c.title, c.created_at, c.updated_at,
+                   (SELECT m.content FROM web_messages m
+                    WHERE m.conversation_id = c.id
+                    ORDER BY m.created_at DESC LIMIT 1) AS last_message
+            FROM web_conversations c
+            WHERE c.user_id = %s
+            ORDER BY c.updated_at DESC
+            LIMIT %s
+            """,
+            (user_id, limit),
+        )
+        rows = cur.fetchall() or []
+    out = []
+    for row in rows:
+        title = _row_value(row, "title", 1) or "Chat"
+        last = _row_value(row, "last_message", 4)
+        out.append({
+            "id": str(_row_value(row, "id", 0)),
+            "title": str(title)[:120],
+            "preview": (str(last)[:120] if last else ""),
+            "created_at": str(_row_value(row, "created_at", 2) or ""),
+            "updated_at": str(_row_value(row, "updated_at", 3) or ""),
+        })
+    return out
+
+
+def _get_conversation_messages(user_id: str, conversation_id: str, limit: int = 100) -> list:
+    limit = max(1, min(int(limit), 200))
+    with get_db_cursor(commit=False) as cur:
+        cur.execute(
+            "SELECT id FROM web_conversations WHERE id = %s AND user_id = %s LIMIT 1",
+            (str(conversation_id), user_id),
+        )
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        cur.execute(
+            """
+            SELECT role, content, created_at
+            FROM web_messages
+            WHERE conversation_id = %s
+            ORDER BY created_at ASC
+            LIMIT %s
+            """,
+            (str(conversation_id), limit),
+        )
+        rows = cur.fetchall() or []
+    result = []
+    for i, row in enumerate(rows):
+        result.append({
+            "id": f"msg-{i}-{_row_value(row, 'created_at', 2)}",
+            "role": str(_row_value(row, "role", 0) or "assistant"),
+            "content": str(_row_value(row, "content", 1) or ""),
+            "created_at": str(_row_value(row, "created_at", 2) or ""),
+        })
+    return result
+
+
+def _maybe_set_conversation_title(conversation_id: str, message: str) -> None:
+    """Set title from first user message if still default."""
+    title = (message or "").strip().replace("\n", " ")[:60] or "New chat"
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                """
+                UPDATE web_conversations
+                SET title = %s, updated_at = NOW()
+                WHERE id = %s
+                  AND (title IS NULL OR title IN ('Web Chat', 'New chat', ''))
+                """,
+                (title, str(conversation_id)),
+            )
+    except Exception:
+        pass
 
 def _save_web_message(conversation_id: str, role: str, content: str) -> str:
     with get_db_cursor(commit=True) as cur:
@@ -663,9 +788,14 @@ def _enrich_with_market_data(message: str) -> str:
 # AI
 # ============================================================
 
-async def _run_web_ai(user_id: str, message: str, image_data: Optional[Tuple[str, bytes]] = None) -> str:
+async def _run_web_ai(
+    user_id: str,
+    message: str,
+    image_data: Optional[Tuple[str, bytes]] = None,
+    conversation_id: Optional[str] = None,
+) -> str:
     """Run the AI engine with optional image data."""
-    web_memory = WebMemoryAdapter(user_id)
+    web_memory = WebMemoryAdapter(user_id, conversation_id=conversation_id)
     request_engine = AIEngine(memory=web_memory)
     response_text = await asyncio.to_thread(
         request_engine.ask,
@@ -792,16 +922,61 @@ async def chat_endpoint(request: Request, chat: ChatRequest):
     enriched_message = _enrich_with_market_data(message)
 
     try:
-        conversation_id = await asyncio.to_thread(_get_or_create_conversation, user_id)
+        conv_id = (chat.conversation_id or "").strip() or None
+        conversation_id = await asyncio.to_thread(
+            _get_or_create_conversation, user_id, conv_id
+        )
+        await asyncio.to_thread(_maybe_set_conversation_title, conversation_id, message)
         # NOTE: Do NOT call _save_web_message here. The AIEngine's WebMemoryAdapter
         # now handles saving both user and assistant messages to web_messages.
-        response_text = await _run_web_ai(user_id, enriched_message, image_data)
+        response_text = await _run_web_ai(user_id, enriched_message, image_data, conversation_id)
         return {"status": "success", "reply": response_text, "conversation_id": conversation_id}
     except HTTPException:
         raise
     except Exception as exc:
         logger.error("Web chat failed: %s", type(exc).__name__)
         raise HTTPException(status_code=500, detail="AI processing failed")
+
+
+
+@app.get("/api/conversations")
+async def list_conversations(request: Request):
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    user_id = str(_row_value(user_row, "id", 0))
+    try:
+        items = await asyncio.to_thread(_list_conversations, user_id)
+        return {"status": "success", "conversations": items}
+    except Exception as exc:
+        logger.error("list conversations failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Could not load conversations")
+
+
+@app.post("/api/conversations")
+async def create_conversation(request: Request):
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    user_id = str(_row_value(user_row, "id", 0))
+    try:
+        conv = await asyncio.to_thread(_create_conversation, user_id, "New chat")
+        return {"status": "success", "conversation": conv}
+    except Exception as exc:
+        logger.error("create conversation failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Could not create conversation")
+
+
+@app.get("/api/conversations/{conversation_id}/messages")
+async def get_conversation_messages(conversation_id: str, request: Request):
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    user_id = str(_row_value(user_row, "id", 0))
+    try:
+        messages = await asyncio.to_thread(
+            _get_conversation_messages, user_id, conversation_id
+        )
+        return {"status": "success", "conversation_id": conversation_id, "messages": messages}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("get messages failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Could not load messages")
 
 
 # ============================================================
