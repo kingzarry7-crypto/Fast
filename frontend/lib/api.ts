@@ -243,6 +243,38 @@ export async function healthCheck(): Promise<{
   return request("/health", { method: "GET" });
 }
 
+export async function createCheckoutSession(
+  plan: string,
+  signal?: AbortSignal
+): Promise<{ status: string; checkout_url: string; session_id?: string }> {
+  return request("/api/billing/create-checkout-session", {
+    method: "POST",
+    body: { plan },
+    signal,
+  });
+}
+
+export interface AdminStats {
+  status: string;
+  active_subscribers: number;
+  payments_count: number;
+  revenue_cents: number;
+  revenue_usd: number;
+  recent_payments: Array<{
+    email?: string;
+    plan?: string;
+    amount_cents?: number;
+    status?: string;
+    created_at?: string;
+  }>;
+}
+
+export async function getAdminStats(
+  signal?: AbortSignal
+): Promise<AdminStats> {
+  return request("/api/admin/stats", { method: "GET", signal });
+}
+
 export const api = {
   buildUrl,
   getBaseUrl,
@@ -253,6 +285,8 @@ export const api = {
   logout,
   sendChatMessage,
   healthCheck,
+  createCheckoutSession,
+  getAdminStats,
 };
 
 // Re-export types so `import type { AuthUser } from "@/lib/api"` also works
