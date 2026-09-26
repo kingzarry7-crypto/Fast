@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AICore from "@/components/AICore";
+import ChatMessage, { ThinkingIndicator } from "@/components/chat/ChatMessage";
 import { useChat } from "@/hooks/useChat";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
@@ -45,6 +46,9 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [capability, setCapability] = useState("AI");
   const [coreState, setCoreState] = useState<CoreState>("idle");
+  const [thinkingPhase, setThinkingPhase] = useState<
+    "reading" | "thinking" | "responding"
+  >("thinking");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [attached, setAttached] = useState<AttachedImage | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
@@ -62,7 +66,18 @@ export default function ChatPage() {
   }, [user?.id]);
 
   useEffect(() => {
-    setCoreState(sending ? "thinking" : "idle");
+    if (!sending) {
+      setCoreState("idle");
+      return;
+    }
+    setCoreState("thinking");
+    setThinkingPhase("reading");
+    const t1 = setTimeout(() => setThinkingPhase("thinking"), 700);
+    const t2 = setTimeout(() => setThinkingPhase("responding"), 2200);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, [sending]);
 
   useEffect(() => {
@@ -155,51 +170,54 @@ export default function ChatPage() {
 
   return (
     <ProtectedRoute>
-      <div className="flex flex-col h-screen">
-        <div className="border-b border-cyan-500/10 px-6 py-3 flex items-center justify-between bg-[#020914]/60 backdrop-blur-xl">
+      <div className="flex flex-col h-screen bg-[#0a0a0b] text-zinc-100">
+        <div className="border-b border-zinc-800/80 px-6 py-3 flex items-center justify-between bg-[#0a0a0b]/90 backdrop-blur-xl">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen((v) => !v)}
-              className="xl:hidden w-8 h-8 flex items-center justify-center rounded-md border border-cyan-500/30 text-cyan-300 text-xs"
+              className="xl:hidden w-8 h-8 flex items-center justify-center rounded-md border border-zinc-700 text-zinc-300 text-xs"
               aria-label="Toggle modules"
             >
               ≡
             </button>
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/80">
-              AI CORE {coreState.toUpperCase()}
+            <span className="text-[11px] tracking-wide text-zinc-400">
+              {coreState === "thinking"
+                ? thinkingPhase === "reading"
+                  ? "Reading…"
+                  : thinkingPhase === "responding"
+                    ? "Responding…"
+                    : "Thinking…"
+                : "Ready"}
             </span>
           </div>
-          <div className="hidden sm:flex items-center gap-4 font-mono-tech text-[9px] tracking-widest text-cyan-400/40">
-            <span>NEON MEMORY</span>
+          <div className="hidden sm:flex items-center gap-4 text-[11px] text-zinc-500">
             {user?.email && <span>{user.email}</span>}
           </div>
         </div>
 
         {!isVip && membership && (
-          <div className="px-6 py-2 border-b border-cyan-500/10 bg-cyan-950/30 flex flex-wrap items-center justify-between gap-2">
-            <p className="font-mono-tech text-[10px] tracking-wider text-cyan-300/80">
-              FREE · {membership.freeMessagesRemaining}/
-              {membership.freeDailyLimit} messages left today · Signals require
-              VIP
+          <div className="px-6 py-2 border-b border-zinc-800/80 bg-zinc-900/40 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[11px] text-zinc-400">
+              Free · {membership.freeMessagesRemaining}/
+              {membership.freeDailyLimit} messages left today · Signals need VIP
             </p>
             <Link
               href="/pricing"
-              className="font-mono-tech text-[10px] tracking-widest text-cyan-400 hover:text-cyan-200"
+              className="text-[11px] text-cyan-400 hover:text-cyan-300"
             >
-              UPGRADE →
+              Upgrade →
             </Link>
           </div>
         )}
 
         {isVip && (
-          <div className="px-6 py-2 border-b border-cyan-500/10 bg-cyan-500/5">
-            <p className="font-mono-tech text-[10px] tracking-wider text-cyan-300/80">
-              VIP ACTIVE
+          <div className="px-6 py-2 border-b border-zinc-800/80 bg-zinc-900/20">
+            <p className="text-[11px] text-zinc-400">
+              VIP active
               {membership?.plan || user?.plan
-                ? ` · ${String(membership?.plan || user?.plan).toUpperCase()}`
-                : ""}{" "}
-              · Unlimited chat & signals
+                ? ` · ${String(membership?.plan || user?.plan)}`
+                : ""}
             </p>
           </div>
         )}
@@ -208,10 +226,10 @@ export default function ChatPage() {
           <div
             className={`${
               sidebarOpen ? "flex" : "hidden"
-            } xl:flex w-52 flex-col border-r border-cyan-500/10 p-3 overflow-y-auto kz-scroll absolute xl:relative inset-y-0 left-0 z-20 bg-[#020914] xl:bg-transparent`}
+            } xl:flex w-52 flex-col border-r border-zinc-800/80 p-3 overflow-y-auto absolute xl:relative inset-y-0 left-0 z-20 bg-[#0a0a0b] xl:bg-transparent`}
           >
-            <p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/30 px-2 mb-2">
-              AI MODULES
+            <p className="text-[10px] tracking-widest text-zinc-600 px-2 mb-2 uppercase">
+              Modules
             </p>
             {capabilities.map((cap) => (
               <button
@@ -220,87 +238,50 @@ export default function ChatPage() {
                   setCapability(cap.name);
                   setSidebarOpen(false);
                 }}
-                className={`text-left px-3 py-2 rounded-md mb-0.5 transition-all ${
+                className={`text-left px-3 py-2 rounded-lg mb-0.5 transition-all text-sm ${
                   capability === cap.name
-                    ? "bg-cyan-500/15 border border-cyan-500/40 text-white"
-                    : "border border-transparent text-cyan-400/50 hover:text-cyan-200 hover:bg-cyan-950/30"
+                    ? "bg-zinc-800 text-white"
+                    : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900"
                 }`}
               >
-                <p className="font-mono-tech text-[10px] tracking-widest">
-                  {cap.name}
-                </p>
-                <p className="font-mono-tech text-[9px] tracking-wider text-cyan-400/30">
-                  {cap.desc}
-                </p>
+                <p className="font-medium">{cap.name}</p>
+                <p className="text-[10px] text-zinc-600">{cap.desc}</p>
               </button>
             ))}
           </div>
 
           <div className="flex-1 flex flex-col min-w-0">
-            <div className="flex-1 overflow-y-auto kz-scroll px-6 py-6 space-y-5">
+            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 space-y-4">
               {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-full text-center">
                   <AICore state="idle" size={180} />
-                  <p className="mt-12 font-mono-tech text-[10px] tracking-[0.4em] text-cyan-400/40">
-                    AWAITING INPUT
+                  <p className="mt-10 text-sm text-zinc-500">
+                    How can King Zarry AI help you today?
                   </p>
                 </div>
               )}
 
               {messages.map((m) => (
-                <div
+                <ChatMessage
                   key={m.id}
-                  className={`flex ${
-                    m.role === "user" ? "justify-end" : "justify-start"
-                  }`}
-                >
-                  <div
-                    className={`max-w-[80%] rounded-xl px-4 py-3 ${
-                      m.role === "user"
-                        ? "bg-cyan-500/15 border border-cyan-500/30"
-                        : m.id.startsWith("error")
-                        ? "bg-red-500/10 border border-red-500/30"
-                        : "kz-glass"
-                    }`}
-                  >
-                    {m.status && (
-                      <p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/40 mb-1.5">
-                        {m.status}
-                      </p>
-                    )}
-                    <p className="text-sm text-white/90 whitespace-pre-wrap leading-relaxed">
-                      {m.text}
-                    </p>
-                    <div className="flex items-center justify-between mt-2 gap-4">
-                      {m.capability && (
-                        <span className="font-mono-tech text-[9px] tracking-widest text-cyan-400/30">
-                          {m.capability}
-                        </span>
-                      )}
-                      <span className="font-mono-tech text-[9px] tracking-widest text-cyan-400/30">
-                        {m.timestamp}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                  id={m.id}
+                  role={m.role}
+                  content={m.text}
+                  timestamp={m.timestamp}
+                  status={m.status}
+                  isError={m.id.startsWith("error")}
+                  imagePreviewUrl={m.imagePreviewUrl}
+                />
               ))}
 
-              {sending && (
-                <div className="flex justify-start">
-                  <div className="kz-glass rounded-xl px-5 py-4 flex items-center gap-2">
-                    <span className="kz-typing-dot w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                    <span className="kz-typing-dot w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                    <span className="kz-typing-dot w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                  </div>
-                </div>
-              )}
+              {sending && <ThinkingIndicator phase={thinkingPhase} />}
 
               <div ref={endRef} />
             </div>
 
             {error && (
               <div className="px-6 pb-2">
-                <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2 text-xs text-red-300 font-mono-tech">
+                <div className="bg-red-950/40 border border-red-500/30 rounded-lg px-4 py-2 text-xs text-red-300">
                   {error}
                 </div>
               </div>
@@ -308,7 +289,7 @@ export default function ChatPage() {
 
             {attachError && (
               <div className="px-6 pb-2">
-                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-2 text-xs text-amber-300 font-mono-tech">
+                <div className="bg-amber-950/30 border border-amber-500/30 rounded-lg px-4 py-2 text-xs text-amber-200">
                   {attachError}
                 </div>
               </div>
@@ -316,25 +297,23 @@ export default function ChatPage() {
 
             {attached && (
               <div className="px-6 pb-2">
-                <div className="inline-flex items-center gap-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg px-3 py-2">
+                <div className="inline-flex items-center gap-3 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={attached.previewUrl}
                     alt="attachment preview"
-                    className="w-12 h-12 object-cover rounded-md border border-cyan-500/20"
+                    className="w-12 h-12 object-cover rounded-md"
                   />
                   <div className="flex flex-col min-w-0">
-                    <span className="font-mono-tech text-[10px] tracking-widest text-cyan-200 truncate max-w-[200px]">
+                    <span className="text-xs text-zinc-300 truncate max-w-[200px]">
                       {attached.name}
                     </span>
-                    <span className="font-mono-tech text-[9px] tracking-widest text-cyan-400/40">
-                      {attached.mime}
-                    </span>
+                    <span className="text-[10px] text-zinc-600">{attached.mime}</span>
                   </div>
                   <button
                     type="button"
                     onClick={clearAttachment}
-                    className="ml-2 w-6 h-6 flex items-center justify-center rounded-md border border-cyan-500/30 text-cyan-300 hover:bg-cyan-950/40 text-xs"
+                    className="ml-2 w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-800 text-xs"
                     aria-label="Remove attachment"
                   >
                     ✕
@@ -345,9 +324,9 @@ export default function ChatPage() {
 
             <form
               onSubmit={handleSubmit}
-              className="border-t border-cyan-500/10 p-4 bg-[#020914]/60 backdrop-blur-xl"
+              className="border-t border-zinc-800/80 p-4 bg-[#0a0a0b]"
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-end gap-2 max-w-3xl mx-auto">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -359,7 +338,7 @@ export default function ChatPage() {
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={sending}
-                  className="w-11 h-11 flex items-center justify-center rounded-lg border border-cyan-500/25 text-cyan-300 hover:border-cyan-400 hover:bg-cyan-950/40 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="w-10 h-10 flex items-center justify-center rounded-xl border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 disabled:opacity-30"
                   aria-label="Attach image"
                   title="Attach image"
                 >
@@ -382,20 +361,20 @@ export default function ChatPage() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onPaste={handlePaste}
-                  placeholder={`Message KING ZARRY AI [${capability}]...`}
+                  placeholder="Message King Zarry AI…"
                   disabled={sending}
-                  className="flex-1 bg-black/40 border border-cyan-500/25 focus:border-cyan-400 rounded-lg px-4 py-3 text-sm text-white placeholder-cyan-400/30 outline-none transition-colors disabled:opacity-50 font-mono-tech tracking-wider"
+                  className="flex-1 bg-zinc-900 border border-zinc-700 focus:border-zinc-500 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none disabled:opacity-50"
                 />
                 <button
                   type="submit"
                   disabled={sending || (!input.trim() && !attached)}
-                  className="px-5 py-3 rounded-lg bg-cyan-400 text-black font-display text-xs font-bold tracking-[0.2em] hover:bg-cyan-300 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="px-4 py-3 rounded-xl bg-zinc-100 text-zinc-900 text-sm font-semibold hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed"
                 >
-                  SEND
+                  Send
                 </button>
               </div>
-              <p className="mt-2 font-mono-tech text-[9px] tracking-widest text-cyan-400/30">
-                Tip: paste an image (Ctrl+V) or click 📎 to attach. Max 8 MB.
+              <p className="mt-2 text-center text-[10px] text-zinc-600">
+                Paste an image or click 📎 · Max 8 MB
               </p>
             </form>
           </div>
