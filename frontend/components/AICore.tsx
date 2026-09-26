@@ -13,8 +13,8 @@ const stateColors: Record<CoreState, string> = {
 };
 
 const stateLabels: Record<CoreState, string> = {
-  idle: "READY",
-  thinking: "THINKING",
+  idle: "SYSTEM ACTIVE",
+  thinking: "PROCESSING",
   speaking: "RESPONDING",
   listening: "LISTENING",
   error: "ERROR",
@@ -47,14 +47,13 @@ function playBootChime() {
       osc.stop(ctx.currentTime + start + duration);
     };
 
-    // Three-note ascending chime
     play(440, 0, 0.4);
     play(660, 0.18, 0.4);
     play(880, 0.36, 0.6);
 
     setTimeout(() => ctx.close(), 1500);
   } catch {
-    // Audio blocked by browser until first interaction
+    // Audio blocked until first interaction
   }
 }
 
@@ -77,6 +76,7 @@ export default function AICore({
 
   const color = stateColors[state];
   const active = state !== "idle";
+  const faceSize = size * 0.72;
 
   return (
     <div
@@ -86,42 +86,45 @@ export default function AICore({
       {active && (
         <>
           <span
-            className="kz-core-ring absolute inset-0 rounded-full"
+            className="kz-core-ring absolute inset-0 rounded-full pointer-events-none"
             style={{ border: `1px solid ${color}` }}
           />
           <span
-            className="kz-core-ring absolute inset-0 rounded-full"
+            className="kz-core-ring absolute inset-0 rounded-full pointer-events-none"
             style={{ border: `1px solid ${color}`, animationDelay: "0.8s" }}
           />
         </>
       )}
 
       <span
-        className="kz-core-rotate absolute rounded-full"
-        style={{ inset: size * 0.02, border: `1px dashed ${color}33` }}
-      />
-
-      <span
-        className="kz-core-rotate-reverse absolute rounded-full"
+        className="kz-core-rotate absolute rounded-full pointer-events-none"
         style={{
-          inset: size * 0.1,
-          border: `1px solid ${color}55`,
-          boxShadow: `0 0 24px ${color}22, inset 0 0 24px ${color}11`,
+          inset: size * 0.02,
+          border: `1px dashed ${color}44`,
         }}
       />
 
       <span
-        className="kz-orbit absolute rounded-full"
+        className="kz-core-rotate-reverse absolute rounded-full pointer-events-none"
         style={{
           inset: size * 0.06,
-          animationDuration: active ? "3s" : "12s",
+          border: `2px solid ${color}88`,
+          boxShadow: `0 0 28px ${color}33, inset 0 0 24px ${color}18`,
+        }}
+      />
+
+      <span
+        className="kz-orbit absolute rounded-full pointer-events-none"
+        style={{
+          inset: size * 0.04,
+          animationDuration: active ? "3s" : "14s",
         }}
       >
         <span
           className="absolute rounded-full"
           style={{
-            width: size * 0.028,
-            height: size * 0.028,
+            width: size * 0.025,
+            height: size * 0.025,
             background: color,
             boxShadow: `0 0 12px ${color}, 0 0 24px ${color}`,
             top: 0,
@@ -132,50 +135,139 @@ export default function AICore({
       </span>
 
       <div
-        className="kz-core-pulse absolute rounded-full"
-        style={{
-          inset: size * 0.2,
-          background: `radial-gradient(circle, ${color}44 0%, ${color}11 40%, transparent 70%)`,
-          boxShadow: `0 0 60px ${color}55, inset 0 0 40px ${color}33`,
-        }}
-      />
-
-      <div
-        className="absolute rounded-full"
-        style={{
-          inset: size * 0.28,
-          border: `1px solid ${color}77`,
-          opacity: 0.6,
-        }}
-      />
-
-      <div
-        className="relative rounded-full"
-        style={{
-          width: size * 0.3,
-          height: size * 0.3,
-          background: `radial-gradient(circle at 35% 35%, #ffffff 0%, ${color} 40%, ${color}88 100%)`,
-          boxShadow: `0 0 40px ${color}, 0 0 80px ${color}88, inset 0 0 20px #ffffff44`,
-        }}
-      />
-
-      <div
-        className="absolute rounded-full"
-        style={{
-          width: size * 0.06,
-          height: size * 0.06,
-          background: "#ffffff",
-          boxShadow: `0 0 20px #ffffff, 0 0 40px ${color}`,
-        }}
-      />
-
-      <div className="absolute -bottom-8 left-1/2 -translate-x-1/2">
+        className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-20"
+        style={{ top: size * 0.04 }}
+      >
         <span
-          className="font-mono-tech text-[10px] tracking-[0.4em] uppercase"
-          style={{ color, textShadow: `0 0 10px ${color}88` }}
+          className="font-mono-tech font-bold tracking-[0.25em] uppercase whitespace-nowrap"
+          style={{
+            fontSize: Math.max(8, size * 0.045),
+            color,
+            textShadow: `0 0 12px ${color}aa`,
+          }}
         >
-          {stateLabels[state]}
+          KING ZARRY AI CORE
         </span>
+      </div>
+
+      <div
+        className="relative z-10 overflow-hidden rounded-full"
+        style={{
+          width: faceSize,
+          height: faceSize,
+          boxShadow: `0 0 40px ${color}55, 0 0 80px ${color}33`,
+          border: `1px solid ${color}66`,
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/images/king-zarry-core.jpg"
+          alt="King Zarry AI Core"
+          width={faceSize}
+          height={faceSize}
+          className="h-full w-full object-cover object-center"
+          style={{
+            filter:
+              state === "error"
+                ? "grayscale(0.3) saturate(1.1) brightness(0.9)"
+                : active
+                  ? "saturate(1.15) brightness(1.05)"
+                  : "saturate(1.05)",
+          }}
+          draggable={false}
+        />
+
+        <div
+          className="pointer-events-none absolute inset-0 rounded-full"
+          style={{
+            background: `radial-gradient(circle at 50% 40%, transparent 45%, ${color}22 75%, #020914cc 100%)`,
+            mixBlendMode: "screen",
+            opacity: 0.55,
+          }}
+        />
+
+        <div
+          className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-sm"
+          style={{
+            width: faceSize * 0.55,
+            height: faceSize * 0.7,
+            border: `1px solid ${color}55`,
+            boxShadow: `inset 0 0 20px ${color}22`,
+          }}
+        />
+      </div>
+
+      <div
+        className="absolute z-20 pointer-events-none"
+        style={{
+          left: 0,
+          bottom: size * 0.02,
+          maxWidth: size * 0.48,
+        }}
+      >
+        <div
+          className="rounded border px-2 py-1 backdrop-blur-sm"
+          style={{
+            borderColor: `${color}55`,
+            background: "rgba(2, 9, 20, 0.75)",
+          }}
+        >
+          <p
+            className="font-mono-tech tracking-widest uppercase leading-tight"
+            style={{
+              fontSize: Math.max(7, size * 0.032),
+              color: `${color}99`,
+            }}
+          >
+            HUMAN INTELLIGENCE CORE
+          </p>
+          <p
+            className="font-mono-tech font-bold tracking-wider uppercase leading-tight"
+            style={{
+              fontSize: Math.max(8, size * 0.038),
+              color,
+              textShadow: `0 0 8px ${color}88`,
+            }}
+          >
+            {stateLabels[state]}
+          </p>
+        </div>
+      </div>
+
+      <div
+        className="absolute z-20 pointer-events-none"
+        style={{
+          right: 0,
+          bottom: size * 0.02,
+          maxWidth: size * 0.42,
+        }}
+      >
+        <div
+          className="rounded border px-2 py-1 backdrop-blur-sm text-right"
+          style={{
+            borderColor: `${color}44`,
+            background: "rgba(2, 9, 20, 0.75)",
+          }}
+        >
+          <p
+            className="font-mono-tech tracking-widest uppercase leading-tight"
+            style={{
+              fontSize: Math.max(7, size * 0.032),
+              color: `${color}99`,
+            }}
+          >
+            NEURAL NETWORK
+          </p>
+          <p
+            className="font-mono-tech tracking-wider uppercase leading-tight"
+            style={{
+              fontSize: Math.max(7, size * 0.032),
+              color: active ? color : `${color}aa`,
+            }}
+          >
+            {active ? "ONLINE" : "STANDBY"}
+          </p>
+        </div>
       </div>
     </div>
   );
