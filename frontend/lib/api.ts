@@ -318,6 +318,48 @@ export async function getConversationMessages(
   return data?.messages || [];
 }
 
+export async function synthesizeSpeech(
+  text: string,
+  style: "slow" | "normal" | "human" | "fast" = "human",
+  signal?: AbortSignal
+): Promise<Blob> {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    throw new ApiError({ status: 400, message: "Text required" });
+  }
+  const url = buildUrl("/api/tts");
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Accept: "audio/mpeg",
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({ text: trimmed.slice(0, 2000), style }),
+      signal,
+    });
+  } catch (error: unknown) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new ApiError({
+      status: 0,
+      message: error instanceof Error ? error.message : "Network error",
+    });
+  }
+  if (!response.ok) {
+    let message = `TTS failed (${response.status})`;
+    try {
+      const j = await response.json();
+      if (j?.detail) message = String(j.detail);
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError({ status: response.status, message });
+  }
+  return response.blob();
+}
+
 export const api = {
   buildUrl,
   getBaseUrl,
@@ -333,6 +375,7 @@ export const api = {
   listConversations,
   createConversation,
   getConversationMessages,
+  synthesizeSpeech,
 };
 
 export type {
