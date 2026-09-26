@@ -5,6 +5,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AICore from "@/components/AICore";
 import ChatMessage, { ThinkingIndicator } from "@/components/chat/ChatMessage";
 import { useChat } from "@/hooks/useChat";
+import { useVoice, type VoiceStyle } from "@/hooks/useVoice";
 import { api, type ConversationItem } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
@@ -35,7 +36,7 @@ const capabilities = [
   { name: "NEWS", desc: "External Information" },
 ];
 
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8 MB
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 export default function ChatPage() {
   const { user } = useAuth();
@@ -49,6 +50,29 @@ export default function ChatPage() {
     conversationId
   );
   const [membership, setMembership] = useState<MembershipSnapshot | null>(null);
+  const [input, setInput] = useState("");
+  const [capability, setCapability] = useState("AI");
+  const [coreState, setCoreState] = useState<CoreState>("idle");
+  const [thinkingPhase, setThinkingPhase] = useState<
+    "reading" | "thinking" | "responding"
+  >("thinking");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [attached, setAttached] = useState<AttachedImage | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const [autoSpeak, setAutoSpeak] = useState(false);
+  const endRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const {
+    speak,
+    stop: stopSpeaking,
+    speaking: isSpeaking,
+    listening,
+    listen,
+    stopListening,
+    supported: voiceSupported,
+    style: voiceStyle,
+    setVoiceStyle,
+  } = useVoice();
 
   const refreshConversations = async () => {
     try {
@@ -73,6 +97,38 @@ export default function ChatPage() {
   useEffect(() => {
     if (user?.id) refreshConversations();
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!sending) {
+      setCoreState("idle");
+      return;
+    }
+    setCoreState("thinking");
+    setThinkingPhase("reading");
+    const t1 = setTimeout(() => setThinkingPhase("thinking"), 700);
+    const t2 = setTimeout(() => setThinkingPhase("responding"), 2200);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [sending]);
+
+  useEffect(() => {
+    if (!autoSpeak || sending || !messages.length) return;
+    const last = messages[messages.length - 1];
+    if (
+      last?.role === "assistant" &&
+      last.text &&
+      !String(last.id || "").startsWith("error")
+    ) {
+      speak(last.text);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, sending, autoSpeak]);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, sending]);
 
   const handleNewChat = async () => {
     clear();
@@ -119,35 +175,6 @@ export default function ChatPage() {
       setHistoryLoading(false);
     }
   };
-
-  const [input, setInput] = useState("");
-  const [capability, setCapability] = useState("AI");
-  const [coreState, setCoreState] = useState<CoreState>("idle");
-  const [thinkingPhase, setThinkingPhase] = useState<"reading" | "thinking" | "responding">("thinking");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [attached, setAttached] = useState<AttachedImage | null>(null);
-  const [attachError, setAttachError] = useState<string | null>(null);
-  const endRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!sending) {
-      setCoreState("idle");
-      return;
-    }
-    setCoreState("thinking");
-    setThinkingPhase("reading");
-    const t1 = setTimeout(() => setThinkingPhase("thinking"), 700);
-    const t2 = setTimeout(() => setThinkingPhase("responding"), 2200);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, [sending]);
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, sending]);
 
   const handleFile = async (file: File) => {
     setAttachError(null);
@@ -215,14 +242,19 @@ export default function ChatPage() {
     if ((!text && !hasImage) || sending) return;
 
     const payloadImage = attached
-      ? { base64: attached.base64, mime: attached.mime }
+      ? {
+          base64: attached.base64,
+          mime: attached.mime,
+          previewUrl: attached.previewUrl,
+          name: attached.name,
+        }
       : undefined;
 
     setInput("");
     clearAttachment();
 
-    // Send image along with the message; text defaults to a sensible prompt if empty
-    const effectiveText = text || (hasImage ? "What do you see in this image?" : "");
+    const effectiveText =
+      text || (hasImage ? "What do you see in this image?" : "");
     const res = await send(effectiveText, capability, payloadImage);
     if (res && (res as { conversation_id?: string }).conversation_id) {
       const cid = (res as { conversation_id: string }).conversation_id;
@@ -231,14 +263,16 @@ export default function ChatPage() {
     }
   };
 
+  const isVip = Boolean(user?.is_subscribed || membership?.isVip);
+
   return (
     <ProtectedRoute>
       <div className="flex flex-col h-screen">
-        {membership && !(membership.isVip || user?.is_subscribed) && (
+        {!isVip && membership && (
           <div className="border-b border-amber-500/20 bg-amber-950/30 px-4 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <p className="font-mono-tech text-[10px] tracking-wider text-amber-200/90">
-              FREE TIER · Normal chat allowed · Signals / plans / alerts require VIP ·{" "}
-              {membership.freeMessagesRemaining}/{membership.freeDailyLimit} messages left today
+              FREE TIER · Normal chat allowed · Signals require VIP ·{" "}
+              {membership.freeMessagesRemaining}/{membership.freeDailyLimit} left today
             </p>
             <Link
               href="/pricing"
@@ -248,21 +282,24 @@ export default function ChatPage() {
             </Link>
           </div>
         )}
-        {(membership?.isVip || user?.is_subscribed) && (
+        {isVip && (
           <div className="border-b border-cyan-500/20 bg-cyan-950/20 px-4 py-2">
             <p className="font-mono-tech text-[10px] tracking-wider text-cyan-300/90">
-              VIP ACTIVE{membership.plan ? ` · ${membership.plan.toUpperCase()}` : ""} · Unlimited chat & signals
+              VIP ACTIVE
+              {membership?.plan || user?.plan
+                ? ` · ${String(membership?.plan || user?.plan).toUpperCase()}`
+                : ""}{" "}
+              · Unlimited chat & signals
             </p>
           </div>
         )}
-        {/* Top bar */}
+
         <div className="border-b border-cyan-500/10 px-6 py-3 flex items-center justify-between bg-[#020914]/60 backdrop-blur-xl">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setHistoryOpen((v) => !v)}
               className="md:hidden w-8 h-8 flex items-center justify-center rounded-md border border-cyan-500/30 text-cyan-300 text-xs"
               aria-label="Toggle history"
-              title="Chat history"
             >
               ☰
             </button>
@@ -292,7 +329,6 @@ export default function ChatPage() {
         </div>
 
         <div className="flex flex-1 overflow-hidden">
-          {/* Chat history */}
           <div
             className={`${
               historyOpen ? "flex" : "hidden"
@@ -307,22 +343,13 @@ export default function ChatPage() {
               >
                 + NEW CHAT
               </button>
-              <button
-                type="button"
-                onClick={() => setHistoryOpen(false)}
-                className="md:hidden w-full font-mono-tech text-[10px] text-cyan-400/50"
-              >
-                CLOSE
-              </button>
             </div>
             <div className="flex-1 overflow-y-auto kz-scroll p-2 space-y-0.5">
               <p className="px-2 py-1 font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/30">
                 HISTORY
               </p>
               {conversations.length === 0 && (
-                <p className="px-2 py-3 text-xs text-cyan-400/40">
-                  No past chats yet.
-                </p>
+                <p className="px-2 py-3 text-xs text-cyan-400/40">No past chats yet.</p>
               )}
               {conversations.map((c) => (
                 <button
@@ -335,20 +362,15 @@ export default function ChatPage() {
                       : "border border-transparent text-cyan-400/60 hover:bg-cyan-950/40 hover:text-cyan-200"
                   }`}
                 >
-                  <p className="font-mono-tech text-[11px] tracking-wide truncate">
-                    {c.title || "Chat"}
-                  </p>
+                  <p className="font-mono-tech text-[11px] tracking-wide truncate">{c.title || "Chat"}</p>
                   {c.preview && (
-                    <p className="text-[10px] text-cyan-400/35 truncate mt-0.5">
-                      {c.preview}
-                    </p>
+                    <p className="text-[10px] text-cyan-400/35 truncate mt-0.5">{c.preview}</p>
                   )}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Module sidebar */}
           <div
             className={`${
               sidebarOpen ? "flex" : "hidden"
@@ -370,21 +392,15 @@ export default function ChatPage() {
                     : "border border-transparent text-cyan-400/50 hover:text-cyan-200 hover:bg-cyan-950/30"
                 }`}
               >
-                <p className="font-mono-tech text-[10px] tracking-widest">
-                  {cap.name}
-                </p>
-                <p className="font-mono-tech text-[9px] tracking-wider text-cyan-400/30">
-                  {cap.desc}
-                </p>
+                <p className="font-mono-tech text-[10px] tracking-widest">{cap.name}</p>
+                <p className="font-mono-tech text-[9px] tracking-wider text-cyan-400/30">{cap.desc}</p>
               </button>
             ))}
           </div>
 
-          {/* Chat area */}
           <div className="flex-1 flex flex-col min-w-0">
-            {/* Messages */}
             <div className="flex-1 overflow-y-auto kz-scroll px-6 py-6 space-y-5">
-              {messages.length === 0 && (
+              {messages.length === 0 && !historyLoading && (
                 <div className="flex flex-col items-center justify-center h-full text-center">
                   <AICore state="idle" size={180} />
                   <p className="mt-12 font-mono-tech text-[10px] tracking-[0.4em] text-cyan-400/40">
@@ -401,8 +417,13 @@ export default function ChatPage() {
                   content={m.text}
                   timestamp={m.timestamp}
                   status={m.status}
-                  isError={m.id.startsWith("error")}
+                  isError={String(m.id || "").startsWith("error")}
                   imagePreviewUrl={m.imagePreviewUrl}
+                  onSpeak={
+                    m.role === "assistant"
+                      ? () => (isSpeaking ? stopSpeaking() : speak(m.text || ""))
+                      : undefined
+                  }
                 />
               ))}
 
@@ -410,7 +431,6 @@ export default function ChatPage() {
                 <p className="font-mono-tech text-xs text-cyan-400/50">Loading chat…</p>
               )}
               {sending && <ThinkingIndicator phase={thinkingPhase} />}
-
               <div ref={endRef} />
             </div>
 
@@ -430,7 +450,6 @@ export default function ChatPage() {
               </div>
             )}
 
-            {/* Attachment preview */}
             {attached && (
               <div className="px-6 pb-2">
                 <div className="inline-flex items-center gap-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg px-3 py-2">
@@ -444,14 +463,11 @@ export default function ChatPage() {
                     <span className="font-mono-tech text-[10px] tracking-widest text-cyan-200 truncate max-w-[200px]">
                       {attached.name}
                     </span>
-                    <span className="font-mono-tech text-[9px] tracking-widest text-cyan-400/40">
-                      {attached.mime}
-                    </span>
                   </div>
                   <button
                     type="button"
                     onClick={clearAttachment}
-                    className="ml-2 w-6 h-6 flex items-center justify-center rounded-md border border-cyan-500/30 text-cyan-300 hover:bg-cyan-950/40 text-xs"
+                    className="ml-2 w-6 h-6 flex items-center justify-center rounded-md border border-cyan-500/30 text-cyan-300 text-xs"
                     aria-label="Remove attachment"
                   >
                     ✕
@@ -460,13 +476,53 @@ export default function ChatPage() {
               </div>
             )}
 
-            {/* Input */}
+            {voiceSupported && (
+              <div className="px-4 pb-2 flex flex-wrap items-center gap-2">
+                <span className="text-[10px] tracking-widest text-cyan-400/50 font-mono-tech uppercase">
+                  Voice
+                </span>
+                {(["slow", "normal", "human", "fast"] as VoiceStyle[]).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setVoiceStyle(s)}
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-mono-tech tracking-wider border ${
+                      voiceStyle === s
+                        ? "border-cyan-400 bg-cyan-500/15 text-cyan-200"
+                        : "border-cyan-500/20 text-cyan-400/50"
+                    }`}
+                  >
+                    {s.toUpperCase()}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setAutoSpeak((v) => !v)}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-mono-tech tracking-wider border ${
+                    autoSpeak
+                      ? "border-emerald-400/50 text-emerald-300"
+                      : "border-cyan-500/20 text-cyan-400/50"
+                  }`}
+                >
+                  {autoSpeak ? "AUTO ON" : "AUTO OFF"}
+                </button>
+                {isSpeaking && (
+                  <button
+                    type="button"
+                    onClick={stopSpeaking}
+                    className="px-2.5 py-1 rounded-md text-[10px] font-mono-tech border border-red-500/40 text-red-300"
+                  >
+                    STOP
+                  </button>
+                )}
+              </div>
+            )}
+
             <form
               onSubmit={handleSubmit}
               className="border-t border-cyan-500/10 p-4 bg-[#020914]/60 backdrop-blur-xl"
             >
               <div className="flex items-center gap-2">
-                {/* Hidden file input */}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -478,25 +534,38 @@ export default function ChatPage() {
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={sending}
-                  className="w-11 h-11 flex items-center justify-center rounded-lg border border-cyan-500/25 text-cyan-300 hover:border-cyan-400 hover:bg-cyan-950/40 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="w-11 h-11 flex items-center justify-center rounded-lg border border-cyan-500/25 text-cyan-300 disabled:opacity-30"
                   aria-label="Attach image"
-                  title="Attach image"
                 >
-                  {/* paperclip icon */}
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                   </svg>
                 </button>
+
+                {voiceSupported && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (listening) stopListening();
+                      else
+                        listen((text) => {
+                          setInput((prev) => (prev ? `${prev} ${text}` : text));
+                        });
+                    }}
+                    disabled={sending}
+                    className={`w-11 h-11 flex items-center justify-center rounded-lg border disabled:opacity-30 ${
+                      listening
+                        ? "border-emerald-400 bg-emerald-500/20 text-emerald-300"
+                        : "border-cyan-500/25 text-cyan-300"
+                    }`}
+                    aria-label="Voice input"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8" />
+                    </svg>
+                  </button>
+                )}
 
                 <input
                   value={input}
@@ -504,19 +573,16 @@ export default function ChatPage() {
                   onPaste={handlePaste}
                   placeholder={`Message KING ZARRY AI [${capability}]...`}
                   disabled={sending}
-                  className="flex-1 bg-black/40 border border-cyan-500/25 focus:border-cyan-400 rounded-lg px-4 py-3 text-sm text-white placeholder-cyan-400/30 outline-none transition-colors disabled:opacity-50 font-mono-tech tracking-wider"
+                  className="flex-1 bg-black/40 border border-cyan-500/25 focus:border-cyan-400 rounded-lg px-4 py-3 text-sm text-white placeholder-cyan-400/30 outline-none disabled:opacity-50 font-mono-tech tracking-wider"
                 />
                 <button
                   type="submit"
                   disabled={sending || (!input.trim() && !attached)}
-                  className="px-5 py-3 rounded-lg bg-cyan-400 text-black font-display text-xs font-bold tracking-[0.2em] hover:bg-cyan-300 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="px-5 py-3 rounded-lg bg-cyan-400 text-black font-display text-xs font-bold tracking-[0.2em] hover:bg-cyan-300 disabled:opacity-30"
                 >
                   SEND
                 </button>
               </div>
-              <p className="mt-2 font-mono-tech text-[9px] tracking-widest text-cyan-400/30">
-                Tip: paste an image (Ctrl+V) or click 📎 to attach. Max 8 MB.
-              </p>
             </form>
           </div>
         </div>
