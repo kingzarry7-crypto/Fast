@@ -12,15 +12,47 @@ class Memory:
     """
 
     def __init__(self, database_path: str = "king_zarry_memory.db"):
-        self.database_path = os.getenv("MEMORY_DB_PATH", database_path)
+        # Prefer MEMORY_DB_PATH / DATA_DIR, but fall back if /data is not mounted or not writable
+        env_path = (os.getenv("MEMORY_DB_PATH") or "").strip()
+        data_dir = (os.getenv("DATA_DIR") or "").strip()
+        if env_path:
+            candidate = env_path
+        elif data_dir:
+            candidate = os.path.join(data_dir, "king_zarry_memory.db")
+        else:
+            candidate = database_path
+        self.database_path = self._resolve_writable_path(candidate, database_path)
         self.lock = threading.RLock()
         self._init_database()
         print(f"🧠 Persistent Memory initialized: {self.database_path}")
 
+    @staticmethod
+    def _resolve_writable_path(candidate: str, fallback: str = "king_zarry_memory.db") -> str:
+        """Use candidate path if its directory is writable; else fall back to cwd."""
+        try:
+            path = os.path.abspath(candidate)
+            directory = os.path.dirname(path) or "."
+            os.makedirs(directory, exist_ok=True)
+            test_file = os.path.join(directory, ".kz_write_test")
+            with open(test_file, "w") as f:
+                f.write("ok")
+            os.remove(test_file)
+            return path
+        except OSError as e:
+            print(
+                f"⚠️ Memory path not writable ({candidate}): {e}. "
+                f"Falling back to ./{fallback}",
+                flush=True,
+            )
+            return os.path.abspath(fallback)
+
     def _connect(self) -> sqlite3.Connection:
         directory = os.path.dirname(os.path.abspath(self.database_path))
         if directory:
-            os.makedirs(directory, exist_ok=True)
+            try:
+                os.makedirs(directory, exist_ok=True)
+            except OSError:
+                pass
         conn = sqlite3.connect(self.database_path, timeout=30.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA busy_timeout = 30000")
