@@ -1,3 +1,4 @@
+import json
 """
 KING ZARRY AI - WEB API
 WEB ONLY - Secure Neon authentication and web chat
@@ -22,6 +23,7 @@ import base64
 import hashlib
 import secrets
 import asyncio
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any, Tuple
@@ -846,12 +848,241 @@ def health_check():
         logger.error("Health check failed: %s", type(exc).__name__)
         return {"status": "ok", "web_db_configured": False, "database": {"status": "unavailable"}}
 
+
+# ============================================================
+# EMAIL VERIFICATION + PASSWORD RESET (6-digit codes)
+# ============================================================
+# Requires RESEND_API_KEY (https://resend.com) + EMAIL_FROM
+# Without a key: codes are logged server-side only (dev fallback).
+
+EMAIL_CODE_TTL_MINUTES = int(os.getenv("EMAIL_CODE_TTL_MINUTES", "15"))
+RESEND_API_KEY = (os.getenv("RESEND_API_KEY") or "").strip()
+EMAIL_FROM = (os.getenv("EMAIL_FROM") or os.getenv("FROM_EMAIL") or "King Zarry AI <onboarding@resend.dev>").strip()
+REQUIRE_EMAIL_VERIFY = (os.getenv("REQUIRE_EMAIL_VERIFY", "true") or "true").strip().lower() in (
+    "1", "true", "yes", "on",
+)
+
+
+def _ensure_auth_extra_tables() -> None:
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS web_email_codes (
+                id BIGSERIAL PRIMARY KEY,
+                email TEXT NOT NULL,
+                purpose TEXT NOT NULL,
+                code_hash TEXT NOT NULL,
+                expires_at TIMESTAMPTZ NOT NULL,
+                used_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_web_email_codes_lookup
+            ON web_email_codes (email, purpose, created_at DESC)
+            """
+        )
+        # Optional column on web_users
+        try:
+            cur.execute(
+                """
+                ALTER TABLE web_users
+                ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT TRUE
+                """
+            )
+        except Exception:
+            pass
+
+
+def _hash_code(code: str) -> str:
+    return hashlib.sha256(f"kz-code:{code}".encode("utf-8")).hexdigest()
+
+
+def _generate_code() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def _send_email_resend(to_email: str, subject: str, text_body: str, html_body: str) -> bool:
+    if not RESEND_API_KEY:
+        logger.warning("RESEND_API_KEY not set — email not sent to %s", to_email)
+        return False
+    try:
+        import urllib.request
+
+        payload = json.dumps(
+            {
+                "from": EMAIL_FROM,
+                "to": [to_email],
+                "subject": subject,
+                "text": text_body,
+                "html": html_body,
+            }
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            "https://api.resend.com/emails",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            return 200 <= resp.status < 300
+    except Exception as exc:
+        logger.error("Resend email failed: %s", type(exc).__name__)
+        return False
+
+
+def _issue_email_code(email: str, purpose: str) -> str:
+    """Create a 6-digit code, store hash, try to email it. Returns plaintext code."""
+    _ensure_auth_extra_tables()
+    email = _normalize_email(email)
+    code = _generate_code()
+    expires = datetime.now(timezone.utc) + timedelta(minutes=EMAIL_CODE_TTL_MINUTES)
+    with get_db_cursor(commit=True) as cur:
+        # Invalidate previous unused codes for same purpose
+        cur.execute(
+            """
+            UPDATE web_email_codes
+            SET used_at = NOW()
+            WHERE email = %s AND purpose = %s AND used_at IS NULL
+            """,
+            (email, purpose),
+        )
+        cur.execute(
+            """
+            INSERT INTO web_email_codes (email, purpose, code_hash, expires_at)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (email, purpose, _hash_code(code), expires),
+        )
+
+    subject = (
+        "King Zarry AI — verify your email"
+        if purpose == "verify"
+        else "King Zarry AI — password reset code"
+    )
+    text = (
+        f"Your code is: {code}\n\n"
+        f"It expires in {EMAIL_CODE_TTL_MINUTES} minutes.\n"
+        "If you did not request this, ignore this email."
+    )
+    html = (
+        f"<p>Your King Zarry AI code:</p>"
+        f"<p style='font-size:28px;letter-spacing:6px'><b>{code}</b></p>"
+        f"<p>Expires in {EMAIL_CODE_TTL_MINUTES} minutes.</p>"
+    )
+    sent = _send_email_resend(email, subject, text, html)
+    if not sent:
+        # Dev visibility only — never expose in production API responses by default
+        logger.info("EMAIL_CODE purpose=%s email=%s code=%s (not emailed)", purpose, email, code)
+    return code
+
+
+def _consume_email_code(email: str, purpose: str, code: str) -> bool:
+    _ensure_auth_extra_tables()
+    email = _normalize_email(email)
+    code = str(code or "").strip()
+    if not code or len(code) < 4:
+        return False
+    code_hash = _hash_code(code)
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            SELECT id FROM web_email_codes
+            WHERE email = %s
+              AND purpose = %s
+              AND code_hash = %s
+              AND used_at IS NULL
+              AND expires_at > NOW()
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (email, purpose, code_hash),
+        )
+        row = cur.fetchone()
+        if not row:
+            return False
+        cid = _row_value(row, "id", 0)
+        cur.execute(
+            "UPDATE web_email_codes SET used_at = NOW() WHERE id = %s",
+            (cid,),
+        )
+    return True
+
+
+def _is_email_verified(user_row: Any) -> bool:
+    """Best-effort: email_verified column or assume true for legacy rows if feature off."""
+    if not REQUIRE_EMAIL_VERIFY:
+        return True
+    try:
+        # index may not include email_verified; query by id
+        user_id = str(_row_value(user_row, "id", 0))
+        with get_db_cursor(commit=False) as cur:
+            cur.execute(
+                "SELECT email_verified FROM web_users WHERE id = %s LIMIT 1",
+                (user_id,),
+            )
+            row = cur.fetchone()
+            if row is None:
+                return False
+            val = _row_value(row, "email_verified", 0)
+            return bool(val)
+    except Exception:
+        return False
+
+
+def _mark_email_verified(email: str) -> None:
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            UPDATE web_users
+            SET email_verified = TRUE
+            WHERE email = %s
+            """,
+            (_normalize_email(email),),
+        )
+
+
+def _set_password_hash(email: str, password: str) -> bool:
+    ph = _hash_password(password)
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            "UPDATE web_users SET password_hash = %s WHERE email = %s RETURNING id",
+            (ph, _normalize_email(email)),
+        )
+        return cur.fetchone() is not None
+
+
+class VerifyEmailRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=4, max_length=12)
+
+
+class ResendCodeRequest(BaseModel):
+    email: EmailStr
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=4, max_length=12)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 @app.post("/api/auth/register")
 async def register(payload: RegisterRequest, request: Request, response: Response):
     email = _normalize_email(payload.email)
     username = _normalize_username(payload.username)
     display_name = _safe_display_name(payload.display_name, email.split("@")[0])
     try:
+        await asyncio.to_thread(_ensure_auth_extra_tables)
         existing_email = await asyncio.to_thread(_find_user_by_email, email)
         if existing_email:
             raise HTTPException(status_code=409, detail="An account with this email already exists")
@@ -863,9 +1094,41 @@ async def register(payload: RegisterRequest, request: Request, response: Respons
                 raise HTTPException(status_code=409, detail="This username is already taken")
         user_row = await asyncio.to_thread(_create_user, email, payload.password, username, display_name)
         user_id = str(_row_value(user_row, "id", 0))
+        # New signups start unverified when feature is on
+        if REQUIRE_EMAIL_VERIFY:
+            try:
+                with get_db_cursor(commit=True) as cur:
+                    cur.execute(
+                        "UPDATE web_users SET email_verified = FALSE WHERE id = %s",
+                        (user_id,),
+                    )
+            except Exception:
+                pass
+
+        # Email verification gate
+        if REQUIRE_EMAIL_VERIFY:
+            code = await asyncio.to_thread(_issue_email_code, email, "verify")
+            result = {
+                "status": "success",
+                "message": "Account created. Enter the 6-digit code we sent to your email.",
+                "requires_verification": True,
+                "email": email,
+            }
+            # Dev only: surface code when Resend is not configured
+            if not RESEND_API_KEY:
+                result["dev_code"] = code
+                result["message"] += " (RESEND_API_KEY missing — code also in Railway logs / dev_code)"
+            return result
+
         raw_token = await asyncio.to_thread(_create_session, user_id, request)
         _set_session_cookie(response, raw_token)
-        return {"status": "success", "message": "Account created successfully", "user": _user_public_data(user_row)}
+        await asyncio.to_thread(_mark_email_verified, email)
+        return {
+            "status": "success",
+            "message": "Account created successfully",
+            "user": _user_public_data(user_row),
+            "requires_verification": False,
+        }
     except HTTPException:
         raise
     except Exception as exc:
@@ -890,6 +1153,11 @@ async def login(payload: LoginRequest, request: Request, response: Response):
             raise HTTPException(status_code=403, detail="This account is suspended")
         if account_status != "active":
             raise HTTPException(status_code=403, detail="This account is not active")
+        if REQUIRE_EMAIL_VERIFY and not await asyncio.to_thread(_is_email_verified, user_row):
+            raise HTTPException(
+                status_code=403,
+                detail="Email not verified. Check your inbox for the code, or use resend.",
+            )
         user_id = str(_row_value(user_row, "id", 0))
         await asyncio.to_thread(_update_last_login, user_id)
         raw_token = await asyncio.to_thread(_create_session, user_id, request)
@@ -921,6 +1189,83 @@ async def current_user(request: Request):
             user.setdefault("plan", None)
             user.setdefault("subscription_expires_at", None)
     return {"status": "success", "user": user}
+
+
+@app.post("/api/auth/verify-email")
+async def verify_email(payload: VerifyEmailRequest, request: Request, response: Response):
+    email = _normalize_email(payload.email)
+    ok = await asyncio.to_thread(_consume_email_code, email, "verify", payload.code)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
+    user_row = await asyncio.to_thread(_find_user_by_email, email)
+    if not user_row:
+        raise HTTPException(status_code=404, detail="Account not found")
+    await asyncio.to_thread(_mark_email_verified, email)
+    user_id = str(_row_value(user_row, "id", 0))
+    raw_token = await asyncio.to_thread(_create_session, user_id, request)
+    _set_session_cookie(response, raw_token)
+    return {
+        "status": "success",
+        "message": "Email verified. You are logged in.",
+        "user": _user_public_data(user_row),
+    }
+
+
+@app.post("/api/auth/resend-code")
+async def resend_code(payload: ResendCodeRequest):
+    email = _normalize_email(payload.email)
+    user_row = await asyncio.to_thread(_find_user_by_email, email)
+    # Always generic message to avoid email enumeration
+    result = {
+        "status": "success",
+        "message": "If that email is registered and needs verification, a new code was sent.",
+    }
+    if user_row and REQUIRE_EMAIL_VERIFY and not await asyncio.to_thread(_is_email_verified, user_row):
+        code = await asyncio.to_thread(_issue_email_code, email, "verify")
+        if not RESEND_API_KEY:
+            result["dev_code"] = code
+    return result
+
+
+@app.post("/api/auth/forgot-password")
+async def forgot_password(payload: ForgotPasswordRequest):
+    email = _normalize_email(payload.email)
+    result = {
+        "status": "success",
+        "message": "If an account exists for that email, a reset code was sent.",
+    }
+    user_row = await asyncio.to_thread(_find_user_by_email, email)
+    if user_row:
+        code = await asyncio.to_thread(_issue_email_code, email, "reset")
+        if not RESEND_API_KEY:
+            result["dev_code"] = code
+    return result
+
+
+@app.post("/api/auth/reset-password")
+async def reset_password(payload: ResetPasswordRequest):
+    email = _normalize_email(payload.email)
+    ok = await asyncio.to_thread(_consume_email_code, email, "reset", payload.code)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset code")
+    user_row = await asyncio.to_thread(_find_user_by_email, email)
+    if not user_row:
+        raise HTTPException(status_code=404, detail="Account not found")
+    updated = await asyncio.to_thread(_set_password_hash, email, payload.new_password)
+    if not updated:
+        raise HTTPException(status_code=500, detail="Could not update password")
+    # Revoke sessions so old devices must re-login
+    user_id = str(_row_value(user_row, "id", 0))
+    try:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute(
+                "UPDATE web_sessions SET revoked_at = NOW() WHERE user_id = %s AND revoked_at IS NULL",
+                (user_id,),
+            )
+    except Exception:
+        pass
+    return {"status": "success", "message": "Password updated. You can log in now."}
+
 
 @app.post("/api/auth/logout")
 async def logout(request: Request, response: Response):
