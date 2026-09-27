@@ -239,7 +239,28 @@ def _row_value(
 
 def _user_public_data(row: Any) -> Dict[str, Any]:
     user_id = str(_row_value(row, "id", 0))
+    email = str(_row_value(row, "email", 1) or "").strip().lower()
     sub = _get_web_subscription(user_id)
+    is_sub = bool(sub.get("is_subscribed"))
+    plan = sub.get("plan")
+    expires = sub.get("expires_at")
+    is_admin = False
+    try:
+        is_admin = bool(email) and _is_admin_email(email)
+    except NameError:
+        # ADMIN helpers defined later in module — resolve from env directly
+        raw = ",".join(
+            [os.getenv("ADMIN_EMAILS") or "", os.getenv("ADMIN_EMAIL") or ""]
+        )
+        admins = {
+            p.strip().strip(chr(34) + chr(39)).lower()
+            for p in raw.split(",")
+            if p.strip() and "@" in p
+        }
+        is_admin = email in admins
+    if is_admin:
+        is_sub = True
+        plan = plan or "admin"
     return {
         "id": user_id,
         "email": _row_value(row, "email", 1),
@@ -247,9 +268,10 @@ def _user_public_data(row: Any) -> Dict[str, Any]:
         "display_name": _row_value(row, "display_name", 3),
         "account_status": _row_value(row, "account_status", 4),
         "created_at": str(_row_value(row, "created_at", 5)),
-        "is_subscribed": bool(sub.get("is_subscribed")),
-        "plan": sub.get("plan"),
-        "subscription_expires_at": sub.get("expires_at"),
+        "is_subscribed": is_sub,
+        "plan": plan,
+        "subscription_expires_at": expires,
+        "is_admin": is_admin,
     }
 
 # ============================================================
@@ -879,16 +901,21 @@ async def login(payload: LoginRequest, request: Request, response: Response):
 async def current_user(request: Request):
     user_row = await asyncio.to_thread(_require_current_user, request)
     user = _user_public_data(user_row)
-    try:
-        from web_billing import get_web_subscription
-        sub = get_web_subscription(str(user.get("id") or ""))
-        user["is_subscribed"] = bool(sub.get("is_subscribed"))
-        user["plan"] = sub.get("plan")
-        user["subscription_expires_at"] = sub.get("expires_at")
-    except Exception:
-        user.setdefault("is_subscribed", False)
-        user.setdefault("plan", None)
-        user.setdefault("subscription_expires_at", None)
+    # Do not let billing overwrite admin unlimited VIP
+    if user.get("is_admin"):
+        user["is_subscribed"] = True
+        user["plan"] = user.get("plan") or "admin"
+    else:
+        try:
+            from web_billing import get_web_subscription
+            sub = get_web_subscription(str(user.get("id") or ""))
+            user["is_subscribed"] = bool(sub.get("is_subscribed"))
+            user["plan"] = sub.get("plan")
+            user["subscription_expires_at"] = sub.get("expires_at")
+        except Exception:
+            user.setdefault("is_subscribed", False)
+            user.setdefault("plan", None)
+            user.setdefault("subscription_expires_at", None)
     return {"status": "success", "user": user}
 
 @app.post("/api/auth/logout")
