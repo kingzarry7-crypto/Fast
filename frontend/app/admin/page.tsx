@@ -130,6 +130,7 @@ export default function AdminPage() {
     }
   };
 
+
   return (
     <ProtectedRoute>
       <div className="p-6 lg:p-10 max-w-6xl mx-auto">
@@ -139,7 +140,7 @@ export default function AdminPage() {
               Admin · Command Centre
             </h1>
             <p className="mt-1 font-mono-tech text-[10px] tracking-widest text-cyan-400/50">
-              Users · usage · revenue · ban / suspend
+              Users · usage · revenue · recent activity
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -199,8 +200,15 @@ export default function AdminPage() {
               </p>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <Stat label="TOTAL USERS" value={n(stats.users_total)} />
-                <Stat label="ACTIVE 7D" value={n(stats.users_active_7d)} sub="logged in last 7 days" />
-                <Stat label="ACTIVE 30D" value={n(stats.users_active_30d)} />
+                <Stat
+                  label="ACTIVE 7D"
+                  value={n(stats.users_active_7d)}
+                  sub="logged in last 7 days"
+                />
+                <Stat
+                  label="ACTIVE 30D"
+                  value={n(stats.users_active_30d)}
+                />
                 <Stat label="NEW 7D" value={n(stats.users_new_7d)} />
               </div>
             </section>
@@ -211,7 +219,10 @@ export default function AdminPage() {
               </p>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <Stat label="SESSIONS LIVE" value={n(stats.sessions_active)} />
-                <Stat label="CONVERSATIONS" value={n(stats.conversations_total)} />
+                <Stat
+                  label="CONVERSATIONS"
+                  value={n(stats.conversations_total)}
+                />
                 <Stat label="MESSAGES" value={n(stats.messages_total)} />
                 <Stat label="MESSAGES 24H" value={n(stats.messages_24h)} />
               </div>
@@ -222,20 +233,26 @@ export default function AdminPage() {
                 REVENUE (STRIPE WEB)
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Stat label="ACTIVE VIP" value={n(stats.active_subscribers)} />
+                <Stat
+                  label="ACTIVE VIP"
+                  value={n(stats.active_subscribers)}
+                />
                 <Stat label="PAYMENTS" value={n(stats.payments_count)} />
-                <Stat label="REVENUE USD" value={`$${Number(stats.revenue_usd || 0).toFixed(2)}`} />
+                <Stat
+                  label="REVENUE USD"
+                  value={`$${Number(stats.revenue_usd || 0).toFixed(2)}`}
+                />
               </div>
             </section>
 
             <section className="kz-panel p-6">
               <p className="font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/40 mb-4">
-                RECENT USERS — BAN / SUSPEND
+                RECENT USERS
               </p>
               {(!stats.recent_users || stats.recent_users.length === 0) && (
                 <p className="text-sm text-cyan-400/50">No users yet.</p>
               )}
-              <div className="space-y-2 max-h-96 overflow-y-auto kz-scroll">
+              <div className="space-y-2 max-h-80 overflow-y-auto kz-scroll">
                 {(stats.recent_users || []).map((u, i) => {
                   const st = String(u.account_status || "active").toLowerCase();
                   const busy = actingId === u.id;
@@ -316,8 +333,11 @@ export default function AdminPage() {
               <p className="font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/40 mb-4">
                 RECENT STRIPE PAYMENTS
               </p>
-              {(!stats.recent_payments || stats.recent_payments.length === 0) && (
-                <p className="text-sm text-cyan-400/50">No web payments yet.</p>
+              {(!stats.recent_payments ||
+                stats.recent_payments.length === 0) && (
+                <p className="text-sm text-cyan-400/50">
+                  No web payments yet. Telegram Stars stay on the bot.
+                </p>
               )}
               <div className="space-y-2">
                 {(stats.recent_payments || []).map((p, i) => (
@@ -325,7 +345,9 @@ export default function AdminPage() {
                     key={`${p.created_at}-${i}`}
                     className="flex flex-wrap justify-between gap-2 border-b border-cyan-500/10 py-2 text-sm"
                   >
-                    <span className="font-mono-tech text-xs">{p.email || "—"}</span>
+                    <span className="font-mono-tech text-xs">
+                      {p.email || "—"}
+                    </span>
                     <span className="font-mono-tech text-[10px] text-cyan-300/80">
                       {(p.plan || "—").toUpperCase()} · $
                       {((p.amount_cents || 0) / 100).toFixed(2)} · {p.status}
@@ -334,6 +356,13 @@ export default function AdminPage() {
                 ))}
               </div>
             </section>
+
+            <p className="text-xs text-cyan-400/40">
+              Logged in as admin
+              {stats.admin_email ? ` (${stats.admin_email})` : ""}. VIP web
+              revenue is Stripe only. Telegram Star revenue is separate on the
+              bot.
+            </p>
           </div>
         )}
       </div>
