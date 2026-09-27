@@ -19,6 +19,7 @@ function isAdminEmail(email?: string | null): boolean {
 const baseNavItems = [
   { label: "Dashboard", href: "/dashboard", icon: "◆" },
   { label: "Chat", href: "/chat", icon: "◆" },
+  { label: "Agent", href: "/agent", icon: "◆" },
   { label: "Markets", href: "/markets", icon: "◆" },
   { label: "Signals", href: "/signals", icon: "◆" },
   { label: "News", href: "/news", icon: "◆" },
@@ -117,28 +118,23 @@ export default function Sidebar() {
                   : "text-cyan-400/60 hover:text-cyan-200 hover:bg-cyan-500/10 border border-transparent"
               }`}
             >
-              <span className="text-[8px] opacity-60">{item.icon}</span>
+              <span className="text-cyan-500/50">{item.icon}</span>
               {item.label.toUpperCase()}
             </Link>
           ))}
         </nav>
 
         <div className="p-4 border-t border-cyan-500/10">
-          {user && (
-            <div className="mb-3">
-              <p className="text-xs text-white truncate">
-                {user.display_name || user.username || user.email}
-              </p>
-              <p className="font-mono-tech text-[9px] tracking-wider text-cyan-400/40 truncate">
-                {user.email}
-              </p>
-            </div>
+          {user?.email && (
+            <p className="font-mono-tech text-[10px] text-cyan-400/50 truncate mb-2">
+              {user.email}
+            </p>
           )}
           <button
             onClick={logout}
-            className="w-full px-3 py-2 rounded-lg font-mono-tech text-[10px] tracking-widest text-red-400/70 border border-red-500/20 hover:bg-red-500/10 hover:text-red-300 transition-all"
+            className="w-full px-3 py-2 rounded-lg font-mono-tech text-[10px] tracking-widest text-red-400/70 border border-red-500/20 hover:bg-red-500/10"
           >
-            SIGN OUT
+            EXIT
           </button>
         </div>
       </aside>
