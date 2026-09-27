@@ -6,58 +6,76 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/hooks/useAuth";
 import { api, ApiError, type AdminStats } from "@/lib/api";
 
-function isAdminEmail(email?: string | null): boolean {
-  if (!email) return false;
-  const raw =
-    (typeof process !== "undefined" &&
-      process.env.NEXT_PUBLIC_ADMIN_EMAILS) ||
-    "";
-  const set = new Set(
-    raw
-      .split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean)
-  );
-  return set.has(email.trim().toLowerCase());
-}
-
 export default function AdminPage() {
   const { user } = useAuth();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const allowed = isAdminEmail(user?.email);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [requiresPassword, setRequiresPassword] = useState(false);
+  const [adminConfigured, setAdminConfigured] = useState(true);
+  const [password, setPassword] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
+
+  const loadMeAndStats = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const me = await api.getAdminMe();
+      setIsAdmin(!!me.is_admin);
+      setRequiresPassword(!!me.requires_password);
+      setAdminConfigured(me.admin_emails_configured !== false);
+      if (!me.is_admin) {
+        setError(
+          me.admin_emails_configured === false
+            ? "No admin emails on server. Set ADMIN_EMAIL or ADMIN_EMAILS on Railway to your login email."
+            : "Admin access denied. Your login email must match ADMIN_EMAIL / ADMIN_EMAILS on Railway."
+        );
+        setLoading(false);
+        return;
+      }
+      if (me.requires_password) {
+        setLoading(false);
+        return;
+      }
+      const data = await api.getAdminStats();
+      setStats(data);
+    } catch (e) {
+      setError(
+        e instanceof ApiError ? e.detail || e.message : "Could not load admin"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
-    if (!allowed) {
-      setLoading(false);
+    loadMeAndStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.email]);
+
+  const handleUnlock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password.trim() || unlocking) return;
+    setUnlocking(true);
+    setError(null);
+    try {
+      await api.unlockAdmin(password.trim());
+      setRequiresPassword(false);
+      setPassword("");
+      const data = await api.getAdminStats();
+      setStats(data);
+    } catch (err) {
       setError(
-        "Admin access required. Set your email in NEXT_PUBLIC_ADMIN_EMAILS and ADMIN_EMAILS."
+        err instanceof ApiError
+          ? err.detail || err.message
+          : "Invalid admin password"
       );
-      return;
+    } finally {
+      setUnlocking(false);
     }
-    let cancelled = false;
-    (async () => {
-      try {
-        const data = await api.getAdminStats();
-        if (!cancelled) setStats(data);
-      } catch (e) {
-        if (!cancelled) {
-          setError(
-            e instanceof ApiError
-              ? e.detail || e.message
-              : "Could not load admin stats"
-          );
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, allowed]);
+  };
 
   return (
     <ProtectedRoute>
@@ -74,29 +92,69 @@ export default function AdminPage() {
           </Link>
         </div>
 
-        {!allowed && (
-          <div className="kz-panel p-6 text-sm text-amber-200/90">
-            {error || "Not authorized."}
-            <p className="mt-3 text-xs text-cyan-400/50">
-              Add your login email to Railway ADMIN_EMAILS and Vercel
-              NEXT_PUBLIC_ADMIN_EMAILS (comma-separated).
-            </p>
+        {loading && (
+          <p className="font-mono-tech text-xs text-cyan-400/50">Loading…</p>
+        )}
+
+        {error && (
+          <div className="kz-panel p-6 text-sm text-amber-200/90 mb-6">
+            {error}
+            {!isAdmin && (
+              <div className="mt-4 text-xs text-cyan-400/60 space-y-2 font-mono-tech">
+                <p>On Railway set:</p>
+                <pre className="bg-black/40 p-3 rounded text-[10px] overflow-x-auto">{`ADMIN_EMAIL=your-login@email.com
+ADMIN_EMAILS=your-login@email.com
+ADMIN_PASSWORD=optional-extra-secret`}</pre>
+                <p>
+                  Use the <strong>same email</strong> you use to log in on the
+                  website. Password for site login is your account password;
+                  ADMIN_PASSWORD is only if you set an extra admin unlock.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
-        {allowed && loading && (
-          <p className="font-mono-tech text-xs text-cyan-400/60">Loading stats…</p>
+        {isAdmin && requiresPassword && (
+          <form
+            onSubmit={handleUnlock}
+            className="kz-panel p-6 max-w-md space-y-4 mb-6"
+          >
+            <p className="font-mono-tech text-[10px] tracking-[0.25em] text-cyan-300">
+              ADMIN PASSWORD (FROM RAILWAY ENV)
+            </p>
+            <p className="text-xs text-cyan-400/60">
+              Enter ADMIN_PASSWORD from Railway to unlock this panel.
+            </p>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="ADMIN_PASSWORD"
+              className="w-full rounded-lg bg-black/40 border border-cyan-500/25 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400"
+              autoComplete="current-password"
+            />
+            <button
+              type="submit"
+              disabled={unlocking || !password.trim()}
+              className="px-4 py-2 rounded-lg bg-cyan-400 text-black text-xs font-bold tracking-widest disabled:opacity-40"
+            >
+              {unlocking ? "CHECKING…" : "UNLOCK ADMIN"}
+            </button>
+          </form>
         )}
 
-        {allowed && error && !stats && (
-          <div className="kz-panel p-6 text-sm text-red-300/90">{error}</div>
-        )}
-
-        {allowed && stats && (
+        {!loading && isAdmin && !requiresPassword && stats && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <StatCard label="ACTIVE VIP" value={String(stats.active_subscribers)} />
-              <StatCard label="PAYMENTS" value={String(stats.payments_count)} />
+              <StatCard
+                label="ACTIVE VIP"
+                value={String(stats.active_subscribers)}
+              />
+              <StatCard
+                label="PAYMENTS"
+                value={String(stats.payments_count)}
+              />
               <StatCard
                 label="REVENUE (USD)"
                 value={`$${Number(stats.revenue_usd || 0).toFixed(2)}`}
@@ -107,9 +165,11 @@ export default function AdminPage() {
               <p className="font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/40 mb-4">
                 RECENT STRIPE PAYMENTS
               </p>
-              {(!stats.recent_payments || stats.recent_payments.length === 0) && (
+              {(!stats.recent_payments ||
+                stats.recent_payments.length === 0) && (
                 <p className="text-sm text-cyan-400/50">
-                  No web payments yet. Complete a Stripe test checkout from Pricing.
+                  No web payments yet. Complete a Stripe test checkout from
+                  Pricing.
                 </p>
               )}
               <div className="space-y-2">
@@ -134,8 +194,8 @@ export default function AdminPage() {
             </div>
 
             <p className="text-xs text-cyan-400/40 leading-relaxed">
-              Web revenue comes from Stripe Checkout → webhook → Neon. Telegram
-              Stars still show in the bot owner balance and /stats, not on this page.
+              Web revenue: Stripe → webhook → Neon. Telegram Stars stay on the
+              bot. Logged in as admin via Railway ADMIN_EMAIL / ADMIN_EMAILS.
             </p>
           </div>
         )}
