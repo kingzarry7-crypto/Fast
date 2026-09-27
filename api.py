@@ -883,7 +883,11 @@ async def login(payload: LoginRequest, request: Request, response: Response):
         password_valid = await asyncio.to_thread(_verify_password, payload.password, stored_password_hash)
         if not password_valid:
             raise HTTPException(status_code=401, detail="Invalid email or password")
-        account_status = _row_value(user_row, "account_status", 4)
+        account_status = str(_row_value(user_row, "account_status", 4) or "active").lower()
+        if account_status == "banned":
+            raise HTTPException(status_code=403, detail="This account has been banned")
+        if account_status == "suspended":
+            raise HTTPException(status_code=403, detail="This account is suspended")
         if account_status != "active":
             raise HTTPException(status_code=403, detail="This account is not active")
         user_id = str(_row_value(user_row, "id", 0))
@@ -1410,60 +1414,266 @@ async def admin_unlock(request: Request, body: AdminUnlockRequest, response: Res
     return {"status": "success", "message": "Admin unlocked"}
 
 
+
+class AdminUserStatusRequest(BaseModel):
+    status: str = Field(min_length=3, max_length=20)  # active | suspended | banned
+
+
+def _set_user_account_status(user_id: str, status: str) -> Optional[Dict[str, Any]]:
+    status = status.strip().lower()
+    if status not in ("active", "suspended", "banned"):
+        raise ValueError("invalid status")
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            UPDATE web_users
+            SET account_status = %s
+            WHERE id = %s
+            RETURNING id, email, username, account_status, created_at, last_login_at
+            """,
+            (status, str(user_id)),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        # Kill sessions when suspending/banning
+        if status in ("suspended", "banned"):
+            try:
+                cur.execute(
+                    """
+                    UPDATE web_sessions
+                    SET revoked_at = NOW()
+                    WHERE user_id = %s AND revoked_at IS NULL
+                    """,
+                    (str(user_id),),
+                )
+            except Exception:
+                pass
+        return {
+            "id": str(_row_value(row, "id", 0) or ""),
+            "email": _row_value(row, "email", 1),
+            "username": _row_value(row, "username", 2),
+            "account_status": _row_value(row, "account_status", 3),
+            "created_at": str(_row_value(row, "created_at", 4) or ""),
+            "last_login_at": str(_row_value(row, "last_login_at", 5) or ""),
+        }
+
+
+@app.post("/api/admin/users/{user_id}/status")
+async def admin_set_user_status(
+    request: Request,
+    user_id: str,
+    body: AdminUserStatusRequest,
+):
+    """Suspend, ban, or reactivate a web user. Revokes sessions on suspend/ban."""
+    admin_row, admin_email = await asyncio.to_thread(_require_admin, request)
+    admin_id = str(_row_value(admin_row, "id", 0) or "")
+    target = str(user_id or "").strip()
+    if not target:
+        raise HTTPException(status_code=400, detail="user_id required")
+    if target == admin_id:
+        raise HTTPException(status_code=400, detail="You cannot change your own account status")
+
+    status = (body.status or "").strip().lower()
+    if status not in ("active", "suspended", "banned"):
+        raise HTTPException(
+            status_code=400,
+            detail="status must be active, suspended, or banned",
+        )
+
+    try:
+        updated = await asyncio.to_thread(_set_user_account_status, target, status)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    except Exception as exc:
+        logger.error("admin set status failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Could not update user status")
+
+    if not updated:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    logger.info(
+        "admin %s set user %s status=%s",
+        admin_email,
+        updated.get("email"),
+        status,
+    )
+    return {"status": "success", "user": updated}
+
+
+@app.get("/api/admin/users")
+async def admin_list_users(request: Request, limit: int = 50):
+    """List recent web users for moderation."""
+    await asyncio.to_thread(_require_admin, request)
+    limit = max(1, min(int(limit or 50), 100))
+
+    def _load():
+        users = []
+        with get_db_cursor(commit=False) as cur:
+            cur.execute(
+                """
+                SELECT id, email, username, account_status, created_at, last_login_at
+                FROM web_users
+                ORDER BY created_at DESC NULLS LAST
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            for r in cur.fetchall() or []:
+                users.append(
+                    {
+                        "id": str(_row_value(r, "id", 0) or ""),
+                        "email": _row_value(r, "email", 1),
+                        "username": _row_value(r, "username", 2),
+                        "account_status": _row_value(r, "account_status", 3),
+                        "created_at": str(_row_value(r, "created_at", 4) or ""),
+                        "last_login_at": str(_row_value(r, "last_login_at", 5) or ""),
+                    }
+                )
+        return users
+
+    try:
+        users = await asyncio.to_thread(_load)
+        return {"status": "success", "users": users}
+    except Exception as exc:
+        logger.error("admin list users: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Could not list users")
+
+
 @app.get("/api/admin/stats")
 async def admin_stats(request: Request):
     user_row, email = await asyncio.to_thread(_require_admin, request)
     _ = email
 
+    def _safe_count(cur, sql: str, params=()):
+        try:
+            cur.execute(sql, params)
+            row = cur.fetchone()
+            return int(_row_value(row, "c", 0) or 0)
+        except Exception as e:
+            logger.warning("admin count failed: %s", type(e).__name__)
+            return 0
+
     def _load():
-        # Always try to create billing tables; never 500 the whole panel if empty
         try:
             _ensure_billing_tables()
-        except Exception as exc:
-            logger.warning("ensure billing tables: %s", type(exc).__name__)
+        except Exception:
+            pass
 
-        active = 0
-        payments = 0
-        revenue_cents = 0
-        recent = []
+        out = {
+            "status": "success",
+            "admin_email": str(email),
+            "users_total": 0,
+            "users_active_7d": 0,
+            "users_active_30d": 0,
+            "users_new_7d": 0,
+            "sessions_active": 0,
+            "conversations_total": 0,
+            "messages_total": 0,
+            "messages_24h": 0,
+            "active_subscribers": 0,
+            "payments_count": 0,
+            "revenue_cents": 0,
+            "revenue_usd": 0.0,
+            "recent_users": [],
+            "recent_payments": [],
+        }
 
         try:
             with get_db_cursor(commit=False) as cur:
-                try:
-                    cur.execute(
-                        """
-                        SELECT COUNT(*) AS c FROM web_subscriptions
-                        WHERE is_subscribed IS TRUE
-                          AND (expires_at IS NULL OR expires_at > NOW())
-                        """
-                    )
-                    active = int(_row_value(cur.fetchone(), "c", 0) or 0)
-                except Exception as e1:
-                    logger.warning("admin active count: %s", type(e1).__name__)
-                    try:
-                        cur.execute(
-                            "SELECT COUNT(*) AS c FROM web_subscriptions WHERE is_subscribed = TRUE"
-                        )
-                        active = int(_row_value(cur.fetchone(), "c", 0) or 0)
-                    except Exception:
-                        active = 0
+                out["users_total"] = _safe_count(
+                    cur, "SELECT COUNT(*) AS c FROM web_users"
+                )
+                out["users_active_7d"] = _safe_count(
+                    cur,
+                    """
+                    SELECT COUNT(*) AS c FROM web_users
+                    WHERE last_login_at IS NOT NULL
+                      AND last_login_at > NOW() - INTERVAL '7 days'
+                    """,
+                )
+                out["users_active_30d"] = _safe_count(
+                    cur,
+                    """
+                    SELECT COUNT(*) AS c FROM web_users
+                    WHERE last_login_at IS NOT NULL
+                      AND last_login_at > NOW() - INTERVAL '30 days'
+                    """,
+                )
+                out["users_new_7d"] = _safe_count(
+                    cur,
+                    """
+                    SELECT COUNT(*) AS c FROM web_users
+                    WHERE created_at > NOW() - INTERVAL '7 days'
+                    """,
+                )
+                out["sessions_active"] = _safe_count(
+                    cur,
+                    """
+                    SELECT COUNT(*) AS c FROM web_sessions
+                    WHERE revoked_at IS NULL AND expires_at > NOW()
+                    """,
+                )
+                out["conversations_total"] = _safe_count(
+                    cur, "SELECT COUNT(*) AS c FROM web_conversations"
+                )
+                out["messages_total"] = _safe_count(
+                    cur, "SELECT COUNT(*) AS c FROM web_messages"
+                )
+                out["messages_24h"] = _safe_count(
+                    cur,
+                    """
+                    SELECT COUNT(*) AS c FROM web_messages
+                    WHERE created_at > NOW() - INTERVAL '24 hours'
+                    """,
+                )
 
+                # Billing
+                out["active_subscribers"] = _safe_count(
+                    cur,
+                    """
+                    SELECT COUNT(*) AS c FROM web_subscriptions
+                    WHERE is_subscribed IS TRUE
+                      AND (expires_at IS NULL OR expires_at > NOW())
+                    """,
+                )
                 try:
                     cur.execute(
                         """
                         SELECT COUNT(*) AS c,
                                COALESCE(SUM(amount_cents), 0) AS s
-                        FROM web_payments
-                        WHERE status = 'paid'
+                        FROM web_payments WHERE status = 'paid'
                         """
                     )
                     pay = cur.fetchone()
-                    payments = int(_row_value(pay, "c", 0) or 0)
-                    revenue_cents = int(_row_value(pay, "s", 1) or 0)
-                except Exception as e2:
-                    logger.warning("admin payments sum: %s", type(e2).__name__)
-                    payments = 0
-                    revenue_cents = 0
+                    out["payments_count"] = int(_row_value(pay, "c", 0) or 0)
+                    out["revenue_cents"] = int(_row_value(pay, "s", 1) or 0)
+                    out["revenue_usd"] = round(out["revenue_cents"] / 100.0, 2)
+                except Exception:
+                    pass
+
+                try:
+                    cur.execute(
+                        """
+                        SELECT id, email, username, account_status, created_at, last_login_at
+                        FROM web_users
+                        ORDER BY created_at DESC NULLS LAST
+                        LIMIT 30
+                        """
+                    )
+                    for r in cur.fetchall() or []:
+                        out["recent_users"].append(
+                            {
+                                "id": str(_row_value(r, "id", 0) or ""),
+                                "email": _row_value(r, "email", 1),
+                                "username": _row_value(r, "username", 2),
+                                "account_status": _row_value(r, "account_status", 3),
+                                "created_at": str(_row_value(r, "created_at", 4) or ""),
+                                "last_login_at": str(_row_value(r, "last_login_at", 5) or ""),
+                            }
+                        )
+                except Exception as e:
+                    logger.warning("recent users: %s", type(e).__name__)
 
                 try:
                     cur.execute(
@@ -1474,9 +1684,8 @@ async def admin_stats(request: Request):
                         LIMIT 50
                         """
                     )
-                    rows = cur.fetchall() or []
-                    for r in rows:
-                        recent.append(
+                    for r in cur.fetchall() or []:
+                        out["recent_payments"].append(
                             {
                                 "email": _row_value(r, "email", 0),
                                 "plan": _row_value(r, "plan", 1),
@@ -1485,37 +1694,28 @@ async def admin_stats(request: Request):
                                 "created_at": str(_row_value(r, "created_at", 4) or ""),
                             }
                         )
-                except Exception as e3:
-                    logger.warning("admin recent payments: %s", type(e3).__name__)
-                    recent = []
+                except Exception:
+                    pass
         except Exception as exc:
             logger.error("admin stats db: %s", type(exc).__name__)
 
-        return {
-            "status": "success",
-            "active_subscribers": active,
-            "payments_count": payments,
-            "revenue_cents": revenue_cents,
-            "revenue_usd": round(revenue_cents / 100.0, 2),
-            "recent_payments": recent,
-            "admin_email": str(email),
-        }
+        return out
 
     try:
         return await asyncio.to_thread(_load)
     except Exception as exc:
-        logger.error("admin stats failed: %s: %s", type(exc).__name__, exc)
-        # Last resort: never block the admin UI with a hard 500
+        logger.error("admin stats failed: %s", type(exc).__name__)
         return {
             "status": "success",
+            "users_total": 0,
             "active_subscribers": 0,
             "payments_count": 0,
             "revenue_cents": 0,
             "revenue_usd": 0.0,
+            "recent_users": [],
             "recent_payments": [],
-            "note": "Billing tables empty or unavailable",
+            "note": "Partial data unavailable",
         }
-
 
 
 # Prefer modular billing if present (remote-friendly install)
