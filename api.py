@@ -985,18 +985,25 @@ async def get_conversation_messages(conversation_id: str, request: Request):
 
 STRIPE_SECRET_KEY = (os.getenv("STRIPE_SECRET_KEY") or "").strip()
 STRIPE_WEBHOOK_SECRET = (os.getenv("STRIPE_WEBHOOK_SECRET") or "").strip()
-# Comma-separated list and/or single ADMIN_EMAIL
-ADMIN_EMAILS = {
-    e.strip().lower()
-    for e in (
-        (os.getenv("ADMIN_EMAILS") or "")
-        + ","
-        + (os.getenv("ADMIN_EMAIL") or "")
-    ).split(",")
-    if e.strip()
-}
-# Optional second factor for /admin (plain env secret — set on Railway only)
-ADMIN_PASSWORD = (os.getenv("ADMIN_PASSWORD") or "").strip()
+def _parse_admin_emails() -> set:
+    """Build admin email set from ADMIN_EMAILS + ADMIN_EMAIL (strip spaces/quotes)."""
+    raw = ",".join(
+        [
+            os.getenv("ADMIN_EMAILS") or "",
+            os.getenv("ADMIN_EMAIL") or "",
+        ]
+    )
+    out = set()
+    for part in raw.split(","):
+        e = part.strip().strip(chr(34)+chr(39)).lower()
+        if e and "@" in e:
+            out.add(e)
+    return out
+
+
+ADMIN_EMAILS = _parse_admin_emails()
+# Optional second factor for /admin ONLY (NOT your website login password unless you choose that)
+ADMIN_PASSWORD = (os.getenv("ADMIN_PASSWORD") or "").strip().strip(chr(34) + chr(39))
 ADMIN_SESSION_COOKIE = "kz_admin_session"
 ADMIN_SESSION_DAYS = 7
 
@@ -1339,6 +1346,16 @@ async def admin_me(request: Request):
         "email": email,
         "requires_password": bool(ADMIN_PASSWORD) and is_admin and not password_ok,
         "admin_emails_configured": bool(ADMIN_EMAILS),
+        "admin_email_count": len(ADMIN_EMAILS),
+        "hint": (
+            None
+            if is_admin
+            else (
+                "No ADMIN_EMAIL/ADMIN_EMAILS on Railway"
+                if not ADMIN_EMAILS
+                else "Logged-in email does not match ADMIN_EMAIL on Railway (must be exact)"
+            )
+        ),
     }
 
 
@@ -1370,56 +1387,107 @@ async def admin_unlock(request: Request, body: AdminUnlockRequest, response: Res
 async def admin_stats(request: Request):
     user_row, email = await asyncio.to_thread(_require_admin, request)
     _ = email
-    _ensure_billing_tables()
 
     def _load():
-        with get_db_cursor(commit=False) as cur:
-            cur.execute(
-                """
-                SELECT COUNT(*) AS c FROM web_subscriptions
-                WHERE is_subscribed = TRUE
-                  AND (expires_at IS NULL OR expires_at > NOW())
-                """
-            )
-            active = _row_value(cur.fetchone(), "c", 0) or 0
-            cur.execute("SELECT COUNT(*) AS c, COALESCE(SUM(amount_cents),0) AS s FROM web_payments WHERE status = 'paid'")
-            pay = cur.fetchone()
-            payments = _row_value(pay, "c", 0) or 0
-            revenue_cents = _row_value(pay, "s", 1) or 0
-            cur.execute(
-                """
-                SELECT email, plan, amount_cents, status, created_at
-                FROM web_payments
-                ORDER BY created_at DESC
-                LIMIT 50
-                """
-            )
-            rows = cur.fetchall() or []
+        # Always try to create billing tables; never 500 the whole panel if empty
+        try:
+            _ensure_billing_tables()
+        except Exception as exc:
+            logger.warning("ensure billing tables: %s", type(exc).__name__)
+
+        active = 0
+        payments = 0
+        revenue_cents = 0
         recent = []
-        for r in rows:
-            recent.append(
-                {
-                    "email": _row_value(r, "email", 0),
-                    "plan": _row_value(r, "plan", 1),
-                    "amount_cents": _row_value(r, "amount_cents", 2),
-                    "status": _row_value(r, "status", 3),
-                    "created_at": str(_row_value(r, "created_at", 4)),
-                }
-            )
+
+        try:
+            with get_db_cursor(commit=False) as cur:
+                try:
+                    cur.execute(
+                        """
+                        SELECT COUNT(*) AS c FROM web_subscriptions
+                        WHERE is_subscribed IS TRUE
+                          AND (expires_at IS NULL OR expires_at > NOW())
+                        """
+                    )
+                    active = int(_row_value(cur.fetchone(), "c", 0) or 0)
+                except Exception as e1:
+                    logger.warning("admin active count: %s", type(e1).__name__)
+                    try:
+                        cur.execute(
+                            "SELECT COUNT(*) AS c FROM web_subscriptions WHERE is_subscribed = TRUE"
+                        )
+                        active = int(_row_value(cur.fetchone(), "c", 0) or 0)
+                    except Exception:
+                        active = 0
+
+                try:
+                    cur.execute(
+                        """
+                        SELECT COUNT(*) AS c,
+                               COALESCE(SUM(amount_cents), 0) AS s
+                        FROM web_payments
+                        WHERE status = 'paid'
+                        """
+                    )
+                    pay = cur.fetchone()
+                    payments = int(_row_value(pay, "c", 0) or 0)
+                    revenue_cents = int(_row_value(pay, "s", 1) or 0)
+                except Exception as e2:
+                    logger.warning("admin payments sum: %s", type(e2).__name__)
+                    payments = 0
+                    revenue_cents = 0
+
+                try:
+                    cur.execute(
+                        """
+                        SELECT email, plan, amount_cents, status, created_at
+                        FROM web_payments
+                        ORDER BY created_at DESC NULLS LAST
+                        LIMIT 50
+                        """
+                    )
+                    rows = cur.fetchall() or []
+                    for r in rows:
+                        recent.append(
+                            {
+                                "email": _row_value(r, "email", 0),
+                                "plan": _row_value(r, "plan", 1),
+                                "amount_cents": _row_value(r, "amount_cents", 2),
+                                "status": _row_value(r, "status", 3),
+                                "created_at": str(_row_value(r, "created_at", 4) or ""),
+                            }
+                        )
+                except Exception as e3:
+                    logger.warning("admin recent payments: %s", type(e3).__name__)
+                    recent = []
+        except Exception as exc:
+            logger.error("admin stats db: %s", type(exc).__name__)
+
         return {
             "status": "success",
-            "active_subscribers": int(active),
-            "payments_count": int(payments),
-            "revenue_cents": int(revenue_cents),
-            "revenue_usd": round(int(revenue_cents) / 100.0, 2),
+            "active_subscribers": active,
+            "payments_count": payments,
+            "revenue_cents": revenue_cents,
+            "revenue_usd": round(revenue_cents / 100.0, 2),
             "recent_payments": recent,
+            "admin_email": str(email),
         }
 
     try:
         return await asyncio.to_thread(_load)
     except Exception as exc:
-        logger.error("admin stats failed: %s", type(exc).__name__)
-        raise HTTPException(status_code=500, detail="Could not load admin stats")
+        logger.error("admin stats failed: %s: %s", type(exc).__name__, exc)
+        # Last resort: never block the admin UI with a hard 500
+        return {
+            "status": "success",
+            "active_subscribers": 0,
+            "payments_count": 0,
+            "revenue_cents": 0,
+            "revenue_usd": 0.0,
+            "recent_payments": [],
+            "note": "Billing tables empty or unavailable",
+        }
 
 
 
@@ -1571,9 +1639,18 @@ async def agent_status_endpoint(request: Request):
 
         await asyncio.to_thread(init_agent_db)
         return {"status": "ok", **agent_status()}
+    except ImportError as exc:
+        logger.error("agent_core import failed: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="Agent unavailable: agent_core.py missing on server",
+        )
     except Exception as exc:
-        logger.error("agent status failed: %s", type(exc).__name__)
-        raise HTTPException(status_code=500, detail="Agent unavailable")
+        logger.error("agent status failed: %s: %s", type(exc).__name__, exc)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Agent unavailable: {type(exc).__name__}",
+        )
 
 
 @app.post("/api/agent/run")
