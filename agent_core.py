@@ -39,25 +39,63 @@ _DB_LOCK = threading.Lock()
 
 
 def _agent_db_path() -> str:
-    data_dir = (
-        os.getenv("DATA_DIR")
-        or os.getenv("MEMORY_DB_PATH")
-        or os.getenv("AGENT_DB_PATH")
-        or ""
-    ).strip()
-    if data_dir:
-        # MEMORY_DB_PATH may be a file path; prefer parent dir
-        if data_dir.endswith(".db"):
-            base = os.path.dirname(data_dir) or "."
+    """Prefer DATA_DIR / AGENT_DB_PATH; never die if /data is not writable."""
+    safe_local = os.path.join(os.getcwd(), "king_zarry_agent.db")
+    candidates = []
+
+    agent_explicit = (os.getenv("AGENT_DB_PATH") or "").strip()
+    if agent_explicit:
+        candidates.append(agent_explicit)
+
+    data_dir = (os.getenv("DATA_DIR") or "").strip()
+    if data_dir and not data_dir.endswith(".db"):
+        candidates.append(os.path.join(data_dir, "king_zarry_agent.db"))
+
+    mem = (os.getenv("MEMORY_DB_PATH") or "").strip()
+    if mem:
+        if mem.endswith(".db"):
+            base = os.path.dirname(mem) or "."
         else:
-            base = data_dir
-        os.makedirs(base, exist_ok=True)
-        return os.path.join(base, "king_zarry_agent.db")
-    return os.path.join(os.getcwd(), "king_zarry_agent.db")
+            base = mem
+        candidates.append(os.path.join(base, "king_zarry_agent.db"))
+
+    candidates.append(safe_local)
+
+    last_err = None
+    for path in candidates:
+        try:
+            abspath = os.path.abspath(path)
+            directory = os.path.dirname(abspath) or os.getcwd()
+            os.makedirs(directory, exist_ok=True)
+            test = os.path.join(directory, ".kz_agent_write_test")
+            with open(test, "w") as f:
+                f.write("ok")
+            os.remove(test)
+            if path != safe_local and last_err:
+                print(
+                    f"⚠️ Agent DB fallback avoided; using writable {abspath}",
+                    flush=True,
+                )
+            return abspath
+        except OSError as e:
+            last_err = e
+            continue
+
+    print(
+        f"⚠️ Agent DB: all paths failed (last={last_err}). Using {safe_local}",
+        flush=True,
+    )
+    return os.path.abspath(safe_local)
 
 
 def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(_agent_db_path(), timeout=30, check_same_thread=False)
+    path = _agent_db_path()
+    try:
+        conn = sqlite3.connect(path, timeout=30, check_same_thread=False)
+    except sqlite3.OperationalError:
+        # Absolute last resort
+        path = os.path.abspath(os.path.join(os.getcwd(), "king_zarry_agent.db"))
+        conn = sqlite3.connect(path, timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
