@@ -1456,5 +1456,128 @@ async def tts_endpoint(request: Request, body: TtsRequest):
     )
 
 
+
+# ============================================================
+# AGENT (Phase 1) — planner, morning brief, job log, auto-learn
+# ============================================================
+
+class AgentGoalRequest(BaseModel):
+    goal: str = Field(min_length=1, max_length=2000)
+
+
+class AgentApproveRequest(BaseModel):
+    job_id: str = Field(min_length=1, max_length=80)
+
+
+@app.get("/api/agent/status")
+async def agent_status_endpoint(request: Request):
+    """Public-ish status of agent capabilities (auth optional later)."""
+    try:
+        await asyncio.to_thread(_require_current_user, request)
+    except HTTPException:
+        # allow unauthenticated capability probe
+        pass
+    try:
+        from agent_core import agent_status, init_agent_db
+
+        await asyncio.to_thread(init_agent_db)
+        return {"status": "ok", **agent_status()}
+    except Exception as exc:
+        logger.error("agent status failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Agent unavailable")
+
+
+@app.post("/api/agent/run")
+async def agent_run_endpoint(request: Request, body: AgentGoalRequest):
+    """Run planner for a user goal (safe tools auto-run; risky need approval)."""
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    user_id = str(_row_value(user_row, "id", 0))
+    try:
+        from agent_core import plan_and_run
+
+        result = await asyncio.to_thread(plan_and_run, body.goal, user_id, True)
+        return {"status": "success", **result}
+    except Exception as exc:
+        logger.error("agent run failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Agent run failed")
+
+
+@app.post("/api/agent/morning-brief")
+async def agent_morning_brief_endpoint(request: Request):
+    """Generate overnight market watch + morning signals (BTC/ETH/SOL/XAU)."""
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    user_id = str(_row_value(user_row, "id", 0))
+    try:
+        from agent_core import build_morning_brief
+
+        brief = await asyncio.to_thread(build_morning_brief, None, user_id)
+        return {"status": "success", "brief": brief}
+    except Exception as exc:
+        logger.error("morning brief failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Morning brief failed")
+
+
+@app.get("/api/agent/morning-brief/latest")
+async def agent_latest_brief_endpoint(request: Request):
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    user_id = str(_row_value(user_row, "id", 0))
+    try:
+        from agent_core import get_latest_morning_brief
+
+        brief = await asyncio.to_thread(get_latest_morning_brief, user_id)
+        if not brief:
+            return {"status": "empty", "brief": None}
+        return {"status": "success", "brief": brief}
+    except Exception as exc:
+        logger.error("latest brief failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Could not load brief")
+
+
+@app.get("/api/agent/jobs")
+async def agent_list_jobs_endpoint(request: Request):
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    user_id = str(_row_value(user_row, "id", 0))
+    try:
+        from agent_core import list_jobs
+
+        jobs = await asyncio.to_thread(list_jobs, user_id, 40)
+        return {"status": "success", "jobs": jobs}
+    except Exception as exc:
+        logger.error("list jobs failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Could not list jobs")
+
+
+@app.post("/api/agent/jobs/approve")
+async def agent_approve_job_endpoint(request: Request, body: AgentApproveRequest):
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    _ = str(_row_value(user_row, "id", 0))
+    try:
+        from agent_core import approve_job, get_job
+
+        job = await asyncio.to_thread(approve_job, body.job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return {"status": "success", "job": job}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("approve job failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Could not approve job")
+
+
+@app.get("/api/agent/learning")
+async def agent_learning_endpoint(request: Request):
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    user_id = str(_row_value(user_row, "id", 0))
+    try:
+        from agent_core import recent_learning
+
+        items = await asyncio.to_thread(recent_learning, user_id, 30)
+        return {"status": "success", "learning": items}
+    except Exception as exc:
+        logger.error("learning list failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Could not load learning")
+
+
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=int(os.getenv("PORT", "8000")), reload=False)
