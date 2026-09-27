@@ -1,5 +1,5 @@
 // Fast/frontend/lib/api.ts
-// KING ZARRY AI — API client.
+// KING ZARRY AI — API client (complete).
 
 import type {
   AuthUser,
@@ -273,6 +273,29 @@ export async function getAdminStats(
   return request("/api/admin/stats", { method: "GET", signal });
 }
 
+export interface AdminMe {
+  status: string;
+  is_admin: boolean;
+  email?: string;
+  requires_password?: boolean;
+  admin_emails_configured?: boolean;
+}
+
+export async function getAdminMe(signal?: AbortSignal): Promise<AdminMe> {
+  return request("/api/admin/me", { method: "GET", signal });
+}
+
+export async function unlockAdmin(
+  password: string,
+  signal?: AbortSignal
+): Promise<{ status: string; message?: string }> {
+  return request("/api/admin/unlock", {
+    method: "POST",
+    body: { password },
+    signal,
+  });
+}
+
 export interface ConversationItem {
   id: string;
   title: string;
@@ -367,6 +390,87 @@ export async function synthesizeSpeech(
   return response.blob();
 }
 
+export interface AgentJob {
+  id: string;
+  user_id?: string | null;
+  job_type: string;
+  title: string;
+  payload_json?: string | null;
+  status: string;
+  needs_approval?: number;
+  approved_at?: string | null;
+  result_json?: string | null;
+  error?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AgentBrief {
+  id?: string;
+  trading_date?: string;
+  generated_at?: string;
+  summary_text?: string;
+  actionable_count?: number;
+  assets?: Array<Record<string, unknown>>;
+  disclaimer?: string;
+}
+
+export async function getAgentStatus(
+  signal?: AbortSignal
+): Promise<Record<string, unknown>> {
+  return request("/api/agent/status", { method: "GET", signal });
+}
+
+export async function runAgentGoal(
+  goal: string,
+  signal?: AbortSignal
+): Promise<Record<string, unknown>> {
+  const trimmed = goal.trim();
+  if (!trimmed) {
+    throw new ApiError({ status: 400, message: "Goal required" });
+  }
+  return request("/api/agent/run", {
+    method: "POST",
+    body: { goal: trimmed.slice(0, 2000) },
+    signal,
+  });
+}
+
+export async function generateMorningBrief(
+  signal?: AbortSignal
+): Promise<{ status: string; brief?: AgentBrief }> {
+  return request("/api/agent/morning-brief", { method: "POST", signal });
+}
+
+export async function getLatestMorningBrief(
+  signal?: AbortSignal
+): Promise<{ status: string; brief?: AgentBrief | null }> {
+  return request("/api/agent/morning-brief/latest", { method: "GET", signal });
+}
+
+export async function listAgentJobs(
+  signal?: AbortSignal
+): Promise<{ status: string; jobs: AgentJob[] }> {
+  return request("/api/agent/jobs", { method: "GET", signal });
+}
+
+export async function approveAgentJob(
+  jobId: string,
+  signal?: AbortSignal
+): Promise<{ status: string; job?: AgentJob }> {
+  return request("/api/agent/jobs/approve", {
+    method: "POST",
+    body: { job_id: jobId },
+    signal,
+  });
+}
+
+export async function getAgentLearning(
+  signal?: AbortSignal
+): Promise<{ status: string; learning: Record<string, unknown>[] }> {
+  return request("/api/agent/learning", { method: "GET", signal });
+}
+
 export const api = {
   buildUrl,
   getBaseUrl,
@@ -379,10 +483,19 @@ export const api = {
   healthCheck,
   createCheckoutSession,
   getAdminStats,
+  getAdminMe,
+  unlockAdmin,
   listConversations,
   createConversation,
   getConversationMessages,
   synthesizeSpeech,
+  getAgentStatus,
+  runAgentGoal,
+  generateMorningBrief,
+  getLatestMorningBrief,
+  listAgentJobs,
+  approveAgentJob,
+  getAgentLearning,
 };
 
 export type {
