@@ -985,11 +985,20 @@ async def get_conversation_messages(conversation_id: str, request: Request):
 
 STRIPE_SECRET_KEY = (os.getenv("STRIPE_SECRET_KEY") or "").strip()
 STRIPE_WEBHOOK_SECRET = (os.getenv("STRIPE_WEBHOOK_SECRET") or "").strip()
+# Comma-separated list and/or single ADMIN_EMAIL
 ADMIN_EMAILS = {
     e.strip().lower()
-    for e in (os.getenv("ADMIN_EMAILS") or os.getenv("ADMIN_EMAIL") or "").split(",")
+    for e in (
+        (os.getenv("ADMIN_EMAILS") or "")
+        + ","
+        + (os.getenv("ADMIN_EMAIL") or "")
+    ).split(",")
     if e.strip()
 }
+# Optional second factor for /admin (plain env secret — set on Railway only)
+ADMIN_PASSWORD = (os.getenv("ADMIN_PASSWORD") or "").strip()
+ADMIN_SESSION_COOKIE = "kz_admin_session"
+ADMIN_SESSION_DAYS = 7
 
 # USD amounts in cents for Checkout (override via env)
 STRIPE_AMOUNT_MONTHLY = int(os.getenv("STRIPE_AMOUNT_MONTHLY", "999"))
@@ -1155,6 +1164,44 @@ def _is_admin_email(email: Optional[str]) -> bool:
     return str(email).strip().lower() in ADMIN_EMAILS
 
 
+def _admin_password_configured() -> bool:
+    return bool(ADMIN_PASSWORD)
+
+
+def _admin_session_token() -> str:
+    """Deterministic token derived from ADMIN_PASSWORD (not the password itself)."""
+    if not ADMIN_PASSWORD:
+        return ""
+    return hashlib.sha256(f"kz-admin:{ADMIN_PASSWORD}".encode("utf-8")).hexdigest()
+
+
+def _has_valid_admin_session(request: Request) -> bool:
+    if not ADMIN_PASSWORD:
+        return True  # no password gate
+    expected = _admin_session_token()
+    got = (request.cookies.get(ADMIN_SESSION_COOKIE) or "").strip()
+    if not got or not expected:
+        return False
+    return hmac.compare_digest(got, expected)
+
+
+def _require_admin(request: Request):
+    """Logged-in user email must be in ADMIN_EMAILS; optional ADMIN_PASSWORD session."""
+    user_row = _require_current_user(request)
+    email = str(_row_value(user_row, "email", "") or "").strip().lower()
+    if not _is_admin_email(email):
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access denied. Set ADMIN_EMAIL or ADMIN_EMAILS on Railway to your login email.",
+        )
+    if ADMIN_PASSWORD and not _has_valid_admin_session(request):
+        raise HTTPException(
+            status_code=403,
+            detail="Admin password required",
+        )
+    return user_row, email
+
+
 class CheckoutRequest(BaseModel):
     plan: str = Field(..., min_length=2, max_length=32)
 
@@ -1275,12 +1322,54 @@ async def stripe_webhook(request: Request):
         raise HTTPException(status_code=400, detail="Webhook error")
 
 
-@app.get("/api/admin/stats")
-async def admin_stats(request: Request):
+class AdminUnlockRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=200)
+
+
+@app.get("/api/admin/me")
+async def admin_me(request: Request):
+    """Tell the frontend if the logged-in user is an admin (server-side env check)."""
     user_row = await asyncio.to_thread(_require_current_user, request)
-    email = str(_row_value(user_row, "email", 1) or "")
+    email = str(_row_value(user_row, "email", 1) or "").strip().lower()
+    is_admin = _is_admin_email(email)
+    password_ok = _has_valid_admin_session(request) if ADMIN_PASSWORD else True
+    return {
+        "status": "success",
+        "is_admin": is_admin,
+        "email": email,
+        "requires_password": bool(ADMIN_PASSWORD) and is_admin and not password_ok,
+        "admin_emails_configured": bool(ADMIN_EMAILS),
+    }
+
+
+@app.post("/api/admin/unlock")
+async def admin_unlock(request: Request, body: AdminUnlockRequest, response: Response):
+    """Verify ADMIN_PASSWORD from Railway env and set admin session cookie."""
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    email = str(_row_value(user_row, "email", 1) or "").strip().lower()
     if not _is_admin_email(email):
         raise HTTPException(status_code=403, detail="Admin access required")
+    if not ADMIN_PASSWORD:
+        return {"status": "success", "message": "No admin password configured"}
+    if not hmac.compare_digest(body.password.strip(), ADMIN_PASSWORD):
+        raise HTTPException(status_code=401, detail="Invalid admin password")
+    token = _admin_session_token()
+    response.set_cookie(
+        key=ADMIN_SESSION_COOKIE,
+        value=token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=ADMIN_SESSION_DAYS * 24 * 3600,
+        path="/",
+    )
+    return {"status": "success", "message": "Admin unlocked"}
+
+
+@app.get("/api/admin/stats")
+async def admin_stats(request: Request):
+    user_row, email = await asyncio.to_thread(_require_admin, request)
+    _ = email
     _ensure_billing_tables()
 
     def _load():
