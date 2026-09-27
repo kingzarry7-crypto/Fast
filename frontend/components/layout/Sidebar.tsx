@@ -6,20 +6,11 @@ import { useAuth } from "@/hooks/useAuth";
 
 const PUBLIC_ROUTES = ["/", "/login", "/register", "/signup"];
 
-function isAdminEmail(email?: string | null): boolean {
-  if (!email) return false;
-  const raw = process.env.NEXT_PUBLIC_ADMIN_EMAILS || "";
-  return raw
-    .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean)
-    .includes(email.trim().toLowerCase());
-}
-
 const baseNavItems = [
   { label: "Dashboard", href: "/dashboard", icon: "◆" },
   { label: "Chat", href: "/chat", icon: "◆" },
   { label: "Agent", href: "/agent", icon: "◆" },
+  { label: "Admin", href: "/admin", icon: "◆" },
   { label: "Markets", href: "/markets", icon: "◆" },
   { label: "Signals", href: "/signals", icon: "◆" },
   { label: "News", href: "/news", icon: "◆" },
@@ -32,12 +23,7 @@ const baseNavItems = [
 export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
-  const navItems = [
-    ...baseNavItems,
-    ...(isAdminEmail(user?.email)
-      ? [{ label: "Admin", href: "/admin", icon: "◆" as const }]
-      : []),
-  ];
+  const navItems = baseNavItems;
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
