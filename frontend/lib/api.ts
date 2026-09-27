@@ -318,10 +318,13 @@ export async function getConversationMessages(
   return data?.messages || [];
 }
 
+export type TtsVoice = "bella" | "male";
+
 export async function synthesizeSpeech(
   text: string,
   style: "slow" | "normal" | "human" | "fast" = "human",
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  voice: TtsVoice = "bella"
 ): Promise<Blob> {
   const trimmed = text.trim();
   if (!trimmed) {
@@ -337,7 +340,11 @@ export async function synthesizeSpeech(
         "Content-Type": "application/json",
       },
       credentials: "include",
-      body: JSON.stringify({ text: trimmed.slice(0, 2000), style }),
+      body: JSON.stringify({
+        text: trimmed.slice(0, 2000),
+        style,
+        voice: voice === "male" ? "male" : "bella",
+      }),
       signal,
     });
   } catch (error: unknown) {
