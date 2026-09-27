@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Sidebar from "@/components/layout/Sidebar";
 import { AppProviders } from "@/components/providers/AppProviders";
@@ -10,6 +10,15 @@ export const metadata: Metadata = {
   },
   description:
     "KING ZARRY AI — intelligent AI command centre. Your intelligence, amplified.",
+};
+
+/** Mobile Chrome + desktop Chrome: correct scale, no unwanted zoom */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+  themeColor: "#020914",
 };
 
 export default function RootLayout({
