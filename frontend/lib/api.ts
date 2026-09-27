@@ -1,4 +1,4 @@
-// Fast/frontend/lib/api.ts
+// frontend/lib/api.ts
 // KING ZARRY AI — API client (complete).
 
 import type {
@@ -185,6 +185,71 @@ export async function register(
   });
 }
 
+export async function verifyEmail(
+  email: string,
+  code: string,
+  signal?: AbortSignal
+): Promise<AuthResponse> {
+  const normalizedEmail = email.trim().toLowerCase();
+  const trimmedCode = code.trim();
+  if (!normalizedEmail || !trimmedCode) {
+    throw new ApiError({ status: 400, message: "Email and verification code required" });
+  }
+  return request<AuthResponse>("/api/auth/verify-email", {
+    method: "POST",
+    body: { email: normalizedEmail, code: trimmedCode },
+    signal,
+  });
+}
+
+export async function resendVerificationCode(
+  email: string,
+  signal?: AbortSignal
+): Promise<{ status: string; message: string; dev_code?: string }> {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) {
+    throw new ApiError({ status: 400, message: "Email required" });
+  }
+  return request<{ status: string; message: string; dev_code?: string }>("/api/auth/resend-code", {
+    method: "POST",
+    body: { email: normalizedEmail },
+    signal,
+  });
+}
+
+export async function forgotPassword(
+  email: string,
+  signal?: AbortSignal
+): Promise<{ status: string; message: string; dev_code?: string }> {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) {
+    throw new ApiError({ status: 400, message: "Email required" });
+  }
+  return request<{ status: string; message: string; dev_code?: string }>("/api/auth/forgot-password", {
+    method: "POST",
+    body: { email: normalizedEmail },
+    signal,
+  });
+}
+
+export async function resetPassword(
+  email: string,
+  code: string,
+  newPassword: string,
+  signal?: AbortSignal
+): Promise<{ status: string; message: string }> {
+  const normalizedEmail = email.trim().toLowerCase();
+  const trimmedCode = code.trim();
+  if (!normalizedEmail || !trimmedCode || !newPassword) {
+    throw new ApiError({ status: 400, message: "Email, code, and new password required" });
+  }
+  return request<{ status: string; message: string }>("/api/auth/reset-password", {
+    method: "POST",
+    body: { email: normalizedEmail, code: trimmedCode, new_password: newPassword },
+    signal,
+  });
+}
+
 export async function logout(
   signal?: AbortSignal
 ): Promise<{ status: string; message?: string }> {
@@ -252,12 +317,32 @@ export async function createCheckoutSession(
   });
 }
 
+export interface AdminUserItem {
+  id: string;
+  email: string;
+  username?: string;
+  display_name?: string;
+  is_admin?: boolean;
+  status: "active" | "suspended" | "banned" | string;
+  email_verified?: boolean;
+  created_at?: string;
+  last_login?: string;
+}
+
 export interface AdminStats {
   status: string;
+  users_count?: number;
+  active_users_7d?: number;
+  active_users_30d?: number;
+  new_signups_7d?: number;
+  conversations_count?: number;
+  total_messages?: number;
+  messages_24h?: number;
   active_subscribers: number;
   payments_count: number;
   revenue_cents: number;
   revenue_usd: number;
+  recent_users?: AdminUserItem[];
   recent_payments: Array<{
     email?: string;
     plan?: string;
@@ -271,6 +356,18 @@ export async function getAdminStats(
   signal?: AbortSignal
 ): Promise<AdminStats> {
   return request("/api/admin/stats", { method: "GET", signal });
+}
+
+export async function updateUserStatus(
+  userId: string,
+  status: "active" | "suspended" | "banned",
+  signal?: AbortSignal
+): Promise<{ status: string; message: string; user?: AdminUserItem }> {
+  return request("/api/admin/users/status", {
+    method: "POST",
+    body: { user_id: userId, status },
+    signal,
+  });
 }
 
 export interface AdminMe {
@@ -478,11 +575,16 @@ export const api = {
   me: getCurrentUser,
   login,
   register,
+  verifyEmail,
+  resendVerificationCode,
+  forgotPassword,
+  resetPassword,
   logout,
   sendChatMessage,
   healthCheck,
   createCheckoutSession,
   getAdminStats,
+  updateUserStatus,
   getAdminMe,
   unlockAdmin,
   listConversations,
