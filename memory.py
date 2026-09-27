@@ -12,48 +12,79 @@ class Memory:
     """
 
     def __init__(self, database_path: str = "king_zarry_memory.db"):
-        # Prefer MEMORY_DB_PATH / DATA_DIR, but fall back if /data is not mounted or not writable
+        # Prefer MEMORY_DB_PATH / DATA_DIR, but NEVER use a non-writable path.
+        # Safe local fallback is always /app/king_zarry_memory.db (cwd), not the failed /data path.
+        safe_local = os.path.abspath("king_zarry_memory.db")
         env_path = (os.getenv("MEMORY_DB_PATH") or "").strip()
         data_dir = (os.getenv("DATA_DIR") or "").strip()
+        arg = (database_path or "").strip()
+
+        candidates = []
         if env_path:
-            candidate = env_path
-        elif data_dir:
-            candidate = os.path.join(data_dir, "king_zarry_memory.db")
-        else:
-            candidate = database_path
-        self.database_path = self._resolve_writable_path(candidate, database_path)
+            candidates.append(env_path)
+        if data_dir:
+            candidates.append(os.path.join(data_dir, "king_zarry_memory.db"))
+        # Only treat constructor arg as a candidate if it is NOT under an unwritable /data
+        if arg and arg not in candidates:
+            candidates.append(arg)
+        candidates.append(safe_local)
+
+        chosen = None
+        last_err = None
+        for cand in candidates:
+            ok, err = self._try_writable(cand)
+            if ok:
+                chosen = os.path.abspath(cand)
+                break
+            last_err = err
+
+        if not chosen:
+            # Last resort: try cwd with a unique name
+            chosen = safe_local
+            print(
+                f"⚠️ Memory: all paths failed (last={last_err}). Using {chosen}",
+                flush=True,
+            )
+        elif last_err and chosen == safe_local:
+            print(
+                f"⚠️ Memory path not writable ({candidates[0]}): {last_err}. "
+                f"Falling back to {chosen}",
+                flush=True,
+            )
+
+        self.database_path = chosen
         self.lock = threading.RLock()
         self._init_database()
         print(f"🧠 Persistent Memory initialized: {self.database_path}")
 
     @staticmethod
-    def _resolve_writable_path(candidate: str, fallback: str = "king_zarry_memory.db") -> str:
-        """Use candidate path if its directory is writable; else fall back to cwd."""
+    def _try_writable(candidate: str):
+        """Return (True, None) if dir is writable; else (False, error)."""
         try:
             path = os.path.abspath(candidate)
-            directory = os.path.dirname(path) or "."
+            directory = os.path.dirname(path) or os.getcwd()
+            # Refuse pure /data if it does not exist / not writable
             os.makedirs(directory, exist_ok=True)
             test_file = os.path.join(directory, ".kz_write_test")
             with open(test_file, "w") as f:
                 f.write("ok")
             os.remove(test_file)
-            return path
+            return True, None
         except OSError as e:
-            print(
-                f"⚠️ Memory path not writable ({candidate}): {e}. "
-                f"Falling back to ./{fallback}",
-                flush=True,
-            )
-            return os.path.abspath(fallback)
+            return False, e
 
     def _connect(self) -> sqlite3.Connection:
-        directory = os.path.dirname(os.path.abspath(self.database_path))
-        if directory:
-            try:
-                os.makedirs(directory, exist_ok=True)
-            except OSError:
-                pass
-        conn = sqlite3.connect(self.database_path, timeout=30.0, check_same_thread=False)
+        path = os.path.abspath(self.database_path)
+        directory = os.path.dirname(path) or os.getcwd()
+        try:
+            os.makedirs(directory, exist_ok=True)
+        except OSError:
+            # Final safety: force local file in cwd
+            path = os.path.abspath("king_zarry_memory.db")
+            self.database_path = path
+            directory = os.path.dirname(path) or os.getcwd()
+            os.makedirs(directory, exist_ok=True)
+        conn = sqlite3.connect(path, timeout=30.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA busy_timeout = 30000")
         conn.execute("PRAGMA journal_mode = WAL")
