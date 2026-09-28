@@ -2404,6 +2404,22 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
+    # Charts for each actionable signal (same as /signal charts)
+    charts = []
+    for a in actionable:
+        sym = str(a.get("symbol") or "")
+        if not sym:
+            continue
+        try:
+            mtf_data = await asyncio.to_thread(analyze_multi_timeframe, sym)
+            chart_buf = await asyncio.to_thread(build_signal_chart, mtf_data)
+            sig = mtf_data.get("mtf_signal") or (mtf_data.get("15m") or {}).get("signal") or a.get("signal")
+            sig_icon = "🟢" if sig == "BUY" else "🔴" if sig == "SELL" else "⏳"
+            caption = f"🤖 AGENT • {sig_icon} {sig} • {sym}" + chr(10) + "Auto signal — not financial advice."
+            charts.append((sym, chart_buf, caption))
+        except Exception as e:
+            logger.warning("agent_signal_watch chart %s: %s", sym, e)
+
     sent = 0
     for uid in targets:
         try:
@@ -2413,8 +2429,21 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML",
                 disable_web_page_preview=True,
             )
+            for sym, chart_buf, caption in charts:
+                try:
+                    if hasattr(chart_buf, "seek"):
+                        chart_buf.seek(0)
+                    await context.bot.send_photo(
+                        chat_id=uid,
+                        photo=chart_buf,
+                        caption=caption[:1024],
+                    )
+                    if hasattr(chart_buf, "seek"):
+                        chart_buf.seek(0)
+                except Exception as ce:
+                    logger.debug("agent chart send %s %s: %s", uid, sym, ce)
             sent += 1
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.08)
         except Exception as e:
             logger.debug(f"agent_signal_watch send {uid}: {e}")
 
