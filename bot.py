@@ -2347,6 +2347,82 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
 
 
 
+
+async def agentscan_command(update, context):
+    """Admin-only: force one agent market scan and reply with results."""
+    user = update.effective_user
+    if not user or user.id not in ADMIN_IDS:
+        await update.message.reply_text("Admin only.")
+        return
+    await update.message.reply_text("🤖 Agent scanning BTC/ETH/SOL/XAU…")
+    try:
+        from agent_core import tool_analyze_symbol
+    except Exception as e:
+        await update.message.reply_text(f"agent_core error: {type(e).__name__}")
+        return
+
+    lines = ["🤖 <b>AGENT SCAN RESULT</b>", ""]
+    actionable = []
+    for symbol in AGENT_WATCH_SYMBOLS:
+        try:
+            analysis = await asyncio.to_thread(tool_analyze_symbol, symbol, "15m")
+        except Exception as e:
+            lines.append(f"• {html.escape(symbol)}: ERROR {html.escape(type(e).__name__)}")
+            continue
+        sig = str(analysis.get("signal") or "WAIT").upper()
+        price = analysis.get("price")
+        late = _agent_signal_is_late(analysis)
+        eq = analysis.get("entry_quality") or "—"
+        conf = analysis.get("confidence")
+        err = analysis.get("error") or analysis.get("reason") or ""
+        tag = ""
+        if late and sig in ("BUY", "SELL"):
+            tag = " — <b>LATE (not sent)</b>"
+        elif sig in ("BUY", "SELL") and _agent_signal_is_actionable(analysis):
+            tag = " — <b>WOULD PUSH</b>"
+            actionable.append(analysis)
+        lines.append(
+            f"• <b>{html.escape(symbol)}</b>: {html.escape(sig)}"
+            + (f" @ {html.escape(str(price))}" if price is not None else "")
+            + f" | q={html.escape(str(eq))} conf={html.escape(str(conf))}"
+            + tag
+        )
+        if err and sig == "WAIT":
+            lines.append(f"  <i>{html.escape(str(err)[:120])}</i>")
+
+    lines.append("")
+    lines.append(f"Actionable now: <b>{len(actionable)}</b>")
+    if not actionable:
+        lines.append("No Telegram push — market is WAIT or late.")
+    else:
+        lines.append("Pushing LIVE SIGNAL to admin…")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML", disable_web_page_preview=True)
+
+    if actionable:
+        # Reuse same format as watch job
+        msg = ["🤖 <b>KING ZARRY AGENT — LIVE SIGNAL</b>", "", "Manual /agentscan:", ""]
+        for a in actionable:
+            msg.append(
+                f"• <b>{html.escape(str(a.get('symbol')))}</b> — "
+                f"<b>{html.escape(str(a.get('signal') or '').upper())}</b>\n"
+                f"  Price: {html.escape(str(a.get('price') or '—'))} | "
+                f"Entry: {html.escape(str(a.get('entry') or '—'))}\n"
+                f"  SL: {html.escape(str(a.get('stop_loss') or '—'))} | "
+                f"TP1: {html.escape(str(a.get('tp1') or '—'))}"
+            )
+        msg.append("")
+        msg.append("<i>Not financial advice. Trading involves risk.</i>")
+        text = "\n".join(msg)
+        for uid in ADMIN_IDS:
+            try:
+                await context.bot.send_message(
+                    chat_id=uid, text=text, parse_mode="HTML", disable_web_page_preview=True
+                )
+            except Exception as e:
+                logger.warning("agentscan send failed %s: %s", uid, e)
+
+
+
 async def notification_job(context: ContextTypes.DEFAULT_TYPE):
     conn=db_connect()
     try:
@@ -3214,6 +3290,8 @@ def main():
     application.add_handler(CommandHandler("3month", three_month_command))
     application.add_handler(CommandHandler("yearly", yearly_command))
     application.add_handler(CommandHandler("status", status_command))
+    application.add_handler(CommandHandler("agentscan", agentscan_command))
+    application.add_handler(CommandHandler("agent", agentscan_command))
     application.add_handler(CommandHandler("history", history_command))
     application.add_handler(CommandHandler("paysupport", paysupport_command))
     application.add_handler(CommandHandler("users", users_command))
@@ -3254,11 +3332,40 @@ def main():
                 application.job_queue.run_repeating(
                     agent_signal_watch_job,
                     interval=AGENT_SIGNAL_INTERVAL_SEC,
-                    first=90,
+                    first=30,
                 )
                 logger.info(
                     f"🤖 Agent signal watch every {AGENT_SIGNAL_INTERVAL_SEC}s → audience={AGENT_SIGNAL_AUDIENCE}"
                 )
+                # One-shot: tell admin agent is auto-watching (no user ask needed)
+                async def _agent_boot_ping(context: ContextTypes.DEFAULT_TYPE):
+                    if not ADMIN_IDS:
+                        logger.warning("agent boot ping: ADMIN_IDS empty — cannot DM")
+                        return
+                    text = chr(10).join([
+                        "🤖 <b>KING ZARRY AGENT ONLINE</b>",
+                        "",
+                        "Auto-watching: BTC · ETH · SOL · XAU",
+                        f"Scan every <b>{AGENT_SIGNAL_INTERVAL_SEC}s</b>",
+                        f"Audience: <b>{html.escape(str(AGENT_SIGNAL_AUDIENCE))}</b>",
+                        "",
+                        "I will message you automatically when a non-late <b>BUY</b> or <b>SELL</b> appears.",
+                        "No need to ask. Quiet = market is WAIT or late.",
+                        "",
+                        "<i>Not financial advice.</i>",
+                    ])
+                    for uid in ADMIN_IDS:
+                        try:
+                            await context.bot.send_message(
+                                chat_id=uid,
+                                text=text,
+                                parse_mode="HTML",
+                                disable_web_page_preview=True,
+                            )
+                            logger.info(f"agent boot ping sent to {uid}")
+                        except Exception as e:
+                            logger.warning(f"agent boot ping failed {uid}: {e}")
+                application.job_queue.run_once(_agent_boot_ping, when=15)
             else:
                 logger.info("🤖 Agent signal watch disabled (AGENT_SIGNAL_WATCH=false)")
             print("🔔 Notification job scheduled every 60s", flush=True)
