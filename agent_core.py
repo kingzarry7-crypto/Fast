@@ -32,7 +32,12 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("king_zarry_agent")
 
-DEFAULT_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD", "XAU/USD"]
+try:
+    from market import get_agent_watch_symbols
+    DEFAULT_SYMBOLS = get_agent_watch_symbols()
+except Exception:
+    DEFAULT_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD", "BNB/USD", "XRP/USD", "XAU/USD"]
+
 RISKY_JOB_TYPES = {"social_post", "whatsapp_send", "browser_action", "email_send"}
 
 _DB_LOCK = threading.Lock()
@@ -375,6 +380,18 @@ def tool_analyze_symbol(symbol: str, timeframe: str = "15m") -> Dict[str, Any]:
             "status": data.get("status"),
             "data_ok": data_ok,
             "reason": data.get("reason") or data.get("entry_status_reason"),
+            "late_entry": bool(
+                data.get("late_entry")
+                or str(data.get("entry_quality") or "").upper() in ("LATE", "RISKY")
+            ),
+            "late_entry_reason": data.get("late_entry_reason")
+            or data.get("trigger_condition")
+            or "",
+            "late_score": (data.get("late_entry_data") or {}).get("score")
+            if isinstance(data.get("late_entry_data"), dict)
+            else data.get("late_score"),
+            "entry_quality": data.get("entry_quality")
+            or (data.get("late_entry_data") or {}).get("quality"),
         }
     except Exception as e:
         logger.warning("tool_analyze_symbol failed %s: %s", symbol, e)
