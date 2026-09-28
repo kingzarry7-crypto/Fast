@@ -79,18 +79,28 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                autoComplete="email"
                 className="w-full bg-black/40 border border-cyan-500/25 focus:border-cyan-400 rounded-md px-4 py-3 text-sm text-white outline-none font-mono-tech tracking-wider"
               />
             </div>
             <div>
-              <label className="block font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/60 mb-2">
-                PASSWORD
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/60">
+                  PASSWORD
+                </label>
+                <Link
+                  href="/forgot-password"
+                  className="font-mono-tech text-[10px] tracking-widest text-cyan-400 hover:text-cyan-300"
+                >
+                  FORGOT PASSWORD?
+                </Link>
+              </div>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                autoComplete="current-password"
                 className="w-full bg-black/40 border border-cyan-500/25 focus:border-cyan-400 rounded-md px-4 py-3 text-sm text-white outline-none font-mono-tech tracking-wider"
               />
             </div>
@@ -104,10 +114,17 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-center font-mono-tech text-[10px] tracking-widest text-cyan-400/40 mt-6">
-          NO ACCOUNT?{" "}
+        <p className="text-center font-mono-tech text-[10px] tracking-widest text-cyan-400/40 mt-6 space-x-3">
           <Link href="/register" className="text-cyan-400 hover:text-cyan-300">
             REGISTER
+          </Link>
+          <span className="text-cyan-500/30">·</span>
+          <Link href="/forgot-password" className="text-cyan-400 hover:text-cyan-300">
+            FORGOT PASSWORD
+          </Link>
+          <span className="text-cyan-500/30">·</span>
+          <Link href="/verify-email" className="text-cyan-400 hover:text-cyan-300">
+            VERIFY EMAIL
           </Link>
         </p>
       </div>
