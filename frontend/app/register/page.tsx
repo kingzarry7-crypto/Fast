@@ -22,7 +22,11 @@ export default function RegisterPage() {
     setError(null);
     setLoading(true);
     try {
-      await register(email, password, username, displayName);
+      const result = await register(email, password, username, displayName);
+      if (result.requires_verification) {
+        router.replace(`/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`);
+        return;
+      }
       router.replace("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
