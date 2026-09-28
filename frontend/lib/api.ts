@@ -1,5 +1,5 @@
 // frontend/lib/api.ts
-// KING ZARRY AI — complete API client (auth, chat, admin, agent, TTS, billing)
+// KING ZARRY AI — complete API client (auth, chat, admin, agent, TTS, billing, markets)
 
 import type {
   AuthUser,
@@ -133,35 +133,16 @@ async function request<T>(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Auth
-// ---------------------------------------------------------------------------
-
 export async function getCurrentUser(signal?: AbortSignal): Promise<AuthUser> {
-  const data = await request<MeResponse>("/api/auth/me", {
-    method: "GET",
-    signal,
-  });
-  if (!data?.user) {
-    throw new ApiError({ status: 500, message: "Invalid user response" });
-  }
+  const data = await request<MeResponse>("/api/auth/me", { method: "GET", signal });
+  if (!data?.user) throw new ApiError({ status: 500, message: "Invalid user response" });
   return data.user;
 }
 
-export async function login(
-  email: string,
-  password: string,
-  signal?: AbortSignal
-): Promise<AuthResponse> {
+export async function login(email: string, password: string, signal?: AbortSignal): Promise<AuthResponse> {
   const normalizedEmail = email.trim().toLowerCase();
-  if (!normalizedEmail || !password) {
-    throw new ApiError({ status: 400, message: "Email and password required" });
-  }
-  return request<AuthResponse>("/api/auth/login", {
-    method: "POST",
-    body: { email: normalizedEmail, password },
-    signal,
-  });
+  if (!normalizedEmail || !password) throw new ApiError({ status: 400, message: "Email and password required" });
+  return request<AuthResponse>("/api/auth/login", { method: "POST", body: { email: normalizedEmail, password }, signal });
 }
 
 export type RegisterResult = AuthResponse & {
@@ -179,118 +160,49 @@ export async function register(
   signal?: AbortSignal
 ): Promise<RegisterResult> {
   const normalizedEmail = email.trim().toLowerCase();
-  if (!normalizedEmail || !password) {
-    throw new ApiError({ status: 400, message: "Email and password required" });
-  }
-  const payload: Record<string, string> = {
-    email: normalizedEmail,
-    password,
-  };
+  if (!normalizedEmail || !password) throw new ApiError({ status: 400, message: "Email and password required" });
+  const payload: Record<string, string> = { email: normalizedEmail, password };
   if (username?.trim()) payload.username = username.trim();
   if (displayName?.trim()) payload.display_name = displayName.trim();
-
-  return request<RegisterResult>("/api/auth/register", {
-    method: "POST",
-    body: payload,
-    signal,
-  });
+  return request<RegisterResult>("/api/auth/register", { method: "POST", body: payload, signal });
 }
 
-export async function verifyEmail(
-  email: string,
-  code: string,
-  signal?: AbortSignal
-): Promise<AuthResponse> {
+export async function verifyEmail(email: string, code: string, signal?: AbortSignal): Promise<AuthResponse> {
   const normalizedEmail = email.trim().toLowerCase();
   const trimmedCode = code.trim();
-  if (!normalizedEmail || !trimmedCode) {
-    throw new ApiError({
-      status: 400,
-      message: "Email and verification code required",
-    });
-  }
-  return request<AuthResponse>("/api/auth/verify-email", {
-    method: "POST",
-    body: { email: normalizedEmail, code: trimmedCode },
-    signal,
-  });
+  if (!normalizedEmail || !trimmedCode) throw new ApiError({ status: 400, message: "Email and verification code required" });
+  return request<AuthResponse>("/api/auth/verify-email", { method: "POST", body: { email: normalizedEmail, code: trimmedCode }, signal });
 }
 
-export async function resendVerificationCode(
-  email: string,
-  signal?: AbortSignal
-): Promise<{ status: string; message?: string; dev_code?: string }> {
+export async function resendVerificationCode(email: string, signal?: AbortSignal) {
   const normalizedEmail = email.trim().toLowerCase();
-  if (!normalizedEmail) {
-    throw new ApiError({ status: 400, message: "Email required" });
-  }
-  return request("/api/auth/resend-code", {
-    method: "POST",
-    body: { email: normalizedEmail },
-    signal,
-  });
+  if (!normalizedEmail) throw new ApiError({ status: 400, message: "Email required" });
+  return request<{ status: string; message?: string; dev_code?: string }>("/api/auth/resend-code", { method: "POST", body: { email: normalizedEmail }, signal });
 }
 
-export async function forgotPassword(
-  email: string,
-  signal?: AbortSignal
-): Promise<{ status: string; message?: string; dev_code?: string }> {
+export async function forgotPassword(email: string, signal?: AbortSignal) {
   const normalizedEmail = email.trim().toLowerCase();
-  if (!normalizedEmail) {
-    throw new ApiError({ status: 400, message: "Email required" });
-  }
-  return request("/api/auth/forgot-password", {
-    method: "POST",
-    body: { email: normalizedEmail },
-    signal,
-  });
+  if (!normalizedEmail) throw new ApiError({ status: 400, message: "Email required" });
+  return request<{ status: string; message?: string; dev_code?: string }>("/api/auth/forgot-password", { method: "POST", body: { email: normalizedEmail }, signal });
 }
 
-export async function resetPassword(
-  email: string,
-  code: string,
-  newPassword: string,
-  signal?: AbortSignal
-): Promise<{ status: string; message?: string }> {
+export async function resetPassword(email: string, code: string, newPassword: string, signal?: AbortSignal) {
   const normalizedEmail = email.trim().toLowerCase();
   const trimmedCode = code.trim();
-  if (!normalizedEmail || !trimmedCode || !newPassword) {
-    throw new ApiError({
-      status: 400,
-      message: "Email, code, and new password required",
-    });
-  }
-  if (newPassword.length < 8) {
-    throw new ApiError({
-      status: 400,
-      message: "Password must be at least 8 characters",
-    });
-  }
-  return request("/api/auth/reset-password", {
+  if (!normalizedEmail || !trimmedCode || !newPassword) throw new ApiError({ status: 400, message: "Email, code, and new password required" });
+  if (newPassword.length < 8) throw new ApiError({ status: 400, message: "Password must be at least 8 characters" });
+  return request<{ status: string; message?: string }>("/api/auth/reset-password", {
     method: "POST",
-    body: {
-      email: normalizedEmail,
-      code: trimmedCode,
-      new_password: newPassword,
-    },
+    body: { email: normalizedEmail, code: trimmedCode, new_password: newPassword },
     signal,
   });
 }
 
-export async function logout(
-  signal?: AbortSignal
-): Promise<{ status: string; message?: string }> {
-  return request("/api/auth/logout", { method: "POST", signal });
+export async function logout(signal?: AbortSignal) {
+  return request<{ status: string; message?: string }>("/api/auth/logout", { method: "POST", signal });
 }
 
-// ---------------------------------------------------------------------------
-// Chat
-// ---------------------------------------------------------------------------
-
-export interface SendImagePayload {
-  base64: string;
-  mime: string;
-}
+export interface SendImagePayload { base64: string; mime: string; }
 
 export async function sendChatMessage(
   message: string,
@@ -300,61 +212,30 @@ export async function sendChatMessage(
 ): Promise<ChatResponse> {
   const trimmed = message.trim();
   const hasImage = !!(image && image.base64);
-
-  if (!trimmed && !hasImage) {
-    throw new ApiError({ status: 400, message: "Message required" });
-  }
-  if (trimmed.length > 4000) {
-    throw new ApiError({ status: 400, message: "Message too long" });
-  }
-
-  const body: Record<string, unknown> = {
-    message: trimmed || "What do you see in this image?",
-  };
-  if (conversationId) {
-    body.conversation_id = conversationId;
-  }
+  if (!trimmed && !hasImage) throw new ApiError({ status: 400, message: "Message required" });
+  if (trimmed.length > 4000) throw new ApiError({ status: 400, message: "Message too long" });
+  const body: Record<string, unknown> = { message: trimmed || "What do you see in this image?" };
+  if (conversationId) body.conversation_id = conversationId;
   if (hasImage) {
     body.image_base64 = image!.base64;
     body.image_mime = image!.mime || "image/jpeg";
   }
-
-  const data = await request<ChatResponse>("/api/chat", {
-    method: "POST",
-    body,
-    signal,
-  });
-  if (!data?.reply) {
-    throw new ApiError({ status: 500, message: "Invalid chat response" });
-  }
+  const data = await request<ChatResponse>("/api/chat", { method: "POST", body, signal });
+  if (!data?.reply) throw new ApiError({ status: 500, message: "Invalid chat response" });
   return data;
 }
 
-export async function healthCheck(): Promise<{
-  status: string;
-  database?: { status: string };
-}> {
-  return request("/health", { method: "GET" });
+export async function healthCheck() {
+  return request<{ status: string; database?: { status: string } }>("/health", { method: "GET" });
 }
 
-// ---------------------------------------------------------------------------
-// Billing
-// ---------------------------------------------------------------------------
-
-export async function createCheckoutSession(
-  plan: string,
-  signal?: AbortSignal
-): Promise<{ status: string; checkout_url: string; session_id?: string }> {
-  return request("/api/billing/create-checkout-session", {
+export async function createCheckoutSession(plan: string, signal?: AbortSignal) {
+  return request<{ status: string; checkout_url: string; session_id?: string }>("/api/billing/create-checkout-session", {
     method: "POST",
     body: { plan },
     signal,
   });
 }
-
-// ---------------------------------------------------------------------------
-// Admin
-// ---------------------------------------------------------------------------
 
 export interface AdminUserItem {
   id?: string;
@@ -381,19 +262,11 @@ export interface AdminStats {
   revenue_cents: number;
   revenue_usd: number;
   recent_users?: AdminUserItem[];
-  recent_payments: Array<{
-    email?: string;
-    plan?: string;
-    amount_cents?: number;
-    status?: string;
-    created_at?: string;
-  }>;
+  recent_payments: Array<{ email?: string; plan?: string; amount_cents?: number; status?: string; created_at?: string }>;
   note?: string;
 }
 
-export async function getAdminStats(
-  signal?: AbortSignal
-): Promise<AdminStats> {
+export async function getAdminStats(signal?: AbortSignal): Promise<AdminStats> {
   return request("/api/admin/stats", { method: "GET", signal });
 }
 
@@ -411,55 +284,33 @@ export async function getAdminMe(signal?: AbortSignal): Promise<AdminMe> {
   return request("/api/admin/me", { method: "GET", signal });
 }
 
-export async function unlockAdmin(
-  password: string,
-  signal?: AbortSignal
-): Promise<{ status: string; message?: string }> {
-  return request("/api/admin/unlock", {
-    method: "POST",
-    body: { password },
-    signal,
-  });
+export async function unlockAdmin(password: string, signal?: AbortSignal) {
+  return request<{ status: string; message?: string }>("/api/admin/unlock", { method: "POST", body: { password }, signal });
 }
 
-/** Ban / suspend / reactivate — matches POST /api/admin/users/{id}/status */
 export async function setAdminUserStatus(
   userId: string,
   status: "active" | "suspended" | "banned",
   signal?: AbortSignal
-): Promise<{ status: string; user: AdminUserItem }> {
-  return request(
-    `/api/admin/users/${encodeURIComponent(userId)}/status`,
-    {
-      method: "POST",
-      body: { status },
-      signal,
-    }
-  );
-}
-
-/** Alias used by some UI builds */
-export async function updateUserStatus(
-  userId: string,
-  status: "active" | "suspended" | "banned",
-  signal?: AbortSignal
-): Promise<{ status: string; user: AdminUserItem }> {
-  return setAdminUserStatus(userId, status, signal);
-}
-
-export async function listAdminUsers(
-  limit = 50,
-  signal?: AbortSignal
-): Promise<{ status: string; users: AdminUserItem[] }> {
-  return request(`/api/admin/users?limit=${limit}`, {
-    method: "GET",
+) {
+  return request<{ status: string; user: AdminUserItem }>(`/api/admin/users/${encodeURIComponent(userId)}/status`, {
+    method: "POST",
+    body: { status },
     signal,
   });
 }
 
-// ---------------------------------------------------------------------------
-// Conversations
-// ---------------------------------------------------------------------------
+export async function updateUserStatus(
+  userId: string,
+  status: "active" | "suspended" | "banned",
+  signal?: AbortSignal
+) {
+  return setAdminUserStatus(userId, status, signal);
+}
+
+export async function listAdminUsers(limit = 50, signal?: AbortSignal) {
+  return request<{ status: string; users: AdminUserItem[] }>(`/api/admin/users?limit=${limit}`, { method: "GET", signal });
+}
 
 export interface ConversationItem {
   id: string;
@@ -469,56 +320,24 @@ export interface ConversationItem {
   updated_at?: string;
 }
 
-export async function listConversations(
-  signal?: AbortSignal
-): Promise<ConversationItem[]> {
-  const data = await request<{
-    status: string;
-    conversations: ConversationItem[];
-  }>("/api/conversations", { method: "GET", signal });
+export async function listConversations(signal?: AbortSignal): Promise<ConversationItem[]> {
+  const data = await request<{ status: string; conversations: ConversationItem[] }>("/api/conversations", { method: "GET", signal });
   return data?.conversations || [];
 }
 
-export async function createConversation(
-  signal?: AbortSignal
-): Promise<ConversationItem> {
-  const data = await request<{
-    status: string;
-    conversation: ConversationItem;
-  }>("/api/conversations", { method: "POST", signal });
-  if (!data?.conversation?.id) {
-    throw new ApiError({
-      status: 500,
-      message: "Could not create conversation",
-    });
-  }
+export async function createConversation(signal?: AbortSignal): Promise<ConversationItem> {
+  const data = await request<{ status: string; conversation: ConversationItem }>("/api/conversations", { method: "POST", signal });
+  if (!data?.conversation?.id) throw new ApiError({ status: 500, message: "Could not create conversation" });
   return data.conversation;
 }
 
-export async function getConversationMessages(
-  conversationId: string,
-  signal?: AbortSignal
-): Promise<
-  { role: string; content: string; created_at?: string; id?: string }[]
-> {
-  const data = await request<{
-    status: string;
-    messages: {
-      role: string;
-      content: string;
-      created_at?: string;
-      id?: string;
-    }[];
-  }>(`/api/conversations/${encodeURIComponent(conversationId)}/messages`, {
-    method: "GET",
-    signal,
-  });
+export async function getConversationMessages(conversationId: string, signal?: AbortSignal) {
+  const data = await request<{ status: string; messages: { role: string; content: string; created_at?: string; id?: string }[] }>(
+    `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
+    { method: "GET", signal }
+  );
   return data?.messages || [];
 }
-
-// ---------------------------------------------------------------------------
-// TTS (ElevenLabs via backend)
-// ---------------------------------------------------------------------------
 
 export type TtsVoice = "bella" | "male";
 
@@ -529,49 +348,31 @@ export async function synthesizeSpeech(
   voice: TtsVoice = "bella"
 ): Promise<Blob> {
   const trimmed = text.trim();
-  if (!trimmed) {
-    throw new ApiError({ status: 400, message: "Text required" });
-  }
+  if (!trimmed) throw new ApiError({ status: 400, message: "Text required" });
   const url = buildUrl("/api/tts");
   let response: Response;
   try {
     response = await fetch(url, {
       method: "POST",
-      headers: {
-        Accept: "audio/mpeg",
-        "Content-Type": "application/json",
-      },
+      headers: { Accept: "audio/mpeg", "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({
-        text: trimmed.slice(0, 2000),
-        style,
-        voice: voice === "male" ? "male" : "bella",
-      }),
+      body: JSON.stringify({ text: trimmed.slice(0, 2000), style, voice: voice === "male" ? "male" : "bella" }),
       signal,
     });
   } catch (error: unknown) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new ApiError({
-      status: 0,
-      message: error instanceof Error ? error.message : "Network error",
-    });
+    throw new ApiError({ status: 0, message: error instanceof Error ? error.message : "Network error" });
   }
   if (!response.ok) {
     let message = `TTS failed (${response.status})`;
     try {
       const j = await response.json();
       if (j?.detail) message = String(j.detail);
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
     throw new ApiError({ status: response.status, message });
   }
   return response.blob();
 }
-
-// ---------------------------------------------------------------------------
-// Agent
-// ---------------------------------------------------------------------------
 
 export interface AgentJob {
   id: string;
@@ -598,65 +399,85 @@ export interface AgentBrief {
   disclaimer?: string;
 }
 
-export async function getAgentStatus(
-  signal?: AbortSignal
-): Promise<Record<string, unknown>> {
-  return request("/api/agent/status", { method: "GET", signal });
+export async function getAgentStatus(signal?: AbortSignal) {
+  return request<Record<string, unknown>>("/api/agent/status", { method: "GET", signal });
 }
 
-export async function runAgentGoal(
-  goal: string,
-  signal?: AbortSignal
-): Promise<Record<string, unknown>> {
+export async function runAgentGoal(goal: string, signal?: AbortSignal) {
   const trimmed = goal.trim();
-  if (!trimmed) {
-    throw new ApiError({ status: 400, message: "Goal required" });
-  }
-  return request("/api/agent/run", {
-    method: "POST",
-    body: { goal: trimmed.slice(0, 2000) },
+  if (!trimmed) throw new ApiError({ status: 400, message: "Goal required" });
+  return request<Record<string, unknown>>("/api/agent/run", { method: "POST", body: { goal: trimmed.slice(0, 2000) }, signal });
+}
+
+export async function generateMorningBrief(signal?: AbortSignal) {
+  return request<{ status: string; brief?: AgentBrief }>("/api/agent/morning-brief", { method: "POST", signal });
+}
+
+export async function getLatestMorningBrief(signal?: AbortSignal) {
+  return request<{ status: string; brief?: AgentBrief | null }>("/api/agent/morning-brief/latest", { method: "GET", signal });
+}
+
+export async function listAgentJobs(signal?: AbortSignal) {
+  return request<{ status: string; jobs: AgentJob[] }>("/api/agent/jobs", { method: "GET", signal });
+}
+
+export async function approveAgentJob(jobId: string, signal?: AbortSignal) {
+  return request<{ status: string; job?: AgentJob }>("/api/agent/jobs/approve", { method: "POST", body: { job_id: jobId }, signal });
+}
+
+export async function getAgentLearning(signal?: AbortSignal) {
+  return request<{ status: string; learning: Record<string, unknown>[] }>("/api/agent/learning", { method: "GET", signal });
+}
+
+export interface MarketSnapshot {
+  symbol: string;
+  timeframe?: string;
+  price?: number | string | null;
+  signal?: string;
+  trend?: string;
+  confidence?: string | number;
+  strength?: string | number;
+  rsi?: number;
+  support?: number;
+  resistance?: number;
+  entry?: string | number;
+  stop_loss?: string | number;
+  tp1?: string | number;
+  tp2?: string | number;
+  tp3?: string | number;
+  reasons?: string[];
+  news?: Record<string, unknown>;
+  error?: string;
+  mtf?: unknown;
+  structure?: unknown;
+  volatility?: unknown;
+}
+
+export async function getMarkets(signal?: AbortSignal) {
+  return request<{ status: string; symbols: MarketSnapshot[]; count?: number }>("/api/markets", { method: "GET", signal });
+}
+
+export async function getMarketDetail(symbol: string, timeframe = "15m", signal?: AbortSignal) {
+  const sym = encodeURIComponent(symbol);
+  return request<{ status: string; market: MarketSnapshot }>(`/api/markets/${sym}?timeframe=${encodeURIComponent(timeframe)}`, {
+    method: "GET",
     signal,
   });
 }
 
-export async function generateMorningBrief(
-  signal?: AbortSignal
-): Promise<{ status: string; brief?: AgentBrief }> {
-  return request("/api/agent/morning-brief", { method: "POST", signal });
-}
-
-export async function getLatestMorningBrief(
-  signal?: AbortSignal
-): Promise<{ status: string; brief?: AgentBrief | null }> {
-  return request("/api/agent/morning-brief/latest", { method: "GET", signal });
-}
-
-export async function listAgentJobs(
-  signal?: AbortSignal
-): Promise<{ status: string; jobs: AgentJob[] }> {
-  return request("/api/agent/jobs", { method: "GET", signal });
-}
-
-export async function approveAgentJob(
-  jobId: string,
-  signal?: AbortSignal
-): Promise<{ status: string; job?: AgentJob }> {
-  return request("/api/agent/jobs/approve", {
-    method: "POST",
-    body: { job_id: jobId },
+export async function getSignals(signal?: AbortSignal) {
+  return request<{ status: string; signals: MarketSnapshot[]; actionable_count?: number; disclaimer?: string }>("/api/signals", {
+    method: "GET",
     signal,
   });
 }
 
-export async function getAgentLearning(
-  signal?: AbortSignal
-): Promise<{ status: string; learning: Record<string, unknown>[] }> {
-  return request("/api/agent/learning", { method: "GET", signal });
+export async function getNews(signal?: AbortSignal) {
+  return request<{ status: string; assets: Array<Record<string, unknown>>; global_headlines?: unknown[]; disclaimer?: string }>("/api/news", {
+    method: "GET",
+    signal,
+  });
 }
-
-// ---------------------------------------------------------------------------
-// Namespace export
-// ---------------------------------------------------------------------------
 
 export const api = {
   buildUrl,
@@ -690,12 +511,10 @@ export const api = {
   listAgentJobs,
   approveAgentJob,
   getAgentLearning,
+  getMarkets,
+  getMarketDetail,
+  getSignals,
+  getNews,
 };
 
-export type {
-  AuthUser,
-  AuthResponse,
-  MeResponse,
-  ChatResponse,
-  ApiErrorData,
-} from "@/types";
+export type { AuthUser, AuthResponse, MeResponse, ChatResponse, ApiErrorData } from "@/types";
