@@ -1431,6 +1431,41 @@ def _ensure_billing_tables() -> None:
                 )
                 """
             )
+
+            # Migrate older web_subscriptions missing is_subscribed
+            try:
+                cur.execute(
+                    """
+                    ALTER TABLE web_subscriptions
+                    ADD COLUMN IF NOT EXISTS is_subscribed BOOLEAN NOT NULL DEFAULT FALSE
+                    """
+                )
+                cur.execute(
+                    """
+                    ALTER TABLE web_subscriptions
+                    ADD COLUMN IF NOT EXISTS plan TEXT
+                    """
+                )
+                cur.execute(
+                    """
+                    ALTER TABLE web_subscriptions
+                    ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ
+                    """
+                )
+                cur.execute(
+                    """
+                    ALTER TABLE web_subscriptions
+                    ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT
+                    """
+                )
+                cur.execute(
+                    """
+                    ALTER TABLE web_subscriptions
+                    ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT
+                    """
+                )
+            except Exception as mig_exc:
+                logger.warning("web_subscriptions migrate: %s", type(mig_exc).__name__)
     except Exception as exc:
         logger.warning("ensure billing tables failed: %s", type(exc).__name__)
 
@@ -2207,14 +2242,20 @@ def _safe_analyze(symbol: str, timeframe: str = "15m") -> Dict[str, Any]:
             "symbol": symbol,
             "timeframe": timeframe,
             "price": data.get("price") or data.get("current_price"),
-            "signal": data.get("signal") or data.get("mtf_signal") or data.get("bias") or "WAIT",
-            "trend": data.get("trend") or data.get("mtf_bias"),
+            "signal": (
+                data.get("signal")
+                or data.get("direction")
+                or data.get("mtf_signal")
+                or data.get("bias")
+                or "WAIT"
+            ),
+            "trend": data.get("trend") or data.get("mtf_bias") or data.get("htf_trend"),
             "confidence": data.get("confidence"),
-            "strength": data.get("strength") or data.get("mtf_strength"),
+            "strength": data.get("strength") or data.get("setup_strength") or data.get("mtf_strength"),
             "rsi": data.get("rsi"),
-            "support": data.get("support"),
-            "resistance": data.get("resistance"),
-            "entry": data.get("entry") or data.get("entry_zone"),
+            "support": data.get("support") or data.get("nearest_support"),
+            "resistance": data.get("resistance") or data.get("nearest_resistance"),
+            "entry": data.get("entry") or data.get("entry_zone") or data.get("ideal_entry"),
             "stop_loss": data.get("stop_loss") or data.get("sl"),
             "tp1": data.get("tp1"),
             "tp2": data.get("tp2"),
