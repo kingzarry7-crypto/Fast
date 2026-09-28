@@ -12,7 +12,7 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
-from permissions import (
+from permission import (
     PermissionLevel,
     Operation,
     Service,

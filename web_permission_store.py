@@ -28,7 +28,7 @@ from enum import Enum
 from typing import Any, Dict, Iterable, Optional, Set, Tuple
 
 from database import get_db_connection
-from permissions import (
+from permission import (
     Approval,
     ApprovalStatus,
     ExactAction,

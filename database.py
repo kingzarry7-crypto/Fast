@@ -10,7 +10,7 @@ This module connects ONLY to Neon PostgreSQL for web frontend users.
 - Provides reusable connection and health-check
 
 Usage:
-    from backend.app.web.database import get_connection, check_database_health, get_db_cursor
+    from database import get_db_connection, check_database_health, get_db_cursor
 
     # Simple query
     with get_db_cursor() as cur:

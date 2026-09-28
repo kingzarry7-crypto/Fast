@@ -87,10 +87,16 @@ allowed_origins = [
 if not allowed_origins:
     allowed_origins = ["http://localhost:3000"]
 
+# Configurable CORS origin regex. Default allows any Vercel preview deployment.
+# SECURITY: To tighten, set CORS_ALLOW_ORIGIN_REGEX in your env to your specific
+# Vercel project pattern (e.g. https://king-zarry-ai.*\.vercel\.app) or set to
+# empty string to disable the regex entirely and rely only on FRONTEND_URL.
+CORS_ORIGIN_REGEX = (os.getenv("CORS_ALLOW_ORIGIN_REGEX") or r"https://.*\.vercel\.app").strip()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origin_regex=CORS_ORIGIN_REGEX if CORS_ORIGIN_REGEX else None,
     allow_credentials=True,
     allow_methods=[
         "GET",
@@ -1380,6 +1386,8 @@ def _parse_admin_emails() -> set:
 ADMIN_EMAILS = _parse_admin_emails()
 # Optional second factor for /admin ONLY (NOT your website login password unless you choose that)
 ADMIN_PASSWORD = (os.getenv("ADMIN_PASSWORD") or "").strip().strip(chr(34) + chr(39))
+if not ADMIN_PASSWORD:
+    logger.warning("ADMIN_PASSWORD not set — admin endpoints have no second-factor password gate. Set ADMIN_PASSWORD in your env to secure admin access.")
 ADMIN_SESSION_COOKIE = "kz_admin_session"
 ADMIN_SESSION_DAYS = 7
 
@@ -1587,20 +1595,31 @@ def _admin_password_configured() -> bool:
 
 
 def _admin_session_token() -> str:
-    """Deterministic token derived from ADMIN_PASSWORD (not the password itself)."""
+    """Token with embedded timestamp for server-side expiry checking."""
     if not ADMIN_PASSWORD:
         return ""
-    return hashlib.sha256(f"kz-admin:{ADMIN_PASSWORD}".encode("utf-8")).hexdigest()
+    ts = str(int(_utc_now().timestamp()))
+    sig = hashlib.sha256(f"kz-admin:{ADMIN_PASSWORD}:{ts}".encode("utf-8")).hexdigest()
+    return f"{ts}.{sig}"
 
 
 def _has_valid_admin_session(request: Request) -> bool:
     if not ADMIN_PASSWORD:
         return True  # no password gate
-    expected = _admin_session_token()
     got = (request.cookies.get(ADMIN_SESSION_COOKIE) or "").strip()
-    if not got or not expected:
+    if not got or "." not in got:
         return False
-    return hmac.compare_digest(got, expected)
+    ts_str, sig = got.split(".", 1)
+    expected_sig = hashlib.sha256(f"kz-admin:{ADMIN_PASSWORD}:{ts_str}".encode("utf-8")).hexdigest()
+    if not hmac.compare_digest(sig, expected_sig):
+        return False
+    try:
+        age = _utc_now().timestamp() - int(ts_str)
+        if age > ADMIN_SESSION_DAYS * 24 * 3600:
+            return False
+    except Exception:
+        return False
+    return True
 
 
 def _require_admin(request: Request):

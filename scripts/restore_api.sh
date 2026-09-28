@@ -1,4 +1,7 @@
 #!/bin/bash
+# WARNING: This script OVERWRITES api.py with an old recovered version.
+# Do NOT run this unless you intentionally want to restore the old api.py.
+# It will destroy any changes made to api.py since the recovery snapshot.
 # Run once: reconstruct api.py from parts (recovery from accidental placeholder)
 set -e
 cd "$(dirname "$0")/.."
