@@ -280,7 +280,7 @@ export default function ChatPage() {
 
   return (
     <ProtectedRoute>
-      <div className="flex flex-col h-screen">
+      <div className="flex flex-col h-[100dvh] min-h-0 overflow-hidden">
         {!isVip && membership && (
           <div className="border-b border-amber-500/20 bg-amber-950/30 px-4 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <p className="font-mono-tech text-[10px] tracking-wider text-amber-200/90">
@@ -308,7 +308,7 @@ export default function ChatPage() {
           </div>
         )}
 
-        <div className="border-b border-cyan-500/10 px-6 py-3 flex items-center justify-between bg-[#020914]/60 backdrop-blur-xl">
+        <div className="border-b border-cyan-500/10 px-4 sm:px-6 py-3 flex items-center justify-between bg-[#020914]/60 backdrop-blur-xl shrink-0">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setHistoryOpen((v) => !v)}
@@ -343,7 +343,7 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 min-h-0 overflow-hidden">
           <div
             className={`${
               historyOpen ? "flex" : "hidden"
@@ -406,8 +406,8 @@ export default function ChatPage() {
             ))}
           </div>
 
-          <div className="flex-1 flex flex-col min-w-0">
-            <div className="flex-1 overflow-y-auto kz-scroll px-6 py-6 space-y-5">
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain kz-scroll px-4 sm:px-6 py-4 sm:py-6 space-y-5">
               {messages.length === 0 && !historyLoading && (
                 <div className="flex flex-col items-center justify-center h-full text-center">
                   <AICore state="idle" size={180} />
