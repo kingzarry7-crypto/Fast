@@ -1,0 +1,11 @@
+# Base44 dev image: system + Python deps only. Source is bind-mounted, never copied.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 TZ=UTC
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg libffi-dev libopus-dev gcc curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r /tmp/requirements.txt

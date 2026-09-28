@@ -1,0 +1,18 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {"name": "OPENROUTER_API_KEY", "description": "Primary AI provider for chat (https://openrouter.ai/keys)", "requiredAtBoot": false},
+    {"name": "GROQ_API_KEY", "description": "AI fallback #1 + Whisper STT (https://console.groq.com/keys)", "requiredAtBoot": false},
+    {"name": "GEMINI_API_KEY", "description": "AI fallback #2 (https://aistudio.google.com/app/apikey)", "requiredAtBoot": false},
+    {"name": "TAVILY_API_KEY", "description": "Live web search (https://app.tavily.com)", "requiredAtBoot": false},
+    {"name": "ELEVENLABS_API_KEY", "description": "Voice TTS; EdgeTTS fallback otherwise (https://elevenlabs.io)", "requiredAtBoot": false},
+    {"name": "AGNES_API_KEY", "description": "Image/video generation (Agnes AI)", "requiredAtBoot": false},
+    {"name": "STRIPE_SECRET_KEY", "description": "Billing checkout (Stripe dashboard > Developers > API keys)", "requiredAtBoot": false},
+    {"name": "STRIPE_WEBHOOK_SECRET", "description": "Stripe webhook signing secret", "requiredAtBoot": false},
+    {"name": "RESEND_API_KEY", "description": "Verification/reset emails (https://resend.com)", "requiredAtBoot": false},
+    {"name": "ADMIN_EMAILS", "description": "Comma-separated admin account emails", "requiredAtBoot": false},
+    {"name": "ADMIN_PASSWORD", "description": "Admin unlock password for /admin", "requiredAtBoot": false}
+  ]
+}
