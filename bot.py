@@ -247,6 +247,12 @@ def _looks_like_media_request(text: str) -> bool:
         return False
     return bool(_MEDIA_VERB_PATTERN.search(text))
 
+
+# Media URL extractors (for send_ai_response — render images/videos in Telegram)
+_MEDIA_IMAGE_RE = re.compile(r"!\[[^\]]*\]\((https?://[^\s)]+)\)")
+_MEDIA_VIDEO_LINK_RE = re.compile(r"\[▶ Watch Video\]\((https?://[^\s)]+)\)")
+_MEDIA_DIRECT_LINK_RE = re.compile(r"\*\*Direct link:\*\*\s*(https?://[^\s\n]+)")
+
 def clean_ai_response(text):
     if not text:
         return ""
@@ -277,6 +283,101 @@ def escape_html(text):
     text = re.sub(r"\*(.*?)\*", r"<i>\1</i>", text)
     text = re.sub(r"`(.*?)`", r"<code>\1</code>", text)
     return text
+
+
+def _extract_media_from_response(text: str) -> Dict[str, List[str]]:
+    """Pull image/video URLs out of an AI response."""
+    if not text:
+        return {"images": [], "videos": []}
+
+    images = list(dict.fromkeys(_MEDIA_IMAGE_RE.findall(text)))
+    videos = list(dict.fromkeys(_MEDIA_VIDEO_LINK_RE.findall(text)))
+
+    for url in _MEDIA_DIRECT_LINK_RE.findall(text):
+        low = url.lower()
+        if any(ext in low for ext in [".mp4", ".webm", ".mov", "video"]):
+            if url not in videos:
+                videos.append(url)
+        elif url not in images:
+            images.append(url)
+
+    return {"images": images, "videos": videos}
+
+
+async def send_ai_response(message, text, is_raw_html=False):
+    """
+    Send an AI response. Auto-detects generated images/videos and sends
+    them via reply_photo / reply_video so they actually render in Telegram.
+    Falls back to send_long_message() for plain text.
+
+    Media URLs are extracted from the RAW response before clean_ai_response()
+    strips links (so pure-text replies still get URL noise removed).
+    """
+    if is_raw_html:
+        await send_long_message(message, text, is_raw_html=True)
+        return
+
+    # Approach A: extract media from RAW text first (before URL stripping)
+    media = _extract_media_from_response(text or "")
+    logger.info(
+        f"send_ai_response: images={len(media['images'])} videos={len(media['videos'])}"
+    )
+
+    cleaned = clean_ai_response(text) or "King Zarry AI returned an empty response."
+
+    # --- Images ---
+    if media["images"]:
+        caption_source = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", text or "")
+        caption_source = re.sub(r"\*\*Direct link:\*\*\s*https?://[^\s\n]+", "", caption_source)
+        caption_source = clean_ai_response(caption_source)
+        caption_source = re.sub(r"\n{3,}", "\n\n", caption_source).strip() or "🎨 Generated image"
+        caption = caption_source[:1000]
+
+        sent_any = False
+        for url in media["images"][:5]:
+            try:
+                await message.reply_photo(
+                    photo=url,
+                    caption=escape_html(caption) if not sent_any else None,
+                    parse_mode="HTML" if not sent_any else None,
+                )
+                sent_any = True
+            except Exception as e:
+                logger.warning(f"reply_photo failed for {url}: {e}")
+                try:
+                    await message.reply_text(f"🖼 Image link: {url}")
+                    sent_any = True
+                except Exception:
+                    pass
+        if sent_any:
+            return
+
+    # --- Videos ---
+    if media["videos"]:
+        sent_any = False
+        for url in media["videos"][:3]:
+            try:
+                await message.reply_video(
+                    video=url,
+                    caption="🎬 Generated video" if not sent_any else None,
+                    supports_streaming=True,
+                )
+                sent_any = True
+            except Exception as e:
+                logger.warning(f"reply_video failed for {url}: {e}")
+                try:
+                    await message.reply_text(
+                        f"🎬 Video: {url}", disable_web_page_preview=False
+                    )
+                    sent_any = True
+                except Exception:
+                    pass
+        if sent_any:
+            return
+
+    # --- Plain text ---
+    await send_long_message(message, cleaned, is_raw_html=False)
+
 
 async def send_long_message(message, text, is_raw_html=False):
     text = clean_ai_response(text)
@@ -1973,6 +2074,172 @@ async def cancelnotify_command(update, context):
     except ValueError:
         await update.message.reply_text("❌ Invalid ID.")
 
+
+# ============================================================
+# AGENT SIGNAL WATCH — always-on scanner → Telegram push
+# Env:
+#   AGENT_SIGNAL_WATCH=true|false   (default true)
+#   AGENT_SIGNAL_INTERVAL_SEC=300   (default 300 = 5 min)
+#   AGENT_SIGNAL_AUDIENCE=admin|subscribers|all  (default admin)
+# ============================================================
+AGENT_SIGNAL_WATCH = clean_env_str(os.getenv("AGENT_SIGNAL_WATCH", "true")).lower() in ("1", "true", "yes", "on")
+try:
+    AGENT_SIGNAL_INTERVAL_SEC = max(60, int(clean_env_str(os.getenv("AGENT_SIGNAL_INTERVAL_SEC", "300")) or "300"))
+except ValueError:
+    AGENT_SIGNAL_INTERVAL_SEC = 300
+AGENT_SIGNAL_AUDIENCE = clean_env_str(os.getenv("AGENT_SIGNAL_AUDIENCE", "admin")).lower() or "admin"
+AGENT_WATCH_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD", "XAU/USD"]
+
+
+def _agent_signal_is_actionable(analysis: dict) -> bool:
+    sig = str(analysis.get("signal") or "").upper().strip()
+    if sig not in ("BUY", "SELL"):
+        return False
+    # Soft confidence filter if present
+    conf = analysis.get("confidence")
+    if conf is None:
+        return True
+    try:
+        if isinstance(conf, (int, float)):
+            return float(conf) >= 55
+        c = str(conf).upper()
+        if c in ("LOW", "WEAK"):
+            return False
+        return True
+    except Exception:
+        return True
+
+
+def _agent_signal_fingerprint(symbol: str, analysis: dict) -> str:
+    sig = str(analysis.get("signal") or "").upper()
+    entry = str(analysis.get("entry") or analysis.get("price") or "")
+    return f"{symbol}|{sig}|{entry}"
+
+
+async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
+    """Scan MTF signals; push new BUY/SELL packages to Telegram immediately."""
+    if not AGENT_SIGNAL_WATCH:
+        return
+    try:
+        from agent_core import tool_analyze_symbol, tool_learn, create_job, _update_job
+    except Exception as e:
+        logger.warning(f"agent_signal_watch: agent_core unavailable: {e}")
+        return
+
+    bot_data = context.application.bot_data
+    last_map = bot_data.setdefault("agent_last_signals", {})
+
+    actionable = []
+    for symbol in AGENT_WATCH_SYMBOLS:
+        try:
+            analysis = await asyncio.to_thread(tool_analyze_symbol, symbol, "15m")
+        except Exception as e:
+            logger.debug(f"agent_signal_watch analyze {symbol}: {e}")
+            continue
+        if not _agent_signal_is_actionable(analysis):
+            continue
+        fp = _agent_signal_fingerprint(symbol, analysis)
+        if last_map.get(symbol) == fp:
+            continue  # same package already pushed
+        last_map[symbol] = fp
+        actionable.append(analysis)
+        try:
+            tool_learn(
+                user_id="telegram_agent",
+                symbol=symbol,
+                signal=str(analysis.get("signal") or ""),
+                confidence=str(analysis.get("confidence") or ""),
+                notes="auto_watch_push",
+                outcome="pushed_telegram",
+            )
+        except Exception:
+            pass
+
+    if not actionable:
+        return
+
+    lines = [
+        "🤖 <b>KING ZARRY AGENT — LIVE SIGNAL</b>",
+        "",
+        "Auto-scan found actionable setup(s):",
+        "",
+    ]
+    for a in actionable:
+        lines.append(
+            f"• <b>{html.escape(str(a.get('symbol')))}</b> — "
+            f"<b>{html.escape(str(a.get('signal') or '').upper())}</b>\n"
+            f"  Price: {html.escape(str(a.get('price') or '—'))}\n"
+            f"  Entry: {html.escape(str(a.get('entry') or '—'))} | "
+            f"SL: {html.escape(str(a.get('stop_loss') or '—'))}\n"
+            f"  TP1: {html.escape(str(a.get('tp1') or '—'))} | "
+            f"TP2: {html.escape(str(a.get('tp2') or '—'))}\n"
+            f"  Conf: {html.escape(str(a.get('confidence') or '—'))} | "
+            f"Trend: {html.escape(str(a.get('trend') or '—'))}"
+        )
+        reasons = a.get("reasons") or []
+        if isinstance(reasons, list) and reasons:
+            lines.append(f"  Note: {html.escape(str(reasons[0])[:120])}")
+        lines.append("")
+    lines.append("<i>Not financial advice. Trading involves risk.</i>")
+    text = "\n".join(lines)
+
+    # Audience
+    targets = set()
+    if AGENT_SIGNAL_AUDIENCE in ("admin", "admins"):
+        targets |= set(ADMIN_IDS)
+    elif AGENT_SIGNAL_AUDIENCE in ("subscribers", "vip", "subs"):
+        try:
+            for uid in get_all_users():
+                if is_subscribed(uid) or uid in ADMIN_IDS:
+                    targets.add(uid)
+        except Exception:
+            targets |= set(ADMIN_IDS)
+    else:  # all
+        try:
+            targets |= set(get_all_users())
+        except Exception:
+            targets |= set(ADMIN_IDS)
+        targets |= set(ADMIN_IDS)
+
+    if not targets:
+        targets |= set(ADMIN_IDS)
+
+    job_id = None
+    try:
+        job_id = create_job(
+            user_id="telegram_agent",
+            job_type="signal_push",
+            title=f"Signal push {len(actionable)} assets",
+            payload={"symbols": [a.get("symbol") for a in actionable]},
+            needs_approval=False,
+        )
+    except Exception:
+        pass
+
+    sent = 0
+    for uid in targets:
+        try:
+            await context.bot.send_message(
+                chat_id=uid,
+                text=text,
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+            sent += 1
+            await asyncio.sleep(0.05)
+        except Exception as e:
+            logger.debug(f"agent_signal_watch send {uid}: {e}")
+
+    if job_id:
+        try:
+            _update_job(job_id, status="done", result={"sent": sent, "count": len(actionable)})
+        except Exception:
+            pass
+
+    logger.info(f"agent_signal_watch: pushed {len(actionable)} signal(s) to {sent} chat(s)")
+
+
+
 async def notification_job(context: ContextTypes.DEFAULT_TYPE):
     conn=db_connect()
     try:
@@ -2221,7 +2488,7 @@ async def ask_command(update, context):
                     pass
                 break
         answer=await asyncio.to_thread(ai_engine.ask, user_id, question, None)
-        await send_long_message(update.message, answer)
+        await send_ai_response(update.message, answer)
     except Exception as error:
         logger.error(f"ask_ai Error: {error}")
         await update.message.reply_text("⚠️ <b>AI Service Temporarily Unavailable</b>\n\nPlease try again in a few seconds.",parse_mode="HTML")
@@ -2377,7 +2644,7 @@ IMPORTANT: This is a plan, not a guarantee. Use risk management.
 Do NOT invent prices - use provided numbers.
 """
         ai_plan = await asyncio.to_thread(ai_engine.ask, str(update.effective_user.id), planner_prompt, None)
-        await send_long_message(update.message, ai_plan, is_raw_html=False)
+        await send_ai_response(update.message, ai_plan)
         try:
             chart=await asyncio.to_thread(build_signal_chart, mtf_data)
             await update.message.reply_photo(photo=chart, caption=f"👑 KING ZARRY AI - ONE DAY PLAN {symbol} - {mtf_data.get('mtf_bias')} - {news_data.get('risk')} News Risk")
@@ -2465,7 +2732,7 @@ async def handle_photo(update, context):
                 mime_type="image/jpeg"
         user_id=str(update.effective_user.id)
         analysis=await asyncio.to_thread(ai_engine.ask, user_id, prompt, (mime_type, image_bytes))
-        await send_long_message(update.message, analysis)
+        await send_ai_response(update.message, analysis)
     except Exception as error:
         logger.error(f"Vision Error: {error}")
         await update.message.reply_text("❌ <b>Vision Analysis Error</b>\n\nUnable to analyze image. Ensure vision API keys are valid.",parse_mode="HTML")
@@ -2492,7 +2759,7 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
         if _looks_like_media_request(text):
             logger.info(f"Media request detected, routing to ai_engine: '{text[:60]}'")
             answer = await asyncio.to_thread(ai_engine.ask, user_id, text, None)
-            await send_long_message(update.message, answer)
+            await send_ai_response(update.message, answer)
             return
     except Exception as media_err:
         logger.warning(f"Media intent pre-check failed (non-fatal): {media_err}")
@@ -2620,7 +2887,7 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
                             )
                             fundamental_answer = await asyncio.to_thread(ai_engine.ask, user_id, combined_prompt, None)
                             if fundamental_answer:
-                                await send_long_message(update.message, f"🌐 <b>LIVE WEB CONTEXT for {symbol}</b>\n\n{fundamental_answer}", is_raw_html=False)
+                                await send_ai_response(update.message, f"🌐 <b>LIVE WEB CONTEXT for {symbol}</b>\n\n{fundamental_answer}")
             except Exception as e:
                 logger.warning(f"Tavily market enhancement failed (non-fatal): {e}")
             return
@@ -2632,7 +2899,7 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
                 pass
 
     answer = await asyncio.to_thread(ai_engine.ask, user_id, text, None)
-    await send_long_message(update.message, answer)
+    await send_ai_response(update.message, answer)
     lower = text.lower()
     should_voice_reply = is_voice_transcription or any(k in lower for k in ["voice note", "send voice", "can you speak", "say it in voice", "talk to me"])
     if should_voice_reply:
@@ -2876,6 +3143,17 @@ def main():
     try:
         if application.job_queue:
             application.job_queue.run_repeating(notification_job, interval=60, first=60)
+            if AGENT_SIGNAL_WATCH:
+                application.job_queue.run_repeating(
+                    agent_signal_watch_job,
+                    interval=AGENT_SIGNAL_INTERVAL_SEC,
+                    first=90,
+                )
+                logger.info(
+                    f"🤖 Agent signal watch every {AGENT_SIGNAL_INTERVAL_SEC}s → audience={AGENT_SIGNAL_AUDIENCE}"
+                )
+            else:
+                logger.info("🤖 Agent signal watch disabled (AGENT_SIGNAL_WATCH=false)")
             print("🔔 Notification job scheduled every 60s", flush=True)
         else:
             print("⚠️ JobQueue not available - add python-telegram-bot[job-queue] to requirements.txt", flush=True)
