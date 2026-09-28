@@ -1,5 +1,5 @@
 // frontend/lib/api.ts
-// KING ZARRY AI — API client (complete).
+// KING ZARRY AI — complete API client (auth, chat, admin, agent, TTS, billing)
 
 import type {
   AuthUser,
@@ -133,6 +133,10 @@ async function request<T>(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
 export async function getCurrentUser(signal?: AbortSignal): Promise<AuthUser> {
   const data = await request<MeResponse>("/api/auth/me", {
     method: "GET",
@@ -160,13 +164,20 @@ export async function login(
   });
 }
 
+export type RegisterResult = AuthResponse & {
+  requires_verification?: boolean;
+  email?: string;
+  message?: string;
+  dev_code?: string;
+};
+
 export async function register(
   email: string,
   password: string,
   username?: string,
   displayName?: string,
   signal?: AbortSignal
-): Promise<AuthResponse> {
+): Promise<RegisterResult> {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail || !password) {
     throw new ApiError({ status: 400, message: "Email and password required" });
@@ -178,7 +189,7 @@ export async function register(
   if (username?.trim()) payload.username = username.trim();
   if (displayName?.trim()) payload.display_name = displayName.trim();
 
-  return request<AuthResponse>("/api/auth/register", {
+  return request<RegisterResult>("/api/auth/register", {
     method: "POST",
     body: payload,
     signal,
@@ -193,7 +204,10 @@ export async function verifyEmail(
   const normalizedEmail = email.trim().toLowerCase();
   const trimmedCode = code.trim();
   if (!normalizedEmail || !trimmedCode) {
-    throw new ApiError({ status: 400, message: "Email and verification code required" });
+    throw new ApiError({
+      status: 400,
+      message: "Email and verification code required",
+    });
   }
   return request<AuthResponse>("/api/auth/verify-email", {
     method: "POST",
@@ -205,12 +219,12 @@ export async function verifyEmail(
 export async function resendVerificationCode(
   email: string,
   signal?: AbortSignal
-): Promise<{ status: string; message: string; dev_code?: string }> {
+): Promise<{ status: string; message?: string; dev_code?: string }> {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) {
     throw new ApiError({ status: 400, message: "Email required" });
   }
-  return request<{ status: string; message: string; dev_code?: string }>("/api/auth/resend-code", {
+  return request("/api/auth/resend-code", {
     method: "POST",
     body: { email: normalizedEmail },
     signal,
@@ -220,12 +234,12 @@ export async function resendVerificationCode(
 export async function forgotPassword(
   email: string,
   signal?: AbortSignal
-): Promise<{ status: string; message: string; dev_code?: string }> {
+): Promise<{ status: string; message?: string; dev_code?: string }> {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) {
     throw new ApiError({ status: 400, message: "Email required" });
   }
-  return request<{ status: string; message: string; dev_code?: string }>("/api/auth/forgot-password", {
+  return request("/api/auth/forgot-password", {
     method: "POST",
     body: { email: normalizedEmail },
     signal,
@@ -237,15 +251,28 @@ export async function resetPassword(
   code: string,
   newPassword: string,
   signal?: AbortSignal
-): Promise<{ status: string; message: string }> {
+): Promise<{ status: string; message?: string }> {
   const normalizedEmail = email.trim().toLowerCase();
   const trimmedCode = code.trim();
   if (!normalizedEmail || !trimmedCode || !newPassword) {
-    throw new ApiError({ status: 400, message: "Email, code, and new password required" });
+    throw new ApiError({
+      status: 400,
+      message: "Email, code, and new password required",
+    });
   }
-  return request<{ status: string; message: string }>("/api/auth/reset-password", {
+  if (newPassword.length < 8) {
+    throw new ApiError({
+      status: 400,
+      message: "Password must be at least 8 characters",
+    });
+  }
+  return request("/api/auth/reset-password", {
     method: "POST",
-    body: { email: normalizedEmail, code: trimmedCode, new_password: newPassword },
+    body: {
+      email: normalizedEmail,
+      code: trimmedCode,
+      new_password: newPassword,
+    },
     signal,
   });
 }
@@ -255,6 +282,10 @@ export async function logout(
 ): Promise<{ status: string; message?: string }> {
   return request("/api/auth/logout", { method: "POST", signal });
 }
+
+// ---------------------------------------------------------------------------
+// Chat
+// ---------------------------------------------------------------------------
 
 export interface SendImagePayload {
   base64: string;
@@ -306,6 +337,10 @@ export async function healthCheck(): Promise<{
   return request("/health", { method: "GET" });
 }
 
+// ---------------------------------------------------------------------------
+// Billing
+// ---------------------------------------------------------------------------
+
 export async function createCheckoutSession(
   plan: string,
   signal?: AbortSignal
@@ -317,26 +352,29 @@ export async function createCheckoutSession(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Admin
+// ---------------------------------------------------------------------------
+
 export interface AdminUserItem {
-  id: string;
-  email: string;
+  id?: string;
+  email?: string;
   username?: string;
-  display_name?: string;
-  is_admin?: boolean;
-  status: "active" | "suspended" | "banned" | string;
-  email_verified?: boolean;
+  account_status?: string;
   created_at?: string;
-  last_login?: string;
+  last_login_at?: string;
 }
 
 export interface AdminStats {
   status: string;
-  users_count?: number;
-  active_users_7d?: number;
-  active_users_30d?: number;
-  new_signups_7d?: number;
-  conversations_count?: number;
-  total_messages?: number;
+  admin_email?: string;
+  users_total?: number;
+  users_active_7d?: number;
+  users_active_30d?: number;
+  users_new_7d?: number;
+  sessions_active?: number;
+  conversations_total?: number;
+  messages_total?: number;
   messages_24h?: number;
   active_subscribers: number;
   payments_count: number;
@@ -350,6 +388,7 @@ export interface AdminStats {
     status?: string;
     created_at?: string;
   }>;
+  note?: string;
 }
 
 export async function getAdminStats(
@@ -358,24 +397,14 @@ export async function getAdminStats(
   return request("/api/admin/stats", { method: "GET", signal });
 }
 
-export async function updateUserStatus(
-  userId: string,
-  status: "active" | "suspended" | "banned",
-  signal?: AbortSignal
-): Promise<{ status: string; message: string; user?: AdminUserItem }> {
-  return request("/api/admin/users/status", {
-    method: "POST",
-    body: { user_id: userId, status },
-    signal,
-  });
-}
-
 export interface AdminMe {
   status: string;
   is_admin: boolean;
   email?: string;
   requires_password?: boolean;
   admin_emails_configured?: boolean;
+  admin_email_count?: number;
+  hint?: string | null;
 }
 
 export async function getAdminMe(signal?: AbortSignal): Promise<AdminMe> {
@@ -393,6 +422,45 @@ export async function unlockAdmin(
   });
 }
 
+/** Ban / suspend / reactivate — matches POST /api/admin/users/{id}/status */
+export async function setAdminUserStatus(
+  userId: string,
+  status: "active" | "suspended" | "banned",
+  signal?: AbortSignal
+): Promise<{ status: string; user: AdminUserItem }> {
+  return request(
+    `/api/admin/users/${encodeURIComponent(userId)}/status`,
+    {
+      method: "POST",
+      body: { status },
+      signal,
+    }
+  );
+}
+
+/** Alias used by some UI builds */
+export async function updateUserStatus(
+  userId: string,
+  status: "active" | "suspended" | "banned",
+  signal?: AbortSignal
+): Promise<{ status: string; user: AdminUserItem }> {
+  return setAdminUserStatus(userId, status, signal);
+}
+
+export async function listAdminUsers(
+  limit = 50,
+  signal?: AbortSignal
+): Promise<{ status: string; users: AdminUserItem[] }> {
+  return request(`/api/admin/users?limit=${limit}`, {
+    method: "GET",
+    signal,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Conversations
+// ---------------------------------------------------------------------------
+
 export interface ConversationItem {
   id: string;
   title: string;
@@ -404,22 +472,25 @@ export interface ConversationItem {
 export async function listConversations(
   signal?: AbortSignal
 ): Promise<ConversationItem[]> {
-  const data = await request<{ status: string; conversations: ConversationItem[] }>(
-    "/api/conversations",
-    { method: "GET", signal }
-  );
+  const data = await request<{
+    status: string;
+    conversations: ConversationItem[];
+  }>("/api/conversations", { method: "GET", signal });
   return data?.conversations || [];
 }
 
 export async function createConversation(
   signal?: AbortSignal
 ): Promise<ConversationItem> {
-  const data = await request<{ status: string; conversation: ConversationItem }>(
-    "/api/conversations",
-    { method: "POST", signal }
-  );
+  const data = await request<{
+    status: string;
+    conversation: ConversationItem;
+  }>("/api/conversations", { method: "POST", signal });
   if (!data?.conversation?.id) {
-    throw new ApiError({ status: 500, message: "Could not create conversation" });
+    throw new ApiError({
+      status: 500,
+      message: "Could not create conversation",
+    });
   }
   return data.conversation;
 }
@@ -427,16 +498,27 @@ export async function createConversation(
 export async function getConversationMessages(
   conversationId: string,
   signal?: AbortSignal
-): Promise<{ role: string; content: string; created_at?: string; id?: string }[]> {
+): Promise<
+  { role: string; content: string; created_at?: string; id?: string }[]
+> {
   const data = await request<{
     status: string;
-    messages: { role: string; content: string; created_at?: string; id?: string }[];
+    messages: {
+      role: string;
+      content: string;
+      created_at?: string;
+      id?: string;
+    }[];
   }>(`/api/conversations/${encodeURIComponent(conversationId)}/messages`, {
     method: "GET",
     signal,
   });
   return data?.messages || [];
 }
+
+// ---------------------------------------------------------------------------
+// TTS (ElevenLabs via backend)
+// ---------------------------------------------------------------------------
 
 export type TtsVoice = "bella" | "male";
 
@@ -486,6 +568,10 @@ export async function synthesizeSpeech(
   }
   return response.blob();
 }
+
+// ---------------------------------------------------------------------------
+// Agent
+// ---------------------------------------------------------------------------
 
 export interface AgentJob {
   id: string;
@@ -568,6 +654,10 @@ export async function getAgentLearning(
   return request("/api/agent/learning", { method: "GET", signal });
 }
 
+// ---------------------------------------------------------------------------
+// Namespace export
+// ---------------------------------------------------------------------------
+
 export const api = {
   buildUrl,
   getBaseUrl,
@@ -584,9 +674,11 @@ export const api = {
   healthCheck,
   createCheckoutSession,
   getAdminStats,
-  updateUserStatus,
   getAdminMe,
   unlockAdmin,
+  setAdminUserStatus,
+  updateUserStatus,
+  listAdminUsers,
   listConversations,
   createConversation,
   getConversationMessages,
