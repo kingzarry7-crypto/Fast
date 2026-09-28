@@ -328,16 +328,204 @@ def round_price(price):
         return round(price, 4)
     return round(price, 6)
 
-def get_price(symbol):
+
+# ============================================================
+# BINANCE (free, no key) — primary for BTC / ETH / SOL
+# Twelve Data kept for XAU/GOLD and as crypto fallback
+# ============================================================
+# Prefer env; try multiple free public hosts (some regions block api.binance.com)
+_BINANCE_HOSTS = [
+    h.strip().rstrip("/")
+    for h in (
+        (os.getenv("BINANCE_API_URL") or ""),
+        "https://data-api.binance.vision",
+        "https://api.binance.com",
+        "https://api1.binance.com",
+        "https://api.binance.us",
+    )
+    if h and str(h).strip()
+]
+# unique preserve order
+_seen = set()
+BINANCE_HOSTS = []
+for h in _BINANCE_HOSTS:
+    if h not in _seen:
+        _seen.add(h)
+        BINANCE_HOSTS.append(h)
+BINANCE_BASE = BINANCE_HOSTS[0] if BINANCE_HOSTS else "https://data-api.binance.vision"
+BINANCE_SYMBOL_MAP = {
+    "BTC/USD": "BTCUSDT",
+    "BTCUSD": "BTCUSDT",
+    "BTCUSDT": "BTCUSDT",
+    "BTC": "BTCUSDT",
+    "ETH/USD": "ETHUSDT",
+    "ETHUSD": "ETHUSDT",
+    "ETHUSDT": "ETHUSDT",
+    "ETH": "ETHUSDT",
+    "SOL/USD": "SOLUSDT",
+    "SOLUSD": "SOLUSDT",
+    "SOLUSDT": "SOLUSDT",
+    "SOL": "SOLUSDT",
+}
+BINANCE_INTERVAL_MAP = {
+    "1m": "1m", "1min": "1m",
+    "5m": "5m", "5min": "5m",
+    "15m": "15m", "15min": "15m",
+    "30m": "30m", "30min": "30m",
+    "1h": "1h", "2h": "2h", "4h": "4h",
+    "1d": "1d", "1day": "1d",
+}
+
+
+def _normalize_symbol_key(symbol: str) -> str:
+    return (symbol or "").upper().strip().replace(" ", "")
+
+
+def binance_pair(symbol: str):
+    """Return Binance USDT pair if this is a supported crypto symbol."""
+    s = _normalize_symbol_key(symbol)
+    if s in BINANCE_SYMBOL_MAP:
+        return BINANCE_SYMBOL_MAP[s]
+    s2 = s.replace("-", "/")
+    if s2 in BINANCE_SYMBOL_MAP:
+        return BINANCE_SYMBOL_MAP[s2]
+    return None
+
+
+def _binance_get_price(pair: str) -> float:
+    errors = []
+    for base in BINANCE_HOSTS:
+        try:
+            r = requests.get(
+                f"{base}/api/v3/ticker/price",
+                params={"symbol": pair},
+                timeout=12,
+            )
+            if r.status_code != 200:
+                errors.append(f"{base}:{r.status_code}")
+                continue
+            data = r.json()
+            if isinstance(data, dict) and data.get("code") and not data.get("price"):
+                errors.append(f"{base}:{data.get('msg', data.get('code'))}")
+                continue
+            price = data.get("price")
+            if price is None:
+                errors.append(f"{base}:no price")
+                continue
+            return float(price)
+        except Exception as e:
+            errors.append(f"{base}:{type(e).__name__}")
+            continue
+    # Bybit free public fallback
+    try:
+        r = requests.get(
+            "https://api.bybit.com/v5/market/tickers",
+            params={"category": "spot", "symbol": pair},
+            timeout=12,
+        )
+        if r.status_code == 200:
+            lst = (r.json().get("result") or {}).get("list") or []
+            if lst and lst[0].get("lastPrice"):
+                return float(lst[0]["lastPrice"])
+    except Exception as e:
+        errors.append(f"bybit:{type(e).__name__}")
+    raise RuntimeError("Crypto price failed: " + "; ".join(errors[:4]))
+
+
+def _binance_get_candles(pair: str, timeframe: str, outputsize: int = 150) -> list:
+    tf = str(timeframe).lower().strip()
+    interval = BINANCE_INTERVAL_MAP.get(tf)
+    if not interval:
+        try:
+            interval = BINANCE_INTERVAL_MAP.get(normalize_timeframe(timeframe), "15m")
+        except Exception:
+            interval = "15m"
+    limit = max(15, min(int(outputsize or 150), 1000))
+    errors = []
+    rows = None
+    for base in BINANCE_HOSTS:
+        try:
+            r = requests.get(
+                f"{base}/api/v3/klines",
+                params={"symbol": pair, "interval": interval, "limit": limit},
+                timeout=18,
+            )
+            if r.status_code != 200:
+                errors.append(f"{base}:{r.status_code}")
+                continue
+            data = r.json()
+            if isinstance(data, dict):
+                errors.append(f"{base}:{data.get('msg', data.get('code'))}")
+                continue
+            if not isinstance(data, list) or len(data) < 15:
+                errors.append(f"{base}:n={len(data) if isinstance(data, list) else 0}")
+                continue
+            rows = data
+            break
+        except Exception as e:
+            errors.append(f"{base}:{type(e).__name__}")
+            continue
+    if rows is None:
+        # Bybit kline fallback
+        bybit_interval = {
+            "1m": "1", "5m": "5", "15m": "15", "30m": "30",
+            "1h": "60", "4h": "240", "1d": "D",
+        }.get(interval, "15")
+        try:
+            r = requests.get(
+                "https://api.bybit.com/v5/market/kline",
+                params={
+                    "category": "spot",
+                    "symbol": pair,
+                    "interval": bybit_interval,
+                    "limit": limit,
+                },
+                timeout=18,
+            )
+            if r.status_code == 200:
+                lst = (r.json().get("result") or {}).get("list") or []
+                # Bybit returns newest first
+                lst = list(reversed(lst))
+                if len(lst) >= 15:
+                    rows = []
+                    for row in lst:
+                        # start, open, high, low, close, volume, turnover
+                        rows.append([
+                            int(row[0]),
+                            row[1], row[2], row[3], row[4],
+                            row[5] if len(row) > 5 else "0",
+                        ])
+        except Exception as e:
+            errors.append(f"bybit:{type(e).__name__}")
+    if rows is None:
+        raise RuntimeError("Crypto candles failed: " + "; ".join(errors[:5]))
+    candles = []
+    for row in rows:
+        try:
+            ts = datetime.fromtimestamp(int(row[0]) / 1000.0, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            ts = str(row[0])
+        candles.append({
+            "datetime": ts,
+            "open": str(row[1]),
+            "high": str(row[2]),
+            "low": str(row[3]),
+            "close": str(row[4]),
+            "volume": str(row[5]) if len(row) > 5 else "0",
+        })
+    return candles
+
+
+def _twelve_get_price(symbol: str) -> float:
     api_key = _get_twelve_api_key()
     if not api_key:
         raise RuntimeError("TWELVE_DATA_API_KEY is missing. Set it in Railway env - same var as Telegram.")
     response = requests.get(
         f"{TWELVE_DATA_URL}/price",
         params={"symbol": symbol.upper().strip(), "apikey": api_key},
-        timeout=30
+        timeout=30,
     )
-    if response.status_code!= 200:
+    if response.status_code != 200:
         raise RuntimeError(f"Twelve Data HTTP error: {response.status_code}")
     data = response.json()
     if data.get("status") == "error":
@@ -346,7 +534,8 @@ def get_price(symbol):
         raise RuntimeError(f"Price unavailable: {data}")
     return float(data["price"])
 
-def get_candles(symbol, timeframe="15m", outputsize=150):
+
+def _twelve_get_candles(symbol: str, timeframe: str = "15m", outputsize: int = 150) -> list:
     api_key = _get_twelve_api_key()
     if not api_key:
         raise RuntimeError("TWELVE_DATA_API_KEY is missing. Set it in Railway env - same var as Telegram.")
@@ -357,11 +546,11 @@ def get_candles(symbol, timeframe="15m", outputsize=150):
             "symbol": symbol.upper().strip(),
             "interval": interval,
             "outputsize": outputsize,
-            "apikey": api_key
+            "apikey": api_key,
         },
-        timeout=30
+        timeout=30,
     )
-    if response.status_code!= 200:
+    if response.status_code != 200:
         raise RuntimeError(f"Twelve Data HTTP error: {response.status_code}")
     data = response.json()
     if data.get("status") == "error":
@@ -372,6 +561,30 @@ def get_candles(symbol, timeframe="15m", outputsize=150):
     if not candles or len(candles) < 15:
         raise RuntimeError(f"Insufficient candle data returned for {symbol} (got {len(candles)} candles).")
     return candles
+
+def get_price(symbol):
+    """Live price: Binance first for BTC/ETH/SOL (free), Twelve Data for gold / fallback."""
+    pair = binance_pair(symbol)
+    if pair:
+        try:
+            price = _binance_get_price(pair)
+            logger.debug("price %s via Binance %s = %s", symbol, pair, price)
+            return price
+        except Exception as e:
+            logger.warning("Binance price failed for %s (%s): %s — trying Twelve Data", symbol, pair, e)
+    return _twelve_get_price(symbol)
+
+def get_candles(symbol, timeframe="15m", outputsize=150):
+    """OHLC: Binance first for BTC/ETH/SOL (free), Twelve Data for XAU / fallback."""
+    pair = binance_pair(symbol)
+    if pair:
+        try:
+            candles = _binance_get_candles(pair, timeframe, outputsize)
+            logger.debug("candles %s via Binance %s tf=%s n=%s", symbol, pair, timeframe, len(candles))
+            return candles
+        except Exception as e:
+            logger.warning("Binance candles failed for %s (%s): %s — trying Twelve Data", symbol, pair, e)
+    return _twelve_get_candles(symbol, timeframe, outputsize)
 
 def calculate_ema(values, period):
     if not values:
