@@ -2092,10 +2092,16 @@ AGENT_WATCH_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD", "XAU/USD"]
 
 
 def _agent_signal_is_actionable(analysis: dict) -> bool:
+    """BUY/SELL only if NOT a late entry — never push chase signals."""
     sig = str(analysis.get("signal") or "").upper().strip()
     if sig not in ("BUY", "SELL"):
         return False
-    # Soft confidence filter if present
+    # Hard block: late or risky entry quality
+    if analysis.get("late_entry") is True:
+        return False
+    eq = str(analysis.get("entry_quality") or "").upper()
+    if eq in ("LATE", "RISKY"):
+        return False
     conf = analysis.get("confidence")
     if conf is None:
         return True
@@ -2108,6 +2114,13 @@ def _agent_signal_is_actionable(analysis: dict) -> bool:
         return True
     except Exception:
         return True
+
+
+def _agent_signal_is_late(analysis: dict) -> bool:
+    if analysis.get("late_entry") is True:
+        return True
+    eq = str(analysis.get("entry_quality") or "").upper()
+    return eq in ("LATE", "RISKY")
 
 
 def _agent_signal_fingerprint(symbol: str, analysis: dict) -> str:
@@ -2136,6 +2149,25 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.debug(f"agent_signal_watch analyze {symbol}: {e}")
             continue
+        # Late BUY/SELL → do NOT push trade signal (user request)
+        if _agent_signal_is_late(analysis) and str(analysis.get("signal") or "").upper() in ("BUY", "SELL"):
+            fp_late = _agent_signal_fingerprint(symbol, analysis) + "|LATE"
+            late_notified = bot_data.setdefault("agent_late_notified", {})
+            if late_notified.get(symbol) != fp_late:
+                late_notified[symbol] = fp_late
+                bot_data.setdefault("agent_late_queue", []).append(analysis)
+            try:
+                tool_learn(
+                    user_id="telegram_agent",
+                    symbol=symbol,
+                    signal=str(analysis.get("signal") or ""),
+                    confidence=str(analysis.get("confidence") or ""),
+                    notes=f"SKIPPED_LATE: {analysis.get('late_entry_reason') or analysis.get('entry_quality')}",
+                    outcome="skipped_late_entry",
+                )
+            except Exception:
+                pass
+            continue
         if not _agent_signal_is_actionable(analysis):
             continue
         fp = _agent_signal_fingerprint(symbol, analysis)
@@ -2154,6 +2186,44 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
             )
         except Exception:
             pass
+
+    # Notify admin once about late setups (warning only — not a trade signal)
+    late_queue = bot_data.pop("agent_late_queue", [])
+    if late_queue and ADMIN_IDS:
+        late_lines = [
+            "⚠️ <b>KING ZARRY AGENT — LATE ENTRY</b>",
+            "",
+            "Setup exists but it is <b>too late to open</b>. Signal NOT sent.",
+            "",
+        ]
+        for a in late_queue:
+            late_lines.append(
+                "• <b>" + html.escape(str(a.get("symbol"))) + "</b> "
+                + html.escape(str(a.get("signal") or "").upper())
+                + " — quality <b>"
+                + html.escape(str(a.get("entry_quality") or "LATE"))
+                + "</b>" + chr(10) + "  "
+                + html.escape(
+                    str(
+                        a.get("late_entry_reason")
+                        or a.get("reason")
+                        or "Extended move"
+                    )[:200]
+                )
+            )
+            late_lines.append("")
+        late_lines.append("<i>Wait for pullback / better location. Not financial advice.</i>")
+        late_text = chr(10).join(late_lines)
+        for uid in ADMIN_IDS:
+            try:
+                await context.bot.send_message(
+                    chat_id=uid,
+                    text=late_text,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
+            except Exception:
+                pass
 
     if not actionable:
         return
