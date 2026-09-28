@@ -783,17 +783,33 @@ async def create_voice_note_file(text: str) -> BytesIO:
         raise RuntimeError(f"TTS unavailable: {e}")
 
 def get_market_candles(symbol, interval=DEFAULT_TIMEFRAME, outputsize=150):
-    if not TWELVE_DATA_API_KEY:
-        raise RuntimeError("TWELVE_DATA_API_KEY is not configured.")
-    response = requests.get(f"{TWELVE_DATA_URL}/time_series", params={"symbol": symbol, "interval": interval, "outputsize": outputsize, "apikey": TWELVE_DATA_API_KEY}, timeout=30)
-    response.raise_for_status()
-    data = response.json()
-    if data.get("status") == "error":
-        raise RuntimeError(data.get("message", "Twelve Data error."))
-    values = data.get("values", [])
-    if len(values) < 60:
-        raise RuntimeError(f"Only {len(values)} candles were returned for {symbol}.")
-    return list(reversed(values))
+    """Candles via market.py — Binance free for crypto, Twelve for gold/forex."""
+    try:
+        from market import get_candles as _m_get_candles
+        tf = str(interval or "15m").lower().strip()
+        # bot historically used 15min/5min Twelve names
+        tf = {"15min": "15m", "5min": "5m", "1min": "1m", "30min": "30m", "1day": "1d"}.get(tf, tf)
+        candles = _m_get_candles(symbol, tf, outputsize)
+        if not candles or len(candles) < 15:
+            raise RuntimeError(f"Only {len(candles) if candles else 0} candles for {symbol}")
+        return candles
+    except Exception as e:
+        # Legacy Twelve path as last resort
+        if not TWELVE_DATA_API_KEY:
+            raise RuntimeError(f"Market data unavailable for {symbol}: {e}")
+        response = requests.get(
+            f"{TWELVE_DATA_URL}/time_series",
+            params={"symbol": symbol, "interval": interval, "outputsize": outputsize, "apikey": TWELVE_DATA_API_KEY},
+            timeout=30,
+        )
+        response.raise_for_status()
+        data = response.json()
+        if data.get("status") == "error":
+            raise RuntimeError(data.get("message", "Twelve Data error."))
+        values = data.get("values", [])
+        if len(values) < 15:
+            raise RuntimeError(f"Only {len(values)} candles were returned for {symbol}.")
+        return list(reversed(values))
 
 def ema(values, period):
     if len(values) < period:
@@ -1641,37 +1657,97 @@ def build_signal_chart(data):
         plt.close(fig)
 
 def detect_market_and_timeframe(text):
-    upper=text.upper()
-    symbol="XAU/USD"
-    markets={"XAU/USD":["XAU/USD","XAUUSD","XAU","GOLD"],"BTC/USD":["BTC/USD","BTCUSDT","BTC"],"ETH/USD":["ETH/USD","ETHUSDT","ETH"],"SOL/USD":["SOL/USD","SOLUSDT","SOL"]}
-    for market,names in markets.items():
-        if any(name in upper for name in names):
-            symbol=market
-            break
-    match=re.search(r"\b(1m|5m|15m|30m|1h|2h|4h|1d)\b",text.lower())
-    timeframe=(match.group(1) if match else "15m")
-    return symbol,timeframe
+    """Resolve any crypto (Binance) / gold / forex (Twelve) from user text."""
+    try:
+        from market import resolve_trading_symbol
+        symbol = resolve_trading_symbol(text or "BTC")
+    except Exception:
+        symbol = "BTC/USD"
+        upper = (text or "").upper()
+        for name, canon in (("GOLD","XAU/USD"),("XAU","XAU/USD"),("BTC","BTC/USD"),("ETH","ETH/USD"),("SOL","SOL/USD")):
+            if name in upper:
+                symbol = canon
+                break
+    match = re.search(r"\b(1m|5m|15m|30m|1h|2h|4h|1d)\b", (text or "").lower())
+    timeframe = match.group(1) if match else "15m"
+    return symbol, timeframe
 
 def detect_market_intent(text: str):
+    """Only route to full MTF signal when user clearly asks for a market call.
+
+    Normal chat ("I want to ask you something", jokes, help, etc.) must go to AI.
+    Background agent auto-push is separate and does not use this function.
+    """
     if not text:
         return False, "XAU/USD", "15m"
     upper = text.upper()
-    lower = text.lower()
-    has_market = any(kw in upper for kw in ["XAU/USD","XAUUSD","XAU","GOLD","BTC/USD","BTCUSDT","BTC","ETH/USD","ETHUSDT","ETH","SOL/USD","SOLUSDT","SOL"])
-    if not has_market:
-        return False, "XAU/USD", "15m"
-    intent_keywords = [
-        "analy", "signal", "trend", "check", "price", "forecast", "predict",
-        "buy", "sell", "support", "resist", "chart", "outlook", "market",
-        "happen", "doing", "doing", "view", "status", "update", "plan",
-        "bias", "direction", "call", "setup", "entry", "sl", "tp", "target",
-        "should i", "what about", "how is", "what is", "whats", "what's",
-        "give me", "show me", "tell me"
+    lower = text.lower().strip()
+    stripped = text.strip()
+
+    # Pure chat / social — never treat as signal request
+    chat_only = [
+        "how are you", "who are you", "what can you do", "thank", "thanks",
+        "hello", "hi ", "hey ", "good morning", "good night", "love you",
+        "i wanna ask", "i want to ask", "can i ask", "ask you something",
+        "ask you somthing", "just asking", "question for you",
+        "are you there", "you there", "help me with", "explain to me",
     ]
-    is_short_market = len(text.strip()) < 35 and has_market
-    has_intent = any(kw in lower for kw in intent_keywords) or is_short_market
-    if not has_intent:
+    if any(p in lower for p in chat_only) and not any(
+        k in upper for k in ("SIGNAL", "CHART", "ENTRY", "SETUP", "MTF")
+    ):
+        # Still allow "ask you something about BTC signal"
+        if "signal" not in lower and "chart" not in lower and "analysis" not in lower:
+            return False, "XAU/USD", "15m"
+
+    try:
+        from market import resolve_trading_symbol, binance_pair
+        tokens = re.findall(r"[A-Za-z]{2,10}", text)
+        has_market = False
+        for tok in tokens:
+            r = resolve_trading_symbol(tok)
+            if binance_pair(r) or r in (
+                "XAU/USD", "XAG/USD",
+                "EUR/USD", "GBP/USD", "USD/JPY", "USD/CHF",
+                "AUD/USD", "USD/CAD", "NZD/USD",
+            ):
+                has_market = True
+                break
+        if any(k in upper for k in ("GOLD", "SILVER", "BITCOIN", "ETHEREUM", "SOLANA")):
+            has_market = True
+    except Exception:
+        has_market = any(kw in upper for kw in ["XAU", "GOLD", "BTC", "ETH", "SOL", "BNB", "XRP"])
+    if not has_market:
+        return False, "BTC/USD", "15m"
+
+
+    # Strong trading intent only (removed vague: tell me, what is, show me, update…)
+    intent_keywords = [
+        "analy", "signal", "chart", "setup", "entry", "stop loss", "take profit",
+        "forecast", "predict", "outlook", "bias", "direction",
+        "support", "resist", "tp1", "tp2", "tp3", "sl ", " rr",
+        "should i buy", "should i sell", "long or short", "buy or sell",
+        "what is the signal", "what's the signal", "whats the signal",
+        "give me signal", "show signal", "send signal", "market analysis",
+        "price action", "mtf", "multi time", "multi-time",
+    ]
+    has_intent = any(kw in lower for kw in intent_keywords)
+
+    # Short messages that are ONLY a symbol / "btc signal" style
+    # e.g. "BTC", "BTC 15m", "gold signal" — not full sentences of chat
+    words = stripped.split()
+    is_short_ticker = (
+        len(stripped) <= 24
+        and len(words) <= 4
+        and has_market
+        and not any(
+            w in lower
+            for w in ("ask", "love", "hello", "thanks", "please explain", "why did")
+        )
+    )
+
+    if not has_intent and not is_short_ticker:
         return False, "XAU/USD", "15m"
+
     symbol, timeframe = detect_market_and_timeframe(text)
     return True, symbol, timeframe
 
@@ -2088,7 +2164,12 @@ try:
 except ValueError:
     AGENT_SIGNAL_INTERVAL_SEC = 300
 AGENT_SIGNAL_AUDIENCE = clean_env_str(os.getenv("AGENT_SIGNAL_AUDIENCE", "admin")).lower() or "admin"
-AGENT_WATCH_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD", "XAU/USD"]
+try:
+    from market import get_agent_watch_symbols
+    AGENT_WATCH_SYMBOLS = get_agent_watch_symbols()
+except Exception:
+    AGENT_WATCH_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD", "BNB/USD", "XRP/USD", "XAU/USD"]
+
 
 
 def _agent_signal_is_actionable(analysis: dict) -> bool:
