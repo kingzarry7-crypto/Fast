@@ -294,29 +294,96 @@ def _update_job(
 # ---------------------------------------------------------------------------
 
 def tool_analyze_symbol(symbol: str, timeframe: str = "15m") -> Dict[str, Any]:
+    """Real MTF analysis via market.analyze_market (Twelve Data candles).
+
+    Requires TWELVE_DATA_API_KEY on the host. Returns WAIT + error when data
+    cannot be fetched — never invents prices or signals.
+    """
     try:
         from market import analyze_market
 
         data = analyze_market(symbol, timeframe=timeframe)
         if not isinstance(data, dict):
-            return {"symbol": symbol, "error": "no data", "signal": "WAIT"}
+            return {
+                "symbol": symbol,
+                "error": "no data",
+                "signal": "WAIT",
+                "data_ok": False,
+            }
+
+        # Real engine uses direction / status as primary signal fields
+        signal = (
+            data.get("signal")
+            or data.get("direction")
+            or data.get("mtf_signal")
+            or data.get("status")
+            or "WAIT"
+        )
+        signal = str(signal).upper().strip()
+        if signal in ("ACTIVE",):
+            signal = str(data.get("direction") or "WAIT").upper()
+        if signal not in ("BUY", "SELL", "WAIT"):
+            # INVALIDATED / etc. → WAIT for agent push purposes
+            if signal not in ("BUY", "SELL"):
+                signal = "WAIT" if signal != "BUY" and signal != "SELL" else signal
+
+        entry = data.get("entry") or data.get("entry_zone") or data.get("ideal_entry")
+        if entry is None and data.get("entry_low") is not None:
+            lo, hi = data.get("entry_low"), data.get("entry_high")
+            entry = f"{lo}-{hi}" if hi is not None else lo
+
+        reasons = data.get("reasons") or []
+        if isinstance(reasons, str):
+            try:
+                import json as _json
+
+                reasons = _json.loads(reasons)
+            except Exception:
+                reasons = [reasons]
+        if not reasons and data.get("reason"):
+            reasons = [data.get("reason")]
+
+        data_ok = not (
+            data.get("price") is None
+            and data.get("current_price") is None
+            and "DATA UNAVAILABLE" in str(data.get("reason") or data.get("entry_status_reason") or "")
+        )
+
         return {
             "symbol": symbol,
             "timeframe": timeframe,
-            "price": data.get("price") or data.get("current_price"),
-            "signal": data.get("signal") or data.get("mtf_signal") or "WAIT",
-            "trend": data.get("trend") or data.get("mtf_bias"),
+            "price": data.get("price") or data.get("current_price") or data.get("original_price"),
+            "signal": signal if signal in ("BUY", "SELL", "WAIT") else "WAIT",
+            "trend": data.get("trend")
+            or data.get("mtf_bias")
+            or data.get("htf_trend"),
             "confidence": data.get("confidence"),
-            "strength": data.get("strength") or data.get("mtf_strength"),
+            "strength": data.get("strength")
+            or data.get("setup_strength")
+            or data.get("mtf_strength"),
             "rsi": data.get("rsi"),
-            "support": data.get("support"),
-            "resistance": data.get("resistance"),
-            "reasons": (data.get("reasons") or [])[:6],
-            "raw_keys": list(data.keys())[:20],
+            "support": data.get("support") or data.get("nearest_support"),
+            "resistance": data.get("resistance") or data.get("nearest_resistance"),
+            "entry": entry,
+            "stop_loss": data.get("stop_loss"),
+            "tp1": data.get("tp1"),
+            "tp2": data.get("tp2"),
+            "tp3": data.get("tp3"),
+            "reasons": list(reasons)[:8] if isinstance(reasons, list) else [],
+            "news_risk": data.get("news_risk"),
+            "structure": data.get("structure"),
+            "status": data.get("status"),
+            "data_ok": data_ok,
+            "reason": data.get("reason") or data.get("entry_status_reason"),
         }
     except Exception as e:
-        logger.warning("tool_analyze_symbol failed %s: %s", symbol, type(e).__name__)
-        return {"symbol": symbol, "error": type(e).__name__, "signal": "WAIT"}
+        logger.warning("tool_analyze_symbol failed %s: %s", symbol, e)
+        return {
+            "symbol": symbol,
+            "error": str(e)[:200],
+            "signal": "WAIT",
+            "data_ok": False,
+        }
 
 
 def tool_news_risk(symbol: str) -> Dict[str, Any]:
