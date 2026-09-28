@@ -2186,6 +2186,187 @@ async def tts_endpoint(request: Request, body: TtsRequest):
 
 
 
+
+
+# ============================================================
+# MARKETS / SIGNALS / NEWS (web)
+# ============================================================
+
+DEFAULT_WEB_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD", "XAU/USD"]
+
+
+def _safe_analyze(symbol: str, timeframe: str = "15m") -> Dict[str, Any]:
+    try:
+        from market import analyze_market
+
+        data = analyze_market(symbol, timeframe=timeframe)
+        if not isinstance(data, dict):
+            return {"symbol": symbol, "error": "no_data", "signal": "WAIT"}
+        # Trim huge payloads
+        out = {
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "price": data.get("price") or data.get("current_price"),
+            "signal": data.get("signal") or data.get("mtf_signal") or data.get("bias") or "WAIT",
+            "trend": data.get("trend") or data.get("mtf_bias"),
+            "confidence": data.get("confidence"),
+            "strength": data.get("strength") or data.get("mtf_strength"),
+            "rsi": data.get("rsi"),
+            "support": data.get("support"),
+            "resistance": data.get("resistance"),
+            "entry": data.get("entry") or data.get("entry_zone"),
+            "stop_loss": data.get("stop_loss") or data.get("sl"),
+            "tp1": data.get("tp1"),
+            "tp2": data.get("tp2"),
+            "tp3": data.get("tp3"),
+            "reasons": (data.get("reasons") or data.get("notes") or [])[:8],
+            "mtf": data.get("mtf") or data.get("mtf_summary"),
+            "structure": data.get("structure"),
+            "volatility": data.get("volatility"),
+        }
+        return out
+    except Exception as e:
+        logger.warning("analyze %s failed: %s", symbol, type(e).__name__)
+        return {"symbol": symbol, "error": type(e).__name__, "signal": "WAIT"}
+
+
+def _safe_news(symbol: str) -> Dict[str, Any]:
+    try:
+        from market import get_news_risk_safe
+
+        return get_news_risk_safe(symbol) or {}
+    except Exception as e:
+        return {"news_risk": "UNKNOWN", "error": type(e).__name__}
+
+
+@app.get("/api/markets")
+async def markets_overview(request: Request):
+    """Snapshot for BTC/ETH/SOL/XAU — requires login."""
+    await asyncio.to_thread(_require_current_user, request)
+
+    def _load():
+        rows = []
+        for sym in DEFAULT_WEB_SYMBOLS:
+            a = _safe_analyze(sym, "15m")
+            n = _safe_news(sym)
+            a["news"] = n
+            rows.append(a)
+        return {"status": "success", "symbols": rows, "count": len(rows)}
+
+    try:
+        return await asyncio.to_thread(_load)
+    except Exception as exc:
+        logger.error("markets overview: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Markets unavailable")
+
+
+@app.get("/api/markets/{symbol:path}")
+async def market_detail(request: Request, symbol: str, timeframe: str = "15m"):
+    await asyncio.to_thread(_require_current_user, request)
+    sym = symbol.replace("-", "/").upper()
+    if "/" not in sym and len(sym) <= 6:
+        # BTC -> BTC/USD, XAU -> XAU/USD
+        if sym in ("XAU", "GOLD"):
+            sym = "XAU/USD"
+        else:
+            sym = f"{sym}/USD"
+
+    def _load():
+        a = _safe_analyze(sym, timeframe or "15m")
+        a["news"] = _safe_news(sym)
+        return {"status": "success", "market": a}
+
+    try:
+        return await asyncio.to_thread(_load)
+    except Exception as exc:
+        logger.error("market detail: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Market detail failed")
+
+
+@app.get("/api/signals")
+async def signals_overview(request: Request):
+    """Trading signals package (same symbols, signal-focused)."""
+    await asyncio.to_thread(_require_current_user, request)
+
+    def _load():
+        signals = []
+        for sym in DEFAULT_WEB_SYMBOLS:
+            a = _safe_analyze(sym, "15m")
+            signals.append(
+                {
+                    "symbol": sym,
+                    "signal": a.get("signal"),
+                    "price": a.get("price"),
+                    "confidence": a.get("confidence"),
+                    "trend": a.get("trend"),
+                    "entry": a.get("entry"),
+                    "stop_loss": a.get("stop_loss"),
+                    "tp1": a.get("tp1"),
+                    "tp2": a.get("tp2"),
+                    "tp3": a.get("tp3"),
+                    "rsi": a.get("rsi"),
+                    "support": a.get("support"),
+                    "resistance": a.get("resistance"),
+                    "reasons": a.get("reasons") or [],
+                    "error": a.get("error"),
+                }
+            )
+        actionable = [
+            s
+            for s in signals
+            if str(s.get("signal") or "").upper() in ("BUY", "SELL")
+        ]
+        return {
+            "status": "success",
+            "signals": signals,
+            "actionable_count": len(actionable),
+            "disclaimer": "Not financial advice. Trading involves risk.",
+        }
+
+    try:
+        return await asyncio.to_thread(_load)
+    except Exception as exc:
+        logger.error("signals: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Signals unavailable")
+
+
+@app.get("/api/news")
+async def news_overview(request: Request):
+    """News risk + headlines per major asset."""
+    await asyncio.to_thread(_require_current_user, request)
+
+    def _load():
+        items = []
+        for sym in DEFAULT_WEB_SYMBOLS:
+            n = _safe_news(sym)
+            items.append({"symbol": sym, **n})
+        # Optional global headlines from news.py
+        global_headlines = []
+        try:
+            from news import get_global_news
+
+            raw = get_global_news()
+            if isinstance(raw, list):
+                global_headlines = raw[:15]
+            elif isinstance(raw, dict):
+                global_headlines = (raw.get("headlines") or raw.get("items") or [])[:15]
+        except Exception:
+            pass
+        return {
+            "status": "success",
+            "assets": items,
+            "global_headlines": global_headlines,
+            "disclaimer": "News is informational only. Not financial advice.",
+        }
+
+    try:
+        return await asyncio.to_thread(_load)
+    except Exception as exc:
+        logger.error("news: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="News unavailable")
+
+
+
 # ============================================================
 # AGENT (Phase 1) — planner, morning brief, job log, auto-learn
 # ============================================================
