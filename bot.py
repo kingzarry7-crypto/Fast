@@ -2096,22 +2096,24 @@ def _agent_signal_is_actionable(analysis: dict) -> bool:
     sig = str(analysis.get("signal") or "").upper().strip()
     if sig not in ("BUY", "SELL"):
         return False
-    # Hard block: late or risky entry quality
     if analysis.get("late_entry") is True:
         return False
     eq = str(analysis.get("entry_quality") or "").upper()
     if eq in ("LATE", "RISKY"):
         return False
+    # Confidence: only skip clearly weak numeric scores
     conf = analysis.get("confidence")
-    if conf is None:
+    if conf is None or conf == "":
         return True
     try:
         if isinstance(conf, (int, float)):
-            return float(conf) >= 55
-        c = str(conf).upper()
-        if c in ("LOW", "WEAK"):
+            return float(conf) >= 50
+        c = str(conf).upper().strip()
+        if c in ("LOW", "WEAK", "POOR"):
             return False
-        return True
+        # try parse number in string
+        num = float("".join(ch for ch in c if ch.isdigit() or ch == ".") or "100")
+        return num >= 50
     except Exception:
         return True
 
@@ -2143,14 +2145,35 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
     last_map = bot_data.setdefault("agent_last_signals", {})
 
     actionable = []
+    n_wait = 0
+    n_late = 0
+    n_dup = 0
+    n_err = 0
+    n_lowconf = 0
+    scan_summary = []
+
     for symbol in AGENT_WATCH_SYMBOLS:
         try:
             analysis = await asyncio.to_thread(tool_analyze_symbol, symbol, "15m")
         except Exception as e:
-            logger.debug(f"agent_signal_watch analyze {symbol}: {e}")
+            n_err += 1
+            logger.warning(f"agent_signal_watch analyze {symbol}: {e}")
+            scan_summary.append(f"{symbol}=ERR")
             continue
-        # Late BUY/SELL → do NOT push trade signal (user request)
-        if _agent_signal_is_late(analysis) and str(analysis.get("signal") or "").upper() in ("BUY", "SELL"):
+
+        sig = str(analysis.get("signal") or "WAIT").upper()
+        price = analysis.get("price")
+        late = _agent_signal_is_late(analysis)
+        scan_summary.append(
+            f"{symbol}={sig}"
+            + (f"@{price}" if price is not None else "")
+            + ("/LATE" if late else "")
+            + (f"/q={analysis.get('entry_quality')}" if analysis.get("entry_quality") else "")
+        )
+
+        # Late BUY/SELL → do NOT push trade signal
+        if late and sig in ("BUY", "SELL"):
+            n_late += 1
             fp_late = _agent_signal_fingerprint(symbol, analysis) + "|LATE"
             late_notified = bot_data.setdefault("agent_late_notified", {})
             if late_notified.get(symbol) != fp_late:
@@ -2160,7 +2183,7 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
                 tool_learn(
                     user_id="telegram_agent",
                     symbol=symbol,
-                    signal=str(analysis.get("signal") or ""),
+                    signal=sig,
                     confidence=str(analysis.get("confidence") or ""),
                     notes=f"SKIPPED_LATE: {analysis.get('late_entry_reason') or analysis.get('entry_quality')}",
                     outcome="skipped_late_entry",
@@ -2168,24 +2191,38 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 pass
             continue
-        if not _agent_signal_is_actionable(analysis):
+
+        if sig not in ("BUY", "SELL"):
+            n_wait += 1
             continue
+
+        if not _agent_signal_is_actionable(analysis):
+            n_lowconf += 1
+            continue
+
         fp = _agent_signal_fingerprint(symbol, analysis)
         if last_map.get(symbol) == fp:
-            continue  # same package already pushed
+            n_dup += 1
+            continue
         last_map[symbol] = fp
         actionable.append(analysis)
         try:
             tool_learn(
                 user_id="telegram_agent",
                 symbol=symbol,
-                signal=str(analysis.get("signal") or ""),
+                signal=sig,
                 confidence=str(analysis.get("confidence") or ""),
                 notes="auto_watch_push",
                 outcome="pushed_telegram",
             )
         except Exception:
             pass
+
+    logger.info(
+        "agent_signal_watch cycle: "
+        + " | ".join(scan_summary)
+        + f" || actionable={len(actionable)} wait={n_wait} late={n_late} dup={n_dup} lowconf={n_lowconf} err={n_err}"
+    )
 
     # Notify admin once about late setups (warning only — not a trade signal)
     late_queue = bot_data.pop("agent_late_queue", [])
