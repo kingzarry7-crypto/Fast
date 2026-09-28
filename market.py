@@ -366,7 +366,378 @@ BINANCE_SYMBOL_MAP = {
     "SOLUSD": "SOLUSDT",
     "SOLUSDT": "SOLUSDT",
     "SOL": "SOLUSDT",
+    "BNB/USD": "BNBUSDT",
+    "BNBUSD": "BNBUSDT",
+    "BNBUSDT": "BNBUSDT",
+    "BNB": "BNBUSDT",
+    "XRP/USD": "XRPUSDT",
+    "XRPUSD": "XRPUSDT",
+    "XRPUSDT": "XRPUSDT",
+    "XRP": "XRPUSDT",
+    "ADA/USD": "ADAUSDT",
+    "ADAUSD": "ADAUSDT",
+    "ADAUSDT": "ADAUSDT",
+    "ADA": "ADAUSDT",
+    "DOGE/USD": "DOGEUSDT",
+    "DOGEUSD": "DOGEUSDT",
+    "DOGEUSDT": "DOGEUSDT",
+    "DOGE": "DOGEUSDT",
+    "AVAX/USD": "AVAXUSDT",
+    "AVAXUSD": "AVAXUSDT",
+    "AVAXUSDT": "AVAXUSDT",
+    "AVAX": "AVAXUSDT",
+    "DOT/USD": "DOTUSDT",
+    "DOTUSD": "DOTUSDT",
+    "DOTUSDT": "DOTUSDT",
+    "DOT": "DOTUSDT",
+    "LINK/USD": "LINKUSDT",
+    "LINKUSD": "LINKUSDT",
+    "LINKUSDT": "LINKUSDT",
+    "LINK": "LINKUSDT",
+    "LTC/USD": "LTCUSDT",
+    "LTCUSD": "LTCUSDT",
+    "LTCUSDT": "LTCUSDT",
+    "LTC": "LTCUSDT",
+    "ATOM/USD": "ATOMUSDT",
+    "ATOMUSD": "ATOMUSDT",
+    "ATOMUSDT": "ATOMUSDT",
+    "ATOM": "ATOMUSDT",
+    "NEAR/USD": "NEARUSDT",
+    "NEARUSD": "NEARUSDT",
+    "NEARUSDT": "NEARUSDT",
+    "NEAR": "NEARUSDT",
+    "APT/USD": "APTUSDT",
+    "APTUSD": "APTUSDT",
+    "APTUSDT": "APTUSDT",
+    "APT": "APTUSDT",
+    "ARB/USD": "ARBUSDT",
+    "ARBUSD": "ARBUSDT",
+    "ARBUSDT": "ARBUSDT",
+    "ARB": "ARBUSDT",
+    "OP/USD": "OPUSDT",
+    "OPUSD": "OPUSDT",
+    "OPUSDT": "OPUSDT",
+    "OP": "OPUSDT",
+    "SUI/USD": "SUIUSDT",
+    "SUIUSD": "SUIUSDT",
+    "SUIUSDT": "SUIUSDT",
+    "SUI": "SUIUSDT",
+    "TRX/USD": "TRXUSDT",
+    "TRXUSD": "TRXUSDT",
+    "TRXUSDT": "TRXUSDT",
+    "TRX": "TRXUSDT",
+    "UNI/USD": "UNIUSDT",
+    "UNIUSD": "UNIUSDT",
+    "UNIUSDT": "UNIUSDT",
+    "UNI": "UNIUSDT",
+    "AAVE/USD": "AAVEUSDT",
+    "AAVEUSD": "AAVEUSDT",
+    "AAVEUSDT": "AAVEUSDT",
+    "AAVE": "AAVEUSDT",
+    "PEPE/USD": "PEPEUSDT",
+    "PEPEUSD": "PEPEUSDT",
+    "PEPEUSDT": "PEPEUSDT",
+    "PEPE": "PEPEUSDT",
+    "SHIB/USD": "SHIBUSDT",
+    "SHIBUSD": "SHIBUSDT",
+    "SHIBUSDT": "SHIBUSDT",
+    "SHIB": "SHIBUSDT",
+    "MATIC/USD": "MATICUSDT",
+    "MATICUSD": "MATICUSDT",
+    "MATICUSDT": "MATICUSDT",
+    "MATIC": "MATICUSDT",
+    "POL/USD": "POLUSDT",
+    "POLUSD": "POLUSDT",
+    "POLUSDT": "POLUSDT",
+    "POL": "POLUSDT",
+    "FIL/USD": "FILUSDT",
+    "FILUSD": "FILUSDT",
+    "FILUSDT": "FILUSDT",
+    "FIL": "FILUSDT",
+    "ICP/USD": "ICPUSDT",
+    "ICPUSD": "ICPUSDT",
+    "ICPUSDT": "ICPUSDT",
+    "ICP": "ICPUSDT",
+    "INJ/USD": "INJUSDT",
+    "INJUSD": "INJUSDT",
+    "INJUSDT": "INJUSDT",
+    "INJ": "INJUSDT",
+    "SEI/USD": "SEIUSDT",
+    "SEIUSD": "SEIUSDT",
+    "SEIUSDT": "SEIUSDT",
+    "SEI": "SEIUSDT",
+    "TIA/USD": "TIAUSDT",
+    "TIAUSD": "TIAUSDT",
+    "TIAUSDT": "TIAUSDT",
+    "TIA": "TIAUSDT",
+    "WLD/USD": "WLDUSDT",
+    "WLDUSD": "WLDUSDT",
+    "WLDUSDT": "WLDUSDT",
+    "WLD": "WLDUSDT",
+    "FET/USD": "FETUSDT",
+    "FETUSD": "FETUSDT",
+    "FETUSDT": "FETUSDT",
+    "FET": "FETUSDT",
+    "RNDR/USD": "RNDRUSDT",
+    "RNDRUSD": "RNDRUSDT",
+    "RNDRUSDT": "RNDRUSDT",
+    "RNDR": "RNDRUSDT",
+    "RENDER/USD": "RENDERUSDT",
+    "RENDERUSD": "RENDERUSDT",
+    "RENDERUSDT": "RENDERUSDT",
+    "RENDER": "RENDERUSDT",
+    "HBAR/USD": "HBARUSDT",
+    "HBARUSD": "HBARUSDT",
+    "HBARUSDT": "HBARUSDT",
+    "HBAR": "HBARUSDT",
+    "VET/USD": "VETUSDT",
+    "VETUSD": "VETUSDT",
+    "VETUSDT": "VETUSDT",
+    "VET": "VETUSDT",
+    "ALGO/USD": "ALGOUSDT",
+    "ALGOUSD": "ALGOUSDT",
+    "ALGOUSDT": "ALGOUSDT",
+    "ALGO": "ALGOUSDT",
+    "EGLD/USD": "EGLDUSDT",
+    "EGLDUSD": "EGLDUSDT",
+    "EGLDUSDT": "EGLDUSDT",
+    "EGLD": "EGLDUSDT",
+    "FTM/USD": "FTMUSDT",
+    "FTMUSD": "FTMUSDT",
+    "FTMUSDT": "FTMUSDT",
+    "FTM": "FTMUSDT",
+    "SAND/USD": "SANDUSDT",
+    "SANDUSD": "SANDUSDT",
+    "SANDUSDT": "SANDUSDT",
+    "SAND": "SANDUSDT",
+    "MANA/USD": "MANAUSDT",
+    "MANAUSD": "MANAUSDT",
+    "MANAUSDT": "MANAUSDT",
+    "MANA": "MANAUSDT",
+    "AXS/USD": "AXSUSDT",
+    "AXSUSD": "AXSUSDT",
+    "AXSUSDT": "AXSUSDT",
+    "AXS": "AXSUSDT",
+    "CRV/USD": "CRVUSDT",
+    "CRVUSD": "CRVUSDT",
+    "CRVUSDT": "CRVUSDT",
+    "CRV": "CRVUSDT",
+    "MKR/USD": "MKRUSDT",
+    "MKRUSD": "MKRUSDT",
+    "MKRUSDT": "MKRUSDT",
+    "MKR": "MKRUSDT",
+    "SNX/USD": "SNXUSDT",
+    "SNXUSD": "SNXUSDT",
+    "SNXUSDT": "SNXUSDT",
+    "SNX": "SNXUSDT",
+    "GRT/USD": "GRTUSDT",
+    "GRTUSD": "GRTUSDT",
+    "GRTUSDT": "GRTUSDT",
+    "GRT": "GRTUSDT",
+    "IMX/USD": "IMXUSDT",
+    "IMXUSD": "IMXUSDT",
+    "IMXUSDT": "IMXUSDT",
+    "IMX": "IMXUSDT",
+    "STX/USD": "STXUSDT",
+    "STXUSD": "STXUSDT",
+    "STXUSDT": "STXUSDT",
+    "STX": "STXUSDT",
+    "RUNE/USD": "RUNEUSDT",
+    "RUNEUSD": "RUNEUSDT",
+    "RUNEUSDT": "RUNEUSDT",
+    "RUNE": "RUNEUSDT",
+    "THETA/USD": "THETAUSDT",
+    "THETAUSD": "THETAUSDT",
+    "THETAUSDT": "THETAUSDT",
+    "THETA": "THETAUSDT",
+    "EOS/USD": "EOSUSDT",
+    "EOSUSD": "EOSUSDT",
+    "EOSUSDT": "EOSUSDT",
+    "EOS": "EOSUSDT",
+    "XLM/USD": "XLMUSDT",
+    "XLMUSD": "XLMUSDT",
+    "XLMUSDT": "XLMUSDT",
+    "XLM": "XLMUSDT",
+    "XTZ/USD": "XTZUSDT",
+    "XTZUSD": "XTZUSDT",
+    "XTZUSDT": "XTZUSDT",
+    "XTZ": "XTZUSDT",
+    "FLOW/USD": "FLOWUSDT",
+    "FLOWUSD": "FLOWUSDT",
+    "FLOWUSDT": "FLOWUSDT",
+    "FLOW": "FLOWUSDT",
+    "KAVA/USD": "KAVAUSDT",
+    "KAVAUSD": "KAVAUSDT",
+    "KAVAUSDT": "KAVAUSDT",
+    "KAVA": "KAVAUSDT",
+    "ZIL/USD": "ZILUSDT",
+    "ZILUSD": "ZILUSDT",
+    "ZILUSDT": "ZILUSDT",
+    "ZIL": "ZILUSDT",
+    "ENJ/USD": "ENJUSDT",
+    "ENJUSD": "ENJUSDT",
+    "ENJUSDT": "ENJUSDT",
+    "ENJ": "ENJUSDT",
+    "CHZ/USD": "CHZUSDT",
+    "CHZUSD": "CHZUSDT",
+    "CHZUSDT": "CHZUSDT",
+    "CHZ": "CHZUSDT",
+    "LDO/USD": "LDOUSDT",
+    "LDOUSD": "LDOUSDT",
+    "LDOUSDT": "LDOUSDT",
+    "LDO": "LDOUSDT",
 }
+
+def _normalize_symbol_key(symbol: str) -> str:
+    return (symbol or "").upper().strip().replace(" ", "")
+
+
+def _normalize_symbol_key(symbol: str) -> str:
+    return (symbol or "").upper().strip().replace(" ", "")
+
+
+# Agent auto-watch: free Binance cryptos + gold (Twelve only for XAU)
+AGENT_WATCH_SYMBOLS_DEFAULT = [
+    "BTC/USD", "ETH/USD", "SOL/USD", "BNB/USD", "XRP/USD", "ADA/USD", "DOGE/USD",
+    "AVAX/USD", "DOT/USD", "LINK/USD", "LTC/USD", "ATOM/USD", "NEAR/USD", "APT/USD",
+    "ARB/USD", "OP/USD", "SUI/USD", "TRX/USD", "UNI/USD", "AAVE/USD", "XAU/USD",
+]
+
+# Forex / metals resolved via Twelve when user asks (not on free agent loop except XAU)
+TWELVE_ONLY_SYMBOLS = {
+    "XAU/USD", "XAUUSD", "XAU", "GOLD",
+    "XAG/USD", "XAGUSD", "XAG", "SILVER",
+    "EUR/USD", "EURUSD", "GBP/USD", "GBPUSD", "USD/JPY", "USDJPY",
+    "USD/CHF", "USDCHF", "AUD/USD", "AUDUSD", "USD/CAD", "USDCAD",
+    "NZD/USD", "NZDUSD", "EUR/GBP", "EURGBP", "EUR/JPY", "EURJPY",
+    "GBP/JPY", "GBPJPY",
+}
+
+TWELVE_CANONICAL = {
+    "XAU": "XAU/USD", "XAUUSD": "XAU/USD", "GOLD": "XAU/USD", "XAU/USD": "XAU/USD",
+    "XAG": "XAG/USD", "XAGUSD": "XAG/USD", "SILVER": "XAG/USD", "XAG/USD": "XAG/USD",
+    "EURUSD": "EUR/USD", "EUR/USD": "EUR/USD",
+    "GBPUSD": "GBP/USD", "GBP/USD": "GBP/USD",
+    "USDJPY": "USD/JPY", "USD/JPY": "USD/JPY",
+    "USDCHF": "USD/CHF", "USD/CHF": "USD/CHF",
+    "AUDUSD": "AUD/USD", "AUD/USD": "AUD/USD",
+    "USDCAD": "USD/CAD", "USD/CAD": "USD/CAD",
+    "NZDUSD": "NZD/USD", "NZD/USD": "NZD/USD",
+    "EURGBP": "EUR/GBP", "EUR/GBP": "EUR/GBP",
+    "EURJPY": "EUR/JPY", "EUR/JPY": "EUR/JPY",
+    "GBPJPY": "GBP/JPY", "GBP/JPY": "GBP/JPY",
+}
+
+
+def get_agent_watch_symbols():
+    """Symbols the always-on agent scans. Override with env AGENT_WATCH_SYMBOLS=BTC/USD,ETH/USD,..."""
+    raw = (os.getenv("AGENT_WATCH_SYMBOLS") or "").strip()
+    if raw:
+        parts = [p.strip().upper().replace(" ", "") for p in raw.replace(";", ",").split(",") if p.strip()]
+        out = []
+        for p in parts:
+            can = resolve_trading_symbol(p)
+            if can and can not in out:
+                out.append(can)
+        if out:
+            return out
+    return list(AGENT_WATCH_SYMBOLS_DEFAULT)
+
+
+def resolve_trading_symbol(text: str) -> str:
+    """Map user text / ticker to canonical SYMBOL (e.g. BNB -> BNB/USD, GOLD -> XAU/USD)."""
+    if not text:
+        return "BTC/USD"
+    raw = text.strip().upper()
+    # strip timeframe tokens
+    import re as _re
+    raw = _re.sub(r"\b(1M|5M|15M|30M|1H|2H|4H|1D)\b", " ", raw)
+    key = _normalize_symbol_key(raw.replace(" ", ""))
+    # Twelve-only canonical
+    if key in TWELVE_CANONICAL:
+        return TWELVE_CANONICAL[key]
+    # Direct map
+    if key in BINANCE_SYMBOL_MAP:
+        # prefer TICKER/USD form
+        base = key.replace("USDT", "").replace("USD", "").replace("/", "")
+        if len(base) >= 2:
+            return f"{base}/USD" if base not in ("USDT",) else "BTC/USD"
+        return key
+    # embedded names in longer text — longest first
+    for canon, aliases in (
+        ("XAU/USD", ["XAU/USD", "XAUUSD", "GOLD", "XAU"]),
+        ("XAG/USD", ["XAG/USD", "XAGUSD", "SILVER", "XAG"]),
+        ("EUR/USD", ["EUR/USD", "EURUSD"]),
+        ("GBP/USD", ["GBP/USD", "GBPUSD"]),
+        ("USD/JPY", ["USD/JPY", "USDJPY"]),
+        ("BTC/USD", ["BTC/USD", "BTCUSDT", "BITCOIN", "BTC"]),
+        ("ETH/USD", ["ETH/USD", "ETHUSDT", "ETHEREUM", "ETH"]),
+        ("SOL/USD", ["SOL/USD", "SOLUSDT", "SOLANA", "SOL"]),
+    ):
+        for a in aliases:
+            if a in raw.replace(" ", ""):
+                return canon
+    # Any BINANCE map alias as substring (word-ish)
+    for alias, pair in sorted(BINANCE_SYMBOL_MAP.items(), key=lambda x: -len(x[0])):
+        a = alias.upper()
+        if a in raw.replace(" ", "") or a in raw.split():
+            base = pair.replace("USDT", "")
+            return f"{base}/USD"
+    # Bare ticker: BNB, LINK, ...
+    token = raw.split()[0] if raw.split() else raw
+    token = _normalize_symbol_key(token).replace("/", "")
+    if token.endswith("USDT"):
+        token = token[:-4]
+    if token.endswith("USD") and len(token) > 3:
+        token = token[:-3]
+    if token in BINANCE_SYMBOL_MAP:
+        pair = BINANCE_SYMBOL_MAP[token]
+        return f"{pair.replace('USDT','')}/USD"
+    # Try TOKENUSDT dynamically for short tickers
+    if 2 <= len(token) <= 10 and token.isalpha():
+        return f"{token}/USD"
+    return "BTC/USD"
+
+
+def binance_pair(symbol: str):
+    """Return Binance USDT pair for crypto only. None for gold/forex (Twelve)."""
+    s = _normalize_symbol_key(symbol)
+    # Never use Binance for metals / forex
+    if s in TWELVE_CANONICAL or any(
+        x in s for x in ("XAU", "XAG", "GOLD", "SILVER", "EUR", "GBP", "JPY", "AUD", "NZD", "CHF", "CAD")
+    ):
+        # Allow crypto that contains none of pure forex-only — BTC etc OK
+        forex_metal = ("XAU", "XAG", "GOLD", "SILVER", "EUR/", "GBP/", "USD/JPY", "USD/CHF", "AUD/", "NZD/", "USD/CAD", "EURUSD", "GBPUSD", "USDJPY")
+        if any(x in s for x in ("XAU", "XAG", "GOLD", "SILVER")):
+            return None
+        if s in TWELVE_CANONICAL:
+            return None
+        # EUR as in something else? pure forex:
+        pure = s.replace("/", "").replace("-", "")
+        if pure in (
+            "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD",
+            "EURGBP", "EURJPY", "GBPJPY",
+        ):
+            return None
+    if s in BINANCE_SYMBOL_MAP:
+        return BINANCE_SYMBOL_MAP[s]
+    s2 = s.replace("-", "/")
+    if s2 in BINANCE_SYMBOL_MAP:
+        return BINANCE_SYMBOL_MAP[s2]
+    base = s.replace("/", "").replace("-", "")
+    if base.endswith("USDT") and 5 <= len(base) <= 15:
+        core = base[:-4]
+        if core in ("XAU", "XAG", "EUR", "GBP"):
+            return None
+        return base
+    if base.endswith("USD") and len(base) > 3:
+        base = base[:-3]
+    if base in ("XAU", "XAG", "EUR", "GBP", "GOLD", "SILVER"):
+        return None
+    if 2 <= len(base) <= 10 and base.isalpha():
+        return f"{base}USDT"
+    return None
+
 BINANCE_INTERVAL_MAP = {
     "1m": "1m", "1min": "1m",
     "5m": "5m", "5min": "5m",
@@ -377,19 +748,6 @@ BINANCE_INTERVAL_MAP = {
 }
 
 
-def _normalize_symbol_key(symbol: str) -> str:
-    return (symbol or "").upper().strip().replace(" ", "")
-
-
-def binance_pair(symbol: str):
-    """Return Binance USDT pair if this is a supported crypto symbol."""
-    s = _normalize_symbol_key(symbol)
-    if s in BINANCE_SYMBOL_MAP:
-        return BINANCE_SYMBOL_MAP[s]
-    s2 = s.replace("-", "/")
-    if s2 in BINANCE_SYMBOL_MAP:
-        return BINANCE_SYMBOL_MAP[s2]
-    return None
 
 
 def _binance_get_price(pair: str) -> float:
