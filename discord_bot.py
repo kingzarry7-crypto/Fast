@@ -490,19 +490,12 @@ async def generate_tts_audio(text: str) -> tuple:
         raise RuntimeError(f"TTS unavailable: {_redact(str(e))}")
 
 def detect_market_and_timeframe(text: str):
-    upper = text.upper()
-    symbol = "BTC/USD"
-    markets = {
-        "XAU/USD": ["XAU/USD", "XAUUSD", "GOLD", "XAU"],
-        "BTC/USD": ["BTC/USD", "BTCUSDT", "BTC"],
-        "ETH/USD": ["ETH/USD", "ETHUSDT", "ETH"],
-        "SOL/USD": ["SOL/USD", "SOLUSDT", "SOL"],
-    }
-    for market_symbol, names in markets.items():
-        if any(name in upper for name in names):
-            symbol = market_symbol
-            break
-    match = re.search(r"\b(1m|5m|15m|30m|1h|2h|4h|1d)\b", text.lower())
+    try:
+        from market import resolve_trading_symbol
+        symbol = resolve_trading_symbol(text or "BTC")
+    except Exception:
+        symbol = "BTC/USD"
+    match = re.search(r"\b(1m|5m|15m|30m|1h|2h|4h|1d)\b", (text or "").lower())
     timeframe = match.group(1) if match else "15m"
     return symbol, timeframe
 
