@@ -7,13 +7,23 @@ import ChatWorkspace from "@/components/chat/ChatWorkspace";
 import { useAuth } from "@/hooks/useAuth";
 import { api, type ConversationItem, type MarketSnapshot } from "@/lib/api";
 
+const NAV = [
+  { href: "/dashboard", label: "Chat" },
+  { href: "/markets", label: "Markets" },
+  { href: "/signals", label: "Signals" },
+  { href: "/agent", label: "Agent" },
+  { href: "/news", label: "News" },
+  { href: "/pricing", label: "Pricing" },
+  { href: "/settings", label: "Settings" },
+];
+
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [markets, setMarkets] = useState<MarketSnapshot[]>([]);
   const [signals, setSignals] = useState<MarketSnapshot[]>([]);
-  const [railOpen, setRailOpen] = useState(true);
+  const [chatsOpen, setChatsOpen] = useState(false);
 
   const loadSide = useCallback(async () => {
     const [m, s, c] = await Promise.allSettled([
@@ -21,9 +31,9 @@ export default function DashboardPage() {
       api.getSignals(),
       api.listConversations(),
     ]);
-    if (m.status === "fulfilled") setMarkets(m.value.symbols || []);
-    if (s.status === "fulfilled") setSignals(s.value.signals || []);
-    if (c.status === "fulfilled") setConversations(c.value || []);
+    if (m.status === "fulfilled") setMarkets((m.value as { symbols?: MarketSnapshot[] }).symbols || []);
+    if (s.status === "fulfilled") setSignals((s.value as { signals?: MarketSnapshot[] }).signals || []);
+    if (c.status === "fulfilled") setConversations((c.value as ConversationItem[]) || []);
   }, []);
 
   useEffect(() => {
@@ -40,131 +50,143 @@ export default function DashboardPage() {
   const newChat = () => {
     window.dispatchEvent(new Event("kz-new-chat"));
     setConversationId(null);
+    setChatsOpen(false);
   };
 
   const openChat = (id: string) => {
     window.dispatchEvent(new CustomEvent("kz-open-chat", { detail: id }));
     setConversationId(id);
+    setChatsOpen(false);
   };
 
   return (
     <ProtectedRoute>
-      <div className="flex h-[100dvh] min-h-0 w-full overflow-hidden">
-        <div className="relative flex min-w-0 flex-1 flex-col">
-          <div className="relative z-10 flex min-h-0 flex-1 flex-col border-r border-cyan-500/10 bg-[#020914]/40">
-            <ChatWorkspace
-              fullScreen
-              embedMode
-              conversationId={conversationId}
-              onConversationChange={setConversationId}
-              onConversationsRefresh={setConversations}
-            />
-          </div>
-        </div>
+      <div className="flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden bg-[#020914]">
+        <header className="relative z-30 shrink-0 border-b border-cyan-500/15 bg-[#020914]/95 backdrop-blur-xl">
+          <div className="flex items-center gap-2 px-3 sm:px-4 py-2.5">
+            <Link href="/dashboard" className="flex items-center gap-2 shrink-0 mr-1">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-cyan-400/50 bg-[#020b18] font-display text-[10px] font-bold text-cyan-300">
+                KZ
+              </span>
+              <span className="hidden sm:block">
+                <span className="block font-display text-[11px] font-bold tracking-wider text-white">
+                  KING ZARRY
+                </span>
+                <span className="block font-mono-tech text-[8px] tracking-[0.25em] text-cyan-400/50">
+                  COMMAND CENTRE
+                </span>
+              </span>
+            </Link>
 
-        <aside
-          className={
-            (railOpen ? "flex" : "hidden") +
-            " w-[min(100%,300px)] shrink-0 flex-col border-l border-cyan-500/10 bg-[#020914]/95 backdrop-blur-xl xl:flex"
-          }
-        >
-          <div className="flex items-center justify-between border-b border-cyan-500/10 px-4 py-3">
-            <div>
-              <p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/50">DASHBOARD</p>
-              <p className="font-display text-xs font-bold tracking-wider text-white">Command side</p>
-            </div>
             <button
               type="button"
               onClick={newChat}
-              className="rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-3 py-1.5 font-mono-tech text-[10px] tracking-widest text-cyan-200 hover:bg-cyan-400/20"
+              className="rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-2.5 py-1.5 font-mono-tech text-[10px] tracking-widest text-cyan-200 hover:bg-cyan-400/20 shrink-0"
             >
-              + NEW CHAT
+              + NEW
             </button>
-          </div>
 
-          <div className="border-b border-cyan-500/10 px-4 py-3">
-            <p className="mb-2 font-mono-tech text-[9px] tracking-[0.25em] text-cyan-400/40">SESSION</p>
-            <p className="truncate text-xs text-zinc-300">{user?.email || "—"}</p>
-            <p className="mt-1 font-mono-tech text-[10px] text-cyan-300/60">
-              {user?.is_subscribed ? "VIP ACTIVE" : "FREE PLAN"}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2 border-b border-cyan-500/10 px-3 py-3">
-            {[
-              { l: "MKT", v: String(markets.length || "—"), href: "/markets" },
-              { l: "SIG", v: String(actionable), href: "/signals" },
-              { l: "CHATS", v: String(conversations.length || "—"), href: "/chat" },
-            ].map((x) => (
-              <Link
-                key={x.l}
-                href={x.href}
-                className="rounded-lg border border-cyan-500/15 bg-black/30 px-2 py-2 text-center hover:border-cyan-400/40"
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setChatsOpen((v) => !v)}
+                className="rounded-lg border border-cyan-500/20 px-2.5 py-1.5 font-mono-tech text-[10px] tracking-widest text-cyan-300/80 hover:bg-cyan-500/10"
               >
-                <p className="font-mono-tech text-[8px] tracking-widest text-cyan-400/40">{x.l}</p>
-                <p className="font-display text-sm font-bold text-white">{x.v}</p>
-              </Link>
-            ))}
-          </div>
-
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="flex items-center justify-between px-4 py-2">
-              <p className="font-mono-tech text-[9px] tracking-[0.25em] text-cyan-400/40">RECENT CHATS</p>
-            </div>
-            <div className="flex-1 overflow-y-auto kz-scroll px-2 pb-3">
-              {conversations.slice(0, 20).map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => openChat(c.id)}
-                  className={
-                    "mb-1 w-full rounded-lg px-3 py-2.5 text-left transition-colors " +
-                    (c.id === conversationId
-                      ? "border border-cyan-500/35 bg-cyan-500/15 text-white"
-                      : "border border-transparent text-zinc-400 hover:bg-white/5 hover:text-zinc-200")
-                  }
-                >
-                  <span className="block truncate text-xs">{c.title || "Untitled conversation"}</span>
-                  <span className="mt-0.5 block truncate font-mono-tech text-[9px] text-zinc-600">
-                    {c.updated_at || c.created_at
-                      ? String(c.updated_at || c.created_at).slice(0, 16).replace("T", " ")
-                      : ""}
-                  </span>
-                </button>
-              ))}
-              {!conversations.length && (
-                <p className="px-2 py-6 text-center font-mono-tech text-[10px] text-zinc-600">
-                  No chats yet — start with + NEW CHAT
-                </p>
+                CHATS {conversations.length ? `(${conversations.length})` : ""}
+              </button>
+              {chatsOpen && (
+                <>
+                  <button
+                    type="button"
+                    className="fixed inset-0 z-40 cursor-default"
+                    aria-label="Close chats"
+                    onClick={() => setChatsOpen(false)}
+                  />
+                  <div className="absolute left-0 top-full z-50 mt-2 w-72 max-h-80 overflow-y-auto rounded-xl border border-cyan-500/20 bg-[#020914] p-2 shadow-2xl">
+                    {!conversations.length && (
+                      <p className="px-2 py-6 text-center font-mono-tech text-[10px] text-zinc-600">
+                        No chats yet
+                      </p>
+                    )}
+                    {conversations.slice(0, 30).map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => openChat(c.id)}
+                        className={
+                          "mb-1 w-full rounded-lg px-3 py-2 text-left text-xs transition-colors " +
+                          (c.id === conversationId
+                            ? "bg-cyan-500/15 text-white border border-cyan-500/30"
+                            : "text-zinc-400 hover:bg-white/5 border border-transparent")
+                        }
+                      >
+                        <span className="block truncate">{c.title || "Untitled"}</span>
+                        <span className="mt-0.5 block font-mono-tech text-[9px] text-zinc-600">
+                          {c.updated_at || c.created_at
+                            ? String(c.updated_at || c.created_at).slice(0, 16).replace("T", " ")
+                            : ""}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
+
+            <nav className="hidden md:flex items-center gap-1 ml-2 overflow-x-auto">
+              {NAV.map((n) => (
+                <Link
+                  key={n.href}
+                  href={n.href}
+                  className="rounded-md px-2.5 py-1.5 font-mono-tech text-[10px] tracking-widest text-cyan-300/60 hover:text-cyan-100 hover:bg-cyan-500/10 whitespace-nowrap"
+                >
+                  {n.label.toUpperCase()}
+                </Link>
+              ))}
+            </nav>
+
+            <div className="ml-auto flex items-center gap-2 min-w-0">
+              <span className="hidden lg:inline font-mono-tech text-[9px] text-cyan-400/40 tracking-widest">
+                MKT {markets.length || "—"} · SIG {actionable}
+              </span>
+              <span className="hidden sm:inline truncate max-w-[120px] text-[10px] text-zinc-500">
+                {user?.email}
+              </span>
+              <span className="font-mono-tech text-[9px] tracking-widest text-cyan-300/50">
+                {user?.is_subscribed ? "VIP" : "FREE"}
+              </span>
+              <button
+                type="button"
+                onClick={logout}
+                className="rounded-md border border-red-500/20 px-2 py-1 font-mono-tech text-[9px] tracking-widest text-red-400/70 hover:bg-red-500/10"
+              >
+                EXIT
+              </button>
+            </div>
           </div>
 
-          <div className="border-t border-cyan-500/10 p-3 space-y-1.5">
-            {[
-              { href: "/markets", label: "Markets" },
-              { href: "/signals", label: "Signals" },
-              { href: "/agent", label: "Agent" },
-              { href: "/pricing", label: "Pricing" },
-            ].map((l) => (
+          <div className="md:hidden flex gap-1 overflow-x-auto px-3 pb-2">
+            {NAV.map((n) => (
               <Link
-                key={l.href}
-                href={l.href}
-                className="block rounded-lg px-3 py-2 font-mono-tech text-[10px] tracking-widest text-cyan-300/70 hover:bg-cyan-500/10 hover:text-cyan-100"
+                key={n.href}
+                href={n.href}
+                className="shrink-0 rounded-md border border-cyan-500/10 px-2.5 py-1 font-mono-tech text-[9px] tracking-widest text-cyan-300/70"
               >
-                {l.label.toUpperCase()} →
+                {n.label.toUpperCase()}
               </Link>
             ))}
           </div>
-        </aside>
+        </header>
 
-        <button
-          type="button"
-          onClick={() => setRailOpen((v) => !v)}
-          className="fixed bottom-4 right-4 z-40 rounded-full border border-cyan-500/40 bg-[#020914]/95 px-4 py-2 font-mono-tech text-[10px] tracking-widest text-cyan-200 shadow-lg xl:hidden"
-        >
-          {railOpen ? "HIDE PANEL" : "DASHBOARD"}
-        </button>
+        <main className="relative z-10 min-h-0 flex-1 overflow-hidden">
+          <ChatWorkspace
+            fullScreen={false}
+            embedMode
+            conversationId={conversationId}
+            onConversationChange={setConversationId}
+            onConversationsRefresh={setConversations}
+          />
+        </main>
       </div>
     </ProtectedRoute>
   );
