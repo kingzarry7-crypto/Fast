@@ -170,14 +170,16 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        <main className="relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden">
-          <ChatWorkspace
-            fullScreen={false}
-            embedMode
-            conversationId={conversationId}
-            onConversationChange={setConversationId}
-            onConversationsRefresh={setConversations}
-          />
+        <main className="relative z-10 min-h-0 flex-1 overflow-hidden">
+          <div className="absolute inset-0">
+            <ChatWorkspace
+              fullScreen={false}
+              embedMode
+              conversationId={conversationId}
+              onConversationChange={setConversationId}
+              onConversationsRefresh={setConversations}
+            />
+          </div>
         </main>
       </div>
     </ProtectedRoute>
