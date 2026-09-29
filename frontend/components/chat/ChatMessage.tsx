@@ -320,36 +320,25 @@ export function ThinkingIndicator({
 }: {
   phase?: "reading" | "thinking" | "searching" | "responding";
 }) {
-  const labels: Record<string, string> = {
-    reading: "Reading",
-    thinking: "Thinking",
-    searching: "Searching",
-    responding: "Responding",
-  };
-
+  const labels: Record<string, string> = { reading: "Reading", thinking: "Thinking", searching: "Searching", responding: "Responding" };
+  const phaseLabel = labels[phase] || "Thinking";
   return (
     <div className="flex items-start gap-3 py-2 px-1">
-      <span className="w-5 h-5 rounded-full bg-zinc-700 flex items-center justify-center text-[9px] font-semibold text-zinc-100 shrink-0 mt-0.5">
-        KZ
-      </span>
+      <div className="relative w-9 h-9 shrink-0 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center overflow-hidden" aria-label={phaseLabel} title={phaseLabel}>
+        <span className={\`absolute -top-1 left-1/2 w-1.5 h-1.5 -translate-x-1/2 rounded-full bg-zinc-300 ${phase === "responding" ? "animate-ping" : "animate-pulse"}\`} />
+        <span className={\`absolute top-0.5 left-1/2 h-1.5 w-px -translate-x-1/2 bg-zinc-500 ${phase === "reading" ? "rotate-[-18deg]" : phase === "responding" ? "rotate-[18deg]" : ""}\`} />
+        <div className={\`relative w-6 h-5 rounded-[7px] border border-zinc-400 bg-zinc-700 flex items-center justify-center gap-1 transition-transform ${phase === "reading" ? "animate-[bounce_1.4s_ease-in-out_infinite]" : phase === "thinking" ? "animate-[pulse_1.1s_ease-in-out_infinite]" : phase === "searching" ? "animate-[spin_1.8s_linear_infinite]" : "animate-[bounce_0.7s_ease-in-out_infinite]"}\`}>
+          <span className={\`w-1.5 h-1.5 rounded-full bg-zinc-200 ${phase === "responding" ? "animate-ping" : ""}\`} />
+          <span className={\`w-1.5 h-1.5 rounded-full bg-zinc-200 ${phase === "thinking" ? "animate-pulse" : ""}\`} />
+        </div>
+        <span className="absolute bottom-1 w-3 h-px bg-zinc-400 rounded-full" />
+      </div>
       <div className="flex flex-col gap-1.5 pt-0.5">
         <div className="flex items-center gap-2 text-sm text-zinc-400">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-zinc-400 opacity-60" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-zinc-400" />
-          </span>
-          <span className="font-medium text-zinc-300">
-            {labels[phase] || "Thinking"}
-          </span>
-          <span className="inline-flex gap-0.5 ml-0.5">
-            <span className="w-1 h-1 rounded-full bg-zinc-500 animate-bounce [animation-delay:0ms]" />
-            <span className="w-1 h-1 rounded-full bg-zinc-500 animate-bounce [animation-delay:150ms]" />
-            <span className="w-1 h-1 rounded-full bg-zinc-500 animate-bounce [animation-delay:300ms]" />
-          </span>
+          <span className="font-medium text-zinc-300">{phaseLabel}</span>
+          <span className="inline-flex gap-0.5 ml-0.5"><span className="w-1 h-1 rounded-full bg-zinc-500 animate-bounce" /><span className="w-1 h-1 rounded-full bg-zinc-500 animate-bounce [animation-delay:150ms]" /><span className="w-1 h-1 rounded-full bg-zinc-500 animate-bounce [animation-delay:300ms]" /></span>
         </div>
-        <div className="h-1 w-32 rounded-full bg-zinc-800 overflow-hidden">
-          <div className="h-full w-1/2 rounded-full bg-zinc-400 animate-pulse" />
-        </div>
+        <div className="h-1 w-32 rounded-full bg-zinc-800 overflow-hidden"><div className={\`h-full rounded-full bg-zinc-400 transition-all ${phase === "reading" ? "w-1/4" : phase === "thinking" ? "w-1/2" : phase === "searching" ? "w-3/4" : "w-full"} animate-pulse\`} /></div>
       </div>
     </div>
   );
