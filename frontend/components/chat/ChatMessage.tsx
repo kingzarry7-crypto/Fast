@@ -61,7 +61,7 @@ export function ChatMessage({
       setShared(true);
       setTimeout(() => setShared(false), 2000);
     } catch {
-      /* user cancelled */
+      /* cancelled */
     }
   };
 
@@ -82,8 +82,8 @@ export function ChatMessage({
 
   if (isSystem) {
     return (
-      <div className={"flex justify-center w-full my-1 " + className}>
-        <div className="px-2.5 py-1 text-center text-[10px] font-mono tracking-widest uppercase text-zinc-400 bg-zinc-800 border border-zinc-700 rounded-full">
+      <div className={"flex justify-center w-full my-2 " + className}>
+        <div className="rounded-full border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-center text-[11px] font-mono uppercase tracking-widest text-zinc-400">
           {content}
         </div>
       </div>
@@ -93,7 +93,7 @@ export function ChatMessage({
   return (
     <div
       className={
-        "group flex w-full my-0 " +
+        "group flex w-full my-1 " +
         (isUser ? "justify-end" : "justify-start") +
         " " +
         className
@@ -101,23 +101,27 @@ export function ChatMessage({
     >
       <div
         className={
-          "relative max-w-[min(100%,24rem)] sm:max-w-[min(100%,28rem)] rounded-xl px-3 py-1.5 text-[12.5px] leading-relaxed " +
+          "relative max-w-[min(100%,36rem)] rounded-2xl px-4 py-3 text-sm leading-relaxed " +
           (isUser
             ? "bg-zinc-100 text-zinc-900 rounded-br-md"
             : isError
               ? "bg-red-950/40 border border-red-500/30 text-red-100 rounded-bl-md"
-              : "bg-zinc-900/90 border border-zinc-800 text-zinc-100 rounded-bl-md")
+              : "bg-zinc-900 border border-zinc-800 text-zinc-100 rounded-bl-md")
         }
       >
         {imagePreviewUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={imagePreviewUrl} alt="attachment" className="mb-1.5 max-h-32 rounded-lg border border-zinc-700 object-cover" />
+          <img
+            src={imagePreviewUrl}
+            alt="attachment"
+            className="mb-2 max-h-48 rounded-lg border border-zinc-700 object-cover"
+          />
         ) : null}
 
         <div className="whitespace-pre-wrap break-words">{content}</div>
 
         {(timestamp || status || isStreaming) && (
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-[9px] tracking-wide text-zinc-500">
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] tracking-wide text-zinc-500">
             {timestamp ? <span>{timestamp}</span> : null}
             {status ? <span>{status}</span> : null}
             {isStreaming ? <span className="animate-pulse">streaming…</span> : null}
@@ -125,14 +129,18 @@ export function ChatMessage({
         )}
 
         {!isUser && !isError && content ? (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1 opacity-60 transition-opacity group-hover:opacity-100">
-            <button type="button" onClick={handleCopy} className="rounded border border-zinc-700 px-1.5 py-0.5 text-[9px] text-zinc-400 hover:bg-zinc-800" title="Copy">{copied ? "Copied" : "Copy"}</button>
-            <button type="button" onClick={() => setLiked((v) => (v === "up" ? null : "up"))} className={"rounded border px-1.5 py-0.5 text-[9px] " + (liked === "up" ? "border-zinc-500 text-zinc-200" : "border-zinc-700 text-zinc-400")} title="Like">Like</button>
-            <button type="button" onClick={() => setLiked((v) => (v === "down" ? null : "down"))} className={"rounded border px-1.5 py-0.5 text-[9px] " + (liked === "down" ? "border-zinc-500 text-zinc-200" : "border-zinc-700 text-zinc-400")} title="Dislike">Dislike</button>
-            <button type="button" onClick={handleShare} className="rounded border border-zinc-700 px-1.5 py-0.5 text-[9px] text-zinc-400 hover:bg-zinc-800" title="Share">{shared ? "Shared" : "Share"}</button>
-            <button type="button" onClick={handleSave} className={"rounded border px-1.5 py-0.5 text-[9px] " + (saved ? "border-zinc-500 text-zinc-200" : "border-zinc-700 text-zinc-400")} title="Save">{saved ? "Saved" : "Save"}</button>
-            {onSpeak ? (<button type="button" onClick={onSpeak} className="rounded border border-zinc-700 px-1.5 py-0.5 text-[9px] text-zinc-400 hover:bg-zinc-800" title="Speak">Speak</button>) : null}
-            {onRegenerate ? (<button type="button" onClick={onRegenerate} className="rounded border border-zinc-700 px-1.5 py-0.5 text-[9px] text-zinc-400 hover:bg-zinc-800" title="Regenerate">Retry</button>) : null}
+          <div className="mt-2.5 flex flex-wrap items-center gap-1 opacity-70 transition-opacity group-hover:opacity-100">
+            <button type="button" onClick={handleCopy} className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200" title="Copy">{copied ? "Copied" : "Copy"}</button>
+            <button type="button" onClick={() => setLiked((v) => (v === "up" ? null : "up"))} className={"rounded-md border px-2 py-1 text-[10px] " + (liked === "up" ? "border-zinc-500 text-zinc-200 bg-zinc-800" : "border-zinc-700 text-zinc-400 hover:bg-zinc-800")} title="Like">Like</button>
+            <button type="button" onClick={() => setLiked((v) => (v === "down" ? null : "down"))} className={"rounded-md border px-2 py-1 text-[10px] " + (liked === "down" ? "border-zinc-500 text-zinc-200 bg-zinc-800" : "border-zinc-700 text-zinc-400 hover:bg-zinc-800")} title="Dislike">Dislike</button>
+            <button type="button" onClick={handleShare} className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200" title="Share">{shared ? "Shared" : "Share"}</button>
+            <button type="button" onClick={handleSave} className={"rounded-md border px-2 py-1 text-[10px] " + (saved ? "border-zinc-500 text-zinc-200 bg-zinc-800" : "border-zinc-700 text-zinc-400 hover:bg-zinc-800")} title="Save">{saved ? "Saved" : "Save"}</button>
+            {onSpeak ? (
+              <button type="button" onClick={onSpeak} className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200" title="Speak">Speak</button>
+            ) : null}
+            {onRegenerate ? (
+              <button type="button" onClick={onRegenerate} className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200" title="Regenerate">Retry</button>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -154,11 +162,11 @@ export function ThinkingIndicator({
   const phaseLabel = labels[phase] || "Thinking";
 
   return (
-    <div className="flex items-center gap-2 py-1 px-1 text-xs text-zinc-400">
-      <span className="inline-flex gap-0.5">
-        <span className="w-1 h-1 rounded-full bg-zinc-500 animate-bounce" />
-        <span className="w-1 h-1 rounded-full bg-zinc-500 animate-bounce [animation-delay:150ms]" />
-        <span className="w-1 h-1 rounded-full bg-zinc-500 animate-bounce [animation-delay:300ms]" />
+    <div className="flex items-center gap-2 py-2 px-1 text-sm text-zinc-400">
+      <span className="inline-flex gap-1">
+        <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 animate-bounce" />
+        <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 animate-bounce [animation-delay:150ms]" />
+        <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 animate-bounce [animation-delay:300ms]" />
       </span>
       <span className="font-medium text-zinc-300">{phaseLabel}</span>
     </div>
