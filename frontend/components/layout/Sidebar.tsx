@@ -37,9 +37,28 @@ export default function Sidebar() {
       <div className="lg:hidden sticky top-0 z-50 border-b border-cyan-500/10 bg-[#020914]/95 backdrop-blur-xl">
         <div className="flex items-center justify-between px-4 py-3">
           <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-[0_0_15px_rgba(0,240,255,0.3)]">
-              <span className="font-bold text-black text-xs">KZ</span>
-            </div>
+            <div className="relative w-9 h-9 shrink-0 rounded-xl border border-cyan-400/60 bg-[#020b18] flex items-center justify-center overflow-hidden shadow-[0_0_18px_rgba(0,240,255,0.45),inset_0_0_12px_rgba(0,240,255,0.16)]">
+  <span className="absolute inset-0 rounded-xl border border-cyan-300/20 animate-pulse" aria-hidden="true" />
+  <svg viewBox="0 0 100 100" className="relative z-10 h-8 w-8" role="img" aria-label="IQ Bot robot head">
+    <defs>
+      <linearGradient id="sidebarRobotShell" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#f1ffff" />
+        <stop offset="40%" stopColor="#8cecff" />
+        <stop offset="75%" stopColor="#12bfe8" />
+        <stop offset="100%" stopColor="#063247" />
+      </linearGradient>
+      <filter id="sidebarRobotGlow"><feGaussianBlur stdDeviation="1.6" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+    </defs>
+    <path d="M50 9v9" stroke="#00f0ff" strokeWidth="3" strokeLinecap="round" />
+    <circle cx="50" cy="6" r="4" fill="#00f0ff" filter="url(#sidebarRobotGlow)" />
+    <path d="M25 25Q50 11 75 25L84 37v34q-34 20-68 0V37z" fill="url(#sidebarRobotShell)" fillOpacity=".2" stroke="#00f0ff" strokeWidth="2.2" filter="url(#sidebarRobotGlow)" />
+    <path d="M29 39Q50 27 71 39v25q-21 12-42 0z" fill="#020b15" stroke="#00dfff" strokeWidth="1.7" />
+    <path d="M36 48h10M54 48h10" stroke="#f3ffff" strokeWidth="5" strokeLinecap="round" filter="url(#sidebarRobotGlow)" />
+    <path d="M39 58q11 8 22 0" fill="none" stroke="#00f0ff" strokeWidth="2.2" strokeLinecap="round" />
+    <path d="M24 47h-7M76 47h7" stroke="#00f0ff" strokeWidth="2.5" strokeLinecap="round" />
+    <circle cx="14" cy="47" r="3" fill="#00f0ff" filter="url(#sidebarRobotGlow)" /><circle cx="86" cy="47" r="3" fill="#00f0ff" filter="url(#sidebarRobotGlow)" />
+  </svg>
+</div>
             <div>
               <p className="font-display text-[11px] font-bold text-white tracking-wider">
                 KING ZARRY
@@ -79,9 +98,28 @@ export default function Sidebar() {
           className="p-5 border-b border-cyan-500/10 block hover:bg-cyan-500/5 transition-colors"
         >
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-[0_0_20px_rgba(0,240,255,0.3)]">
-              <span className="font-bold text-black text-sm">KZ</span>
-            </div>
+            <div className="relative w-9 h-9 shrink-0 rounded-xl border border-cyan-400/60 bg-[#020b18] flex items-center justify-center overflow-hidden shadow-[0_0_18px_rgba(0,240,255,0.45),inset_0_0_12px_rgba(0,240,255,0.16)]">
+  <span className="absolute inset-0 rounded-xl border border-cyan-300/20 animate-pulse" aria-hidden="true" />
+  <svg viewBox="0 0 100 100" className="relative z-10 h-8 w-8" role="img" aria-label="IQ Bot robot head">
+    <defs>
+      <linearGradient id="sidebarRobotShell" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#f1ffff" />
+        <stop offset="40%" stopColor="#8cecff" />
+        <stop offset="75%" stopColor="#12bfe8" />
+        <stop offset="100%" stopColor="#063247" />
+      </linearGradient>
+      <filter id="sidebarRobotGlow"><feGaussianBlur stdDeviation="1.6" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+    </defs>
+    <path d="M50 9v9" stroke="#00f0ff" strokeWidth="3" strokeLinecap="round" />
+    <circle cx="50" cy="6" r="4" fill="#00f0ff" filter="url(#sidebarRobotGlow)" />
+    <path d="M25 25Q50 11 75 25L84 37v34q-34 20-68 0V37z" fill="url(#sidebarRobotShell)" fillOpacity=".2" stroke="#00f0ff" strokeWidth="2.2" filter="url(#sidebarRobotGlow)" />
+    <path d="M29 39Q50 27 71 39v25q-21 12-42 0z" fill="#020b15" stroke="#00dfff" strokeWidth="1.7" />
+    <path d="M36 48h10M54 48h10" stroke="#f3ffff" strokeWidth="5" strokeLinecap="round" filter="url(#sidebarRobotGlow)" />
+    <path d="M39 58q11 8 22 0" fill="none" stroke="#00f0ff" strokeWidth="2.2" strokeLinecap="round" />
+    <path d="M24 47h-7M76 47h7" stroke="#00f0ff" strokeWidth="2.5" strokeLinecap="round" />
+    <circle cx="14" cy="47" r="3" fill="#00f0ff" filter="url(#sidebarRobotGlow)" /><circle cx="86" cy="47" r="3" fill="#00f0ff" filter="url(#sidebarRobotGlow)" />
+  </svg>
+</div>
             <div>
               <h1 className="font-display text-xs font-bold text-white tracking-wider">
                 KING ZARRY AI
