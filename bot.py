@@ -3036,6 +3036,29 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
     text = text.strip()
     if text.startswith("/") and not is_voice_transcription:
         return
+
+    # Telegram greeting guard: handle simple greetings before ANY alert/market
+    # routing. This prevents "he", "hi", "hey", etc. from becoming a signal.
+    greeting_key = re.sub(r"[\\s.!?,]+$", "", text.lower())
+    greeting_replies = {
+        "hi": "Hey 👋 What's up?",
+        "hey": "Hey 👋 What's going on?",
+        "hello": "Hello 👋 How are you doing?",
+        "he": "Hey 👋 What's up?",
+        "hiya": "Heyyy 👋 What's up?",
+        "yo": "Yo 👋 What's good?",
+        "sup": "Hey 👋 What's up?",
+        "howdy": "Howdy 👋 What's going on?",
+        "good morning": "Good morning ☀️ How are you doing?",
+        "good afternoon": "Good afternoon 👋 How's your day going?",
+        "good evening": "Good evening 👋 How are you doing?",
+        "good night": "Good night 🌙 Rest well.",
+    }
+    if not is_voice_transcription and greeting_key in greeting_replies:
+        logger.info("Telegram greeting detected: %r -> normal chat", text)
+        await update.message.reply_text(greeting_replies[greeting_key])
+        return
+
     if not await require_subscription(update):
         return
     user_id = str(update.effective_user.id)
