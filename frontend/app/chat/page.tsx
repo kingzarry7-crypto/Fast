@@ -97,7 +97,8 @@ export default function ChatPage() {
   };
 
   useEffect(() => {
-    const refresh = () => setMembership(getMembershipSnapshot(user?.id));
+    const refresh = () =>
+      setMembership(getMembershipSnapshot(user?.id, user?.is_subscribed));
     refresh();
     window.addEventListener("kz-membership-change", refresh);
     window.addEventListener("storage", refresh);
