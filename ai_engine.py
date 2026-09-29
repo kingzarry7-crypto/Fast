@@ -13,7 +13,8 @@ import requests
 
 logger = logging.getLogger("ai_engine")
 
-# Bound background learning so traffic spikes cannot create one thread per message.\nAUTO_LEARN_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="kz-auto-memory")
+# Bound background learning so traffic spikes cannot create one thread per message.
+AUTO_LEARN_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="kz-auto-memory")
 
 def clean_env_str(v, default=""):
     if not v:
