@@ -543,6 +543,63 @@ class WebMemoryAdapter:
             return ""
         return "\n".join(f"- {item['fact']}" for item in facts)
 
+    def add_fact(self, user_id: str, fact: str, category: str = "general", source: str = "auto") -> bool:
+        """Persist a durable web memory fact for the authenticated web user."""
+        if not fact:
+            return False
+        fact = str(fact).strip()[:500]
+        memory_type = "preference" if str(category).lower() == "preference" else "fact"
+        try:
+            with get_db_cursor(commit=True) as cur:
+                cur.execute(
+                    "SELECT id FROM web_ai_memories WHERE user_id = %s AND content = %s AND memory_type = %s LIMIT 1",
+                    (self.web_user_id, fact, memory_type),
+                )
+                if cur.fetchone():
+                    return False
+                cur.execute(
+                    "INSERT INTO web_ai_memories (user_id, role, content, memory_type) VALUES (%s, 'user', %s, %s)",
+                    (self.web_user_id, fact, memory_type),
+                )
+            return True
+        except Exception as exc:
+            logger.warning("WebMemoryAdapter.add_fact failed: %s", type(exc).__name__)
+            return False
+
+    def get_trading_preferences(self, user_id: str) -> Dict[str, Any]:
+        try:
+            with get_db_cursor(commit=False) as cur:
+                cur.execute("SELECT trading_preferences FROM web_user_settings WHERE user_id = %s", (self.web_user_id,))
+                row = cur.fetchone()
+            value = _row_value(row, "trading_preferences", 0) if row else {}
+            if isinstance(value, dict):
+                return value
+            return json.loads(value) if value else {}
+        except Exception:
+            return {}
+
+    def save_trading_preferences(self, user_id: str, preferred_assets: Optional[str] = None,
+                                 preferred_timeframe: Optional[str] = None,
+                                 risk_preference: Optional[str] = None, **kwargs) -> bool:
+        try:
+            current = self.get_trading_preferences(user_id)
+            if preferred_assets is not None:
+                current["preferred_assets"] = preferred_assets
+            if preferred_timeframe is not None:
+                current["preferred_timeframe"] = preferred_timeframe
+            if risk_preference is not None:
+                current["risk_preference"] = risk_preference
+            with get_db_cursor(commit=True) as cur:
+                cur.execute(
+                    "INSERT INTO web_user_settings (user_id, trading_preferences) VALUES (%s, %s::jsonb) "
+                    "ON CONFLICT (user_id) DO UPDATE SET trading_preferences = EXCLUDED.trading_preferences",
+                    (self.web_user_id, json.dumps(current)),
+                )
+            return True
+        except Exception as exc:
+            logger.warning("WebMemoryAdapter.save_trading_preferences failed: %s", type(exc).__name__)
+            return False
+
 # ============================================================
 # USER DATABASE
 # ============================================================
