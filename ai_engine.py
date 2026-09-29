@@ -7,10 +7,13 @@ import logging
 import math
 import time
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Tuple, List, Dict, Any
 import requests
 
 logger = logging.getLogger("ai_engine")
+
+# Bound background learning so traffic spikes cannot create one thread per message.\nAUTO_LEARN_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="kz-auto-memory")
 
 def clean_env_str(v, default=""):
     if not v:
@@ -1871,7 +1874,13 @@ class AIEngine:
         logger.info(f"✅ Crypto Vision ready (free tier) | endpoint={CRYPTOVISION_BASE_URL}")
 
     def _get_provider_order(self) -> List[str]:
-        return ["openrouter", "groq", "gemini"]
+        """Return a deterministic provider fallback order honoring AI_PROVIDER."""
+        preferred = (AI_PROVIDER or "AUTO").strip().lower()
+        preferred = {"openai": "openrouter", "router": "openrouter", "auto": ""}.get(preferred, preferred)
+        available = ["openrouter", "groq", "gemini"]
+        if preferred in available:
+            return [preferred] + [p for p in available if p != preferred]
+        return available
 
     def _should_use_tavily(self, prompt: str) -> bool:
         if not self._tavily_module:
@@ -1963,12 +1972,12 @@ class AIEngine:
         # daemon thread so automatic learning never adds model latency to chat.
         try:
             from auto_learning import learn_from_message
-            threading.Thread(
-                target=learn_from_message,
-                args=(self.memory, str(user_id), str(prompt or "")),
-                name="kz-auto-memory",
-                daemon=True,
-            ).start()
+            AUTO_LEARN_EXECUTOR.submit(
+                learn_from_message,
+                self.memory,
+                str(user_id),
+                str(prompt or ""),
+            )
         except Exception as e:
             logger.debug("Auto-learning unavailable: %s", type(e).__name__)
 
