@@ -319,13 +319,6 @@ export default function ChatPage() {
             >
               ☰
             </button>
-            <button
-              type="button"
-              onClick={handleNewChat}
-              className="hidden sm:inline-flex px-3 py-1.5 rounded-md text-xs tracking-widest text-zinc-300 border border-zinc-700 hover:bg-zinc-800"
-            >
-              + NEW
-            </button>
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-xs tracking-[0.3em] text-zinc-300">
               AI CORE {coreState.toUpperCase()}
@@ -339,66 +332,41 @@ export default function ChatPage() {
             </span>
           </div>
           <div className="hidden sm:flex items-center gap-4 text-xs tracking-widest text-zinc-500">
-            <span>NEON MEMORY</span>
+            <span>AI memory</span>
             {user?.email && <span>{user.email}</span>}
           </div>
         </div>
 
         <div className="flex flex-1 min-h-0 overflow-hidden">
-          <div
-            className={`${
-              historyOpen ? "flex" : "hidden"
-            } md:flex w-56 flex-col border-r border-zinc-800 bg-[#171717] shrink-0 z-30`}
+          <aside
+            className={`${historyOpen ? "flex" : "hidden"} md:flex w-64 flex-col border-r border-zinc-800 bg-[#171717] shrink-0 z-30`}
+            aria-label="Chat navigation"
           >
-            <div className="p-3 border-b border-zinc-800 space-y-2">
-              <button
-                type="button"
-                onClick={handleNewChat}
-                disabled={sending}
-                className="w-full rounded-lg bg-white text-black font-display text-xs font-bold tracking-widest py-2.5 hover:bg-zinc-200 disabled:opacity-40"
-              >
-                + NEW CHAT
-              </button>
-              <button
-                type="button"
-                onClick={() => setHistoryOpen(false)}
-                className="md:hidden w-full text-xs text-zinc-400"
-              >
-                CLOSE
+            <div className="p-3">
+              <button type="button" onClick={handleNewChat} disabled={sending}
+                className="w-full flex items-center gap-2 rounded-lg border border-zinc-700 bg-[#212121] px-3 py-2.5 text-sm text-zinc-100 hover:bg-[#2a2a2a] disabled:opacity-40">
+                <span className="text-lg leading-none">+</span><span>New chat</span>
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto kz-scroll p-2 space-y-0.5">
-              <p className="px-2 py-1 text-xs tracking-[0.3em] text-zinc-500">
-                HISTORY
-              </p>
-              {conversations.length === 0 && (
-                <p className="px-2 py-3 text-xs text-zinc-500">
-                  No past chats yet.
-                </p>
-              )}
-              {conversations.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => handleOpenConversation(c.id)}
-                  className={`w-full text-left rounded-lg px-3 py-2.5 transition-all ${
-                    conversationId === c.id
-                      ? "bg-zinc-800 border border-cyan-500/40 text-white"
-                      : "border border-transparent text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-                  }`}
-                >
-                  <p className="font-mono-tech text-[11px] tracking-wide truncate">
-                    {c.title || "Chat"}
-                  </p>
-                  {c.preview && (
-                    <p className="text-[10px] text-cyan-400/35 truncate mt-0.5">
-                      {c.preview}
-                    </p>
-                  )}
+            <div className="flex-1 overflow-y-auto kz-scroll px-2 space-y-1">
+              <p className="px-3 py-2 text-xs font-medium text-zinc-500">Recent</p>
+              {conversations.length === 0 && <p className="px-3 py-3 text-xs text-zinc-500">No past chats yet.</p>}
+              {conversations.map((conv) => (
+                <button key={conv.id} type="button" onClick={() => handleOpenConversation(conv.id)}
+                  className={`w-full text-left rounded-lg px-3 py-2.5 transition-colors ${conversationId === conv.id ? "bg-[#2a2a2a] text-white" : "text-zinc-400 hover:bg-[#212121] hover:text-zinc-200"}`}>
+                  <p className="text-sm truncate">{conv.title || "Chat"}</p>
+                  {conv.preview && <p className="text-xs text-zinc-600 truncate mt-0.5">{conv.preview}</p>}
                 </button>
               ))}
             </div>
-          </div>
+            <div className="border-t border-zinc-800 p-3 space-y-2">
+              <button type="button" onClick={() => setHistoryOpen((v) => !v)}
+                className="w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm text-zinc-400 hover:bg-[#212121] hover:text-zinc-200">
+                <span>Open more</span><span className="text-zinc-500">⋯</span>
+              </button>
+              <div className="rounded-lg px-3 py-2 text-xs text-zinc-500">{user?.email || "King Zarry AI"}</div>
+            </div>
+          </aside>
 
           {/* AI MODULES — hidden */}
           <div className="hidden" aria-hidden="true">
