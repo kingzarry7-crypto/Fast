@@ -67,15 +67,22 @@ export function incrementFreeMessageCount(userId?: string | null): number {
   return next;
 }
 
-export function getMembershipSnapshot(userId?: string | null): MembershipSnapshot {
+export function getMembershipSnapshot(
+  userId?: string | null,
+  serverSubscribed?: boolean
+): MembershipSnapshot {
   const used = getFreeMessageCount(userId);
-  const isVip = getIsVip();
+  // Server billing/admin status is authoritative when supplied.
+  // Local storage is only a fallback for older sessions.
+  const isVip = Boolean(serverSubscribed) || getIsVip();
   return {
     isVip,
-    plan: getVipPlan(),
+    plan: isVip && serverSubscribed ? (getVipPlan() || "vip") : getVipPlan(),
     since: canUseStorage() ? localStorage.getItem(VIP_SINCE_KEY) : null,
     freeMessagesUsedToday: used,
-    freeMessagesRemaining: Math.max(0, FREE_DAILY_MESSAGE_LIMIT - used),
+    freeMessagesRemaining: isVip
+      ? FREE_DAILY_MESSAGE_LIMIT
+      : Math.max(0, FREE_DAILY_MESSAGE_LIMIT - used),
     freeDailyLimit: FREE_DAILY_MESSAGE_LIMIT,
   };
 }
