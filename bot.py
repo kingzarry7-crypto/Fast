@@ -3036,32 +3036,28 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
     text = text.strip()
     if text.startswith("/") and not is_voice_transcription:
         return
+    user_id = str(update.effective_user.id)
 
-    # Telegram greeting guard: handle simple greetings before ANY alert/market
-    # routing. This prevents "he", "hi", "hey", etc. from becoming a signal.
-    greeting_key = re.sub(r"[\\s.!?,]+$", "", text.lower())
+    # Normal conversation must go through the same AI engine as the web app.
+    # Keep this guard BEFORE alerts/market routing so short greetings such as
+    # "he", "hi", "hey", etc. can never be misclassified as a trading symbol.
+    greeting_key = re.sub(r"[\s.!?,]+$", "", text.lower()).strip()
     greeting_replies = {
-        "hi": "Hey 👋 What's up?",
-        "hey": "Hey 👋 What's going on?",
-        "hello": "Hello 👋 How are you doing?",
-        "he": "Hey 👋 What's up?",
-        "hiya": "Heyyy 👋 What's up?",
-        "yo": "Yo 👋 What's good?",
-        "sup": "Hey 👋 What's up?",
-        "howdy": "Howdy 👋 What's going on?",
-        "good morning": "Good morning ☀️ How are you doing?",
-        "good afternoon": "Good afternoon 👋 How's your day going?",
-        "good evening": "Good evening 👋 How are you doing?",
-        "good night": "Good night 🌙 Rest well.",
+        "hi", "hey", "hello", "he", "hiya", "yo", "sup", "howdy",
+        "good morning", "good afternoon", "good evening", "good night",
     }
     if not is_voice_transcription and greeting_key in greeting_replies:
-        logger.info("Telegram greeting detected: %r -> normal chat", text)
-        await update.message.reply_text(greeting_replies[greeting_key])
+        logger.info("Telegram greeting detected: %r -> AIEngine", text)
+        try:
+            answer = await asyncio.to_thread(ai_engine.ask, user_id, text, None)
+            await send_ai_response(update.message, answer)
+        except Exception as greeting_err:
+            logger.warning(f"Telegram greeting AI fallback failed: {greeting_err}")
+            await update.message.reply_text("Hey 👋 What's up?")
         return
 
     if not await require_subscription(update):
         return
-    user_id = str(update.effective_user.id)
     upper = text.upper()
     for kw in ["BTC", "ETH", "SOL", "XAU", "GOLD"]:
         if kw in upper and len(text) < 80:
