@@ -83,7 +83,7 @@ export function ChatMessage({
   if (isSystem) {
     return (
       <div className={`flex justify-center w-full my-3 ${className}`}>
-        <div className="px-4 py-2 text-center text-[11px] font-mono tracking-widest uppercase text-zinc-400 bg-zinc-900/60 border border-zinc-700/50 rounded-full">
+        <div className="px-4 py-2 text-center text-[11px] font-mono tracking-widest uppercase text-zinc-400 bg-zinc-800 border border-zinc-700 rounded-full">
           {content}
         </div>
       </div>
@@ -108,7 +108,7 @@ export function ChatMessage({
         >
           {!isUser && (
             <span className="inline-flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-[9px] font-bold text-black">
+              <span className="w-5 h-5 rounded-full bg-zinc-700 flex items-center justify-center text-[9px] font-semibold text-zinc-100">
                 KZ
               </span>
               <span className="text-zinc-300">King Zarry AI</span>
@@ -125,7 +125,7 @@ export function ChatMessage({
             isUser
               ? "bg-zinc-800 text-zinc-100 rounded-br-md"
               : isError
-                ? "bg-red-950/40 border border-red-500/30 text-red-100"
+                ? "bg-red-950/40 border border-red-800/60 text-red-100"
                 : "bg-transparent text-zinc-100"
           }`}
         >
@@ -235,8 +235,8 @@ function ActionBtn({
       onClick={onClick}
       className={`inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs transition-colors ${
         active
-          ? "text-cyan-300 bg-cyan-500/10"
-          : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/80"
+          ? "text-zinc-200 bg-zinc-800"
+          : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
       }`}
     >
       {children}
@@ -329,14 +329,14 @@ export function ThinkingIndicator({
 
   return (
     <div className="flex items-start gap-3 py-2 px-1">
-      <span className="w-5 h-5 rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-[9px] font-bold text-black shrink-0 mt-0.5">
+      <span className="w-5 h-5 rounded-full bg-zinc-700 flex items-center justify-center text-[9px] font-semibold text-zinc-100 shrink-0 mt-0.5">
         KZ
       </span>
       <div className="flex flex-col gap-1.5 pt-0.5">
         <div className="flex items-center gap-2 text-sm text-zinc-400">
           <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-60" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400" />
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-zinc-400 opacity-60" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-zinc-400" />
           </span>
           <span className="font-medium text-zinc-300">
             {labels[phase] || "Thinking"}
@@ -348,7 +348,7 @@ export function ThinkingIndicator({
           </span>
         </div>
         <div className="h-1 w-32 rounded-full bg-zinc-800 overflow-hidden">
-          <div className="h-full w-1/2 rounded-full bg-gradient-to-r from-cyan-500/80 to-blue-500/80 animate-pulse" />
+          <div className="h-full w-1/2 rounded-full bg-zinc-400 animate-pulse" />
         </div>
       </div>
     </div>
