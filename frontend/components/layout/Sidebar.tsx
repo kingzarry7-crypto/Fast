@@ -4,9 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import AICore from "@/components/AICore";
+import RobotHead from "@/components/RobotHead";
 
 const PUBLIC_ROUTES = ["/", "/login", "/register", "/signup", "/forgot-password", "/reset-password", "/verify-email", "/pricing"];
-/** Command centre owns chrome — no second nav column */
 const HIDE_SIDEBAR_ROUTES = ["/dashboard", "/chat"];
 
 const baseNavItems = [
@@ -43,10 +43,7 @@ export default function Sidebar() {
       <div className="lg:hidden sticky top-0 z-50 border-b border-cyan-500/10 bg-[#020914]/95 backdrop-blur-xl">
         <div className="flex items-center justify-between px-4 py-3">
           <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="relative w-9 h-9 shrink-0 rounded-xl border border-cyan-400/60 bg-[#020b18] flex items-center justify-center overflow-hidden shadow-[0_0_18px_rgba(0,240,255,0.45),inset_0_0_12px_rgba(0,240,255,0.16)]">
-              <span className="absolute inset-0 rounded-xl border border-cyan-300/20 animate-pulse" aria-hidden="true" />
-              <span className="relative z-10 font-display text-[10px] font-bold text-cyan-300">KZ</span>
-            </div>
+            <RobotHead size={36} />
             <div>
               <p className="font-display text-[11px] font-bold text-white tracking-wider">KING ZARRY</p>
               <p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/60">COMMAND CENTRE</p>
@@ -64,9 +61,7 @@ export default function Sidebar() {
       <aside className="hidden lg:flex w-64 shrink-0 flex-col border-r border-cyan-500/10 bg-[#020914]/80 min-h-screen">
         <div className="p-4 border-b border-cyan-500/10">
           <Link href="/dashboard" className="flex items-center gap-3">
-            <div className="relative w-10 h-10 shrink-0 rounded-xl border border-cyan-400/60 bg-[#020b18] flex items-center justify-center overflow-hidden shadow-[0_0_18px_rgba(0,240,255,0.45)]">
-              <span className="relative z-10 font-display text-xs font-bold text-cyan-300">KZ</span>
-            </div>
+            <RobotHead size={40} />
             <div>
               <h1 className="font-display text-xs font-bold text-white tracking-wider">KING ZARRY AI</h1>
               <p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/60">COMMAND CENTRE</p>
