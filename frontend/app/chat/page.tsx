@@ -6,7 +6,9 @@ import ChatWorkspace from "@/components/chat/ChatWorkspace";
 export default function ChatPage() {
   return (
     <ProtectedRoute>
-      <ChatWorkspace fullScreen />
+      <div className="h-[100dvh] min-h-0 bg-[#020914]">
+        <ChatWorkspace fullScreen embedMode={false} />
+      </div>
     </ProtectedRoute>
   );
 }
