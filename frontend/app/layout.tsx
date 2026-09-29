@@ -12,7 +12,6 @@ export const metadata: Metadata = {
     "KING ZARRY AI — intelligent AI command centre. Your intelligence, amplified.",
 };
 
-/** Mobile Chrome + desktop Chrome: correct scale, no unwanted zoom */
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -27,12 +26,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className="h-full">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
-          rel="preconnect"
           href="https://fonts.gstatic.com"
+          rel="preconnect"
           crossOrigin="anonymous"
         />
         <link
@@ -40,13 +39,15 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>
+      <body className="h-full overflow-hidden">
         <AppProviders>
           <div className="kz-bg-grid" />
           <div className="kz-bg-radial" />
-          <div className="relative z-10 flex min-h-screen">
+          <div className="relative z-10 flex h-full min-h-0 w-full">
             <Sidebar />
-            <main className="flex-1 min-w-0">{children}</main>
+            <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              {children}
+            </main>
           </div>
         </AppProviders>
       </body>
