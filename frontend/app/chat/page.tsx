@@ -284,22 +284,22 @@ export default function ChatPage() {
       <div className="flex flex-col h-[100dvh] min-h-0 overflow-hidden">
         {!isVip && membership && (
           <div className="border-b border-amber-500/20 bg-amber-950/30 px-4 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <p className="font-mono-tech text-[10px] tracking-wider text-amber-200/90">
+            <p className="text-xs tracking-wider text-zinc-300">
               FREE TIER · Normal chat allowed · Signals / plans / alerts require
               VIP · {membership.freeMessagesRemaining}/
               {membership.freeDailyLimit} messages left today
             </p>
             <Link
               href="/pricing"
-              className="font-mono-tech text-[10px] tracking-widest text-cyan-300 hover:text-cyan-200 underline underline-offset-2 shrink-0"
+              className="text-xs tracking-widest text-zinc-300 hover:text-white underline underline-offset-2 shrink-0"
             >
               UPGRADE →
             </Link>
           </div>
         )}
         {isVip && (
-          <div className="border-b border-cyan-500/20 bg-cyan-950/20 px-4 py-2">
-            <p className="font-mono-tech text-[10px] tracking-wider text-cyan-300/90">
+          <div className="border-b border-zinc-700/60 bg-[#212121] px-4 py-2">
+            <p className="text-xs tracking-wider text-zinc-300">
               VIP ACTIVE
               {membership?.plan || user?.plan
                 ? ` · ${String(membership?.plan || user?.plan).toUpperCase()}`
@@ -309,11 +309,11 @@ export default function ChatPage() {
           </div>
         )}
 
-        <div className="border-b border-cyan-500/10 px-4 sm:px-6 py-3 flex items-center justify-between bg-[#020914]/60 backdrop-blur-xl shrink-0">
+        <div className="border-b border-b border-zinc-800 px-4 sm:px-6 py-3 flex items-center justify-between bg-[#171717]/95 backdrop-blur-xl shrink-0">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setHistoryOpen((v) => !v)}
-              className="md:hidden w-8 h-8 flex items-center justify-center rounded-md border border-cyan-500/30 text-cyan-300 text-xs"
+              className="md:hidden w-8 h-8 flex items-center justify-center rounded-md border border-zinc-700 text-zinc-300 text-xs"
               aria-label="Toggle history"
               title="Chat history"
             >
@@ -322,12 +322,12 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={handleNewChat}
-              className="hidden sm:inline-flex px-3 py-1.5 rounded-md font-mono-tech text-[10px] tracking-widest text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/10"
+              className="hidden sm:inline-flex px-3 py-1.5 rounded-md text-xs tracking-widest text-zinc-300 border border-zinc-700 hover:bg-zinc-800"
             >
               + NEW
             </button>
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/80">
+            <span className="text-xs tracking-[0.3em] text-zinc-300">
               AI CORE {coreState.toUpperCase()}
               {coreState === "thinking"
                 ? thinkingPhase === "reading"
@@ -338,7 +338,7 @@ export default function ChatPage() {
                 : ""}
             </span>
           </div>
-          <div className="hidden sm:flex items-center gap-4 font-mono-tech text-[9px] tracking-widest text-cyan-400/40">
+          <div className="hidden sm:flex items-center gap-4 text-xs tracking-widest text-zinc-500">
             <span>NEON MEMORY</span>
             {user?.email && <span>{user.email}</span>}
           </div>
@@ -348,31 +348,31 @@ export default function ChatPage() {
           <div
             className={`${
               historyOpen ? "flex" : "hidden"
-            } md:flex w-56 flex-col border-r border-cyan-500/10 bg-[#020914] shrink-0 z-30`}
+            } md:flex w-56 flex-col border-r border-zinc-800 bg-[#171717] shrink-0 z-30`}
           >
-            <div className="p-3 border-b border-cyan-500/10 space-y-2">
+            <div className="p-3 border-b border-zinc-800 space-y-2">
               <button
                 type="button"
                 onClick={handleNewChat}
                 disabled={sending}
-                className="w-full rounded-lg bg-cyan-400 text-black font-display text-xs font-bold tracking-widest py-2.5 hover:bg-cyan-300 disabled:opacity-40"
+                className="w-full rounded-lg bg-white text-black font-display text-xs font-bold tracking-widest py-2.5 hover:bg-zinc-200 disabled:opacity-40"
               >
                 + NEW CHAT
               </button>
               <button
                 type="button"
                 onClick={() => setHistoryOpen(false)}
-                className="md:hidden w-full font-mono-tech text-[10px] text-cyan-400/50"
+                className="md:hidden w-full text-xs text-zinc-400"
               >
                 CLOSE
               </button>
             </div>
             <div className="flex-1 overflow-y-auto kz-scroll p-2 space-y-0.5">
-              <p className="px-2 py-1 font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/30">
+              <p className="px-2 py-1 text-xs tracking-[0.3em] text-zinc-500">
                 HISTORY
               </p>
               {conversations.length === 0 && (
-                <p className="px-2 py-3 text-xs text-cyan-400/40">
+                <p className="px-2 py-3 text-xs text-zinc-500">
                   No past chats yet.
                 </p>
               )}
@@ -383,8 +383,8 @@ export default function ChatPage() {
                   onClick={() => handleOpenConversation(c.id)}
                   className={`w-full text-left rounded-lg px-3 py-2.5 transition-all ${
                     conversationId === c.id
-                      ? "bg-cyan-500/15 border border-cyan-500/40 text-white"
-                      : "border border-transparent text-cyan-400/60 hover:bg-cyan-950/40 hover:text-cyan-200"
+                      ? "bg-zinc-800 border border-cyan-500/40 text-white"
+                      : "border border-transparent text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
                   }`}
                 >
                   <p className="font-mono-tech text-[11px] tracking-wide truncate">
@@ -412,7 +412,7 @@ export default function ChatPage() {
               {messages.length === 0 && !historyLoading && (
                 <div className="flex flex-col items-center justify-center h-full text-center">
                   <AICore state="idle" size={180} />
-                  <p className="mt-12 font-mono-tech text-[10px] tracking-[0.4em] text-cyan-400/40">
+                  <p className="mt-12 text-xs tracking-[0.4em] text-zinc-500">
                     AWAITING INPUT
                   </p>
                 </div>
@@ -438,7 +438,7 @@ export default function ChatPage() {
               ))}
 
               {historyLoading && (
-                <p className="font-mono-tech text-xs text-cyan-400/50">
+                <p className="text-sm text-zinc-400">
                   Loading chat…
                 </p>
               )}
@@ -464,7 +464,7 @@ export default function ChatPage() {
 
             {attached && (
               <div className="px-6 pb-2">
-                <div className="inline-flex items-center gap-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg px-3 py-2">
+                <div className="inline-flex items-center gap-3 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={attached.previewUrl}
@@ -472,17 +472,17 @@ export default function ChatPage() {
                     className="w-12 h-12 object-cover rounded-md border border-cyan-500/20"
                   />
                   <div className="flex flex-col min-w-0">
-                    <span className="font-mono-tech text-[10px] tracking-widest text-cyan-200 truncate max-w-[200px]">
+                    <span className="text-xs tracking-widest text-zinc-200 truncate max-w-[200px]">
                       {attached.name}
                     </span>
-                    <span className="font-mono-tech text-[9px] tracking-widest text-cyan-400/40">
+                    <span className="text-xs tracking-widest text-zinc-500">
                       {attached.mime}
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={clearAttachment}
-                    className="ml-2 w-6 h-6 flex items-center justify-center rounded-md border border-cyan-500/30 text-cyan-300 hover:bg-cyan-950/40 text-xs"
+                    className="ml-2 w-6 h-6 flex items-center justify-center rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-900 text-xs"
                     aria-label="Remove attachment"
                   >
                     ×
@@ -493,13 +493,13 @@ export default function ChatPage() {
 
             <form
               onSubmit={handleSubmit}
-              className="border-t border-cyan-500/10 px-4 sm:px-6 py-4 bg-[#020914]/80"
+              className="border-t border-zinc-800 px-4 sm:px-6 py-4 bg-[#171717]/80"
             >
               <div className="flex flex-wrap items-center gap-2 mb-3">
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-3 py-1.5 rounded-md border border-cyan-500/30 font-mono-tech text-[10px] tracking-widest text-cyan-300 hover:bg-cyan-500/10"
+                  className="px-3 py-1.5 rounded-md border border-zinc-700 text-xs tracking-widest text-zinc-300 hover:bg-zinc-800"
                 >
                   📎
                 </button>
@@ -517,10 +517,10 @@ export default function ChatPage() {
                       onClick={() =>
                         listening ? stopListening() : listen((t) => setInput(t))
                       }
-                      className={`px-3 py-1.5 rounded-md border font-mono-tech text-[10px] tracking-widest ${
+                      className={`px-3 py-1.5 rounded-md border text-xs tracking-widest ${
                         listening
                           ? "border-red-400/50 text-red-300 bg-red-500/10"
-                          : "border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10"
+                          : "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
                       }`}
                     >
                       {listening ? "STOP MIC" : "MIC"}
@@ -528,17 +528,17 @@ export default function ChatPage() {
                     <button
                       type="button"
                       onClick={() => setVoicePanelOpen((v) => !v)}
-                      className="px-3 py-1.5 rounded-md border border-cyan-500/30 font-mono-tech text-[10px] tracking-widest text-cyan-300 hover:bg-cyan-500/10"
+                      className="px-3 py-1.5 rounded-md border border-zinc-700 text-xs tracking-widest text-zinc-300 hover:bg-zinc-800"
                     >
                       VOICE
                     </button>
                     <button
                       type="button"
                       onClick={() => setAutoSpeak((v) => !v)}
-                      className={`px-3 py-1.5 rounded-md border font-mono-tech text-[10px] tracking-widest ${
+                      className={`px-3 py-1.5 rounded-md border text-xs tracking-widest ${
                         autoSpeak
-                          ? "border-cyan-400/50 text-cyan-200 bg-cyan-500/15"
-                          : "border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10"
+                          ? "border-zinc-500/50 text-zinc-200 bg-zinc-800"
+                          : "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
                       }`}
                     >
                       AUTO {autoSpeak ? "ON" : "OFF"}
@@ -548,8 +548,8 @@ export default function ChatPage() {
               </div>
 
               {voicePanelOpen && (
-                <div className="mb-3 p-3 rounded-lg border border-cyan-500/20 bg-black/40 space-y-2">
-                  <p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/40">
+                <div className="mb-3 p-3 rounded-lg border border-cyan-500/20 bg-[#2f2f2f] space-y-2">
+                  <p className="text-xs tracking-[0.3em] text-zinc-500">
                     CHARACTER
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -560,15 +560,15 @@ export default function ChatPage() {
                         onClick={() => setVoice(v)}
                         className={`px-2.5 py-1 rounded-md text-[9px] font-mono-tech tracking-widest border ${
                           voiceCharacter === v
-                            ? "border-cyan-400 text-cyan-200 bg-cyan-500/15"
-                            : "border-cyan-500/25 text-cyan-400/60"
+                            ? "border-zinc-500 text-zinc-200 bg-zinc-800"
+                            : "border-cyan-500/25 text-zinc-400"
                         }`}
                       >
                         {v.toUpperCase()}
                       </button>
                     ))}
                   </div>
-                  <p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/40">
+                  <p className="text-xs tracking-[0.3em] text-zinc-500">
                     SPEED
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -580,8 +580,8 @@ export default function ChatPage() {
                           onClick={() => setVoiceStyle(s)}
                           className={`px-2.5 py-1 rounded-md text-[9px] font-mono-tech tracking-widest border ${
                             voiceStyle === s
-                              ? "border-cyan-400 text-cyan-200 bg-cyan-500/15"
-                              : "border-cyan-500/25 text-cyan-400/60"
+                              ? "border-zinc-500 text-zinc-200 bg-zinc-800"
+                              : "border-cyan-500/25 text-zinc-400"
                           }`}
                         >
                           {s.toUpperCase()}
@@ -600,17 +600,17 @@ export default function ChatPage() {
                   onPaste={handlePaste}
                   placeholder="Message KING ZARRY AI..."
                   disabled={sending}
-                  className="flex-1 bg-black/40 border border-cyan-500/25 focus:border-cyan-400 rounded-lg px-4 py-3 text-sm text-white placeholder-cyan-400/30 outline-none transition-colors disabled:opacity-50 font-mono-tech tracking-wider"
+                  className="flex-1 bg-[#2f2f2f] border border-cyan-500/25 focus:border-zinc-500 rounded-lg px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none transition-colors disabled:opacity-50 tracking-normal"
                 />
                 <button
                   type="submit"
                   disabled={sending || (!input.trim() && !attached)}
-                  className="px-5 py-3 rounded-lg bg-cyan-400 text-black font-display text-xs font-bold tracking-[0.2em] hover:bg-cyan-300 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="px-5 py-3 rounded-lg bg-white text-black font-display text-xs font-bold tracking-[0.2em] hover:bg-zinc-200 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   SEND
                 </button>
               </div>
-              <p className="mt-2 font-mono-tech text-[9px] tracking-widest text-cyan-400/30 text-center">
+              <p className="mt-2 text-xs tracking-widest text-zinc-500 text-center">
                 Tip: paste an image (Ctrl+V) or click 📎 to attach. Max 8 MB.
               </p>
             </form>
