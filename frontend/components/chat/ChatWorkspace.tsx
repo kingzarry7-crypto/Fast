@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import ProtectedRoute from "@/components/ProtectedRoute";
 import AICore from "@/components/AICore";
 import ChatMessage, { ThinkingIndicator } from "@/components/chat/ChatMessage";
 import { useChat } from "@/hooks/useChat";
@@ -66,7 +65,6 @@ export default function ChatWorkspace({ fullScreen = true }: { fullScreen?: bool
   const [thinkingPhase, setThinkingPhase] = useState<
     "reading" | "thinking" | "responding"
   >("thinking");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [attached, setAttached] = useState<AttachedImage | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [autoSpeak, setAutoSpeak] = useState(false);
@@ -280,8 +278,7 @@ export default function ChatWorkspace({ fullScreen = true }: { fullScreen?: bool
   const isVip = Boolean(user?.is_subscribed || membership?.isVip);
 
   return (
-    <ProtectedRoute>
-      <div className={`flex flex-col min-h-0 overflow-hidden bg-[#212121] text-zinc-100 ${fullScreen ? "h-[100dvh]" : "h-[min(760px,calc(100dvh-2rem))] rounded-2xl border border-zinc-800 shadow-2xl"}`}>
+    <div className={`flex flex-col min-h-0 overflow-hidden bg-[#212121] text-zinc-100 ${fullScreen ? "h-[100dvh]" : "min-h-[640px] h-[min(820px,calc(100dvh-2rem))] rounded-2xl border border-zinc-800 shadow-2xl"}`}>
         {!isVip && membership && (
           <div className="border-b border-zinc-800 bg-[#212121] px-4 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <p className="text-xs tracking-wider text-zinc-300">
@@ -338,6 +335,57 @@ export default function ChatWorkspace({ fullScreen = true }: { fullScreen?: bool
         </div>
 
         <div className="flex flex-1 min-h-0 overflow-hidden">
+          {historyOpen && (
+            <aside className="hidden md:flex w-64 shrink-0 flex-col border-r border-zinc-800 bg-[#1b1b1b]">
+              <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
+                <div>
+                  <p className="text-[10px] tracking-widest text-zinc-500">CONVERSATIONS</p>
+                  <p className="mt-1 text-xs text-zinc-300">{conversations.length} SAVED CHATS</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleNewChat}
+                  disabled={sending}
+                  className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-[10px] tracking-widest text-zinc-200 hover:bg-zinc-800 disabled:opacity-40"
+                >
+                  + NEW
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto kz-scroll p-2">
+                {historyLoading && (
+                  <p className="px-2 py-3 text-xs text-zinc-500">LOADING…</p>
+                )}
+                {!historyLoading && conversations.length === 0 && (
+                  <p className="px-2 py-3 text-xs leading-5 text-zinc-500">
+                    No saved conversations yet.
+                  </p>
+                )}
+                {conversations.map((conversation) => (
+                  <button
+                    key={conversation.id}
+                    type="button"
+                    onClick={() => handleOpenConversation(conversation.id)}
+                    disabled={sending || historyLoading}
+                    className={`mb-1 w-full rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                      conversation.id === conversationId
+                        ? "border-zinc-600 bg-zinc-800 text-white"
+                        : "border-transparent text-zinc-400 hover:border-zinc-800 hover:bg-zinc-800/60 hover:text-zinc-200"
+                    }`}
+                  >
+                    <span className="block truncate text-xs">
+                      {conversation.title || "Untitled conversation"}
+                    </span>
+                    <span className="mt-1 block truncate text-[10px] text-zinc-600">
+                      {conversation.updated_at || conversation.created_at
+                        ? String(conversation.updated_at || conversation.created_at).slice(0, 16).replace("T", " ")
+                        : "RECENT"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </aside>
+          )}
+
           <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
           {/* AI MODULES — hidden */}
           <div className="hidden" aria-hidden="true">
@@ -347,6 +395,7 @@ export default function ChatWorkspace({ fullScreen = true }: { fullScreen?: bool
           </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain kz-scroll px-4 sm:px-6 py-4 sm:py-6 space-y-5">
+
               {messages.length === 0 && !historyLoading && (
                 <div className="flex flex-col items-center justify-center h-full text-center">
                   <AICore state="idle" size={180} />
@@ -555,6 +604,5 @@ export default function ChatWorkspace({ fullScreen = true }: { fullScreen?: bool
           </div>
         </div>
       </div>
-    </ProtectedRoute>
   );
 }
