@@ -566,6 +566,24 @@ class WebMemoryAdapter:
             logger.warning("WebMemoryAdapter.add_fact failed: %s", type(exc).__name__)
             return False
 
+    def update_user_profile(self, user_id: str, preferred_name: Optional[str] = None, **kwargs) -> bool:
+        """Persist lightweight profile fields used by automatic memory learning."""
+        if not preferred_name:
+            return False
+        name = str(preferred_name).strip()[:100]
+        if not name:
+            return False
+        try:
+            with get_db_cursor(commit=True) as cur:
+                cur.execute(
+                    "UPDATE web_users SET display_name = %s WHERE id = %s",
+                    (name, self.web_user_id),
+                )
+            return True
+        except Exception as exc:
+            logger.warning("WebMemoryAdapter.update_user_profile failed: %s", type(exc).__name__)
+            return False
+
     def get_trading_preferences(self, user_id: str) -> Dict[str, Any]:
         try:
             with get_db_cursor(commit=False) as cur:
