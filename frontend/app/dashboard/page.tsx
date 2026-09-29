@@ -75,51 +75,32 @@ export default function DashboardPage() {
           />
         </div>
 
-        <header className="relative z-30 shrink-0 border-b border-white/5 bg-[#05080f]/90 backdrop-blur-md">
-          <div className="flex items-center gap-2 px-3 sm:px-4 py-2.5">
+        <header className="relative z-30 shrink-0 border-b border-white/5 bg-[#05080f]/95">
+          <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5">
             <Link href="/dashboard" className="flex items-center gap-2 shrink-0 mr-1">
-              <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-cyan-400/50 bg-[#020b18] font-display text-[10px] font-bold text-cyan-300">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-cyan-400/50 bg-[#020b18] font-display text-[10px] font-bold text-cyan-300">
                 KZ
               </span>
               <span className="hidden sm:block">
-                <span className="block font-display text-[11px] font-bold tracking-wider text-white">
-                  KING ZARRY
-                </span>
-                <span className="block font-mono-tech text-[8px] tracking-[0.25em] text-cyan-400/50">
-                  COMMAND CENTRE
-                </span>
+                <span className="block font-display text-[11px] font-bold tracking-wider text-white">KING ZARRY</span>
+                <span className="block font-mono-tech text-[8px] tracking-[0.25em] text-cyan-400/50">COMMAND CENTRE</span>
               </span>
             </Link>
 
-            <button
-              type="button"
-              onClick={newChat}
-              className="rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-2.5 py-1.5 font-mono-tech text-[10px] tracking-widest text-cyan-200 hover:bg-cyan-400/20 shrink-0"
-            >
+            <button type="button" onClick={newChat} className="rounded-md border border-cyan-400/40 bg-cyan-400/10 px-2 py-1 font-mono-tech text-[10px] tracking-widest text-cyan-200 hover:bg-cyan-400/20 shrink-0">
               + NEW
             </button>
 
             <div className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => setChatsOpen((v) => !v)}
-                className="rounded-lg border border-cyan-500/20 px-2.5 py-1.5 font-mono-tech text-[10px] tracking-widest text-cyan-300/80 hover:bg-cyan-500/10"
-              >
+              <button type="button" onClick={() => setChatsOpen((v) => !v)} className="rounded-md border border-cyan-500/20 px-2 py-1 font-mono-tech text-[10px] tracking-widest text-cyan-300/80 hover:bg-cyan-500/10">
                 CHATS {conversations.length ? `(${conversations.length})` : ""}
               </button>
               {chatsOpen && (
                 <>
-                  <button
-                    type="button"
-                    className="fixed inset-0 z-40 cursor-default"
-                    aria-label="Close chats"
-                    onClick={() => setChatsOpen(false)}
-                  />
-                  <div className="absolute left-0 top-full z-50 mt-2 w-72 max-h-80 overflow-y-auto rounded-xl border border-cyan-500/20 bg-[#05080f] p-2 shadow-2xl">
+                  <button type="button" className="fixed inset-0 z-40 cursor-default" aria-label="Close chats" onClick={() => setChatsOpen(false)} />
+                  <div className="absolute left-0 top-full z-50 mt-2 w-72 max-h-72 overflow-y-auto rounded-xl border border-cyan-500/20 bg-[#05080f] p-2 shadow-2xl">
                     {!conversations.length && (
-                      <p className="px-2 py-6 text-center font-mono-tech text-[10px] text-zinc-600">
-                        No chats yet
-                      </p>
+                      <p className="px-2 py-4 text-center font-mono-tech text-[10px] text-zinc-600">No chats yet</p>
                     )}
                     {conversations.slice(0, 30).map((c) => (
                       <button
@@ -127,18 +108,13 @@ export default function DashboardPage() {
                         type="button"
                         onClick={() => openChat(c.id)}
                         className={
-                          "mb-1 w-full rounded-lg px-3 py-2 text-left text-xs transition-colors " +
+                          "mb-1 w-full rounded-lg px-3 py-2 text-left text-xs " +
                           (c.id === conversationId
                             ? "bg-cyan-500/15 text-white border border-cyan-500/30"
                             : "text-zinc-400 hover:bg-white/5 border border-transparent")
                         }
                       >
                         <span className="block truncate">{c.title || "Untitled"}</span>
-                        <span className="mt-0.5 block font-mono-tech text-[9px] text-zinc-600">
-                          {c.updated_at || c.created_at
-                            ? String(c.updated_at || c.created_at).slice(0, 16).replace("T", " ")
-                            : ""}
-                        </span>
                       </button>
                     ))}
                   </div>
@@ -146,13 +122,9 @@ export default function DashboardPage() {
               )}
             </div>
 
-            <nav className="hidden md:flex items-center gap-1 ml-2 overflow-x-auto">
+            <nav className="hidden md:flex items-center gap-0.5 ml-1 overflow-x-auto">
               {NAV.map((n) => (
-                <Link
-                  key={n.href}
-                  href={n.href}
-                  className="rounded-md px-2.5 py-1.5 font-mono-tech text-[10px] tracking-widest text-cyan-300/60 hover:text-cyan-100 hover:bg-cyan-500/10 whitespace-nowrap"
-                >
+                <Link key={n.href} href={n.href} className="rounded-md px-2 py-1 font-mono-tech text-[10px] tracking-widest text-cyan-300/60 hover:text-cyan-100 hover:bg-cyan-500/10 whitespace-nowrap">
                   {n.label.toUpperCase()}
                 </Link>
               ))}
@@ -162,32 +134,13 @@ export default function DashboardPage() {
               <span className="hidden lg:inline font-mono-tech text-[9px] text-cyan-400/40 tracking-widest">
                 MKT {markets.length || "—"} · SIG {actionable}
               </span>
-              <span className="hidden sm:inline truncate max-w-[120px] text-[10px] text-zinc-500">
-                {user?.email}
-              </span>
               <span className="font-mono-tech text-[9px] tracking-widest text-cyan-300/50">
                 {user?.is_subscribed ? "VIP" : "FREE"}
               </span>
-              <button
-                type="button"
-                onClick={logout}
-                className="rounded-md border border-red-500/20 px-2 py-1 font-mono-tech text-[9px] tracking-widest text-red-400/70 hover:bg-red-500/10"
-              >
+              <button type="button" onClick={logout} className="rounded-md border border-red-500/20 px-2 py-1 font-mono-tech text-[9px] tracking-widest text-red-400/70 hover:bg-red-500/10">
                 EXIT
               </button>
             </div>
-          </div>
-
-          <div className="md:hidden flex gap-1 overflow-x-auto px-3 pb-2">
-            {NAV.map((n) => (
-              <Link
-                key={n.href}
-                href={n.href}
-                className="shrink-0 rounded-md border border-cyan-500/10 px-2.5 py-1 font-mono-tech text-[9px] tracking-widest text-cyan-300/70"
-              >
-                {n.label.toUpperCase()}
-              </Link>
-            ))}
           </div>
         </header>
 
