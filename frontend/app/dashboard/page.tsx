@@ -64,19 +64,6 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <div className="kz-panel relative p-8 sm:p-12 mb-8 flex flex-col items-center overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,240,255,.10),transparent_55%)] pointer-events-none" />
-          <div className="absolute left-0 top-0 h-px w-full bg-gradient-to-r from-transparent via-cyan-400/70 to-transparent" />
-          <div className="relative w-full flex items-center justify-between mb-4">
-            <div>
-              <p className="font-mono-tech text-[9px] tracking-[0.35em] text-cyan-400/45">PRIMARY SYSTEM</p>
-              <p className="font-display text-sm font-bold tracking-widest text-white">AI INTELLIGENCE CORE</p>
-            </div>
-            <span className="rounded border border-emerald-400/25 bg-emerald-400/5 px-2 py-1 font-mono-tech text-[8px] tracking-widest text-emerald-300">ONLINE</span>
-          </div>
-          <AICore state="idle" size={260} />
-        </div>
-
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
           {[
             ["MARKETS", markets.length, "LIVE"],
