@@ -1,35 +1,74 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import AICore from "@/components/AICore";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function LandingPage() {
+  const { user, isLoading } = useAuth();
+  const router = useRouter();
+
+  // Logged-in users skip landing → dashboard
+  useEffect(() => {
+    if (!isLoading && user) {
+      router.replace("/dashboard");
+    }
+  }, [isLoading, user, router]);
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#020914]">
+        <p className="font-mono-tech text-[10px] tracking-[0.35em] text-cyan-400/50">
+          INITIALIZING…
+        </p>
+      </div>
+    );
+  }
+
+  if (user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#020914]">
+        <p className="font-mono-tech text-[10px] tracking-[0.35em] text-cyan-400/50">
+          ENTERING COMMAND CENTRE…
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-6 py-16 bg-[#020914]">
-      <div className="max-w-3xl w-full text-center">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-[#020914] px-6 py-16">
+      <div className="w-full max-w-3xl text-center">
         <AICore state="idle" size={200} />
-        <h1 className="mt-10 font-display text-4xl md:text-6xl font-bold tracking-wider text-white">
+        <p className="mt-8 font-mono-tech text-[10px] tracking-[0.4em] text-cyan-400/50">
+          COMMAND CENTRE
+        </p>
+        <h1 className="mt-3 font-display text-4xl font-bold tracking-wider text-white md:text-6xl">
           KING ZARRY <span className="text-cyan-400">AI</span>
         </h1>
-        <p className="mt-6 text-base md:text-lg text-cyan-200/70 leading-relaxed">
-          Multi-timeframe trading intelligence, persistent memory, live web
-          search, and generative media — one AI core.
+        <p className="mt-6 text-base leading-relaxed text-cyan-200/70 md:text-lg">
+          Multi-timeframe signals, persistent memory, live news, and generative
+          media — your trading intelligence command centre.
         </p>
-        <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link
-            href="/chat"
-            className="px-8 py-3 rounded-lg bg-cyan-400 text-black font-display text-sm font-bold tracking-[0.2em] hover:bg-cyan-300 transition-all"
-          >
-            OPEN CHAT
-          </Link>
+        <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
           <Link
             href="/login"
-            className="px-8 py-3 rounded-lg border border-cyan-500/30 text-cyan-300 font-mono-tech text-sm tracking-widest hover:bg-cyan-950/40 transition-all"
+            className="rounded-lg bg-cyan-400 px-8 py-3 font-display text-sm font-bold tracking-[0.2em] text-black transition-all hover:bg-cyan-300"
           >
-            SIGN IN
+            ENTER COMMAND CENTRE
+          </Link>
+          <Link
+            href="/register"
+            className="rounded-lg border border-cyan-500/30 px-8 py-3 font-mono-tech text-sm tracking-widest text-cyan-300 transition-all hover:bg-cyan-950/40"
+          >
+            CREATE ACCOUNT
           </Link>
         </div>
+        <p className="mt-8 font-mono-tech text-[10px] tracking-widest text-cyan-400/30">
+          Already signed in? You will be redirected to the dashboard.
+        </p>
       </div>
-    </main>
+    </div>
   );
 }
