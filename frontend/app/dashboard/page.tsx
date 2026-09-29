@@ -3,6 +3,7 @@
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AICore from "@/components/AICore";
+import ChatPage from "@/app/chat/page";
 import { useAuth } from "@/hooks/useAuth";
 import { useCallback, useEffect, useState } from "react";
 import { api, type ConversationItem, type MarketSnapshot } from "@/lib/api";
@@ -51,7 +52,9 @@ export default function DashboardPage() {
 
   return (
     <ProtectedRoute>
-      <div className="p-6 lg:p-10 max-w-6xl mx-auto">
+      <div className="min-h-screen">
+        <ChatPage />
+        <div className="p-6 lg:p-10 max-w-6xl mx-auto">
         <div className="mb-10">
           <p className="font-mono-tech text-[10px] tracking-[0.4em] text-cyan-400/50 mb-2">
             SYSTEM ONLINE
