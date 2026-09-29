@@ -2140,6 +2140,28 @@ class AIEngine:
         if not prompt_for_providers and not image:
             return "Hey, I'm listening 👀 what's on your mind?"
 
+        # Greeting-only messages are handled directly so they can NEVER be
+        # pulled into trading/signal mode by model context or provider behavior.
+        if _is_simple_greeting(original_prompt) and not image:
+            greeting = original_prompt.lower().strip().rstrip(".!?,")
+            replies = {
+                "hi": "Hey 👋 What's up?",
+                "hey": "Hey 👋 What's going on?",
+                "hello": "Hello 👋 How are you doing?",
+                "he": "Hey 👋 What's up?",
+                "hiya": "Heyyy 👋 What's up?",
+                "yo": "Yo 👋 What's good?",
+                "sup": "Hey 👋 What's up?",
+                "howdy": "Howdy 👋 What's going on?",
+                "good morning": "Good morning ☀️ How are you doing?",
+                "good afternoon": "Good afternoon 👋 How's your day going?",
+                "good evening": "Good evening 👋 How are you doing?",
+                "good night": "Good night 🌙 Rest well.",
+            }
+            reply = replies.get(greeting, "Hey 👋 What's up?")
+            self._save_memory(user_id, original_prompt, reply)
+            return reply
+
         # --- Video status check ---
         try:
             vm = _VIDEO_STATUS_CHECK_PATTERN.search(original_prompt)
