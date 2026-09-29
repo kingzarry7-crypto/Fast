@@ -67,6 +67,7 @@ export default function ChatWorkspace({
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [voicePanelOpen, setVoicePanelOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {
     speak,
@@ -133,7 +134,11 @@ export default function ChatWorkspace({
   }, [messages, sending, autoSpeak]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Scroll only the message list — never the page (stops up/down jump)
+    const el = listRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [messages, sending]);
 
   const handleNewChat = async () => {
@@ -279,12 +284,12 @@ export default function ChatWorkspace({
   return (
     <div
       className={
-        "flex flex-col min-h-0 overflow-hidden text-zinc-100 bg-transparent " +
-        (fullScreen ? "h-[100dvh]" : "h-full min-h-[560px]")
+        "flex min-h-0 max-h-full flex-col overflow-hidden text-zinc-100 bg-transparent " +
+        (fullScreen ? "h-[100dvh] max-h-[100dvh]" : "h-full")
       }
     >
       {!isVip && membership && (
-        <div className="border-b border-cyan-500/10 bg-[#020914]/80 px-4 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 shrink-0">
+        <div className="border-b border-white/5 bg-[#05080f]/80 px-4 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 shrink-0">
           <p className="text-xs tracking-wider text-cyan-200/70">
             FREE · {membership.freeMessagesRemaining}/{membership.freeDailyLimit} messages left today
           </p>
@@ -294,7 +299,7 @@ export default function ChatWorkspace({
         </div>
       )}
 
-      <div className="border-b border-cyan-500/10 px-4 py-2.5 flex items-center justify-between bg-[#020914]/50 backdrop-blur-md shrink-0">
+      <div className="border-b border-white/5 px-4 py-2.5 flex items-center justify-between bg-[#05080f]/40 backdrop-blur-md shrink-0">
         <div className="flex items-center gap-2.5">
           {showSideHistory && (
             <button
@@ -334,8 +339,8 @@ export default function ChatWorkspace({
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {showSideHistory && historyOpen && (
-          <aside className="flex w-60 shrink-0 flex-col border-r border-cyan-500/10 bg-[#020914]/90">
-            <div className="flex items-center justify-between border-b border-cyan-500/10 px-3 py-3">
+          <aside className="flex w-60 shrink-0 flex-col border-r border-white/5 bg-[#05080f]/95">
+            <div className="flex items-center justify-between border-b border-white/5 px-3 py-3">
               <p className="text-[10px] tracking-widest text-cyan-400/50">CHATS</p>
               <button type="button" onClick={handleNewChat} disabled={sending} className="text-[10px] tracking-widest text-cyan-300 hover:text-white disabled:opacity-40">
                 + NEW
@@ -363,10 +368,13 @@ export default function ChatWorkspace({
         )}
 
         <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain kz-scroll px-3 sm:px-6 py-4">
+          <div
+            ref={listRef}
+            className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain kz-scroll px-3 sm:px-6 py-4 [overflow-anchor:none]"
+          >
             <div className="mx-auto w-full max-w-2xl space-y-2.5">
               {messages.length === 0 && !historyLoading && (
-                <div className="flex flex-col items-center justify-center min-h-[42vh] text-center py-10">
+                <div className="flex flex-col items-center justify-center min-h-[min(42vh,320px)] text-center py-8">
                   <AICore state={coreState === "idle" ? "idle" : coreState} size={110} />
                   <p className="mt-5 font-mono-tech text-[10px] tracking-[0.3em] text-cyan-300/70">COMMAND CENTRE</p>
                   <p className="mt-1.5 text-[11px] text-zinc-500">Ask anything about markets, signals, or strategy</p>
@@ -398,17 +406,17 @@ export default function ChatWorkspace({
           </div>
 
           {error && (
-            <div className="px-4 pb-2">
+            <div className="px-4 pb-2 shrink-0">
               <div className="mx-auto max-w-2xl rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>
             </div>
           )}
           {attachError && (
-            <div className="px-4 pb-2">
+            <div className="px-4 pb-2 shrink-0">
               <div className="mx-auto max-w-2xl rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">{attachError}</div>
             </div>
           )}
           {attached && (
-            <div className="px-4 pb-2">
+            <div className="px-4 pb-2 shrink-0">
               <div className="mx-auto max-w-2xl flex items-center gap-3 rounded-lg border border-cyan-500/20 bg-black/40 px-3 py-2">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={attached.previewUrl} alt="" className="h-10 w-10 rounded object-cover" />
@@ -418,7 +426,10 @@ export default function ChatWorkspace({
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="border-t border-cyan-500/10 bg-[#020914]/70 backdrop-blur-xl px-3 sm:px-6 py-3 shrink-0">
+          <form
+            onSubmit={handleSubmit}
+            className="shrink-0 border-t border-white/5 bg-[#05080f]/95 backdrop-blur-md px-3 sm:px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+          >
             <div className="mx-auto w-full max-w-2xl">
               <div className="mb-2 flex flex-wrap items-center gap-1.5">
                 <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-lg border border-cyan-500/20 px-2.5 py-1 text-[10px] tracking-widest text-cyan-300/80 hover:bg-cyan-500/10">📎</button>
