@@ -61,8 +61,21 @@ export default function DashboardPage() {
 
   return (
     <ProtectedRoute>
-      <div className="flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden bg-[#020914]">
-        <header className="relative z-30 shrink-0 border-b border-cyan-500/15 bg-[#020914]/95 backdrop-blur-xl">
+      <div className="kz-command-shell fixed inset-0 flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 -z-10 bg-[#05080f]" aria-hidden="true">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(0,180,220,0.12),transparent_55%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_80%_100%,rgba(30,60,120,0.08),transparent_50%)]" />
+          <div
+            className="absolute inset-0 opacity-[0.35]"
+            style={{
+              backgroundImage:
+                "linear-gradient(rgba(0,200,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,200,255,0.03) 1px, transparent 1px)",
+              backgroundSize: "48px 48px",
+            }}
+          />
+        </div>
+
+        <header className="relative z-30 shrink-0 border-b border-white/5 bg-[#05080f]/90 backdrop-blur-md">
           <div className="flex items-center gap-2 px-3 sm:px-4 py-2.5">
             <Link href="/dashboard" className="flex items-center gap-2 shrink-0 mr-1">
               <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-cyan-400/50 bg-[#020b18] font-display text-[10px] font-bold text-cyan-300">
@@ -102,7 +115,7 @@ export default function DashboardPage() {
                     aria-label="Close chats"
                     onClick={() => setChatsOpen(false)}
                   />
-                  <div className="absolute left-0 top-full z-50 mt-2 w-72 max-h-80 overflow-y-auto rounded-xl border border-cyan-500/20 bg-[#020914] p-2 shadow-2xl">
+                  <div className="absolute left-0 top-full z-50 mt-2 w-72 max-h-80 overflow-y-auto rounded-xl border border-cyan-500/20 bg-[#05080f] p-2 shadow-2xl">
                     {!conversations.length && (
                       <p className="px-2 py-6 text-center font-mono-tech text-[10px] text-zinc-600">
                         No chats yet
@@ -178,7 +191,7 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        <main className="relative z-10 min-h-0 flex-1 overflow-hidden">
+        <main className="relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden">
           <ChatWorkspace
             fullScreen={false}
             embedMode
