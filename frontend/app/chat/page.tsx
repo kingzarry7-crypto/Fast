@@ -338,36 +338,7 @@ export default function ChatPage() {
         </div>
 
         <div className="flex flex-1 min-h-0 overflow-hidden">
-          <aside
-            className={`${historyOpen ? "flex" : "hidden"} md:flex w-64 flex-col border-r border-zinc-800 bg-[#171717] shrink-0 z-30`}
-            aria-label="Chat navigation"
-          >
-            <div className="p-3">
-              <button type="button" onClick={handleNewChat} disabled={sending}
-                className="w-full flex items-center gap-2 rounded-lg border border-zinc-700 bg-[#212121] px-3 py-2.5 text-sm text-zinc-100 hover:bg-[#2a2a2a] disabled:opacity-40">
-                <span className="text-lg leading-none">+</span><span>New chat</span>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto kz-scroll px-2 space-y-1">
-              <p className="px-3 py-2 text-xs font-medium text-zinc-500">Recent</p>
-              {conversations.length === 0 && <p className="px-3 py-3 text-xs text-zinc-500">No past chats yet.</p>}
-              {conversations.map((conv) => (
-                <button key={conv.id} type="button" onClick={() => handleOpenConversation(conv.id)}
-                  className={`w-full text-left rounded-lg px-3 py-2.5 transition-colors ${conversationId === conv.id ? "bg-[#2a2a2a] text-white" : "text-zinc-400 hover:bg-[#212121] hover:text-zinc-200"}`}>
-                  <p className="text-sm truncate">{conv.title || "Chat"}</p>
-                  {conv.preview && <p className="text-xs text-zinc-600 truncate mt-0.5">{conv.preview}</p>}
-                </button>
-              ))}
-            </div>
-            <div className="border-t border-zinc-800 p-3 space-y-2">
-              <button type="button" onClick={() => setHistoryOpen((v) => !v)}
-                className="w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm text-zinc-400 hover:bg-[#212121] hover:text-zinc-200">
-                <span>Open more</span><span className="text-zinc-500">⋯</span>
-              </button>
-              <div className="rounded-lg px-3 py-2 text-xs text-zinc-500">{user?.email || "King Zarry AI"}</div>
-            </div>
-          </aside>
-
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
           {/* AI MODULES — hidden */}
           <div className="hidden" aria-hidden="true">
             {capabilities.map((cap) => (
@@ -375,7 +346,6 @@ export default function ChatPage() {
             ))}
           </div>
 
-          <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
             <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain kz-scroll px-4 sm:px-6 py-4 sm:py-6 space-y-5">
               {messages.length === 0 && !historyLoading && (
                 <div className="flex flex-col items-center justify-center h-full text-center">
