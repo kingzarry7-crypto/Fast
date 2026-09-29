@@ -281,9 +281,9 @@ export default function ChatPage() {
 
   return (
     <ProtectedRoute>
-      <div className="flex flex-col h-[100dvh] min-h-0 overflow-hidden">
+      <div className="flex flex-col h-[100dvh] min-h-0 overflow-hidden bg-[#212121] text-zinc-100">
         {!isVip && membership && (
-          <div className="border-b border-amber-500/20 bg-amber-950/30 px-4 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="border-b border-zinc-800 bg-[#212121] px-4 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <p className="text-xs tracking-wider text-zinc-300">
               FREE TIER · Normal chat allowed · Signals / plans / alerts require
               VIP · {membership.freeMessagesRemaining}/
@@ -291,14 +291,14 @@ export default function ChatPage() {
             </p>
             <Link
               href="/pricing"
-              className="text-xs tracking-widest text-zinc-300 hover:text-white underline underline-offset-2 shrink-0"
+              className="text-xs tracking-normal text-zinc-300 hover:text-white underline underline-offset-2 shrink-0"
             >
               UPGRADE →
             </Link>
           </div>
         )}
         {isVip && (
-          <div className="border-b border-zinc-700/60 bg-[#212121] px-4 py-2">
+          <div className="border-b border-zinc-800 bg-[#212121] px-4 py-2">
             <p className="text-xs tracking-wider text-zinc-300">
               VIP ACTIVE
               {membership?.plan || user?.plan
@@ -309,7 +309,7 @@ export default function ChatPage() {
           </div>
         )}
 
-        <div className="border-b border-b border-zinc-800 px-4 sm:px-6 py-3 flex items-center justify-between bg-[#171717]/95 backdrop-blur-xl shrink-0">
+        <div className="border-b border-zinc-800 px-4 sm:px-6 py-3 flex items-center justify-between bg-[#212121] backdrop-blur-xl shrink-0">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setHistoryOpen((v) => !v)}
@@ -320,7 +320,7 @@ export default function ChatPage() {
               ☰
             </button>
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs tracking-[0.3em] text-zinc-300">
+            <span className="text-xs tracking-normal text-zinc-300">
               AI CORE {coreState.toUpperCase()}
               {coreState === "thinking"
                 ? thinkingPhase === "reading"
@@ -331,7 +331,7 @@ export default function ChatPage() {
                 : ""}
             </span>
           </div>
-          <div className="hidden sm:flex items-center gap-4 text-xs tracking-widest text-zinc-500">
+          <div className="hidden sm:flex items-center gap-4 text-xs tracking-normal text-zinc-500">
             <span>AI memory</span>
             {user?.email && <span>{user.email}</span>}
           </div>
@@ -380,7 +380,7 @@ export default function ChatPage() {
               {messages.length === 0 && !historyLoading && (
                 <div className="flex flex-col items-center justify-center h-full text-center">
                   <AICore state="idle" size={180} />
-                  <p className="mt-12 text-xs tracking-[0.4em] text-zinc-500">
+                  <p className="mt-12 text-xs tracking-normal text-zinc-500">
                     AWAITING INPUT
                   </p>
                 </div>
@@ -416,7 +416,7 @@ export default function ChatPage() {
 
             {error && (
               <div className="px-6 pb-2">
-                <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2 text-xs text-red-300 font-mono-tech">
+                <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2 text-xs text-red-300 font-sans">
                   {error}
                 </div>
               </div>
@@ -424,7 +424,7 @@ export default function ChatPage() {
 
             {attachError && (
               <div className="px-6 pb-2">
-                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-2 text-xs text-amber-300 font-mono-tech">
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-2 text-xs text-amber-300 font-sans">
                   {attachError}
                 </div>
               </div>
@@ -437,13 +437,13 @@ export default function ChatPage() {
                   <img
                     src={attached.previewUrl}
                     alt="attachment preview"
-                    className="w-12 h-12 object-cover rounded-md border border-cyan-500/20"
+                    className="w-12 h-12 object-cover rounded-md border border-zinc-700"
                   />
                   <div className="flex flex-col min-w-0">
-                    <span className="text-xs tracking-widest text-zinc-200 truncate max-w-[200px]">
+                    <span className="text-xs tracking-normal text-zinc-200 truncate max-w-[200px]">
                       {attached.name}
                     </span>
-                    <span className="text-xs tracking-widest text-zinc-500">
+                    <span className="text-xs tracking-normal text-zinc-500">
                       {attached.mime}
                     </span>
                   </div>
@@ -461,13 +461,13 @@ export default function ChatPage() {
 
             <form
               onSubmit={handleSubmit}
-              className="border-t border-zinc-800 px-4 sm:px-6 py-4 bg-[#171717]/80"
+              className="border-t border-zinc-800 px-4 sm:px-6 py-4 bg-[#212121]"
             >
               <div className="flex flex-wrap items-center gap-2 mb-3">
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-3 py-1.5 rounded-md border border-zinc-700 text-xs tracking-widest text-zinc-300 hover:bg-zinc-800"
+                  className="px-3 py-1.5 rounded-md border border-zinc-700 text-xs tracking-normal text-zinc-300 hover:bg-zinc-800"
                 >
                   📎
                 </button>
@@ -485,7 +485,7 @@ export default function ChatPage() {
                       onClick={() =>
                         listening ? stopListening() : listen((t) => setInput(t))
                       }
-                      className={`px-3 py-1.5 rounded-md border text-xs tracking-widest ${
+                      className={`px-3 py-1.5 rounded-md border text-xs tracking-normal ${
                         listening
                           ? "border-red-400/50 text-red-300 bg-red-500/10"
                           : "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
@@ -496,14 +496,14 @@ export default function ChatPage() {
                     <button
                       type="button"
                       onClick={() => setVoicePanelOpen((v) => !v)}
-                      className="px-3 py-1.5 rounded-md border border-zinc-700 text-xs tracking-widest text-zinc-300 hover:bg-zinc-800"
+                      className="px-3 py-1.5 rounded-md border border-zinc-700 text-xs tracking-normal text-zinc-300 hover:bg-zinc-800"
                     >
                       VOICE
                     </button>
                     <button
                       type="button"
                       onClick={() => setAutoSpeak((v) => !v)}
-                      className={`px-3 py-1.5 rounded-md border text-xs tracking-widest ${
+                      className={`px-3 py-1.5 rounded-md border text-xs tracking-normal ${
                         autoSpeak
                           ? "border-zinc-500/50 text-zinc-200 bg-zinc-800"
                           : "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
@@ -516,8 +516,8 @@ export default function ChatPage() {
               </div>
 
               {voicePanelOpen && (
-                <div className="mb-3 p-3 rounded-lg border border-cyan-500/20 bg-[#2f2f2f] space-y-2">
-                  <p className="text-xs tracking-[0.3em] text-zinc-500">
+                <div className="mb-3 p-3 rounded-lg border border-zinc-700 bg-[#2a2a2a] space-y-2">
+                  <p className="text-xs tracking-normal text-zinc-500">
                     CHARACTER
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -526,17 +526,17 @@ export default function ChatPage() {
                         key={v}
                         type="button"
                         onClick={() => setVoice(v)}
-                        className={`px-2.5 py-1 rounded-md text-[9px] font-mono-tech tracking-widest border ${
+                        className={`px-2.5 py-1 rounded-md text-[9px] font-sans tracking-normal border ${
                           voiceCharacter === v
                             ? "border-zinc-500 text-zinc-200 bg-zinc-800"
-                            : "border-cyan-500/25 text-zinc-400"
+                            : "border-zinc-700 text-zinc-400"
                         }`}
                       >
                         {v.toUpperCase()}
                       </button>
                     ))}
                   </div>
-                  <p className="text-xs tracking-[0.3em] text-zinc-500">
+                  <p className="text-xs tracking-normal text-zinc-500">
                     SPEED
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -546,10 +546,10 @@ export default function ChatPage() {
                           key={s}
                           type="button"
                           onClick={() => setVoiceStyle(s)}
-                          className={`px-2.5 py-1 rounded-md text-[9px] font-mono-tech tracking-widest border ${
+                          className={`px-2.5 py-1 rounded-md text-[9px] font-sans tracking-normal border ${
                             voiceStyle === s
                               ? "border-zinc-500 text-zinc-200 bg-zinc-800"
-                              : "border-cyan-500/25 text-zinc-400"
+                              : "border-zinc-700 text-zinc-400"
                           }`}
                         >
                           {s.toUpperCase()}
@@ -568,17 +568,17 @@ export default function ChatPage() {
                   onPaste={handlePaste}
                   placeholder="Message KING ZARRY AI..."
                   disabled={sending}
-                  className="flex-1 bg-[#2f2f2f] border border-cyan-500/25 focus:border-zinc-500 rounded-lg px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none transition-colors disabled:opacity-50 tracking-normal"
+                  className="flex-1 bg-[#2a2a2a] border border-zinc-700 focus:border-zinc-500 rounded-lg px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none transition-colors disabled:opacity-50 tracking-normal"
                 />
                 <button
                   type="submit"
                   disabled={sending || (!input.trim() && !attached)}
-                  className="px-5 py-3 rounded-lg bg-white text-black font-display text-xs font-bold tracking-[0.2em] hover:bg-zinc-200 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="px-5 py-3 rounded-lg bg-white text-black font-display text-xs font-bold tracking-normal hover:bg-zinc-200 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   SEND
                 </button>
               </div>
-              <p className="mt-2 text-xs tracking-widest text-zinc-500 text-center">
+              <p className="mt-2 text-xs tracking-normal text-zinc-500 text-center">
                 Tip: paste an image (Ctrl+V) or click 📎 to attach. Max 8 MB.
               </p>
             </form>
