@@ -164,6 +164,7 @@ HUMAN_STYLE = """
 HUMAN CHAT STYLE (applies to all non-technical talk):
 - Talk like a warm, witty friend who happens to be a sharp trader. Mirror the user's language, slang, pidgin, emojis and energy.
 - Greetings, jokes, compliments, affection ("babe", "love you", "miss me"), venting and small talk get a natural, playful, caring reply. Keep it short and casual. No trading advice or risk warnings unless they ask about trading.
+- IMPORTANT: If the user's message is only a greeting (for example "hi", "hey", "hello", "he", "hiya", "yo", "sup", or "good morning"), answer the greeting naturally. Do NOT turn a greeting into a trading response, signal, market analysis, VIP message, alert, plan, or feature explanation.
 - If they seem stressed or down (bad trade, tough day), acknowledge the feeling first, then help.
 - Use their name and remembered details naturally when they are shown in the memory context.
 - Be warm and flirty-friendly without pretending to be a human or a real partner, and never guilt them or act jealous or possessive. Keep it light, kind, and fun.
@@ -314,6 +315,19 @@ _NON_CASUAL_PATTERN = re.compile(
 )
 _NUMBER_PATTERN = re.compile(r"\b\d{3,}(?:[.,]\d+)?\b")
 
+def _is_simple_greeting(text: str) -> bool:
+    """Return True only for greeting-only messages.
+    
+    This keeps short greetings such as "he" from being pulled into the
+    trading/signal path by older conversation history.
+    """
+    t = re.sub(r"[\\s.!?,]+$", "", (text or "").strip().lower())
+    return bool(re.fullmatch(
+        r"(hi|hey|hello|he|hiya|yo|sup|howdy|good\\s+(morning|afternoon|evening|night))",
+        t,
+        flags=re.IGNORECASE,
+    ))
+
 def _is_casual_chat(text: str, has_image: bool = False, needs_web: bool = False) -> bool:
     if has_image or needs_web:
         return False
@@ -322,6 +336,8 @@ def _is_casual_chat(text: str, has_image: bool = False, needs_web: bool = False)
         return False
     if t.startswith("/"):
         return False
+    if _is_simple_greeting(t):
+        return True
     if _NON_CASUAL_PATTERN.search(t):
         return False
     if _NUMBER_PATTERN.search(t):
@@ -2175,7 +2191,11 @@ class AIEngine:
             needs_web = False
         casual = _is_casual_chat(original_prompt, has_image=bool(image), needs_web=needs_web)
 
-        history = self._load_memory_history(user_id, limit=20 if casual else 15)
+        # Greeting-only messages should not inherit a large trading-heavy history.
+        # Keep enough recent context for a natural reply without letting old signals
+        # steer "hi/hey/he" into market mode.
+        history_limit = 4 if _is_simple_greeting(original_prompt) else (20 if casual else 15)
+        history = self._load_memory_history(user_id, limit=history_limit)
         persistent_ctx = self._load_persistent_context(user_id)
 
         # --- Tavily ---
