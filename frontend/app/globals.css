@@ -32,7 +32,7 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100%;
-  background-color: #03060a;
+  background-color: #05080f;
   color: #c8e6f5;
   font-family: var(--font-sans);
   color-scheme: dark;
@@ -40,9 +40,6 @@ body {
   overflow-x: hidden;
 }
 
-/* ============================================
-   Background layers
-   ============================================ */
 .kz-bg-grid {
   position: fixed;
   inset: 0;
@@ -67,9 +64,6 @@ body {
   z-index: 0;
 }
 
-/* ============================================
-   Panels and text
-   ============================================ */
 .kz-panel {
   background: var(--kz-glass-bg);
   backdrop-filter: blur(18px);
@@ -105,7 +99,6 @@ body {
   text-shadow: 0 0 8px rgba(0, 240, 255, 0.5);
 }
 
-/* Font helpers */
 .font-display {
   font-family: "Orbitron", "Rajdhani", sans-serif;
   letter-spacing: 0.05em;
@@ -116,9 +109,6 @@ body {
   letter-spacing: 0.15em;
 }
 
-/* ============================================
-   Scrollbar
-   ============================================ */
 .kz-scroll::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -134,9 +124,6 @@ body {
   background: rgba(0, 240, 255, 0.5);
 }
 
-/* ============================================
-   AI Core animations
-   ============================================ */
 @keyframes kz-core-pulse {
   0%, 100% { transform: scale(1); opacity: 0.6; }
   50% { transform: scale(1.15); opacity: 1; }
@@ -179,7 +166,6 @@ body {
 .kz-scan { animation: kz-scan 3.5s linear infinite; }
 .kz-ring-breathe { animation: kz-ring-breathe 4s ease-in-out infinite; }
 
-/* Typing indicator */
 @keyframes kz-typing {
   0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
   30% { transform: translateY(-6px); opacity: 1; }
@@ -187,3 +173,16 @@ body {
 .kz-typing-dot { animation: kz-typing 1.4s ease-in-out infinite; }
 .kz-typing-dot:nth-child(2) { animation-delay: 0.2s; }
 .kz-typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* Command centre — page stays fixed; only message list scrolls */
+.kz-command-shell {
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  background-color: #05080f;
+}
+html:has(.kz-command-shell),
+body:has(.kz-command-shell) {
+  overflow: hidden !important;
+  height: 100%;
+  overscroll-behavior: none;
+}
