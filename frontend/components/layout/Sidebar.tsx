@@ -6,6 +6,8 @@ import { useAuth } from "@/hooks/useAuth";
 import AICore from "@/components/AICore";
 
 const PUBLIC_ROUTES = ["/", "/login", "/register", "/signup", "/forgot-password", "/reset-password", "/verify-email", "/pricing"];
+/** Command centre owns chrome — no second nav column */
+const HIDE_SIDEBAR_ROUTES = ["/dashboard", "/chat"];
 
 const baseNavItems = [
   { label: "Dashboard", href: "/dashboard", icon: "◆" },
@@ -29,7 +31,10 @@ export default function Sidebar() {
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
-  if (PUBLIC_ROUTES.includes(pathname)) {
+  if (
+    PUBLIC_ROUTES.includes(pathname) ||
+    HIDE_SIDEBAR_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"))
+  ) {
     return null;
   }
 
@@ -43,12 +48,8 @@ export default function Sidebar() {
               <span className="relative z-10 font-display text-[10px] font-bold text-cyan-300">KZ</span>
             </div>
             <div>
-              <p className="font-display text-[11px] font-bold text-white tracking-wider">
-                KING ZARRY
-              </p>
-              <p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/60">
-                COMMAND CENTRE
-              </p>
+              <p className="font-display text-[11px] font-bold text-white tracking-wider">KING ZARRY</p>
+              <p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/60">COMMAND CENTRE</p>
             </div>
           </Link>
           <button
@@ -87,11 +88,12 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg font-mono-tech text-[11px] tracking-widest transition-all duration-200 ${
-                isActive(item.href)
+              className={
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg font-mono-tech text-[11px] tracking-widest transition-all duration-200 " +
+                (isActive(item.href)
                   ? "bg-cyan-500/15 text-cyan-300 border border-cyan-500/40 shadow-[0_0_12px_rgba(0,240,255,0.15)]"
-                  : "text-cyan-400/60 hover:text-cyan-200 hover:bg-cyan-500/10 border border-transparent"
-              }`}
+                  : "text-cyan-400/60 hover:text-cyan-200 hover:bg-cyan-500/10 border border-transparent")
+              }
             >
               <span className="text-cyan-500/50">{item.icon}</span>
               {item.label.toUpperCase()}
@@ -101,9 +103,7 @@ export default function Sidebar() {
 
         <div className="p-4 border-t border-cyan-500/10">
           {user?.email && (
-            <p className="font-mono-tech text-[10px] text-cyan-400/50 truncate mb-2">
-              {user.email}
-            </p>
+            <p className="font-mono-tech text-[10px] text-cyan-400/50 truncate mb-2">{user.email}</p>
           )}
           <button
             onClick={logout}
