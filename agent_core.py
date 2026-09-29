@@ -456,7 +456,10 @@ def tool_learn(
 
             mem = Memory()
             fact = f"Agent observed {symbol} signal={signal} confidence={confidence} ({outcome})"
-            if hasattr(mem, "add_user_fact"):
+            if hasattr(mem, "add_fact"):
+                mem.add_fact(user_id, fact, category="agent_learning", source="agent")
+            elif hasattr(mem, "add_user_fact"):
+                # Backward compatibility for older Memory implementations.
                 mem.add_user_fact(user_id, fact, category="agent_learning", source="agent")
             elif hasattr(mem, "save_fact"):
                 mem.save_fact(user_id, fact)
