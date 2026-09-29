@@ -905,10 +905,16 @@ def _generate_code() -> str:
 
 
 def _send_email_resend(to_email: str, subject: str, text_body: str, html_body: str) -> bool:
+    """Send an email through Resend without exposing secrets to the client."""
     if not RESEND_API_KEY:
         logger.warning("RESEND_API_KEY not set — email not sent to %s", to_email)
         return False
+    if not EMAIL_FROM:
+        logger.warning("EMAIL_FROM not set — email not sent to %s", to_email)
+        return False
+
     try:
+        import urllib.error
         import urllib.request
 
         payload = json.dumps(
@@ -926,13 +932,26 @@ def _send_email_resend(to_email: str, subject: str, text_body: str, html_body: s
             headers={
                 "Authorization": f"Bearer {RESEND_API_KEY}",
                 "Content-Type": "application/json",
+                "User-Agent": "King-Zarry-AI/1.0",
             },
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=20) as resp:
-            return 200 <= resp.status < 300
+            body = resp.read().decode("utf-8", errors="replace")
+            if 200 <= resp.status < 300:
+                logger.info("Resend email accepted: to=%s status=%s", to_email, resp.status)
+                return True
+            logger.error("Resend rejected email: to=%s status=%s response=%s", to_email, resp.status, _redact(body)[:1000])
+            return False
+    except urllib.error.HTTPError as exc:
+        try:
+            body = exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            body = ""
+        logger.error("Resend HTTP error: to=%s status=%s response=%s", to_email, exc.code, _redact(body)[:1000])
+        return False
     except Exception as exc:
-        logger.error("Resend email failed: %s", type(exc).__name__)
+        logger.error("Resend email failed: to=%s error=%s detail=%s", to_email, type(exc).__name__, _redact(str(exc))[:500])
         return False
 
 
