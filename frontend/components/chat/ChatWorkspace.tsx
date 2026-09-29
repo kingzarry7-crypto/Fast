@@ -286,7 +286,7 @@ export default function ChatWorkspace({
       }
     >
       {!isVip && membership && (
-        <div className="border-b border-white/5 bg-[#05080f]/80 px-3 py-1 flex items-center justify-between gap-2 shrink-0">
+        <div className="border-b border-white/5 bg-[#05080f]/80 px-3 py-1.5 flex items-center justify-between gap-2 shrink-0">
           <p className="text-[11px] tracking-wider text-cyan-200/70">
             FREE · {membership.freeMessagesRemaining}/{membership.freeDailyLimit} left today
           </p>
@@ -339,14 +339,14 @@ export default function ChatWorkspace({
         <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
           <div
             ref={listRef}
-            className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain kz-scroll px-3 sm:px-4 py-2 [overflow-anchor:none]"
+            className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain kz-scroll px-3 sm:px-5 py-3 [overflow-anchor:none]"
           >
-            <div className="mx-auto w-full max-w-xl space-y-1.5">
+            <div className="mx-auto w-full max-w-2xl space-y-2.5">
               {messages.length === 0 && !historyLoading && (
-                <div className="flex flex-col items-center justify-center min-h-[120px] text-center py-4">
-                  <AICore state={coreState === "idle" ? "idle" : coreState} size={64} />
-                  <p className="mt-2 font-mono-tech text-[9px] tracking-[0.25em] text-cyan-300/60">READY</p>
-                  <p className="mt-1 text-[11px] text-zinc-500">Type a message below</p>
+                <div className="flex flex-col items-center justify-center min-h-[180px] text-center py-6">
+                  <AICore state={coreState === "idle" ? "idle" : coreState} size={90} />
+                  <p className="mt-3 font-mono-tech text-[10px] tracking-[0.25em] text-cyan-300/70">READY</p>
+                  <p className="mt-1 text-xs text-zinc-500">Type a message below</p>
                 </div>
               )}
 
@@ -376,19 +376,19 @@ export default function ChatWorkspace({
 
           {error && (
             <div className="px-3 pb-1 shrink-0">
-              <div className="mx-auto max-w-xl rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-300">{error}</div>
+              <div className="mx-auto max-w-2xl rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>
             </div>
           )}
           {attachError && (
             <div className="px-3 pb-1 shrink-0">
-              <div className="mx-auto max-w-xl rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-300">{attachError}</div>
+              <div className="mx-auto max-w-2xl rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">{attachError}</div>
             </div>
           )}
           {attached && (
             <div className="px-3 pb-1 shrink-0">
-              <div className="mx-auto max-w-xl flex items-center gap-2 rounded-lg border border-cyan-500/20 bg-black/40 px-2 py-1.5">
+              <div className="mx-auto max-w-2xl flex items-center gap-2 rounded-lg border border-cyan-500/20 bg-black/40 px-2 py-1.5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={attached.previewUrl} alt="" className="h-8 w-8 rounded object-cover" />
+                <img src={attached.previewUrl} alt="" className="h-9 w-9 rounded object-cover" />
                 <span className="truncate text-xs text-zinc-300">{attached.name}</span>
                 <button type="button" onClick={clearAttachment} className="ml-auto text-zinc-400 hover:text-white text-sm">×</button>
               </div>
@@ -397,9 +397,9 @@ export default function ChatWorkspace({
 
           <form
             onSubmit={handleSubmit}
-            className="shrink-0 border-t border-white/10 bg-[#05080f] px-3 sm:px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] z-20"
+            className="shrink-0 border-t border-white/10 bg-[#05080f] px-3 sm:px-5 py-2.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] z-20"
           >
-            <div className="mx-auto w-full max-w-xl">
+            <div className="mx-auto w-full max-w-2xl">
               <div className="mb-1.5 flex flex-wrap items-center gap-1">
                 <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-md border border-cyan-500/20 px-2 py-0.5 text-[10px] text-cyan-300/80">📎</button>
                 <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInputChange} />
@@ -433,12 +433,12 @@ export default function ChatWorkspace({
                   onPaste={handlePaste}
                   placeholder="Message King Zarry AI…"
                   disabled={sending}
-                  className="flex-1 rounded-xl border border-cyan-500/20 bg-black/50 px-3 py-2 text-[13px] text-white placeholder-zinc-600 outline-none focus:border-cyan-400/40 disabled:opacity-50"
+                  className="flex-1 rounded-xl border border-cyan-500/20 bg-black/50 px-3 py-2.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-cyan-400/40 disabled:opacity-50"
                 />
                 <button
                   type="submit"
                   disabled={sending || (!input.trim() && !attached)}
-                  className="rounded-xl bg-cyan-400 px-3.5 py-2 text-xs font-semibold tracking-wide text-black hover:bg-cyan-300 disabled:opacity-30 shrink-0"
+                  className="rounded-xl bg-cyan-400 px-4 py-2.5 text-xs font-semibold tracking-wide text-black hover:bg-cyan-300 disabled:opacity-30 shrink-0"
                 >
                   SEND
                 </button>
