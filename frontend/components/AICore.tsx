@@ -148,25 +148,50 @@ export default function AICore({
         }}
       />
 
+      {/* IQ Bot robot mascot — neon face from the selected Modern Dark Neon design. */}
       <div
-        className="relative rounded-full"
+        className="relative z-10 flex items-center justify-center rounded-[28%]"
         style={{
-          width: size * 0.3,
-          height: size * 0.3,
-          background: `radial-gradient(circle at 35% 35%, #ffffff 0%, ${color} 40%, ${color}88 100%)`,
-          boxShadow: `0 0 40px ${color}, 0 0 80px ${color}88, inset 0 0 20px #ffffff44`,
+          width: size * 0.38,
+          height: size * 0.38,
+          background: "linear-gradient(145deg, rgba(5,18,28,.98), rgba(1,8,14,.98))",
+          border: `1px solid ${color}99`,
+          boxShadow: `0 0 28px ${color}66, 0 0 70px ${color}22, inset 0 0 28px ${color}22`,
         }}
-      />
+      >
+        <svg
+          viewBox="0 0 160 160"
+          className="h-[82%] w-[82%]"
+          aria-label="IQ Bot robot"
+          role="img"
+        >
+          <defs>
+            <linearGradient id="iqRobotFace" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#e9ffff" stopOpacity=".98" />
+              <stop offset="42%" stopColor={color} stopOpacity=".9" />
+              <stop offset="100%" stopColor="#063442" stopOpacity=".98" />
+            </linearGradient>
+            <filter id="iqRobotGlow">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+          </defs>
 
-      <div
-        className="absolute rounded-full"
-        style={{
-          width: size * 0.06,
-          height: size * 0.06,
-          background: "#ffffff",
-          boxShadow: `0 0 20px #ffffff, 0 0 40px ${color}`,
-        }}
-      />
+          <path d="M52 32 Q80 14 108 32 L126 54 L121 112 Q80 138 39 112 L34 54 Z"
+            fill="url(#iqRobotFace)" fillOpacity=".16" stroke={color} strokeWidth="3" filter="url(#iqRobotGlow)" />
+          <path d="M48 52 Q80 35 112 52 L108 103 Q80 119 52 103 Z"
+            fill="#020b12" stroke={color} strokeWidth="2" />
+          <rect x="57" y="67" width="18" height="10" rx="5" fill="#fff" filter="url(#iqRobotGlow)" />
+          <rect x="85" y="67" width="18" height="10" rx="5" fill="#fff" filter="url(#iqRobotGlow)" />
+          <path d="M64 91 Q80 101 96 91" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" />
+          <path d="M80 16 V30" stroke={color} strokeWidth="3" strokeLinecap="round" />
+          <circle cx="80" cy="11" r="6" fill={color} filter="url(#iqRobotGlow)" />
+          <path d="M35 66 H24 M125 66 H136" stroke={color} strokeWidth="3" strokeLinecap="round" />
+          <circle cx="20" cy="66" r="4" fill={color} />
+          <circle cx="140" cy="66" r="4" fill={color} />
+          <path d="M58 119 L52 130 M102 119 L108 130" stroke={color} strokeWidth="3" strokeLinecap="round" />
+        </svg>
+      </div>
 
       <div className="absolute -bottom-8 left-1/2 -translate-x-1/2">
         <span
