@@ -6,6 +6,7 @@ import base64
 import logging
 import math
 import time
+import threading
 from typing import Optional, Tuple, List, Dict, Any
 import requests
 
@@ -1957,6 +1958,19 @@ class AIEngine:
             self.memory.add_message(user_id, "assistant", response)
         except Exception as e:
             logger.warning(f"Memory save failed for {user_id}: {_redact_secrets(str(e))}")
+
+        # Learn durable preferences/facts AFTER the response path. This runs in a
+        # daemon thread so automatic learning never adds model latency to chat.
+        try:
+            from auto_learning import learn_from_message
+            threading.Thread(
+                target=learn_from_message,
+                args=(self.memory, str(user_id), str(prompt or "")),
+                name="kz-auto-memory",
+                daemon=True,
+            ).start()
+        except Exception as e:
+            logger.debug("Auto-learning unavailable: %s", type(e).__name__)
 
     def _format_tavily_sources_footer(self, sources: List[Dict[str, str]]) -> str:
         if not sources:
