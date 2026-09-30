@@ -500,27 +500,31 @@ def detect_market_and_timeframe(text: str):
     return symbol, timeframe
 
 def detect_market_intent_discord(text: str):
+    """ONLY slash trading commands trigger MTF signals.
+
+    Free text (hi, btc, give me signal, analyze eth) → normal AI chat.
+    /btc /eth /sol /xau /gold /signal /plan → signal embed path.
+    """
+    try:
+        from market_intent import detect_market_intent
+        return detect_market_intent(text)
+    except Exception:
+        pass
     if not text:
         return False, "XAU/USD", "15m"
-    upper = text.upper()
-    lower = text.lower()
-    has_market = any(kw in upper for kw in ["XAU/USD","XAUUSD","XAU","GOLD","BTC/USD","BTCUSDT","BTC","ETH/USD","ETHUSDT","ETH","SOL/USD","SOLUSDT","SOL"])
-    if not has_market:
-        return False, "XAU/USD", "15m"
-    intent_keywords = [
-        "analy","signal","trend","check","price","forecast","predict",
-        "buy","sell","support","resist","chart","outlook","market",
-        "happen","doing","view","status","update","plan",
-        "bias","direction","call","setup","entry","sl","tp","target",
-        "should i","what about","how is","what is","whats","what's",
-        "give me","show me","tell me"
-    ]
-    is_short_market = len(text.strip()) < 35 and has_market
-    has_intent = any(kw in lower for kw in intent_keywords) or is_short_market
-    if not has_intent:
+    lower = text.lower().strip()
+    # Slash-only fallback if market_intent.py missing
+    import re as _re
+    m = _re.match(
+        r"^\s*/(btc|eth|sol|xau|xag|gold|silver|bitcoin|ethereum|solana|bnb|xrp|signal|plan)"
+        r"(?:\s+.+)?\s*$",
+        lower,
+    )
+    if not m:
         return False, "XAU/USD", "15m"
     symbol, timeframe = detect_market_and_timeframe(text)
     return True, symbol, timeframe
+
 
 def detect_news_intent_discord(text: str):
     lower = text.lower()
