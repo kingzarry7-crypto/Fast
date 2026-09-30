@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { api, type ConversationItem } from "@/lib/api";
 
 type CategoryType =
   | "ALL"
@@ -198,83 +199,54 @@ export default function KingZarryHistoryPage() {
       setError("");
       setAuthRequired(false);
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/history`,
-        {
-          method: "GET",
-          credentials: "include",
-          headers: {
-            Accept: "application/json",
-          },
-          cache: "no-store",
-        }
-      );
+      const conversations: ConversationItem[] =
+        await api.listConversations();
 
-      if (response.status === 401) {
-        setAuthRequired(true);
-        setRecords([]);
-        setHudStats({
-          conversations: 0,
-          aiMemories: 0,
-          analyses: 0,
-          savedItems: 0,
-          nodesConnected: 0,
+      const nextRecords: HistoryRecord[] = conversations.map((conversation) => {
+        const createdAt =
+          conversation.updated_at ||
+          conversation.created_at ||
+          new Date().toISOString();
+
+        const title =
+          conversation.title?.trim() ||
+          "Untitled AI Conversation";
+
+        const preview =
+          conversation.preview?.trim() ||
+          "Conversation available in the KING ZARRY AI archive.";
+
+        return normalizeRecord({
+          id: conversation.id,
+          category: "CHAT",
+          title,
+          description: preview,
+          timestamp: formatDate(createdAt),
+          status: "INDEXED",
+          source: "WEB CHAT",
+          contextPreview: preview,
+          memoryId: `CHAT-${conversation.id.slice(0, 8).toUpperCase()}`,
+          timeframe: getTimeframe(createdAt),
+          createdAt,
+          conversationId: conversation.id,
         });
-        return;
-      }
-
-      if (!response.ok) {
-        let message = "Unable to load history.";
-
-        try {
-          const body = await response.json();
-
-          if (body?.detail) {
-            message = String(body.detail);
-          }
-        } catch {
-          // Ignore invalid JSON error bodies.
-        }
-
-        throw new Error(message);
-      }
-
-      const data: HistoryResponse =
-        await response.json();
-
-      const nextRecords = Array.isArray(data.records)
-        ? data.records.map(normalizeRecord)
-        : [];
+      });
 
       setRecords(nextRecords);
 
       setHudStats({
-        conversations:
-          Number(data.stats?.conversations ?? 0),
-
-        aiMemories:
-          Number(data.stats?.aiMemories ?? 0),
-
-        analyses:
-          Number(data.stats?.analyses ?? 0),
-
-        savedItems:
-          Number(data.stats?.savedItems ?? 0),
-
-        nodesConnected:
-          Number(
-            data.stats?.nodesConnected ??
-              nextRecords.length
-          ),
+        conversations: nextRecords.length,
+        aiMemories: 0,
+        analyses: 0,
+        savedItems: 0,
+        nodesConnected: nextRecords.length,
       });
 
       if (nextRecords.length > 0) {
         setSelectedRecordId((current) => {
           if (
             current &&
-            nextRecords.some(
-              (record) => record.id === current
-            )
+            nextRecords.some((record) => record.id === current)
           ) {
             return current;
           }
@@ -287,11 +259,30 @@ export default function KingZarryHistoryPage() {
     } catch (err) {
       console.error("History loading failed:", err);
 
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load intelligence history."
-      );
+      const status =
+        typeof err === "object" &&
+        err !== null &&
+        "status" in err
+          ? Number((err as { status?: number }).status)
+          : 0;
+
+      if (status === 401) {
+        setAuthRequired(true);
+        setRecords([]);
+        setHudStats({
+          conversations: 0,
+          aiMemories: 0,
+          analyses: 0,
+          savedItems: 0,
+          nodesConnected: 0,
+        });
+      } else {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load intelligence history."
+        );
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
