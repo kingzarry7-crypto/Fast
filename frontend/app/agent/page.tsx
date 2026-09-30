@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { useAuth } from "@/hooks/useAuth";
 import {
   api,
   type AgentBrief,
@@ -9,6 +11,8 @@ import {
 } from "@/lib/api";
 
 export default function AgentPage() {
+  const { user } = useAuth();
+  const isVip = Boolean(user?.is_subscribed);
   const [goal, setGoal] = useState("");
   const [running, setRunning] = useState(false);
   const [briefLoading, setBriefLoading] = useState(false);
@@ -20,6 +24,7 @@ export default function AgentPage() {
   const [status, setStatus] = useState<Record<string, unknown> | null>(null);
 
   const refresh = useCallback(async () => {
+    if (!isVip) return;
     try {
       const [st, j, learn, latest] = await Promise.all([
         api.getAgentStatus().catch(() => null),
@@ -37,15 +42,16 @@ export default function AgentPage() {
     } catch {
       /* backend agent may not be deployed yet */
     }
-  }, []);
+  }, [isVip]);
 
   useEffect(() => {
-    refresh();
+    if (isVip) refresh();
   }, [refresh]);
 
   const handleRunGoal = async (e: React.FormEvent) => {
     e.preventDefault();
     const g = goal.trim();
+    if (!isVip) return;
     if (!g || running) return;
     setRunning(true);
     setError(null);
@@ -71,6 +77,7 @@ export default function AgentPage() {
   };
 
   const handleMorningBrief = async () => {
+    if (!isVip) return;
     setBriefLoading(true);
     setError(null);
     try {
@@ -92,6 +99,7 @@ export default function AgentPage() {
   };
 
   const handleApprove = async (jobId: string) => {
+    if (!isVip) return;
     try {
       await api.approveAgentJob(jobId);
       await refresh();
@@ -110,6 +118,23 @@ export default function AgentPage() {
   return (
     <ProtectedRoute>
       <div className="min-h-screen px-4 py-6 md:px-8 md:py-8 max-w-5xl mx-auto">
+        {!isVip ? (
+          <section className="mx-auto max-w-3xl rounded-2xl border border-cyan-500/25 bg-[#020914]/90 p-6 sm:p-8 shadow-[0_0_40px_rgba(0,240,255,0.08)]">
+            <p className="font-mono-tech text-[10px] tracking-[0.35em] text-cyan-400/50 mb-3">AGENT ACCESS · VIP</p>
+            <h1 className="font-display text-2xl sm:text-3xl font-bold text-white tracking-wide">AGENT COMMAND IS VIP ONLY</h1>
+            <p className="mt-3 text-sm leading-relaxed text-cyan-200/70 max-w-2xl">The KING ZARRY AI Agent runs background jobs, market scans, morning briefs, and auto-learning workflows. Upgrade to VIP to unlock Agent access.</p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              {["Background agent jobs","Morning market briefs","Market scanning & analysis","Agent learning logs"].map((feature) => (
+                <div key={feature} className="rounded-lg border border-cyan-500/15 bg-black/20 px-3 py-2 text-xs font-mono-tech text-cyan-200/80"><span className="text-cyan-400 mr-2">▸</span>{feature}</div>
+              ))}
+            </div>
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <Link href="/pricing" className="inline-flex items-center justify-center rounded-lg bg-cyan-400 px-5 py-3 text-xs font-bold tracking-widest text-black hover:bg-cyan-300 transition">VIEW VIP PLANS</Link>
+              <Link href="/chat" className="inline-flex items-center justify-center rounded-lg border border-cyan-500/30 px-5 py-3 text-xs font-mono-tech tracking-widest text-cyan-200 hover:bg-cyan-500/10 transition">USE AI CHAT</Link>
+            </div>
+            <p className="mt-4 text-[10px] font-mono-tech text-cyan-400/40">Your normal AI chat remains available according to your current account limits.</p>
+          </section>
+        ) : (
         <header className="mb-8">
           <p className="font-mono-tech text-[10px] tracking-[0.35em] text-cyan-400/50 mb-2">
             PHASE 1 · PLANNER + TOOLS + JOB LOG
@@ -309,6 +334,7 @@ export default function AgentPage() {
             </ul>
           )}
         </section>
+        )}
       </div>
     </ProtectedRoute>
   );
