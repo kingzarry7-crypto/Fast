@@ -7,6 +7,7 @@ import hashlib
 
 managed_processes = []
 
+
 def start_process(name, command):
     print(f"🚀 Starting {name}: {' '.join(command)}", flush=True)
     try:
@@ -16,6 +17,7 @@ def start_process(name, command):
     except Exception as e:
         print(f"❌ Failed to start {name}: {e}", flush=True)
         return None
+
 
 def shutdown_handler(signum=None, frame=None):
     print("\n🛑 Shutdown signal received!", flush=True)
@@ -36,24 +38,50 @@ def shutdown_handler(signum=None, frame=None):
     print("👋 All processes stopped.", flush=True)
     sys.exit(0)
 
+
+def is_telegram_conflict(name, proc):
+    """Detect a Telegram getUpdates conflict without touching other services."""
+    if name != "TelegramBot":
+        return False
+
+    # bot.py exits non-zero after python-telegram-bot reports the polling conflict.
+    # We only classify the process as conflicted here; the actual error remains
+    # visible in bot.py's logs.
+    return proc.returncode not in (None, 0)
+
+
 def monitor_processes():
     while True:
         for item in managed_processes:
             if not item:
                 continue
+
             name, command, proc = item
             exit_code = proc.poll()
+
             if exit_code is None:
                 continue
+
             print("=" * 55, flush=True)
             print(f"⚠️ {name} PROCESS STOPPED (exit code {exit_code})", flush=True)
             print("=" * 55, flush=True)
+
+            if is_telegram_conflict(name, proc):
+                print("🛑 TelegramBot stopped after a polling conflict.", flush=True)
+                print("❗ Another process/deployment is using the same TELEGRAM_BOT_TOKEN.", flush=True)
+                print("➡️ TelegramBot will NOT be restarted automatically.", flush=True)
+                print("➡️ Stop the duplicate Telegram bot, then restart this service.", flush=True)
+                managed_processes.remove(item)
+                continue
+
             print(f"🔄 Restarting {name} in 10s...", flush=True)
             time.sleep(10)
             new_proc = start_process(name, command)
             if new_proc:
                 item[2] = new_proc[2]
+
         time.sleep(3)
+
 
 def verify_bot_py():
     """
@@ -79,11 +107,9 @@ def verify_bot_py():
         first_line = text.splitlines()[0] if text else "<EMPTY>"
         print(f"📄 bot.py first line: {first_line}", flush=True)
 
-        # Detect the diagnostic Telegram version
         if "BOOT: bot.py starting" in text and "from telegram" in text:
             print("✅ bot.py is the NEW Telegram diagnostic version", flush=True)
             return True
-        # Detect old Discord content masquerading as bot.py
         elif "import discord" in text and "from telegram" not in text:
             print("❌ bot.py contains DISCORD code (wrong file!)", flush=True)
             print("➡️ ACTION: replace bot.py contents on GitHub with the Telegram version.", flush=True)
@@ -96,19 +122,18 @@ def verify_bot_py():
         print(f"⚠️ Cannot read bot.py: {e} — will try to run anyway", flush=True)
         return False
 
+
 def main():
     print("=" * 60, flush=True)
     print("🇳🇬 LAUNCHER-V4-NO-CRASH 🇳🇬", flush=True)
     print("👑 KING ZARRY AI MULTI-PLATFORM LAUNCHER v4", flush=True)
     print("=" * 60, flush=True)
 
-    # ---- Verify bot.py is the right file (NON-FATAL now) ----
     bot_py_ok = verify_bot_py()
     if not bot_py_ok:
         print("⚠️ bot.py verification failed but launcher will CONTINUE.", flush=True)
         print("⚠️ FastAPI + Discord will still start. Only Telegram may fail.", flush=True)
 
-    # ---- FastAPI ----
     if not os.path.exists("api.py"):
         print("❌ api.py not found — aborting (FastAPI is required for Vercel)", flush=True)
         sys.exit(1)
@@ -125,7 +150,6 @@ def main():
 
     time.sleep(3)
 
-    # ---- Telegram bot.py ----
     if os.path.exists("bot.py"):
         bot_process = start_process(
             "TelegramBot",
@@ -136,7 +160,6 @@ def main():
     else:
         print("ℹ️ bot.py not found — skipping Telegram", flush=True)
 
-    # ---- Discord bot ----
     if os.path.exists("discord_bot.py"):
         discord_process = start_process(
             "DiscordBot",
@@ -166,6 +189,7 @@ def main():
     except Exception as e:
         print(f"❌ Launcher error: {e}", flush=True)
         shutdown_handler()
+
 
 if __name__ == "__main__":
     main()
