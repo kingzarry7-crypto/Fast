@@ -1,18 +1,15 @@
-"""Normal-chat vs signal-mode detection (shared by AIEngine)."""
+"""Normal-chat vs signal-mode detection (shared by AIEngine / web).
+
+Rule: only slash trading commands leave casual mode.
+Any free-text message (even "btc signal") stays normal AI conversation.
+"""
 import re
 
-_EXPLICIT_TRADING_PATTERN = re.compile(
-    r"(?:"
-    r"\b(signal|signals)\b|"
-    r"\b(entry(\s+zone)?|stop\s*loss|\bsl\b|take\s*profit|\btp[123]?\b)\b|"
-    r"\b(mtf|multi[- ]?timeframe)\b|"
-    r"\b(analyze|analysis|analyse)\s+(btc|eth|sol|xau|gold|bitcoin|ethereum|solana|the\s+market|this\s+chart)\b|"
-    r"\b(buy|sell)\s+(btc|eth|sol|xau|gold|bitcoin|ethereum|solana)\b|"
-    r"\b(long|short)\s+(setup|bias|on)\b|"
-    r"^\s*/?(btc|eth|sol|xau|gold|signal|plan)\b|"
-    r"\b(trade\s+plan|one[- ]?day\s+plan|daily\s+plan)\b|"
-    r"\b(price\s+alert|set\s+alert|alert\s+me)\b"
-    r")",
+# Only these slash commands are treated as explicit trading mode
+_SIGNAL_SLASH_RE = re.compile(
+    r"^\s*/"
+    r"(btc|eth|sol|xau|xag|gold|silver|bitcoin|ethereum|solana|bnb|xrp|signal|plan|alert)"
+    r"\b",
     re.IGNORECASE,
 )
 
@@ -29,16 +26,18 @@ def is_simple_greeting(text: str) -> bool:
 
 
 def is_casual_chat(text: str, has_image: bool = False, needs_web: bool = False) -> bool:
-    """Default normal chat; signal mode only on explicit trading request."""
+    """Default normal chat. Only /btc /signal /plan etc. force non-casual."""
     t = (text or "").strip()
     if not t:
+        return True
+    # Slash trading command → NOT casual (signal / plan path)
+    if _SIGNAL_SLASH_RE.match(t):
         return False
+    # Any other slash command → still casual for the AI (help, status, etc.)
     if t.startswith("/"):
-        if re.match(r"^/(btc|eth|sol|xau|gold|signal|plan|alert)\b", t, re.I):
-            return False
         return True
     if is_simple_greeting(t):
         return True
-    if _EXPLICIT_TRADING_PATTERN.search(t):
-        return False
+    # Free text always casual — AI can still talk about markets in words,
+    # but bot will not auto-run the MTF signal pipeline.
     return True
