@@ -2502,6 +2502,22 @@ async def news_overview(request: Request):
 
 
 
+
+def _require_web_vip(user_row) -> str:
+    """Logged-in user must be active web VIP or admin email. Returns user_id."""
+    user_id = str(_row_value(user_row, "id", 0))
+    email = str(_row_value(user_row, "email", "") or "").strip().lower()
+    if _is_admin_email(email):
+        return user_id
+    sub = _get_web_subscription(user_id)
+    if not bool(sub.get("is_subscribed")):
+        raise HTTPException(
+            status_code=403,
+            detail="VIP subscription required for the web agent. Upgrade on the pricing page.",
+        )
+    return user_id
+
+
 # ============================================================
 # AGENT (Phase 1) — planner, morning brief, job log, auto-learn
 # ============================================================
@@ -2516,17 +2532,27 @@ class AgentApproveRequest(BaseModel):
 
 @app.get("/api/agent/status")
 async def agent_status_endpoint(request: Request):
-    """Public-ish status of agent capabilities (auth optional later)."""
+    """Agent capability status. Features require VIP (except this probe)."""
+    vip = False
     try:
-        await asyncio.to_thread(_require_current_user, request)
+        user_row = await asyncio.to_thread(_require_current_user, request)
+        try:
+            await asyncio.to_thread(_require_web_vip, user_row)
+            vip = True
+        except HTTPException:
+            vip = False
     except HTTPException:
-        # allow unauthenticated capability probe
         pass
     try:
         from agent_core import agent_status, init_agent_db
 
         await asyncio.to_thread(init_agent_db)
-        return {"status": "ok", **agent_status()}
+        return {
+            "status": "ok",
+            "vip_required": True,
+            "vip_active": vip,
+            **agent_status(),
+        }
     except ImportError as exc:
         logger.error("agent_core import failed: %s", exc)
         raise HTTPException(
@@ -2543,9 +2569,9 @@ async def agent_status_endpoint(request: Request):
 
 @app.post("/api/agent/run")
 async def agent_run_endpoint(request: Request, body: AgentGoalRequest):
-    """Run planner for a user goal (safe tools auto-run; risky need approval)."""
+    """Run planner for a user goal (safe tools auto-run; risky need approval). VIP only."""
     user_row = await asyncio.to_thread(_require_current_user, request)
-    user_id = str(_row_value(user_row, "id", 0))
+    user_id = await asyncio.to_thread(_require_web_vip, user_row)
     try:
         from agent_core import plan_and_run
 
@@ -2558,9 +2584,9 @@ async def agent_run_endpoint(request: Request, body: AgentGoalRequest):
 
 @app.post("/api/agent/morning-brief")
 async def agent_morning_brief_endpoint(request: Request):
-    """Generate overnight market watch + morning signals (BTC/ETH/SOL/XAU)."""
+    """Generate overnight market watch + morning signals (BTC/ETH/SOL/XAU). VIP only."""
     user_row = await asyncio.to_thread(_require_current_user, request)
-    user_id = str(_row_value(user_row, "id", 0))
+    user_id = await asyncio.to_thread(_require_web_vip, user_row)
     try:
         from agent_core import build_morning_brief
 
@@ -2574,7 +2600,7 @@ async def agent_morning_brief_endpoint(request: Request):
 @app.get("/api/agent/morning-brief/latest")
 async def agent_latest_brief_endpoint(request: Request):
     user_row = await asyncio.to_thread(_require_current_user, request)
-    user_id = str(_row_value(user_row, "id", 0))
+    user_id = await asyncio.to_thread(_require_web_vip, user_row)
     try:
         from agent_core import get_latest_morning_brief
 
@@ -2590,7 +2616,7 @@ async def agent_latest_brief_endpoint(request: Request):
 @app.get("/api/agent/jobs")
 async def agent_list_jobs_endpoint(request: Request):
     user_row = await asyncio.to_thread(_require_current_user, request)
-    user_id = str(_row_value(user_row, "id", 0))
+    user_id = await asyncio.to_thread(_require_web_vip, user_row)
     try:
         from agent_core import list_jobs
 
@@ -2604,7 +2630,7 @@ async def agent_list_jobs_endpoint(request: Request):
 @app.post("/api/agent/jobs/approve")
 async def agent_approve_job_endpoint(request: Request, body: AgentApproveRequest):
     user_row = await asyncio.to_thread(_require_current_user, request)
-    _ = str(_row_value(user_row, "id", 0))
+    _ = await asyncio.to_thread(_require_web_vip, user_row)
     try:
         from agent_core import approve_job, get_job
 
@@ -2622,7 +2648,7 @@ async def agent_approve_job_endpoint(request: Request, body: AgentApproveRequest
 @app.get("/api/agent/learning")
 async def agent_learning_endpoint(request: Request):
     user_row = await asyncio.to_thread(_require_current_user, request)
-    user_id = str(_row_value(user_row, "id", 0))
+    user_id = await asyncio.to_thread(_require_web_vip, user_row)
     try:
         from agent_core import recent_learning
 
