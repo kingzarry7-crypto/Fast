@@ -41,7 +41,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
-from telegram.error import Forbidden, BadRequest, RetryAfter
+from telegram.error import Conflict, Forbidden, BadRequest, RetryAfter
 print("🔵 BOOT: python-telegram-bot OK", flush=True)
 
 logging.basicConfig(
@@ -3443,6 +3443,10 @@ def main():
 
     try:
         application.run_polling(drop_pending_updates=True, allowed_updates=["message", "pre_checkout_query"])
+    except Conflict as e:
+        print(f"❌ Telegram polling conflict: {type(e).__name__}: {e}", flush=True)
+        print("🛑 Exiting with conflict code 2 so launcher will NOT restart a duplicate Telegram poller.", flush=True)
+        raise SystemExit(2)
     except Exception as e:
         print(f"❌ run_polling() crashed: {type(e).__name__}: {e}", flush=True)
         raise
