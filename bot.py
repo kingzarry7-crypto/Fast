@@ -14,8 +14,9 @@ import tempfile
 import shutil
 import logging
 from io import BytesIO
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, time as dt_time
 from typing import Optional, Dict, List
+from zoneinfo import ZoneInfo
 
 print(f"🔵 BOOT: stdlib imports OK | Python {sys.version.split()[0]}", flush=True)
 
@@ -2174,6 +2175,65 @@ def _agent_signal_fingerprint(symbol: str, analysis: dict) -> str:
     return f"{symbol}|{sig}|{entry}"
 
 
+async def agent_morning_brief_job(context: ContextTypes.DEFAULT_TYPE):
+    """Generate the daily Agent brief once and DM it to active Telegram VIP users."""
+    try:
+        from agent_core import build_morning_brief
+
+        targets = set()
+        for uid in get_all_users():
+            try:
+                if is_subscribed(uid) or uid in ADMIN_IDS:
+                    targets.add(uid)
+            except Exception:
+                continue
+
+        if not targets:
+            logger.info("agent_morning_brief: no active VIP Telegram users")
+            return
+
+        brief = await asyncio.to_thread(build_morning_brief)
+        summary = str(brief.get("summary_text") or "").strip()
+        if not summary:
+            logger.warning("agent_morning_brief: generated brief was empty")
+            return
+
+        message = (
+            "🌅 <b>KING ZARRY AI — MORNING BRIEF</b>\\n\\n"
+            + html.escape(summary)
+        )
+        sent = 0
+        failed = 0
+
+        for uid in targets:
+            try:
+                await context.bot.send_message(
+                    chat_id=uid,
+                    text=message[:4096],
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
+                sent += 1
+                await asyncio.sleep(0.08)
+            except Forbidden:
+                failed += 1
+            except RetryAfter as e:
+                failed += 1
+                logger.warning("agent_morning_brief rate limit for %s: %s", uid, e)
+            except Exception as e:
+                failed += 1
+                logger.debug("agent_morning_brief send %s failed: %s", uid, e)
+
+        logger.info(
+            "agent_morning_brief: generated once, sent=%s failed=%s vip_targets=%s",
+            sent,
+            failed,
+            len(targets),
+        )
+    except Exception as e:
+        logger.exception("agent_morning_brief failed: %s", e)
+
+
 async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
     """Scan MTF signals; push new BUY/SELL packages to Telegram immediately."""
     if not AGENT_SIGNAL_WATCH:
@@ -3387,6 +3447,31 @@ def main():
                     interval=AGENT_SIGNAL_INTERVAL_SEC,
                     first=30,
                 )
+            # Daily morning brief: one fresh scan, then DM active Telegram VIP users.
+            # Defaults to 08:00 Africa/Lagos. Disable with AGENT_MORNING_BRIEF=false.
+            if clean_env_str(os.getenv("AGENT_MORNING_BRIEF"), "true").lower() in ("1", "true", "yes", "on"):
+                try:
+                    morning_hour = max(0, min(23, env_int("AGENT_MORNING_BRIEF_HOUR", 8)))
+                    morning_minute = max(0, min(59, env_int("AGENT_MORNING_BRIEF_MINUTE", 0)))
+                    morning_tz_name = clean_env_str(os.getenv("AGENT_MORNING_BRIEF_TIMEZONE"), "Africa/Lagos")
+                    morning_tz = ZoneInfo(morning_tz_name)
+                    application.job_queue.run_daily(
+                        agent_morning_brief_job,
+                        time=dt_time(
+                            hour=morning_hour,
+                            minute=morning_minute,
+                            tzinfo=morning_tz,
+                        ),
+                        name="king-zarry-agent-morning-brief",
+                    )
+                    logger.info(
+                        "🌅 Agent morning brief scheduled daily at %02d:%02d %s",
+                        morning_hour,
+                        morning_minute,
+                        morning_tz_name,
+                    )
+                except Exception as e:
+                    logger.warning("Agent morning brief scheduler unavailable: %s", e)
                 logger.info(
                     f"🤖 Agent signal watch every {AGENT_SIGNAL_INTERVAL_SEC}s → audience={AGENT_SIGNAL_AUDIENCE}"
                 )
