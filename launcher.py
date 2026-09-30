@@ -44,10 +44,9 @@ def is_telegram_conflict(name, proc):
     if name != "TelegramBot":
         return False
 
-    # bot.py exits non-zero after python-telegram-bot reports the polling conflict.
-    # We only classify the process as conflicted here; the actual error remains
-    # visible in bot.py's logs.
-    return proc.returncode not in (None, 0)
+    # bot.py uses exit code 2 only for a Telegram getUpdates polling conflict.
+    # Other non-zero exits are real crashes and should still be restarted.
+    return proc.returncode == 2
 
 
 def monitor_processes():
