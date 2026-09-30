@@ -530,24 +530,50 @@ def get_economic_events(days: int = 7, provider: Optional[str] = None) -> List[D
     for current_provider in providers:
         try:
             if current_provider == "EODHD":
-                return get_eodhd_events(start_date, end_date)
-            if current_provider == "FINNHUB":
-                return get_finnhub_events(start_date, end_date)
-            if current_provider == "TRADINGECONOMICS":
-                return get_tradingeconomics_events(start_date, end_date)
-            if current_provider == "TWELVEDATA":
-                return get_twelvedata_events(start_date, end_date)
-            if current_provider == "FOREXFACTORY":
-                evs = get_forexfactory_events()
-                if evs:
-                    return evs
-                else:
+                events = get_eodhd_events(start_date, end_date)
+            elif current_provider == "FINNHUB":
+                events = get_finnhub_events(start_date, end_date)
+            elif current_provider == "TRADINGECONOMICS":
+                events = get_tradingeconomics_events(start_date, end_date)
+            elif current_provider == "TWELVEDATA":
+                events = get_twelvedata_events(start_date, end_date)
+            elif current_provider == "FOREXFACTORY":
+                events = get_forexfactory_events()
+                if not events:
                     raise RuntimeError("ForexFactory returned empty")
+                return events
+            else:
+                raise RuntimeError(f"Unknown calendar provider: {current_provider}")
+
+            # An HTTP request can succeed while returning no usable events.
+            # Treat that as a failed provider so AUTO can continue to the next one.
+            if events:
+                logger.info(
+                    f"Calendar data from {current_provider}: {len(events)} events"
+                )
+                return events
+
+            raise RuntimeError("provider returned no usable events")
         except Exception as error:
             errors.append(f"{current_provider}: {error}")
-            logger.warning(f"Calendar provider {current_provider} failed: {error}")
+            # Provider failures are expected in AUTO mode (expired/free-plan
+            # keys, temporary outages, etc.). Keep the log concise and continue
+            # through the fallback chain instead of generating a traceback/noise.
+            logger.info(
+                f"Calendar provider {current_provider} unavailable; trying next provider"
+            )
             continue
-    raise RuntimeError("All calendar providers failed.\n" + "\n".join(errors))
+
+    # Do not raise here. Callers should receive a clean empty calendar result
+    # rather than immediately retrying ForexFactory and logging the same
+    # failures a second time.
+    if errors:
+        logger.warning(
+            "Calendar unavailable after trying %s provider(s): %s",
+            len(errors),
+            "; ".join(errors),
+        )
+    return []
 
 class BaseNewsProvider:
     name: str = "base"
