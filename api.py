@@ -1455,6 +1455,10 @@ async def get_conversation_messages(conversation_id: str, request: Request):
 
 STRIPE_SECRET_KEY = (os.getenv("STRIPE_SECRET_KEY") or "").strip()
 STRIPE_WEBHOOK_SECRET = (os.getenv("STRIPE_WEBHOOK_SECRET") or "").strip()
+# Paystack (preferred for NG / web VIP when set)
+PAYSTACK_SECRET_KEY = (os.getenv("PAYSTACK_SECRET_KEY") or "").strip()
+PAYSTACK_PUBLIC_KEY = (os.getenv("PAYSTACK_PUBLIC_KEY") or "").strip()
+# Amounts: if PAYSTACK_SECRET_KEY set, plan amounts are KOBO (NGN*100). Else Stripe cents (USD).
 def _parse_admin_emails() -> set:
     """Build admin email set from ADMIN_EMAILS + ADMIN_EMAIL (strip spaces/quotes)."""
     raw = ",".join(
@@ -1477,17 +1481,28 @@ ADMIN_PASSWORD = (os.getenv("ADMIN_PASSWORD") or "").strip().strip(chr(34) + chr
 ADMIN_SESSION_COOKIE = "kz_admin_session"
 ADMIN_SESSION_DAYS = 7
 
-# USD amounts in cents for Checkout (override via env)
-STRIPE_AMOUNT_MONTHLY = int(os.getenv("STRIPE_AMOUNT_MONTHLY", "999"))
-STRIPE_AMOUNT_QUARTERLY = int(os.getenv("STRIPE_AMOUNT_QUARTERLY", "2499"))
-STRIPE_AMOUNT_YEARLY = int(os.getenv("STRIPE_AMOUNT_YEARLY", "7999"))
+# Plan amounts: Paystack = KOBO (default NGN); Stripe = USD cents if no Paystack
+def _plan_amount(env_paystack: str, env_stripe: str, default_kobo: int, default_cents: int) -> int:
+    if (os.getenv("PAYSTACK_SECRET_KEY") or "").strip():
+        return int(os.getenv(env_paystack) or os.getenv(env_stripe) or default_kobo)
+    return int(os.getenv(env_stripe) or default_cents)
+
+# Defaults: ₦15,000 / ₦40,000 / ₦150,000 (kobo) OR $9.99 / $24.99 / $79.99 (cents)
+_AMOUNT_MONTHLY = _plan_amount("PAYSTACK_AMOUNT_MONTHLY", "STRIPE_AMOUNT_MONTHLY", 1500000, 999)
+_AMOUNT_QUARTERLY = _plan_amount("PAYSTACK_AMOUNT_QUARTERLY", "STRIPE_AMOUNT_QUARTERLY", 4000000, 2499)
+_AMOUNT_YEARLY = _plan_amount("PAYSTACK_AMOUNT_YEARLY", "STRIPE_AMOUNT_YEARLY", 15000000, 7999)
+STRIPE_AMOUNT_MONTHLY = _AMOUNT_MONTHLY
+STRIPE_AMOUNT_QUARTERLY = _AMOUNT_QUARTERLY
+STRIPE_AMOUNT_YEARLY = _AMOUNT_YEARLY
 
 WEB_PLAN_CATALOG = {
-    "monthly": {"name": "Monthly VIP", "days": 30, "amount": STRIPE_AMOUNT_MONTHLY},
-    "quarterly": {"name": "90-Day VIP", "days": 90, "amount": STRIPE_AMOUNT_QUARTERLY},
-    "3month": {"name": "90-Day VIP", "days": 90, "amount": STRIPE_AMOUNT_QUARTERLY},
-    "yearly": {"name": "Yearly VIP", "days": 365, "amount": STRIPE_AMOUNT_YEARLY},
+    "monthly": {"name": "Monthly VIP", "days": 30, "amount": _AMOUNT_MONTHLY},
+    "quarterly": {"name": "90-Day VIP", "days": 90, "amount": _AMOUNT_QUARTERLY},
+    "3month": {"name": "90-Day VIP", "days": 90, "amount": _AMOUNT_QUARTERLY},
+    "yearly": {"name": "Yearly VIP", "days": 365, "amount": _AMOUNT_YEARLY},
 }
+BILLING_PROVIDER = "paystack" if PAYSTACK_SECRET_KEY else ("stripe" if STRIPE_SECRET_KEY else "none")
+BILLING_CURRENCY = "NGN" if PAYSTACK_SECRET_KEY else "USD"
 
 
 def _ensure_billing_tables() -> None:
@@ -1648,21 +1663,24 @@ def _record_web_payment(
     session_id: str,
     payment_intent: Optional[str],
     status: str,
+    currency: Optional[str] = None,
 ) -> None:
     _ensure_billing_tables()
+    cur_code = (currency or BILLING_CURRENCY or "usd").lower()
     with get_db_cursor(commit=True) as cur:
         cur.execute(
             """
             INSERT INTO web_payments (
                 user_id, email, plan, amount_cents, currency,
                 stripe_session_id, stripe_payment_intent, status
-            ) VALUES (%s, %s, %s, %s, 'usd', %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 str(user_id),
                 email,
                 plan,
                 amount_cents,
+                cur_code,
                 session_id,
                 payment_intent,
                 status,
@@ -1720,10 +1738,11 @@ class CheckoutRequest(BaseModel):
 
 @app.post("/api/billing/create-checkout-session")
 async def create_checkout_session(payload: CheckoutRequest, request: Request):
-    if not STRIPE_SECRET_KEY:
+    """Start web VIP payment. Prefers Paystack when PAYSTACK_SECRET_KEY is set; else Stripe."""
+    if not PAYSTACK_SECRET_KEY and not STRIPE_SECRET_KEY:
         raise HTTPException(
             status_code=503,
-            detail="Stripe is not configured. Set STRIPE_SECRET_KEY on the API server.",
+            detail="Billing not configured. Set PAYSTACK_SECRET_KEY (or STRIPE_SECRET_KEY) on Railway.",
         )
     user_row = await asyncio.to_thread(_require_current_user, request)
     user_id = str(_row_value(user_row, "id", 0))
@@ -1735,7 +1754,45 @@ async def create_checkout_session(payload: CheckoutRequest, request: Request):
     success_url = f"{FRONTEND_URL.rstrip('/')}/settings?checkout=success&plan={plan_key}"
     cancel_url = f"{FRONTEND_URL.rstrip('/')}/pricing?checkout=cancel"
 
-    def _create():
+    def _create_paystack():
+        import json as _json
+        amount = int(plan["amount"])
+        body = {
+            "email": email or f"user{user_id}@kingzarryai.online",
+            "amount": amount,
+            "currency": "NGN",
+            "callback_url": success_url,
+            "metadata": {
+                "user_id": str(user_id),
+                "plan": plan_key,
+                "days": int(plan["days"]),
+                "cancel_url": cancel_url,
+            },
+        }
+        r = requests.post(
+            "https://api.paystack.co/transaction/initialize",
+            headers={
+                "Authorization": f"Bearer {PAYSTACK_SECRET_KEY}",
+                "Content-Type": "application/json",
+            },
+            data=_json.dumps(body),
+            timeout=30,
+        )
+        data = r.json() if r.content else {}
+        if r.status_code >= 400 or not data.get("status"):
+            msg = (data.get("message") if isinstance(data, dict) else None) or r.text[:200]
+            raise RuntimeError(f"Paystack initialize failed: {msg}")
+        d = data.get("data") or {}
+        return {
+            "status": "success",
+            "provider": "paystack",
+            "url": d.get("authorization_url"),
+            "session_id": d.get("reference"),
+            "access_code": d.get("access_code"),
+            "public_key": PAYSTACK_PUBLIC_KEY or None,
+        }
+
+    def _create_stripe():
         try:
             import stripe
         except ImportError as e:
@@ -1749,36 +1806,62 @@ async def create_checkout_session(payload: CheckoutRequest, request: Request):
                     "quantity": 1,
                     "price_data": {
                         "currency": "usd",
-                        "unit_amount": plan["amount"],
+                        "unit_amount": int(plan["amount"]),
                         "product_data": {
-                            "name": f"King Zarry AI — {plan['name']}",
-                            "description": f"{plan['days']} days VIP web access",
+                            "name": plan["name"],
+                            "description": f"King Zarry AI VIP — {plan['days']} days",
                         },
                     },
                 }
             ],
-            success_url=success_url,
+            success_url=success_url + "&session_id={CHECKOUT_SESSION_ID}",
             cancel_url=cancel_url,
+            client_reference_id=str(user_id),
             metadata={
-                "user_id": user_id,
+                "user_id": str(user_id),
                 "plan": plan_key,
                 "days": str(plan["days"]),
             },
-            client_reference_id=user_id,
         )
-        return session
+        return {
+            "status": "success",
+            "provider": "stripe",
+            "url": session.url,
+            "session_id": session.id,
+        }
+
+    def _create():
+        if PAYSTACK_SECRET_KEY:
+            return _create_paystack()
+        return _create_stripe()
 
     try:
-        session = await asyncio.to_thread(_create)
+        return await asyncio.to_thread(_create)
     except HTTPException:
         raise
     except Exception as exc:
-        logger.error("Stripe checkout failed: %s: %s", type(exc).__name__, _redact(str(exc)))
-        raise HTTPException(status_code=500, detail="Could not start Stripe checkout")
+        logger.error("checkout create failed: %s: %s", type(exc).__name__, _redact(str(exc)))
+        raise HTTPException(status_code=500, detail="Could not start checkout")
+
+
+@app.get("/api/billing/config")
+async def billing_config():
+    """Public pricing metadata for the frontend."""
     return {
         "status": "success",
-        "checkout_url": session.url,
-        "session_id": session.id,
+        "provider": BILLING_PROVIDER,
+        "currency": BILLING_CURRENCY,
+        "configured": BILLING_PROVIDER != "none",
+        "plans": {
+            k: {
+                "name": v["name"],
+                "days": v["days"],
+                "amount": v["amount"],
+                "amount_major": round(v["amount"] / 100, 2),
+            }
+            for k, v in WEB_PLAN_CATALOG.items()
+            if k != "3month"
+        },
     }
 
 
@@ -1831,6 +1914,77 @@ async def stripe_webhook(request: Request):
         return await asyncio.to_thread(_handle)
     except Exception as exc:
         logger.error("Stripe webhook error: %s: %s", type(exc).__name__, _redact(str(exc)))
+        raise HTTPException(status_code=400, detail="Webhook error")
+
+
+
+@app.post("/api/billing/paystack-webhook")
+async def paystack_webhook(request: Request):
+    """Paystack event webhook — enable charge.success in dashboard."""
+    if not PAYSTACK_SECRET_KEY:
+        raise HTTPException(status_code=503, detail="Paystack not configured")
+    payload = await request.body()
+    # Optional signature: x-paystack-signature = HMAC SHA512 of body with secret
+    sig = (request.headers.get("x-paystack-signature") or "").strip()
+    if sig:
+        import hashlib as _hashlib
+        import hmac as _hmac
+        expected = _hmac.new(
+            PAYSTACK_SECRET_KEY.encode("utf-8"),
+            payload,
+            _hashlib.sha512,
+        ).hexdigest()
+        if not _hmac.compare_digest(expected, sig):
+            raise HTTPException(status_code=400, detail="Invalid Paystack signature")
+
+    def _handle():
+        import json as _json
+        event = _json.loads(payload.decode("utf-8") or "{}")
+        etype = event.get("event") or event.get("type") or ""
+        data = event.get("data") or {}
+        if etype in ("charge.success", "paymentrequest.success"):
+            meta = data.get("metadata") or {}
+            if isinstance(meta, str):
+                try:
+                    meta = _json.loads(meta)
+                except Exception:
+                    meta = {}
+            user_id = meta.get("user_id") or meta.get("userId")
+            plan = (meta.get("plan") or "monthly").lower()
+            days = int(meta.get("days") or WEB_PLAN_CATALOG.get(plan, {}).get("days", 30))
+            email = data.get("customer", {}).get("email") if isinstance(data.get("customer"), dict) else ""
+            if not email:
+                email = data.get("email") or ""
+            amount = int(data.get("amount") or 0)
+            reference = data.get("reference") or data.get("id") or ""
+            status = (data.get("status") or "").lower()
+            if status and status not in ("success", "successful", "paid"):
+                return {"received": True, "ignored": status}
+            if user_id:
+                _activate_web_subscription(
+                    str(user_id),
+                    plan,
+                    days,
+                    stripe_customer_id=None,
+                    stripe_subscription_id=str(reference) if reference else None,
+                )
+                _record_web_payment(
+                    str(user_id),
+                    str(email),
+                    plan,
+                    amount,
+                    str(reference),
+                    str(data.get("id") or ""),
+                    "paid",
+                    currency="ngn",
+                )
+                logger.info("Paystack VIP activated user=%s plan=%s ref=%s", user_id, plan, reference)
+        return {"received": True}
+
+    try:
+        return await asyncio.to_thread(_handle)
+    except Exception as exc:
+        logger.error("Paystack webhook error: %s: %s", type(exc).__name__, _redact(str(exc)))
         raise HTTPException(status_code=400, detail="Webhook error")
 
 
