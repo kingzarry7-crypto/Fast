@@ -63,11 +63,11 @@ export default function MarketsPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {rows.map((m) => (
-            <div key={m.symbol} className="kz-panel p-5 space-y-3">
+            <div key={String(m.symbol || "")} className="kz-panel p-5 space-y-3">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-display text-lg text-white tracking-wider">
-                    {m.symbol}
+                    {String(m.symbol || "—")}
                   </p>
                   <p className="font-mono-tech text-xs text-cyan-400/60">
                     {m.price != null ? String(m.price) : "—"}
@@ -87,13 +87,13 @@ export default function MarketsPage() {
                 <span>Support: {m.support != null ? String(m.support) : "—"}</span>
                 <span>Resist: {m.resistance != null ? String(m.resistance) : "—"}</span>
               </div>
-              {m.news && (
+              {Boolean(m.news) && (
                 <p className="font-mono-tech text-[10px] text-cyan-400/50">
                   News risk: {String((m.news as { news_risk?: string }).news_risk || "—")}
                 </p>
               )}
-              {m.error && (
-                <p className="text-xs text-amber-300/80">Error: {m.error}</p>
+              {Boolean(m.error) && (
+                <p className="text-xs text-amber-300/80">Error: {String(m.error)}</p>
               )}
             </div>
           ))}
