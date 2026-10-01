@@ -75,6 +75,10 @@ OPENROUTER_URL = clean_env_str(
     "https://openrouter.ai/api/v1/chat/completions",
 )
 
+# Keep normal chat responsive: fail over quickly instead of repeated long waits.
+AI_PROVIDER_TIMEOUT = max(8, int(clean_env_str(os.getenv("AI_PROVIDER_TIMEOUT"), "18")))
+AI_PROVIDER_RETRIES = max(0, int(clean_env_str(os.getenv("AI_PROVIDER_RETRIES"), "0")))
+
 OPENAI_API_KEY = OPENROUTER_API_KEY
 OPENAI_MODEL = OPENROUTER_MODEL
 OPENAI_URL = OPENROUTER_URL
@@ -2388,7 +2392,7 @@ class AIEngine:
         messages = self._build_openai_messages(prompt, history, image, persistent_ctx, casual=casual)
         headers = {"Authorization": f"Bearer {XAI_API_KEY}", "Content-Type": "application/json"}
         payload = {"model": model, "messages": messages, "temperature": 0.85 if casual else 0.7, "max_tokens": 2000}
-        resp = self._request_with_retry(XAI_URL, headers, payload, "xai", max_retries=1, timeout=45)
+        resp = self._request_with_retry(XAI_URL, headers, payload, "xai", max_retries=AI_PROVIDER_RETRIES, timeout=AI_PROVIDER_TIMEOUT)
         data = resp.json()
         return data["choices"][0]["message"]["content"]
 
@@ -2399,7 +2403,7 @@ class AIEngine:
         messages = self._build_openai_messages(prompt, history, image, persistent_ctx, casual=casual)
         headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
         payload = {"model": model, "messages": messages, "temperature": 0.85 if casual else 0.7, "max_tokens": 2000}
-        resp = self._request_with_retry(GROQ_URL, headers, payload, "groq", max_retries=1, timeout=45)
+        resp = self._request_with_retry(GROQ_URL, headers, payload, "groq", max_retries=AI_PROVIDER_RETRIES, timeout=AI_PROVIDER_TIMEOUT)
         data = resp.json()
         return data["choices"][0]["message"]["content"]
 
@@ -2410,7 +2414,7 @@ class AIEngine:
         messages = self._build_openai_messages(prompt, history, image, persistent_ctx, casual=casual)
         headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
         payload = {"model": model, "messages": messages, "temperature": 0.85 if casual else 0.7, "max_tokens": 2000}
-        resp = self._request_with_retry(OPENROUTER_URL, headers, payload, "openrouter", max_retries=1, timeout=45)
+        resp = self._request_with_retry(OPENROUTER_URL, headers, payload, "openrouter", max_retries=AI_PROVIDER_RETRIES, timeout=AI_PROVIDER_TIMEOUT)
         data = resp.json()
         return data["choices"][0]["message"]["content"]
 
@@ -2444,7 +2448,7 @@ class AIEngine:
         payload = {"contents": contents, "systemInstruction": {"parts": [{"text": sys_text}]}, "generationConfig": {"temperature": 0.85 if casual else 0.7, "maxOutputTokens": 2000}}
         url = GEMINI_URL.format(model=GEMINI_MODEL) + f"?key={GEMINI_API_KEY}"
         headers = {"Content-Type": "application/json"}
-        resp = self._request_with_retry(url, headers, payload, "gemini", max_retries=1, timeout=45)
+        resp = self._request_with_retry(url, headers, payload, "gemini", max_retries=AI_PROVIDER_RETRIES, timeout=AI_PROVIDER_TIMEOUT)
         data = resp.json()
         try:
             candidates = data.get("candidates", [])
