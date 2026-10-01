@@ -118,7 +118,7 @@ export async function getMe(signal?: AbortSignal): Promise<MeResponse> {
 }
 
 // Backward-compatible alias used by AppProviders. Keep getMe() as the canonical implementation.
-export async function getCurrentUser(signal?: AbortSignal): Promise<AuthUser> {
+export async function getCurrentUser(signal?: AbortSignal): Promise<AuthUser | null> {
   const data = await getMe(signal);
   return data.user;
 }
