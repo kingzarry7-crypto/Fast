@@ -15,11 +15,42 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-DB_PATH = os.getenv("FIVERR_AGENT_DB_PATH") or os.getenv("DATA_DIR") or "king_zarry_fiverr_agent.db"
-if os.path.isdir(DB_PATH):
-    DB_PATH = os.path.join(DB_PATH, "king_zarry_fiverr_agent.db")
-
 _LOCK = threading.RLock()
+
+def _candidate_db_paths() -> List[str]:
+    configured = os.getenv("FIVERR_AGENT_DB_PATH")
+    data_dir = os.getenv("DATA_DIR")
+    candidates: List[str] = []
+    if configured:
+        path = os.path.expanduser(configured)
+        if os.path.isdir(path):
+            path = os.path.join(path, "king_zarry_fiverr_agent.db")
+        candidates.append(path)
+    if data_dir and os.path.isdir(os.path.expanduser(data_dir)):
+        candidates.append(os.path.join(os.path.expanduser(data_dir), "king_zarry_fiverr_agent.db"))
+    candidates.extend(["/app/king_zarry_fiverr_agent.db", "/tmp/king_zarry_fiverr_agent.db", os.path.abspath("king_zarry_fiverr_agent.db")])
+    seen = set()
+    result: List[str] = []
+    for path in candidates:
+        path = os.path.abspath(path)
+        if path not in seen:
+            seen.add(path)
+            result.append(path)
+    return result
+
+def _select_db_path() -> str:
+    last_error = None
+    for path in _candidate_db_paths():
+        try:
+            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+            probe = sqlite3.connect(path, timeout=5, check_same_thread=False)
+            probe.close()
+            return path
+        except Exception as exc:
+            last_error = exc
+    raise RuntimeError(f"No writable Fiverr Agent SQLite location available: {last_error}")
+
+DB_PATH = _select_db_path()
 
 SKILLS = {
     "gig_creator": "Create complete Gig drafts: title, category, tags, packages, description, FAQ, requirements and gallery checklist.",
