@@ -20,7 +20,7 @@ import fal_client
 from discord import app_commands, File, Embed
 from dotenv import load_dotenv
 
-from memory import Memory
+from shared_memory import SharedMemory
 from ai_engine import AIEngine
 from news_engine import news_engine
 import market as market_engine
@@ -271,7 +271,7 @@ try:
 except Exception:
     groq_client = None
 
-memory = Memory(MEMORY_DB_PATH)
+memory = SharedMemory("discord", MEMORY_DB_PATH)
 ai = AIEngine(memory)
 
 def db_connect():
