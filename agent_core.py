@@ -639,6 +639,21 @@ def plan_and_run(
     if not g:
         return {"status": "error", "detail": "Empty goal"}
 
+    # New external Action Gateway. This is additive: existing market scans,
+    # morning briefs, Signal Agent delivery and Intelligence Agent continue unchanged.
+    # External actions are approval-gated and never receive raw credentials.
+    if any(k in g for k in ("whatsapp", "buy ", "sell ", "long ", "short ")) and (
+        "whatsapp" in g
+        or any(k in g for k in ("buy ", "sell ", "long ", "short "))
+    ):
+        try:
+            from agent_action_gateway import plan_action_from_goal
+            action_result = plan_action_from_goal(goal, str(user_id or ""))
+            if action_result.get("status") in {"awaiting_approval", "needs_details"}:
+                return action_result
+        except Exception as exc:
+            logger.warning("Action Gateway planning failed: %s", type(exc).__name__)
+
     # Risky stubs — never auto-execute
     if any(k in g for k in ("whatsapp", "post on", "tweet", "instagram", "facebook")):
         job = create_job(
