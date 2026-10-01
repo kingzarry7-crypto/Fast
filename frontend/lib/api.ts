@@ -10,20 +10,19 @@ import type {
 } from "@/types";
 
 function getBaseUrl(): string {
-  // Same-origin: browser hits vercel.app/api → rewrite → Railway (mobile cookies work)
+  // Prefer same-origin so mobile browsers accept the session cookie (Vercel rewrite → Railway).
   const sameOrigin =
     (process.env.NEXT_PUBLIC_API_SAME_ORIGIN || "true").trim().toLowerCase() === "true" ||
     (process.env.NEXT_PUBLIC_API_SAME_ORIGIN || "").trim() === "1";
   if (sameOrigin) return "";
-  const raw = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!raw) return "";
-  return raw.trim().replace(/\/+$/, "");
+  const raw = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim().replace(/\/+$/, "");
+  return raw;
 }
 
 function buildUrl(path: string): string {
-  const normalized = path.startsWith("/") ? path : `/${path}`;
   const base = getBaseUrl();
-  return base ? `${base}${normalized}` : normalized;
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return `${base}${p}`;
 }
 
 export class ApiError extends Error {
@@ -32,7 +31,7 @@ export class ApiError extends Error {
   raw?: unknown;
 
   constructor(data: ApiErrorData) {
-    super(data.message);
+    super(data.message || "Request failed");
     this.name = "ApiError";
     this.status = data.status;
     this.detail = data.detail;
@@ -40,122 +39,101 @@ export class ApiError extends Error {
   }
 }
 
-interface RequestOptions {
-  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+type RequestOptions = {
+  method?: string;
   body?: unknown;
   signal?: AbortSignal;
   headers?: Record<string, string>;
-}
+};
 
-async function request<T>(
-  path: string,
-  options: RequestOptions = {}
-): Promise<T> {
-  const { method = "GET", body, signal, headers = {} } = options;
-  const url = buildUrl(path);
-  const hasBody = body !== undefined && method !== "GET";
-
-  const finalHeaders: Record<string, string> = {
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const method = (options.method || "GET").toUpperCase();
+  const headers: Record<string, string> = {
     Accept: "application/json",
-    ...headers,
+    ...(options.headers || {}),
   };
-  if (hasBody && !finalHeaders["Content-Type"]) {
-    finalHeaders["Content-Type"] = "application/json";
-  }
 
   let fetchBody: string | undefined;
-  if (hasBody) {
+  if (options.body !== undefined && method !== "GET" && method !== "HEAD") {
+    headers["Content-Type"] = "application/json";
     try {
-      fetchBody = JSON.stringify(body);
+      fetchBody = JSON.stringify(options.body);
     } catch {
       throw new ApiError({ status: 400, message: "Invalid request body" });
     }
   }
 
+  const url = buildUrl(path);
   let response: Response;
   try {
     response = await fetch(url, {
       method,
-      headers: finalHeaders,
+      headers,
       body: fetchBody,
       credentials: "include",
-      signal,
+      signal: options.signal,
     });
-  } catch (error: unknown) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      throw error;
-    }
-    const message = error instanceof Error ? error.message : "Network error";
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Network error — is the API reachable?";
     throw new ApiError({ status: 0, message, raw: error });
   }
 
-  if (response.status === 204) return undefined as T;
-
-  if (!response.ok) {
-    let message = `Request failed (${response.status})`;
-    let detail: string | undefined;
-    let raw: unknown;
-
+  const contentType = response.headers.get("content-type") || "";
+  let data: unknown = null;
+  if (contentType.includes("application/json")) {
+    try {
+      data = await response.json();
+    } catch {
+      data = null;
+    }
+  } else {
     try {
       const text = await response.text();
-      if (text) {
-        try {
-          const json: unknown = JSON.parse(text);
-          if (json && typeof json === "object" && !Array.isArray(json)) {
-            const d = json as Record<string, unknown>;
-            message =
-              (typeof d.detail === "string" && d.detail) ||
-              (typeof d.message === "string" && d.message) ||
-              message;
-            detail = typeof d.detail === "string" ? d.detail : undefined;
-            raw = d;
-          } else {
-            raw = json;
-          }
-        } catch {
-          message = text.slice(0, 500) || message;
-          raw = text;
-        }
-      }
+      data = text || null;
     } catch {
-      // ignore
+      data = null;
     }
-
-    throw new ApiError({ status: response.status, message, detail, raw });
   }
 
-  const text = await response.text();
-  if (!text) return undefined as T;
-
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new ApiError({
-      status: response.status,
-      message: "Invalid JSON response",
-      raw: text,
-    });
+  if (!response.ok) {
+    const obj = data && typeof data === "object" ? (data as Record<string, unknown>) : null;
+    const detail =
+      (obj && (typeof obj.detail === "string" ? obj.detail : undefined)) ||
+      (obj && typeof obj.message === "string" ? obj.message : undefined) ||
+      undefined;
+    const message =
+      detail ||
+      (typeof data === "string" && data) ||
+      response.statusText ||
+      `HTTP ${response.status}`;
+    throw new ApiError({ status: response.status, message, detail, raw: data });
   }
+
+  return data as T;
 }
 
-export async function getCurrentUser(signal?: AbortSignal): Promise<AuthUser> {
+function normalizeUser(user: AuthUser | undefined | null): AuthUser | null {
+  if (!user) return null;
+  return user;
+}
+
+export async function getMe(signal?: AbortSignal): Promise<MeResponse> {
   const data = await request<MeResponse>("/api/auth/me", { method: "GET", signal });
   if (!data?.user) throw new ApiError({ status: 500, message: "Invalid user response" });
-  return data.user;
+  return { ...data, user: normalizeUser(data.user)! };
 }
 
 export async function login(email: string, password: string, signal?: AbortSignal): Promise<AuthResponse> {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail || !password) throw new ApiError({ status: 400, message: "Email and password required" });
-  return request<AuthResponse>("/api/auth/login", { method: "POST", body: { email: normalizedEmail, password }, signal });
+  const data = await request<AuthResponse>("/api/auth/login", {
+    method: "POST",
+    body: { email: normalizedEmail, password },
+    signal,
+  });
+  return { ...data, user: normalizeUser(data.user) || undefined };
 }
-
-export type RegisterResult = AuthResponse & {
-  requires_verification?: boolean;
-  email?: string;
-  message?: string;
-  dev_code?: string;
-};
 
 export async function register(
   email: string,
@@ -163,39 +141,52 @@ export async function register(
   username?: string,
   displayName?: string,
   signal?: AbortSignal
-): Promise<RegisterResult> {
+): Promise<AuthResponse> {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail || !password) throw new ApiError({ status: 400, message: "Email and password required" });
-  const payload: Record<string, string> = { email: normalizedEmail, password };
-  if (username?.trim()) payload.username = username.trim();
-  if (displayName?.trim()) payload.display_name = displayName.trim();
-  return request<RegisterResult>("/api/auth/register", { method: "POST", body: payload, signal });
+  const body: Record<string, string> = { email: normalizedEmail, password };
+  if (username) body.username = username;
+  if (displayName) body.display_name = displayName;
+  const data = await request<AuthResponse>("/api/auth/register", { method: "POST", body, signal });
+  return { ...data, user: normalizeUser(data.user) || undefined };
 }
 
-export async function verifyEmail(email: string, code: string, signal?: AbortSignal): Promise<AuthResponse> {
+export async function verifyEmail(email: string, code: string, signal?: AbortSignal) {
   const normalizedEmail = email.trim().toLowerCase();
   const trimmedCode = code.trim();
   if (!normalizedEmail || !trimmedCode) throw new ApiError({ status: 400, message: "Email and verification code required" });
-  return request<AuthResponse>("/api/auth/verify-email", { method: "POST", body: { email: normalizedEmail, code: trimmedCode }, signal });
+  return request<{ status?: string; message?: string }>("/api/auth/verify-email", {
+    method: "POST",
+    body: { email: normalizedEmail, code: trimmedCode },
+    signal,
+  });
 }
 
-export async function resendVerificationCode(email: string, signal?: AbortSignal) {
+export async function resendVerification(email: string, signal?: AbortSignal) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) throw new ApiError({ status: 400, message: "Email required" });
-  return request<{ status: string; message?: string; dev_code?: string }>("/api/auth/resend-code", { method: "POST", body: { email: normalizedEmail }, signal });
+  return request<{ status?: string; message?: string }>("/api/auth/resend-verification", {
+    method: "POST",
+    body: { email: normalizedEmail },
+    signal,
+  });
 }
 
 export async function forgotPassword(email: string, signal?: AbortSignal) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) throw new ApiError({ status: 400, message: "Email required" });
-  return request<{ status: string; message?: string; dev_code?: string }>("/api/auth/forgot-password", { method: "POST", body: { email: normalizedEmail }, signal });
+  return request<{ status?: string; message?: string }>("/api/auth/forgot-password", {
+    method: "POST",
+    body: { email: normalizedEmail },
+    signal,
+  });
 }
 
 export async function resetPassword(email: string, code: string, newPassword: string, signal?: AbortSignal) {
   const normalizedEmail = email.trim().toLowerCase();
   const trimmedCode = code.trim();
   if (!normalizedEmail || !trimmedCode || !newPassword) throw new ApiError({ status: 400, message: "Email, code, and new password required" });
-  return request<{ status: string; message?: string }>("/api/auth/reset-password", {
+  return request<{ status?: string; message?: string }>("/api/auth/reset-password", {
     method: "POST",
     body: { email: normalizedEmail, code: trimmedCode, new_password: newPassword },
     signal,
@@ -203,28 +194,52 @@ export async function resetPassword(email: string, code: string, newPassword: st
 }
 
 export async function logout(signal?: AbortSignal) {
-  return request<{ status: string }>("/api/auth/logout", { method: "POST", signal });
+  try {
+    await request<{ status?: string }>("/api/auth/logout", { method: "POST", signal });
+  } catch {
+    /* ignore */
+  }
 }
 
-export type SendImagePayload = { base64: string; mime?: string };
+export type ConversationItem = {
+  id: string;
+  title?: string;
+  updated_at?: string;
+  created_at?: string;
+};
 
-export async function sendChatMessage(
+export async function listConversations(signal?: AbortSignal): Promise<ConversationItem[]> {
+  const data = await request<{ conversations?: ConversationItem[] } | ConversationItem[]>("/api/conversations", {
+    method: "GET",
+    signal,
+  });
+  if (Array.isArray(data)) return data;
+  return data.conversations || [];
+}
+
+export async function getConversation(id: string, signal?: AbortSignal) {
+  return request<{ id: string; messages?: unknown[] }>(`/api/conversations/${encodeURIComponent(id)}`, {
+    method: "GET",
+    signal,
+  });
+}
+
+export async function chat(
   message: string,
-  image?: SendImagePayload,
-  signal?: AbortSignal,
-  conversationId?: string | null
+  options?: { conversationId?: string; image?: { base64: string; mime?: string }; signal?: AbortSignal }
 ): Promise<ChatResponse> {
-  const trimmed = message.trim();
-  const hasImage = !!(image && image.base64);
+  const trimmed = (message || "").trim();
+  const image = options?.image;
+  const hasImage = Boolean(image?.base64);
   if (!trimmed && !hasImage) throw new ApiError({ status: 400, message: "Message required" });
   if (trimmed.length > 16000) throw new ApiError({ status: 400, message: "Message too long" });
   const body: Record<string, unknown> = { message: trimmed || "What do you see in this image?" };
-  if (conversationId) body.conversation_id = conversationId;
+  if (options?.conversationId) body.conversation_id = options.conversationId;
   if (hasImage) {
     body.image_base64 = image!.base64;
     body.image_mime = image!.mime || "image/jpeg";
   }
-  return request<ChatResponse>("/api/chat", { method: "POST", body, signal });
+  return request<ChatResponse>("/api/chat", { method: "POST", body, signal: options?.signal });
 }
 
 export async function healthCheck() {
@@ -232,11 +247,30 @@ export async function healthCheck() {
 }
 
 export async function createCheckoutSession(plan: string, signal?: AbortSignal) {
-  return request<{ status: string; url?: string; session_id?: string }>("/api/billing/create-checkout-session", {
+  return request<{
+    status: string;
+    url?: string;
+    checkout_url?: string;
+    session_id?: string;
+    provider?: string;
+    access_code?: string;
+    public_key?: string;
+  }>("/api/billing/create-checkout-session", {
     method: "POST",
     body: { plan },
     signal,
   });
+}
+
+/** Public billing metadata (provider, currency, plan amounts). */
+export async function getBillingConfig(signal?: AbortSignal) {
+  return request<{
+    status?: string;
+    provider?: string;
+    currency?: string;
+    configured?: boolean;
+    plans?: Record<string, { name?: string; days?: number; amount?: number; amount_major?: number }>;
+  }>("/api/billing/config", { method: "GET", signal });
 }
 
 export type AdminStats = Record<string, unknown>;
@@ -250,154 +284,114 @@ export async function getAdminMe(signal?: AbortSignal): Promise<AdminMe> {
   return request<AdminMe>("/api/admin/me", { method: "GET", signal });
 }
 
-export async function unlockAdmin(password: string, signal?: AbortSignal) {
-  return request<{ status: string }>("/api/admin/unlock", { method: "POST", body: { password }, signal });
-}
-
-export async function setAdminUserStatus(
-  userId: string,
-  status: "active" | "suspended" | "banned",
-  signal?: AbortSignal
-) {
-  return request<{ status: string }>(`/api/admin/users/${encodeURIComponent(userId)}/status`, {
+export async function adminUnlock(password: string, signal?: AbortSignal) {
+  return request<{ status?: string }>("/api/admin/unlock", {
     method: "POST",
-    body: { status },
+    body: { password },
     signal,
   });
 }
 
-export async function updateUserStatus(
-  userId: string,
-  status: "active" | "suspended" | "banned",
-  signal?: AbortSignal
-) {
-  return setAdminUserStatus(userId, status, signal);
+export async function adminListUsers(signal?: AbortSignal) {
+  return request<{ users?: unknown[] }>("/api/admin/users", { method: "GET", signal });
 }
 
-export async function listAdminUsers(limit = 50, signal?: AbortSignal) {
-  return request<{ users?: unknown[] }>(`/api/admin/users?limit=${limit}`, { method: "GET", signal });
+export async function adminBanUser(userId: string, reason?: string, signal?: AbortSignal) {
+  return request<{ status?: string }>("/api/admin/users/ban", {
+    method: "POST",
+    body: { user_id: userId, reason: reason || "" },
+    signal,
+  });
 }
 
-export type ConversationItem = {
-  id: string;
-  title?: string;
-  created_at?: string;
-  updated_at?: string;
+export async function adminUnbanUser(userId: string, signal?: AbortSignal) {
+  return request<{ status?: string }>("/api/admin/users/unban", {
+    method: "POST",
+    body: { user_id: userId },
+    signal,
+  });
+}
+
+export async function ttsSpeak(
+  text: string,
+  options?: { voice?: string; signal?: AbortSignal }
+): Promise<{ audio_base64?: string; mime?: string; url?: string }> {
+  return request("/api/tts", {
+    method: "POST",
+    body: { text, voice: options?.voice },
+    signal: options?.signal,
+  });
+}
+
+export type MarketSnapshot = {
+  symbol?: string;
+  price?: number;
+  change?: number;
+  signal?: string;
+  trend?: string;
+  [key: string]: unknown;
 };
 
-export async function listConversations(signal?: AbortSignal): Promise<ConversationItem[]> {
-  const data = await request<{ conversations?: ConversationItem[] } | ConversationItem[]>("/api/conversations", {
+export async function getMarkets(signal?: AbortSignal) {
+  return request<{ symbols?: MarketSnapshot[] }>("/api/markets", { method: "GET", signal });
+}
+
+export async function getMarketDetail(symbol: string, signal?: AbortSignal) {
+  return request<Record<string, unknown>>(`/api/markets/${encodeURIComponent(symbol)}`, {
     method: "GET",
     signal,
   });
-  if (Array.isArray(data)) return data;
-  return (data as { conversations?: ConversationItem[] }).conversations || [];
 }
 
-export async function createConversation(signal?: AbortSignal): Promise<ConversationItem> {
-  return request<ConversationItem>("/api/conversations", { method: "POST", body: {}, signal });
+export async function getSignals(signal?: AbortSignal) {
+  return request<{ signals?: MarketSnapshot[] }>("/api/signals", { method: "GET", signal });
 }
 
-export async function getConversationMessages(conversationId: string, signal?: AbortSignal) {
-  const data = await request<
-    | { messages?: Array<{ id?: string; role?: string; content?: string; created_at?: string }> }
-    | Array<{ id?: string; role?: string; content?: string; created_at?: string }>
-  >(`/api/conversations/${encodeURIComponent(conversationId)}/messages`, { method: "GET", signal });
-  if (Array.isArray(data)) return data;
-  return (data as { messages?: Array<{ id?: string; role?: string; content?: string; created_at?: string }> }).messages || [];
+export async function getNews(signal?: AbortSignal) {
+  return request<{ items?: unknown[] }>("/api/news", { method: "GET", signal });
 }
 
-export type TtsVoice = "bella" | "male";
+// ---- Agent ----
+export type AgentBrief = {
+  summary_text?: string;
+  [key: string]: unknown;
+};
 
-export async function synthesizeSpeech(
-  text: string,
-  style: "slow" | "normal" | "human" | "fast" = "human",
-  voice: TtsVoice = "bella"
-) {
-  return request<{ status?: string; audio_base64?: string; mime?: string }>("/api/tts", {
-    method: "POST",
-    body: { text, style, voice },
-  });
-}
-
-export async function getAgentIntelligence(signal?: AbortSignal) {
-  return request<Record<string, unknown>>("/api/agent/intelligence", { method: "GET", signal });
-}
-
-export async function getAgentV2(signal?: AbortSignal) {
-  return request<Record<string, unknown>>("/api/agent/v2", { method: "GET", signal });
-}
-
-export async function getAgentPreferences(signal?: AbortSignal) {
-  return request<Record<string, unknown>>("/api/agent/preferences", { method: "GET", signal });
-}
-
-export async function updateAgentPreferences(
-  preferences: Record<string, unknown>,
-  signal?: AbortSignal
-) {
-  return request<Record<string, unknown>>("/api/agent/preferences", {
-    method: "PUT",
-    body: preferences,
-    signal,
-  });
-}
+export type AgentJob = {
+  id?: string;
+  status?: string;
+  [key: string]: unknown;
+};
 
 export async function getAgentStatus(signal?: AbortSignal) {
   return request<Record<string, unknown>>("/api/agent/status", { method: "GET", signal });
 }
 
-export async function getAgentActionStatus(signal?: AbortSignal) {
-  return request<Record<string, unknown>>("/api/agent/actions/status", { method: "GET", signal });
-}
-
-export async function getAgentAccount(signal?: AbortSignal) {
-  return request<Record<string, unknown>>("/api/agent/actions/account", { method: "GET", signal });
-}
-
-export async function listAgentActions(signal?: AbortSignal) {
-  return request<Record<string, unknown>>("/api/agent/actions", { method: "GET", signal });
-}
-
-export async function createAgentAction(
-  action_type: string,
-  payload: Record<string, unknown>,
-  title: string,
-  signal?: AbortSignal
-) {
-  return request<Record<string, unknown>>("/api/agent/actions", {
-    method: "POST",
-    body: { action_type, payload, title },
-    signal,
-  });
-}
-
-export async function approveAgentAction(action_id: string, signal?: AbortSignal) {
-  return request<Record<string, unknown>>("/api/agent/actions/approve", {
-    method: "POST",
-    body: { action_id },
-    signal,
-  });
-}
-
 export async function runAgentGoal(goal: string, signal?: AbortSignal) {
-  return request<Record<string, unknown>>("/api/agent/run", { method: "POST", body: { goal }, signal });
+  return request<Record<string, unknown>>("/api/agent/run", {
+    method: "POST",
+    body: { goal },
+    signal,
+  });
 }
 
 export async function generateMorningBrief(signal?: AbortSignal) {
-  return request<Record<string, unknown>>("/api/agent/morning-brief", { method: "POST", body: {}, signal });
+  return request<{ brief?: AgentBrief }>("/api/agent/morning-brief", { method: "POST", signal });
 }
 
 export async function getLatestMorningBrief(signal?: AbortSignal) {
-  return request<Record<string, unknown>>("/api/agent/morning-brief/latest", { method: "GET", signal });
+  return request<{ brief?: AgentBrief | null; status?: string }>("/api/agent/morning-brief/latest", {
+    method: "GET",
+    signal,
+  });
 }
 
 export async function listAgentJobs(signal?: AbortSignal) {
-  return request<Record<string, unknown>>("/api/agent/jobs", { method: "GET", signal });
+  return request<{ jobs?: AgentJob[] }>("/api/agent/jobs", { method: "GET", signal });
 }
 
 export async function approveAgentJob(jobId: string, signal?: AbortSignal) {
-  return request<Record<string, unknown>>("/api/agent/jobs/approve", {
+  return request<{ status?: string; job?: AgentJob }>("/api/agent/jobs/approve", {
     method: "POST",
     body: { job_id: jobId },
     signal,
@@ -405,103 +399,98 @@ export async function approveAgentJob(jobId: string, signal?: AbortSignal) {
 }
 
 export async function getAgentLearning(signal?: AbortSignal) {
-  return request<Record<string, unknown>>("/api/agent/learning", { method: "GET", signal });
-}
-
-export interface MarketSnapshot {
-  symbol: string;
-  timeframe?: string;
-  price?: number | string | null;
-  signal?: string;
-  trend?: string;
-  confidence?: string | number;
-  strength?: string | number;
-  rsi?: number;
-  support?: number;
-  resistance?: number;
-  entry?: string | number;
-  stop_loss?: string | number;
-  tp1?: string | number;
-  tp2?: string | number;
-  tp3?: string | number;
-  reasons?: string[];
-  news?: Record<string, unknown>;
-  error?: string;
-  mtf?: unknown;
-  structure?: unknown;
-  volatility?: unknown;
-  [key: string]: unknown;
-}
-
-export async function getMarkets(signal?: AbortSignal) {
-  return request<{ status?: string; symbols?: MarketSnapshot[]; count?: number }>("/api/markets", {
+  return request<{ learning?: Record<string, unknown>[] }>("/api/agent/learning", {
     method: "GET",
     signal,
   });
 }
 
-export async function getMarketDetail(symbol: string, timeframe = "15m", signal?: AbortSignal) {
-  const sym = encodeURIComponent(symbol);
-  return request<{ status?: string; market?: MarketSnapshot }>(
-    `/api/markets/${sym}?timeframe=${encodeURIComponent(timeframe)}`,
-    { method: "GET", signal }
-  );
+export async function getAgentV2(signal?: AbortSignal) {
+  return request<Record<string, unknown>>("/api/agent/v2", { method: "GET", signal });
 }
 
-export async function getSignals(signal?: AbortSignal) {
-  return request<{ status?: string; signals?: MarketSnapshot[]; actionable_count?: number; disclaimer?: string }>(
-    "/api/signals",
-    { method: "GET", signal }
-  );
+export async function getAgentIntelligence(signal?: AbortSignal) {
+  return request<Record<string, unknown>>("/api/agent/intelligence", { method: "GET", signal });
 }
 
-export async function getNews(signal?: AbortSignal) {
-  return request<{ status?: string; assets?: Array<Record<string, unknown>>; global_headlines?: unknown[]; disclaimer?: string }>(
-    "/api/news",
-    { method: "GET", signal }
-  );
+export async function getAgentPreferences(signal?: AbortSignal) {
+  return request<{ preferences?: Record<string, unknown> }>("/api/agent/preferences", {
+    method: "GET",
+    signal,
+  });
+}
+
+export async function updateAgentPreferences(
+  preferences: Record<string, unknown>,
+  signal?: AbortSignal
+) {
+  return request<{ status?: string }>("/api/agent/preferences", {
+    method: "POST",
+    body: preferences,
+    signal,
+  });
+}
+
+export async function getAgentActionStatus(signal?: AbortSignal) {
+  return request<Record<string, unknown>>("/api/agent/actions/status", { method: "GET", signal });
+}
+
+export async function listAgentActions(signal?: AbortSignal) {
+  return request<{ actions?: Record<string, unknown>[] }>("/api/agent/actions", {
+    method: "GET",
+    signal,
+  });
+}
+
+export async function approveAgentAction(actionId: string, signal?: AbortSignal) {
+  return request<{ status?: string }>("/api/agent/actions/approve", {
+    method: "POST",
+    body: { action_id: actionId },
+    signal,
+  });
 }
 
 export const api = {
-  buildUrl,
   getBaseUrl,
-  getCurrentUser,
-  me: getCurrentUser,
+  getMe,
   login,
   register,
   verifyEmail,
-  resendVerificationCode,
+  resendVerification,
   forgotPassword,
   resetPassword,
   logout,
-  sendChatMessage,
+  listConversations,
+  getConversation,
+  chat,
   healthCheck,
   createCheckoutSession,
+  getBillingConfig,
   getAdminStats,
   getAdminMe,
-  unlockAdmin,
-  setAdminUserStatus,
-  updateUserStatus,
-  listAdminUsers,
-  listConversations,
-  createConversation,
-  getConversationMessages,
-  synthesizeSpeech,
+  adminUnlock,
+  adminListUsers,
+  adminBanUser,
+  adminUnbanUser,
+  ttsSpeak,
+  getMarkets,
+  getMarketDetail,
+  getSignals,
+  getNews,
   getAgentStatus,
-  getAgentIntelligence,
-  getAgentV2,
-  getAgentPreferences,
-  updateAgentPreferences,
   runAgentGoal,
   generateMorningBrief,
   getLatestMorningBrief,
   listAgentJobs,
   approveAgentJob,
   getAgentLearning,
-  getMarkets,
-  getMarketDetail,
-  getSignals,
-  getNews,
+  getAgentV2,
+  getAgentIntelligence,
+  getAgentPreferences,
+  updateAgentPreferences,
+  getAgentActionStatus,
+  listAgentActions,
+  approveAgentAction,
 };
 
 export type { AuthUser, AuthResponse, MeResponse, ChatResponse, ApiErrorData } from "@/types";
