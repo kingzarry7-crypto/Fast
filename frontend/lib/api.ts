@@ -192,6 +192,55 @@ export async function listConversations(signal?: AbortSignal): Promise<Conversat
   return data.conversations || [];
 }
 
+export async function createConversation(title?: string, signal?: AbortSignal): Promise<ConversationItem> {
+  const data = await request<{
+    status?: string;
+    conversation?: ConversationItem;
+    id?: string;
+    title?: string;
+    preview?: string;
+    updated_at?: string;
+    created_at?: string;
+  }>("/api/conversations", {
+    method: "POST",
+    body: title ? { title } : {},
+    signal,
+  });
+  const conv = data.conversation || data;
+  if (conv && conv.id) {
+    return {
+      id: String(conv.id),
+      title: conv.title != null ? String(conv.title) : undefined,
+      preview: conv.preview != null ? String(conv.preview) : undefined,
+      updated_at: conv.updated_at != null ? String(conv.updated_at) : undefined,
+      created_at: conv.created_at != null ? String(conv.created_at) : undefined,
+    };
+  }
+  throw new ApiError({ status: 500, message: "Invalid create conversation response" });
+}
+
+export type ConversationMessage = {
+  id?: string;
+  role?: string;
+  content?: string;
+  created_at?: string;
+};
+
+export async function getConversationMessages(
+  id: string,
+  signal?: AbortSignal
+): Promise<ConversationMessage[]> {
+  const data = await request<{
+    status?: string;
+    conversation_id?: string;
+    messages?: ConversationMessage[];
+  }>(`/api/conversations/${encodeURIComponent(id)}/messages`, {
+    method: "GET",
+    signal,
+  });
+  return Array.isArray(data.messages) ? data.messages : [];
+}
+
 export async function getConversation(id: string, signal?: AbortSignal) {
   return request<{ id: string; messages?: unknown[] }>(`/api/conversations/${encodeURIComponent(id)}`, {
     method: "GET", signal,
@@ -338,7 +387,7 @@ export async function approveAgentAction(actionId: string, signal?: AbortSignal)
 
 export const api = {
   getBaseUrl, getMe, login, register, verifyEmail, resendVerification, forgotPassword, resetPassword, logout,
-  listConversations, getConversation, chat, healthCheck, createCheckoutSession, getBillingConfig,
+  listConversations, createConversation, getConversation, getConversationMessages, chat, healthCheck, createCheckoutSession, getBillingConfig,
   getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, ttsSpeak,
   getMarkets, getMarketDetail, getSignals, getNews,
   getAgentStatus, runAgentGoal, generateMorningBrief, getLatestMorningBrief, listAgentJobs, approveAgentJob,
