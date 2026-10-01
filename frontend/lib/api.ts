@@ -117,7 +117,7 @@ export async function getMe(signal?: AbortSignal): Promise<MeResponse> {
   return { ...data, user: normalizeUser(data.user)! };
 }
 
-export async function login(email: string, password: string, signal?: AbortSignal): Promise<AuthResponse> {
+// Backward-compatible alias used by AppProviders. Keep getMe() as the canonical implementation.\nexport async function getCurrentUser(signal?: AbortSignal): Promise<AuthUser> {\n  const data = await getMe(signal);\n  return data.user;\n}\n\nexport async function login(email: string, password: string, signal?: AbortSignal): Promise<AuthResponse> {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail || !password) throw new ApiError({ status: 400, message: "Email and password required" });
   const data = await request<AuthResponse>("/api/auth/login", {
@@ -386,7 +386,7 @@ export async function approveAgentAction(actionId: string, signal?: AbortSignal)
 }
 
 export const api = {
-  getBaseUrl, getMe, login, register, verifyEmail, resendVerification, forgotPassword, resetPassword, logout,
+  getBaseUrl, getMe, getCurrentUser, login, register, verifyEmail, resendVerification, forgotPassword, resetPassword, logout,
   listConversations, createConversation, getConversation, getConversationMessages, chat, healthCheck, createCheckoutSession, getBillingConfig,
   getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, ttsSpeak,
   getMarkets, getMarketDetail, getSignals, getNews,
