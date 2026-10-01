@@ -268,7 +268,7 @@ def verify_setup(analysis: Dict[str, Any]) -> Dict[str, Any]:
         checks.append({"name": "stop_loss", "ok": True, "impact": 0})
 
     # Real 4H/1H/15M/5M consensus from the existing market engine.
-    mtf = analysis.get("mtf")
+    mtf = analysis.get("mtf") or analysis.get("mtf_data")
     if isinstance(mtf, dict):
         mtf_signal = _direction(mtf.get("mtf_signal"))
         if mtf_signal == signal:
@@ -288,10 +288,24 @@ def verify_setup(analysis: Dict[str, Any]) -> Dict[str, Any]:
         tf1 = mtf.get("1h") or {}
         tf15 = mtf.get("15m") or {}
         tf5 = mtf.get("5m") or {}
+        # market.py exposes compact real-engine fields when nested analyses
+        # are not returned.
+        if not tf4 and mtf.get("h4_trend"):
+            tf4 = {"trend": mtf.get("h4_trend")}
+        if not tf1 and mtf.get("h1_trend"):
+            tf1 = {"trend": mtf.get("h1_trend")}
+        if not tf15 and mtf.get("m15_trend"):
+            tf15 = {"trend": mtf.get("m15_trend")}
+        if not tf5 and mtf.get("m5_trend"):
+            tf5 = {"trend": mtf.get("m5_trend")}
         trend4 = str(tf4.get("trend") or "").upper()
         trend1 = str(tf1.get("trend") or "").upper()
         sig15 = _direction(tf15.get("signal"))
         sig5 = _direction(tf5.get("signal"))
+        if not sig15:
+            sig15 = signal if str(mtf.get("m15_trend") or "").upper() == ("BULLISH" if signal == "BUY" else "BEARISH") else "WAIT"
+        if not sig5:
+            sig5 = signal if str(mtf.get("m5_trend") or "").upper() == ("BULLISH" if signal == "BUY" else "BEARISH") else "WAIT"
         if ((signal == "BUY" and trend4 == "BULLISH" and trend1 == "BULLISH") or
             (signal == "SELL" and trend4 == "BEARISH" and trend1 == "BEARISH")):
             score += 10
