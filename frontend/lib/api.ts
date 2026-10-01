@@ -347,6 +347,39 @@ export async function getAgentStatus(signal?: AbortSignal) {
   return request<Record<string, unknown>>("/api/agent/status", { method: "GET", signal });
 }
 
+export async function getAgentActionStatus(signal?: AbortSignal) {
+  return request<Record<string, unknown>>("/api/agent/actions/status", { method: "GET", signal });
+}
+
+export async function getAgentAccount(signal?: AbortSignal) {
+  return request<Record<string, unknown>>("/api/agent/actions/account", { method: "GET", signal });
+}
+
+export async function listAgentActions(signal?: AbortSignal) {
+  return request<Record<string, unknown>>("/api/agent/actions", { method: "GET", signal });
+}
+
+export async function createAgentAction(
+  action_type: string,
+  payload: Record<string, unknown>,
+  title: string,
+  signal?: AbortSignal
+) {
+  return request<Record<string, unknown>>("/api/agent/actions", {
+    method: "POST",
+    body: { action_type, payload, title },
+    signal,
+  });
+}
+
+export async function approveAgentAction(action_id: string, signal?: AbortSignal) {
+  return request<Record<string, unknown>>("/api/agent/actions/approve", {
+    method: "POST",
+    body: { action_id },
+    signal,
+  });
+}
+
 export async function runAgentGoal(goal: string, signal?: AbortSignal) {
   return request<Record<string, unknown>>("/api/agent/run", { method: "POST", body: { goal }, signal });
 }
