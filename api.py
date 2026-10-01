@@ -2721,6 +2721,67 @@ async def agent_status_endpoint(request: Request):
         )
 
 
+@app.get("/api/agent/v2")
+async def agent_v2_endpoint(request: Request):
+    """VIP Agent V2 dashboard: health, active signals, performance."""
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    await asyncio.to_thread(_require_web_vip, user_row)
+    try:
+        from agent_v2 import get_agent_health, get_active_signals, get_agent_performance_summary
+        return {
+            "status": "success",
+            "health": await asyncio.to_thread(get_agent_health),
+            "active_signals": await asyncio.to_thread(get_active_signals, 50),
+            "performance": await asyncio.to_thread(get_agent_performance_summary),
+        }
+    except Exception as exc:
+        logger.error("agent v2 dashboard failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Agent V2 unavailable")
+
+
+class AgentPreferencesRequest(BaseModel):
+    watch_symbols: Optional[list[str]] = None
+    signal_alerts: Optional[bool] = None
+    lifecycle_alerts: Optional[bool] = None
+    morning_brief: Optional[bool] = None
+    quiet_start: Optional[str] = None
+    quiet_end: Optional[str] = None
+
+
+@app.get("/api/agent/preferences")
+async def agent_preferences_endpoint(request: Request):
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    user_id = await asyncio.to_thread(_require_web_vip, user_row)
+    try:
+        from agent_v2 import get_agent_preferences
+        return {"status": "success", "preferences": await asyncio.to_thread(get_agent_preferences, user_id)}
+    except Exception as exc:
+        logger.error("agent preferences read failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Could not load agent preferences")
+
+
+@app.put("/api/agent/preferences")
+async def agent_preferences_update_endpoint(request: Request, body: AgentPreferencesRequest):
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    user_id = await asyncio.to_thread(_require_web_vip, user_row)
+    try:
+        from agent_v2 import save_agent_preferences
+        prefs = await asyncio.to_thread(
+            save_agent_preferences,
+            user_id,
+            watch_symbols=body.watch_symbols,
+            signal_alerts=body.signal_alerts,
+            lifecycle_alerts=body.lifecycle_alerts,
+            morning_brief=body.morning_brief,
+            quiet_start=body.quiet_start,
+            quiet_end=body.quiet_end,
+        )
+        return {"status": "success", "preferences": prefs}
+    except Exception as exc:
+        logger.error("agent preferences update failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Could not save agent preferences")
+
+
 @app.post("/api/agent/run")
 async def agent_run_endpoint(request: Request, body: AgentGoalRequest):
     """Run planner for a user goal (safe tools auto-run; risky need approval). VIP only."""
