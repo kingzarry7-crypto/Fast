@@ -176,6 +176,13 @@ except Exception as e:
     logger.warning("Fiverr Agent import failed: %s", e)
 
 try:
+    import provider_registry
+    logger.info("🔌 Provider Registry loaded | automatic API capability detection active")
+except Exception as e:
+    provider_registry = None
+    logger.warning("Provider Registry import failed: %s", e)
+
+try:
     from news_engine import news_engine
     print("🔵 BOOT: news_engine imported", flush=True)
 except Exception as e:
@@ -2688,6 +2695,36 @@ async def agentscan_command(update, context):
                 logger.warning("agentscan send failed %s: %s", uid, e)
 
 
+_provider_watch_signature = None
+
+async def provider_registry_watch_job(context: ContextTypes.DEFAULT_TYPE):
+    """Detect configured/new APIs and privately report capability status to owner/admin."""
+    global _provider_watch_signature
+    if provider_registry is None or not ADMIN_IDS:
+        return
+    try:
+        snapshot = provider_registry.snapshot()
+        sig = provider_registry.signature(snapshot)
+        if sig == _provider_watch_signature:
+            return
+        first_run = _provider_watch_signature is None
+        _provider_watch_signature = sig
+        report = provider_registry.format_admin_report(snapshot, first_run=first_run)
+        for uid in ADMIN_IDS:
+            try:
+                await context.bot.send_message(
+                    chat_id=uid,
+                    text=report,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
+                logger.info("🔌 Provider registry report sent to admin %s", uid)
+            except Exception as e:
+                logger.warning("Provider registry admin report failed %s: %s", uid, e)
+    except Exception as e:
+        logger.warning("Provider registry scan failed: %s", e)
+
+
 async def notification_job(context: ContextTypes.DEFAULT_TYPE):
     conn=db_connect()
     try:
@@ -3997,6 +4034,12 @@ def main():
     try:
         if application.job_queue:
             application.job_queue.run_repeating(notification_job, interval=60, first=60)
+            application.job_queue.run_repeating(
+                provider_registry_watch_job,
+                interval=max(30, env_int("PROVIDER_WATCH_INTERVAL", 60)),
+                first=10,
+                name="king-zarry-provider-registry-watch",
+            )
             if AGENT_SIGNAL_WATCH:
                 application.job_queue.run_repeating(
                     agent_signal_watch_job,
