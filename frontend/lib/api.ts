@@ -158,7 +158,7 @@ export async function verifyEmail(email: string, code: string, signal?: AbortSig
 export async function resendVerification(email: string, signal?: AbortSignal) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) throw new ApiError({ status: 400, message: "Email required" });
-  return request<{ status?: string; message?: string }>("/api/auth/resend-verification", {
+  return request<{ status?: string; message?: string; dev_code?: string }>("/api/auth/resend-verification", {
     method: "POST",
     body: { email: normalizedEmail },
     signal,
@@ -168,7 +168,7 @@ export async function resendVerification(email: string, signal?: AbortSignal) {
 export async function forgotPassword(email: string, signal?: AbortSignal) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) throw new ApiError({ status: 400, message: "Email required" });
-  return request<{ status?: string; message?: string }>("/api/auth/forgot-password", {
+  return request<{ status?: string; message?: string; dev_code?: string }>("/api/auth/forgot-password", {
     method: "POST",
     body: { email: normalizedEmail },
     signal,
