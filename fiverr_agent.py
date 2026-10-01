@@ -307,17 +307,95 @@ def gig_checklist() -> List[str]:
         "Final Fiverr policy review before publishing",
     ]
 
+def workspace_missing(workspace: Dict[str, Any]) -> List[str]:
+    required = [
+        ("profile_url", "Fiverr profile URL or username"),
+        ("seller_name", "seller/display name"),
+        ("main_service", "main service"),
+        ("target_buyer", "target buyer"),
+        ("starting_price", "starting price/package range"),
+    ]
+    return [label for key, label in required if not str(workspace.get(key) or "").strip()]
+
+
+def task_context(task: Dict[str, Any]) -> str:
+    data = task.get("data") or {}
+    messages = data.get("messages") or []
+    if not messages:
+        return ""
+    lines = []
+    for item in messages[-12:]:
+        role = str(item.get("role") or "user").upper()
+        content = str(item.get("content") or "").strip()
+        if content:
+            lines.append(f"{role}: {content}")
+    return "\n".join(lines)
+
+
+def is_missing_information_response(answer: str) -> bool:
+    text = (answer or "").strip().lower()
+    if not text:
+        return True
+    markers = (
+        "i need more information",
+        "please provide",
+        "please tell me",
+        "i need the following",
+        "missing information",
+        "before i can",
+        "a few questions",
+        "questions:",
+    )
+    question_count = (answer or "").count("?")
+    return any(marker in text for marker in markers) or question_count >= 1 and question_count <= 8
+
+
+def render_manual_execution_pack(task: Dict[str, Any]) -> str:
+    data = task.get("data") or {}
+    draft = str(data.get("draft") or "").strip()
+    policy = data.get("policy_check") or {}
+    lines = [
+        "FIVERR AGENT — MANUAL EXECUTION PACK",
+        f"Task: {task.get('id', '')}",
+        f"Type: {task.get('kind', '')}",
+        f"Status: {task.get('status', '')}",
+        "",
+        "DRAFT",
+        draft,
+        "",
+        "POLICY CHECK",
+        policy.get("message", "Not checked."),
+        "",
+        "EXECUTION",
+        "Copy the approved draft into Fiverr manually. Do not share passwords, 2FA codes, recovery codes or session cookies.",
+    ]
+    return "\n".join(lines)
+
+
 def agent_system_instructions() -> str:
-    return """You are FIVERR AGENT, a separate specialist inside KING ZARRY AI.
-Your job is to help the user run their Fiverr freelance business.
-Skills: gig creation/optimization, profile, SEO/tag research, client replies,
-custom offers, order intake, delivery planning, portfolio, pricing, analytics,
-policy checking and workflow management.
-Never invent the user's qualifications, portfolio, client facts, pricing rules,
-Fiverr account data or permissions. Ask the user on Telegram when information is
-missing. Keep Fiverr buyer communication on Fiverr. Do not bypass CAPTCHA, 2FA,
-anti-bot controls, account restrictions, or platform rules.
-Prepare drafts first. Any public/account-changing action requires explicit user
-approval and a supported integration. Never claim an action was completed unless
-the connected integration returned success.
+    return """You are FIVERR AGENT, a separate professional specialist inside KING ZARRY AI.
+Your job is to help the user operate a Fiverr freelance business from Telegram.
+You are a workflow assistant, copywriter, planner, researcher and quality-control layer.
+
+OPERATING STANDARD
+1. Never invent qualifications, portfolio items, client facts, account data, prices,
+   delivery promises, reviews, certifications or permissions.
+2. Use the user's saved Fiverr workspace as context, but ask focused questions when
+   important information is missing.
+3. Build professional, ready-to-paste drafts with clear headings and complete fields.
+4. For a Gig, normally include: title, category/subcategory, search tags, packages,
+   delivery time, revisions, description, FAQs, requirements, gallery/media checklist
+   and a final quality-control checklist.
+5. For Buyer replies, keep the tone concise, professional and human. Never promise
+   work or results the user has not authorized.
+6. For Custom Offers, clearly separate scope, deliverables, exclusions, price,
+   delivery time, revisions and buyer requirements.
+7. For order intake, identify ambiguities before proposing a delivery plan.
+8. Keep Fiverr buyer communication on Fiverr.
+9. Do not bypass CAPTCHA, 2FA, anti-bot controls, account restrictions or platform rules.
+10. Never claim that something was published, sent, edited or completed on Fiverr unless
+    a supported integration actually returned success.
+11. Without an official/supported Fiverr execution integration, produce an approved
+    manual execution pack instead of pretending to perform the action.
+12. Before approval, show the user the actual draft and policy-check result.
 """
