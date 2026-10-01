@@ -2297,6 +2297,32 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
         lifecycle_events = _agent_v2_update_lifecycle(symbol, analysis)
         if lifecycle_events:
             logger.info("agent_v2 lifecycle %s: %s", symbol, ", ".join(str(e.get("event")) for e in lifecycle_events))
+            try:
+                from agent_v2 import get_agent_preferences
+                for event in lifecycle_events:
+                    for uid in get_all_users():
+                        if not (is_subscribed(uid) or uid in ADMIN_IDS):
+                            continue
+                        prefs = get_agent_preferences(str(uid))
+                        if not prefs.get("lifecycle_alerts", True):
+                            continue
+                        event_text = (
+                            "🤖 <b>KING ZARRY AGENT</b>\n\n"
+                            f"<b>{html.escape(str(event.get('symbol')))}</b> "
+                            f"{html.escape(str(event.get('direction')))}\n"
+                            f"ID: <code>{html.escape(str(event.get('signal_id')))}</code>\n"
+                            f"Event: <b>{html.escape(str(event.get('event')))}</b>\n"
+                            f"Observed: <b>{html.escape(str(event.get('price')))}</b>"
+                        )
+                        try:
+                            await context.bot.send_message(
+                                chat_id=int(uid), text=event_text,
+                                parse_mode="HTML", disable_web_page_preview=True,
+                            )
+                        except Exception as send_error:
+                            logger.debug("Agent V2 lifecycle notify %s failed: %s", uid, send_error)
+            except Exception as notify_error:
+                logger.debug("Agent V2 lifecycle notification skipped: %s", notify_error)
         scan_summary.append(
             f"{symbol}={sig}"
             + (f"@{price}" if price is not None else "")
@@ -2416,6 +2442,18 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
                 )
             except Exception:
                 pass
+
+    try:
+        from agent_v2 import record_agent_heartbeat
+        record_agent_heartbeat(
+            status="degraded" if n_err else "online",
+            scan_count=len(AGENT_WATCH_SYMBOLS),
+            actionable_count=len(actionable),
+            wait_count=n_wait + n_lowconf,
+            error_count=n_err,
+        )
+    except Exception as heartbeat_error:
+        logger.debug("Agent V2 heartbeat update failed: %s", heartbeat_error)
 
     if not actionable:
         return
