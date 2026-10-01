@@ -384,11 +384,12 @@ def place_market_order(symbol: str, side: str, quantity: float, price: Optional[
     notional = price * quantity
     if notional > float(cfg["max_notional"]):
         raise ValueError(f"order notional {notional:.2f} exceeds TRADING_MAX_NOTIONAL")
+    if cfg["mode"] == "paper":
+        # Paper mode is isolated from live-account execution.
+        return _paper_place(symbol, side, quantity, price)
+
     if cfg["kill_switch"]:
         raise RuntimeError("Agent trading kill switch is ON")
-
-    if cfg["mode"] == "paper":
-        return _paper_place(symbol, side, quantity, price)
 
     if not cfg["live_ready"]:
         raise RuntimeError("Live trading is not enabled and/or provider credentials are missing")
