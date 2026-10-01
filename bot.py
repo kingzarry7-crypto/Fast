@@ -2210,7 +2210,16 @@ async def agent_morning_brief_job(context: ContextTypes.DEFAULT_TYPE):
         for uid in get_all_users():
             try:
                 if is_subscribed(uid) or uid in ADMIN_IDS:
-                    targets.add(uid)
+                    try:
+                        from agent_v2 import get_agent_preferences, preferences_allow_now
+                        prefs = get_agent_preferences(str(uid))
+                        if any(
+                            preferences_allow_now(prefs, symbol=str(a.get("symbol") or ""), lifecycle=False)
+                            for a in actionable
+                        ):
+                            targets.add(uid)
+                    except Exception:
+                        targets.add(uid)
             except Exception:
                 continue
 
