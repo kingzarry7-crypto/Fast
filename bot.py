@@ -1781,7 +1781,7 @@ async def start_command(update, context):
           "📊 <b>15M SIGNALS - MTF 4H→1H→15M→5M</b>\n"
           "Signals only come when you use a command:\n"
           "/signal XAU\n/signal BTC\n/signal ETH\n/signal SOL\n\n📋 <b>One-Day Plan</b>\n/plan BTC\n/plan XAU\n\n📰 <b>News</b>\n/news BTC\n/events\n\n⚡ Quick:\n/xau\n/btc\n/eth\n/sol\n\n"
-          "🔔 <b>Price alerts</b>\n/alert XAU above 4329\n/alerts\n\n"
+          "🧠 <b>Market Intelligence</b>\n/intel — live market regime, news, macro and crypto context\n\n          "🔔 <b>Price alerts</b>\n/alert XAU above 4329\n/alerts\n\n"
           "💎 <b>VIP</b>\n/buy\n/status\n/history\n/paysupport\n\n📸 Send a chart for AI Vision")
     await send_long_message(update.message,text,is_raw_html=True)
 
@@ -2631,6 +2631,31 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"agent_signal_watch: pushed {len(actionable)} signal(s) to {sent} chat(s)")
 
 
+
+
+async def intelligence_command(update, context):
+    """VIP Market Intelligence Agent: context/news/macro, separate from signals."""
+    if not await require_subscription(update):
+        return
+    await update.message.chat.send_action("typing")
+    status = await update.message.reply_text(
+        "🧠 <b>MARKET INTELLIGENCE AGENT</b>\\n\\nScanning market regime, news, macro events and crypto intelligence…",
+        parse_mode="HTML",
+    )
+    try:
+        from agent_intelligence import get_market_intelligence, format_market_intelligence
+        data = await asyncio.to_thread(get_market_intelligence)
+        await send_long_message(update.message, html.escape(format_market_intelligence(data)), is_raw_html=True)
+        try:
+            await status.delete()
+        except Exception:
+            pass
+    except Exception as exc:
+        logger.exception("Market Intelligence Agent failed: %s", exc)
+        try:
+            await status.edit_text("❌ <b>Market Intelligence Agent</b>\\n\\nLive intelligence is temporarily unavailable.", parse_mode="HTML")
+        except Exception:
+            await update.message.reply_text("❌ Market Intelligence Agent unavailable.")
 
 
 async def agentscan_command(update, context):
@@ -3558,6 +3583,8 @@ def main():
     application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("agentscan", agentscan_command))
     application.add_handler(CommandHandler("agent", agentscan_command))
+    application.add_handler(CommandHandler("intel", intelligence_command))
+    application.add_handler(CommandHandler("intelligence", intelligence_command))
     application.add_handler(CommandHandler("history", history_command))
     application.add_handler(CommandHandler("paysupport", paysupport_command))
     application.add_handler(CommandHandler("users", users_command))
