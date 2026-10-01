@@ -39,8 +39,10 @@ try:
     from fiverr_api import router as fiverr_api_router
 except Exception as _fiverr_api_import_error:
     fiverr_api_router = None
-    logging.getLogger("king_zarry_api").warning(
-        "Fiverr Agent API unavailable: %s", type(_fiverr_api_import_error).__name__
+    logging.getLogger("king_zarry_api").exception(
+        "Fiverr Agent API unavailable: %s: %s",
+        type(_fiverr_api_import_error).__name__,
+        _fiverr_api_import_error,
     )
 from database import (
     get_db_cursor,
@@ -134,6 +136,7 @@ app.add_middleware(
     allow_headers=[
         "Content-Type",
         "Authorization",
+        "X-Fiverr-Agent-Key",
     ],
 )
 
