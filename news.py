@@ -33,6 +33,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any, Tuple, Set
 import requests
 
+try:
+    import web_research_engine
+except Exception:
+    web_research_engine = None
+
 logger = logging.getLogger("king_zarry_news")
 
 def clean_env(value: Optional[str], default: str = "") -> str:
@@ -980,6 +985,40 @@ class NewsEngineSingleton:
                 return result
             else:
                 logger.info(f"Provider {provider.name} 0 headlines for '{query}', trying next")
+        # Final public-web fallback. Existing API providers remain first.
+        if web_research_engine is not None:
+            try:
+                if web_research_engine.is_configured():
+                    web_result = web_research_engine.research(
+                        query,
+                        deep=False,
+                        max_results=min(max(5, limit), 10),
+                    )
+                    if web_result.get("success"):
+                        headlines = []
+                        for item in web_result.get("results", [])[:limit]:
+                            headlines.append({
+                                "title": item.get("title"),
+                                "source": item.get("source") or "SearXNG",
+                                "published": None,
+                                "url": item.get("final_url") or item.get("url"),
+                                "provider": "searxng",
+                                "content": item.get("page_text") or item.get("content") or "",
+                            })
+                        if headlines:
+                            result = {
+                                "headlines": headlines,
+                                "provider": "searxng",
+                                "available": True,
+                                "error": None,
+                            }
+                            self.cache[cache_key] = result
+                            self.cache_expiry[cache_key] = datetime.now(timezone.utc) + timedelta(minutes=5)
+                            logger.info("Public web fallback returned %s headlines for '%s'", len(headlines), query)
+                            return result
+            except Exception as exc:
+                logger.info("Public web fallback unavailable: %s", type(exc).__name__)
+
         result = {"headlines": [], "provider": "all_failed", "available": False, "error": "All headline providers failed or returned empty."}
         self.cache[cache_key] = result
         self.cache_expiry[cache_key] = datetime.now(timezone.utc) + timedelta(minutes=3)
