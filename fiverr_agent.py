@@ -62,60 +62,63 @@ def _connect():
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     conn = sqlite3.connect(path, timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout=30000")
     return conn
 
+def _initialize_schema(conn) -> None:
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS fiverr_agent_tasks (
+        id TEXT PRIMARY KEY,
+        telegram_user_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        status TEXT NOT NULL,
+        title TEXT,
+        data_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_fiverr_tasks_user
+        ON fiverr_agent_tasks(telegram_user_id, updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS fiverr_agent_approvals (
+        id TEXT PRIMARY KEY,
+        telegram_user_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        decided_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS fiverr_agent_inbox (
+        id TEXT PRIMARY KEY,
+        telegram_user_id TEXT NOT NULL,
+        external_id TEXT,
+        conversation_id TEXT,
+        sender_name TEXT,
+        sender_username TEXT,
+        subject TEXT,
+        message TEXT NOT NULL,
+        received_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'unread',
+        raw_json TEXT NOT NULL DEFAULT '{}'
+    );
+    CREATE INDEX IF NOT EXISTS idx_fiverr_inbox_user
+        ON fiverr_agent_inbox(telegram_user_id, received_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_fiverr_inbox_external
+        ON fiverr_agent_inbox(telegram_user_id, external_id)
+        WHERE external_id IS NOT NULL;
+    """)
+
 def init_db() -> None:
-    """Initialize the Fiverr Agent SQLite store safely across Railway processes."""
+    """Initialize the Fiverr Agent SQLite store safely, on demand."""
     last_error = None
-    for attempt in range(6):
+    for attempt in range(8):
         conn = None
         try:
             with _LOCK:
                 conn = _connect()
-                conn.execute("PRAGMA busy_timeout=30000")
-                conn.executescript("""
-                CREATE TABLE IF NOT EXISTS fiverr_agent_tasks (
-                    id TEXT PRIMARY KEY,
-                    telegram_user_id TEXT NOT NULL,
-                    kind TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    title TEXT,
-                    data_json TEXT NOT NULL DEFAULT '{}',
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS idx_fiverr_tasks_user
-                    ON fiverr_agent_tasks(telegram_user_id, updated_at DESC);
-
-                CREATE TABLE IF NOT EXISTS fiverr_agent_approvals (
-                    id TEXT PRIMARY KEY,
-                    telegram_user_id TEXT NOT NULL,
-                    action TEXT NOT NULL,
-                    payload_json TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    decided_at TEXT
-                );
-
-                CREATE TABLE IF NOT EXISTS fiverr_agent_inbox (
-                    id TEXT PRIMARY KEY,
-                    telegram_user_id TEXT NOT NULL,
-                    external_id TEXT,
-                    conversation_id TEXT,
-                    sender_name TEXT,
-                    sender_username TEXT,
-                    subject TEXT,
-                    message TEXT NOT NULL,
-                    received_at TEXT NOT NULL,
-                    status TEXT NOT NULL DEFAULT 'unread',
-                    raw_json TEXT NOT NULL DEFAULT '{}'
-                );
-                CREATE INDEX IF NOT EXISTS idx_fiverr_inbox_user
-                    ON fiverr_agent_inbox(telegram_user_id, received_at DESC);
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_fiverr_inbox_external
-                    ON fiverr_agent_inbox(telegram_user_id, external_id)
-                    WHERE external_id IS NOT NULL;
-                """)
+                _initialize_schema(conn)
                 conn.commit()
             return
         except sqlite3.OperationalError as exc:
@@ -123,16 +126,27 @@ def init_db() -> None:
             message = str(exc).lower()
             if "locked" not in message and "busy" not in message:
                 raise
-            if attempt < 5:
+            if attempt < 7:
                 import time
-                time.sleep(0.5 * (attempt + 1))
+                time.sleep(0.75 * (attempt + 1))
         finally:
             if conn is not None:
                 conn.close()
     if last_error is not None:
         raise last_error
 
-init_db()
+_DB_READY = False
+_DB_READY_LOCK = threading.Lock()
+
+def _ensure_db() -> None:
+    global _DB_READY
+    if _DB_READY:
+        return
+    with _DB_READY_LOCK:
+        if not _DB_READY:
+            init_db()
+            _DB_READY = True
+
 
 def _task(row) -> Dict[str, Any]:
     item = dict(row)
