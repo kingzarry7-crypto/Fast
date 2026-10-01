@@ -19,19 +19,14 @@ def _env(name: str) -> str:
 
 
 def status() -> Dict[str, Any]:
-    configured = all(
-        [
-            _env("WHATSAPP_ACCESS_TOKEN"),
-            _env("WHATSAPP_PHONE_NUMBER_ID"),
-            _env("WHATSAPP_GRAPH_VERSION"),
-        ]
-    )
+    configured = bool(_env("WHATSAPP_ACCESS_TOKEN") and _env("WHATSAPP_PHONE_NUMBER_ID"))
     return {
         "configured": configured,
         "provider": "meta_whatsapp_cloud_api",
         "phone_number_id_configured": bool(_env("WHATSAPP_PHONE_NUMBER_ID")),
         "access_token_configured": bool(_env("WHATSAPP_ACCESS_TOKEN")),
-        "graph_version_configured": bool(_env("WHATSAPP_GRAPH_VERSION")),
+        "graph_version": _env("WHATSAPP_GRAPH_VERSION") or "v25.0",
+        "graph_version_configured": True,
         "webhook_verify_configured": bool(_env("WHATSAPP_VERIFY_TOKEN")),
         "app_secret_configured": bool(_env("WHATSAPP_APP_SECRET")),
         "note": "Uses Meta WhatsApp Cloud API; outbound messages are approval-gated by the Agent.",
