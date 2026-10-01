@@ -44,9 +44,18 @@ class SharedMemory:
         if key in self._migrated:
             return
         try:
-            # Migrate old conversation history without touching or deleting it.
-            for item in self.legacy.get_history(raw, limit=200):
-                self.shared.add_message(key, item.get("role", "user"), item.get("content", ""), source_platform=self.platform)
+            # Migrate only the missing tail. This makes restarts safe and avoids
+            # duplicating messages that were already copied to Neon.
+            legacy_count = self.legacy.count(raw)
+            shared_count = self.shared.count(key)
+            if shared_count < legacy_count:
+                legacy_history = self.legacy.get_history(raw, limit=200)
+                missing = legacy_history[shared_count:]
+                for item in missing:
+                    self.shared.add_message(
+                        key, item.get("role", "user"), item.get("content", ""),
+                        source_platform=self.platform
+                    )
             profile = self.legacy.get_user_profile(raw)
             if profile:
                 self.shared.update_user_profile(
