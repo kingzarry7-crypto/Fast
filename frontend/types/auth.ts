@@ -18,6 +18,8 @@ export interface AuthUser {
   is_subscribed?: boolean;
   plan?: string | null;
   subscription_expires_at?: string | null;
+  email_verified?: boolean;
+  is_admin?: boolean;
 }
 
 /**
@@ -30,7 +32,8 @@ export type AccountStatus =
   | "active"
   | "inactive"
   | "suspended"
-  | "pending";
+  | "pending"
+  | "banned";
 
 /**
  * Login form/request data.
@@ -57,6 +60,9 @@ export interface AuthResponse {
   status?: string;
   message?: string;
   user: AuthUser | null;
+  requires_verification?: boolean;
+  email_verified?: boolean;
+  dev_code?: string;
 }
 
 /**
