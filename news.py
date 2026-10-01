@@ -54,6 +54,35 @@ NEWS_API_KEY = clean_env(os.getenv("NEWS_API_KEY"))
 TWELVE_DATA_API_KEY = clean_env(os.getenv("TWELVE_DATA_API_KEY"))
 TWELVE_DATA_URL = "https://api.twelvedata.com"
 
+# Provider cooldowns prevent an exhausted free API from being hammered on every
+# asset/query. This is process-local and intentionally conservative.
+_NEWS_PROVIDER_COOLDOWNS: Dict[str, datetime] = {}
+
+def _provider_cooldown_active(name: str) -> bool:
+    until = _NEWS_PROVIDER_COOLDOWNS.get(name.lower())
+    return bool(until and datetime.now(timezone.utc) < until)
+
+def _set_provider_cooldown(name: str, status_code: int) -> None:
+    now = datetime.now(timezone.utc)
+    name = name.lower()
+    if status_code == 429:
+        if name == "currents":
+            # Currents documents daily quota resets at 00:00 UTC.
+            tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=5, microsecond=0)
+            until = tomorrow
+        else:
+            until = now + timedelta(hours=1)
+    elif status_code == 402 and name == "eodhd":
+        # EODHD daily exhaustion resets at midnight GMT.
+        until = (now + timedelta(days=1)).replace(hour=0, minute=0, second=5, microsecond=0)
+    else:
+        until = now + timedelta(minutes=10)
+    _NEWS_PROVIDER_COOLDOWNS[name] = until
+    logger.info("News provider %s cooling down until %s after HTTP %s", name, until.isoformat(), status_code)
+
+def _clear_provider_cooldown(name: str) -> None:
+    _NEWS_PROVIDER_COOLDOWNS.pop(name.lower(), None)
+
 def provider_status() -> Dict[str, Any]:
     """
     Fixed consistency:
@@ -587,13 +616,18 @@ class CurrentsProvider(BaseNewsProvider):
     def is_configured(self) -> bool:
         return bool(CURRENTS_API_KEY)
     def fetch_headlines(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        if _provider_cooldown_active(self.name):
+            return []
         try:
             url = "https://api.currentsapi.services/v1/latest-news"
             params = {"keywords": query, "language": "en", "apiKey": CURRENTS_API_KEY}
             resp = requests.get(url, params=params, timeout=12)
             if resp.status_code != 200:
+                if resp.status_code in (402, 429):
+                    _set_provider_cooldown(self.name, resp.status_code)
                 logger.warning(f"Currents HTTP {resp.status_code}: {resp.text[:200]}")
                 return []
+            _clear_provider_cooldown(self.name)
             data = resp.json()
             articles = data.get("news", [])[:limit]
             return [{"title": a.get("title"), "source": a.get("author") or "Currents", "published": a.get("published"), "url": a.get("url"), "provider": "currents", "sentiment": None} for a in articles if isinstance(a, dict)]
@@ -606,13 +640,18 @@ class NewsDataProvider(BaseNewsProvider):
     def is_configured(self) -> bool:
         return bool(NEWSDATA_API_KEY)
     def fetch_headlines(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        if _provider_cooldown_active(self.name):
+            return []
         try:
             url = "https://newsdata.io/api/1/latest"
             params = {"apikey": NEWSDATA_API_KEY, "q": query, "language": "en", "size": limit}
             resp = requests.get(url, params=params, timeout=12)
             if resp.status_code != 200:
+                if resp.status_code in (402, 429):
+                    _set_provider_cooldown(self.name, resp.status_code)
                 logger.warning(f"NewsData HTTP {resp.status_code}: {resp.text[:200]}")
                 return []
+            _clear_provider_cooldown(self.name)
             data = resp.json()
             articles = data.get("results", [])[:limit]
             return [{"title": a.get("title"), "source": a.get("source_id") or "NewsData", "published": a.get("pubDate"), "url": a.get("link"), "provider": "newsdata"} for a in articles if isinstance(a, dict)]
@@ -625,13 +664,18 @@ class NewsAPIProvider(BaseNewsProvider):
     def is_configured(self) -> bool:
         return bool(NEWS_API_KEY)
     def fetch_headlines(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        if _provider_cooldown_active(self.name):
+            return []
         try:
             url = "https://newsapi.org/v2/everything"
             params = {"q": query, "sortBy": "publishedAt", "pageSize": limit, "language": "en", "apiKey": NEWS_API_KEY}
             resp = requests.get(url, params=params, timeout=12)
             if resp.status_code != 200:
+                if resp.status_code in (402, 429):
+                    _set_provider_cooldown(self.name, resp.status_code)
                 logger.warning(f"NewsAPI HTTP {resp.status_code}: {resp.text[:200]}")
                 return []
+            _clear_provider_cooldown(self.name)
             data = resp.json()
             articles = data.get("articles", [])[:limit]
             return [{"title": a.get("title"), "source": (a.get("source") or {}).get("name") or "NewsAPI", "published": a.get("publishedAt"), "url": a.get("url"), "provider": "newsapi"} for a in articles if isinstance(a, dict)]
@@ -644,11 +688,16 @@ class EODHDNewsProvider(BaseNewsProvider):
     def is_configured(self) -> bool:
         return bool(EODHD_API_KEY)
     def fetch_headlines(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        if _provider_cooldown_active(self.name):
+            return []
         try:
             resp = requests.get("https://eodhd.com/api/news", params={"api_token": EODHD_API_KEY, "s": query.split()[0][:10], "limit": min(limit, 20), "fmt": "json"}, timeout=20)
             if resp.status_code != 200:
+                if resp.status_code in (402, 429):
+                    _set_provider_cooldown(self.name, resp.status_code)
                 logger.warning(f"EODHD news HTTP {resp.status_code}")
                 return []
+            _clear_provider_cooldown(self.name)
             data = resp.json()
             if isinstance(data, dict):
                 if data.get("error"):
