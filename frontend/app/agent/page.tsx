@@ -27,19 +27,26 @@ export default function AgentPage() {
   const [intel, setIntel] = useState<Record<string, unknown> | null>(null);
   const [watchlist, setWatchlist] = useState<string[]>(["BTC/USD", "ETH/USD", "SOL/USD", "XAU/USD", "UNI/USD"]);
   const [watchSaving, setWatchSaving] = useState(false);
+  const [actionStatus, setActionStatus] = useState<Record<string, unknown> | null>(null);
+  const [actions, setActions] = useState<Record<string, unknown>[]>([]);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!isVip) return;
     try {
-      const [st, v2, j, learn, latest] = await Promise.all([
+      const [st, v2, j, learn, latest, actionSt, actionList] = await Promise.all([
         api.getAgentStatus().catch(() => null),
         api.getAgentV2().catch(() => null),
         api.listAgentJobs().catch(() => ({ jobs: [] as AgentJob[] })),
         api.getAgentLearning().catch(() => ({ learning: [] as Record<string, unknown>[] })),
         api.getLatestMorningBrief().catch(() => ({ brief: null })),
+        api.getAgentActionStatus().catch(() => null),
+        api.listAgentActions().catch(() => ({ actions: [] as Record<string, unknown>[] })),
       ]);
       if (st) setStatus(st);
       if (v2) setV2(v2);
+      if (actionSt) setActionStatus(actionSt);
+      if (Array.isArray(actionList?.actions)) setActions(actionList.actions as Record<string, unknown>[]);
       try { const intelData = await api.getAgentIntelligence(); setIntel(intelData); } catch {}
       try {
         const pref = await api.getAgentPreferences();
@@ -215,6 +222,36 @@ export default function AgentPage() {
                 </button>
               ))}
             </div>
+          </section>
+
+          <section className="rounded-xl border border-cyan-500/20 bg-[#020914]/80 p-5 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/40">ACTION GATEWAY · CONTROLLED ACCESS</p>
+                <h2 className="mt-1 font-mono-tech text-sm tracking-[0.2em] text-cyan-200">DO MORE FOR ME</h2>
+              </div>
+              <button type="button" onClick={async () => { setActionLoading(true); try { const [s,a] = await Promise.all([api.getAgentActionStatus(), api.listAgentActions()]); setActionStatus(s); setActions((a.actions as Record<string, unknown>[]) || []); } catch {} finally { setActionLoading(false); } }} className="px-3 py-1.5 rounded-md border border-cyan-500/30 text-[10px] font-mono-tech text-cyan-200 disabled:opacity-40" disabled={actionLoading}>{actionLoading ? "SYNC…" : "SYNC"}</button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-lg border border-cyan-500/10 p-3"><div className="text-[9px] text-cyan-400/40">TRADING</div><div className="mt-1 text-xs font-mono-tech text-white">{String(((actionStatus?.trading as Record<string, unknown> | undefined)?.mode) || "PAPER").toUpperCase()}</div></div>
+              <div className="rounded-lg border border-cyan-500/10 p-3"><div className="text-[9px] text-cyan-400/40">WHATSAPP</div><div className="mt-1 text-xs font-mono-tech text-white">{(actionStatus?.whatsapp as Record<string, unknown> | undefined)?.configured ? "CONNECTED" : "NOT CONNECTED"}</div></div>
+            </div>
+            <p className="text-[10px] leading-relaxed text-cyan-200/60">Tell the Agent what you want in the box above. External actions are prepared first, then you approve them. Your existing five-market Signal Agent keeps working separately.</p>
+            <div className="space-y-2">
+              {actions.length === 0 ? <p className="text-[10px] text-cyan-400/40 font-mono-tech">No external actions yet.</p> : actions.slice(0, 8).map((action) => {
+                const id = String(action.id || "");
+                const payload = (action.payload || {}) as Record<string, unknown>;
+                const pending = String(action.status || "") === "awaiting_approval";
+                return <div key={id} className="rounded-lg border border-cyan-500/10 px-3 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-mono-tech text-white">{String(action.action_type || "action")}</div>
+                    <div className="text-[9px] font-mono-tech text-cyan-400/50 truncate">{String(payload.symbol || payload.to || "")} · {String(action.status || "")}</div>
+                  </div>
+                  {pending && <button type="button" onClick={async () => { try { await api.approveAgentAction(id); await refresh(); } catch (err: unknown) { setError(err instanceof Error ? err.message : "Action approval failed"); } }} className="shrink-0 px-3 py-1.5 rounded-md bg-cyan-400 text-black text-[9px] font-bold tracking-widest">APPROVE</button>}
+                </div>;
+              })}
+            </div>
+            <p className="text-[9px] font-mono-tech text-cyan-400/30">Live trading remains disabled by default. Paper mode is isolated; live mode requires explicit Railway configuration.</p>
           </section>
 
           <section className="rounded-xl border border-cyan-500/20 bg-[#020914]/80 p-5 space-y-3">
