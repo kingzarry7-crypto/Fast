@@ -174,9 +174,6 @@ try:
 except Exception as e:
     fiverr_agent = None
     logger.warning("Fiverr Agent import failed: %s", e)
-except Exception as e:
-    print(f"❌ BOOT: ai_engine import failed | {e}", flush=True)
-    raise
 
 try:
     from news_engine import news_engine
