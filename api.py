@@ -40,6 +40,11 @@ from database import (
     check_database_health,
 )
 
+try:
+    from neon_memory import NeonMemory
+except Exception:
+    NeonMemory = None
+
 # External Agent Action Gateway is additive: existing Signal/Intelligence/Chat flows remain unchanged.
 try:
     from agent_action_gateway import (
@@ -445,6 +450,12 @@ class WebMemoryAdapter:
     def __init__(self, web_user_id: str, conversation_id: Optional[str] = None):
         self.web_user_id = str(web_user_id)
         self.conversation_id = str(conversation_id) if conversation_id else None
+        self.shared = None
+        try:
+            if NeonMemory and os.getenv("DATABASE_URL"):
+                self.shared = NeonMemory()
+        except Exception as exc:
+            logger.warning("Shared Neon memory unavailable for web: %s", type(exc).__name__)
 
     def get_history(self, user_id: str, limit: int = 20) -> List[Dict[str, str]]:
         try:
@@ -549,6 +560,14 @@ class WebMemoryAdapter:
                     "UPDATE web_conversations SET updated_at = NOW() WHERE id = %s",
                     (conv_id,),
                 )
+            if self.shared:
+                try:
+                    self.shared.add_message(
+                        f"web:{self.web_user_id}", str(role), str(content),
+                        conversation_id=self.conversation_id, source_platform="web"
+                    )
+                except Exception as shared_exc:
+                    logger.warning("Shared web memory write failed: %s", type(shared_exc).__name__)
         except Exception as exc:
             logger.warning("WebMemoryAdapter.add_message failed: %s", type(exc).__name__)
 
@@ -576,6 +595,11 @@ class WebMemoryAdapter:
                     "INSERT INTO web_ai_memories (user_id, role, content, memory_type) VALUES (%s, 'user', %s, %s)",
                     (self.web_user_id, fact, memory_type),
                 )
+            if self.shared:
+                try:
+                    self.shared.add_fact(f"web:{self.web_user_id}", fact, memory_type, source)
+                except Exception as shared_exc:
+                    logger.warning("Shared web fact save failed: %s", type(shared_exc).__name__)
             return True
         except Exception as exc:
             logger.warning("WebMemoryAdapter.add_fact failed: %s", type(exc).__name__)
