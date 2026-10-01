@@ -275,7 +275,11 @@ export async function getMarketDetail(symbol: string, signal?: AbortSignal) {
   return request<Record<string, unknown>>(`/api/markets/${encodeURIComponent(symbol)}`, { method: "GET", signal });
 }
 export async function getSignals(signal?: AbortSignal) {
-  return request<{ signals?: MarketSnapshot[] }>("/api/signals", { method: "GET", signal });
+  return request<{
+    signals?: MarketSnapshot[];
+    actionable_count?: number;
+    status?: string;
+  }>("/api/signals", { method: "GET", signal });
 }
 export async function getNews(signal?: AbortSignal) {
   return request<{
