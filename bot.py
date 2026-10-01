@@ -3155,13 +3155,21 @@ def _fiverr_usage() -> str:
         "• <code>/fiverr status</code> — show Fiverr workspace status\n"
         "• <code>/fiverr skills</code> — show all skills\n"
         "• <code>/fiverr gig</code> — build a complete Gig draft\n"
+        "• <code>/fiverr optimize</code> — improve an existing Gig\n"
+        "• <code>/fiverr seo</code> — keyword/tag research\n"
         "• <code>/fiverr reply</code> — prepare a Buyer reply\n"
         "• <code>/fiverr offer</code> — prepare a Custom Offer\n"
         "• <code>/fiverr profile</code> — build profile copy\n"
-        "• <code>/fiverr order</code> — turn requirements into a delivery plan\n"
-        "• <code>/fiverr policy</code> — check a draft for common policy risks\n"
-        "• <code>/fiverr tasks</code> — show open Fiverr tasks\n"
-        "• <code>/fiverr approve ID</code> / <code>reject ID</code>\n\n"
+        "• <code>/fiverr order</code> — order intake + plan\n"
+        "• <code>/fiverr delivery</code> — delivery workflow\n"
+        "• <code>/fiverr portfolio</code> — portfolio case study\n"
+        "• <code>/fiverr pricing</code> — pricing options\n"
+        "• <code>/fiverr analytics</code> — analyze supplied metrics\n"
+        "• <code>/fiverr brief</code> — workspace brief\n"
+        "• <code>/fiverr policy</code> — policy check\n"
+        "• <code>/fiverr tasks</code> — workflow history\n"
+        "• <code>/fiverr approve ID</code> / <code>reject ID</code>\n"
+        "• <code>/fiverr pack TASK_ID</code> — manual execution pack\n\n"
         "After starting a task, I can ask questions here on Telegram and continue from your answers."
     )
 
@@ -3173,21 +3181,28 @@ async def fiverr_command(update, context):
     if fiverr_agent is None:
         await update.message.reply_text("❌ Fiverr Agent module is unavailable.")
         return
+
     args = list(getattr(context, "args", []) or [])
     sub = (args[0].lower() if args else "help")
     user_id = str(update.effective_user.id)
 
     if sub in {"help", "start"}:
-        await update.message.reply_text(_fiverr_usage(), parse_mode="HTML", disable_web_page_preview=True)
-        return
-    if sub == "status":
-        workspace = fiverr_agent.get_workspace(user_id)
         await update.message.reply_text(
-            fiverr_agent.workspace_text(workspace),
-            parse_mode="HTML",
-            disable_web_page_preview=True,
+            _fiverr_usage(), parse_mode="HTML", disable_web_page_preview=True
         )
         return
+
+    if sub == "status":
+        workspace = fiverr_agent.get_workspace(user_id)
+        missing = fiverr_agent.workspace_missing(workspace)
+        message = fiverr_agent.workspace_text(workspace)
+        if missing:
+            message += "\n\n🟡 <b>Still needed:</b> " + ", ".join(html.escape(x) for x in missing)
+        await update.message.reply_text(
+            message, parse_mode="HTML", disable_web_page_preview=True
+        )
+        return
+
     if sub == "setup":
         task = fiverr_agent.create_task(
             user_id,
@@ -3201,145 +3216,296 @@ async def fiverr_command(update, context):
             },
         )
         await update.message.reply_text(
-            "🧑‍💻 <b>FIVERR AGENT SETUP</b>\n\n"
-            "Send these details in your next message:\n"
-            "1. Your Fiverr profile URL or username\n"
-            "2. Your seller/display name\n"
-            "3. Your main service\n"
-            "4. Your target buyer\n"
-            "5. Your starting price/package range\n\n"
-            "Do not send your Fiverr password, 2FA code, recovery code, or session cookie.\n\n"
+            "🧑‍💻 <b>FIVERR AGENT — WORKSPACE SETUP</b>\n\n"
+            "Send these details in one message (you can also send them naturally):\n"
+            "1. Fiverr profile URL or username\n"
+            "2. Seller/display name\n"
+            "3. Main service\n"
+            "4. Target buyer\n"
+            "5. Starting price/package range\n\n"
+            "I will save the workspace and ask only for anything still missing.\n\n"
+            "🔐 Never send your Fiverr password, 2FA code, recovery code or session cookie.\n\n"
             f"Setup task: <code>{html.escape(task['id'][:8])}</code>",
             parse_mode="HTML",
             disable_web_page_preview=True,
         )
         return
+
     if sub == "skills":
         await update.message.reply_text(
             "🧑‍💻 <b>FIVERR AGENT SKILLS</b>\n\n" + fiverr_agent.skills_text(),
-            parse_mode="HTML", disable_web_page_preview=True)
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
         return
+
     if sub == "tasks":
-        tasks = fiverr_agent.list_tasks(user_id, 10)
+        tasks = fiverr_agent.list_tasks(user_id, 12)
         if not tasks:
             await update.message.reply_text("🧑‍💻 No Fiverr Agent tasks yet.")
             return
-        lines = ["🧑‍💻 <b>FIVERR TASKS</b>", ""]
+        lines = ["🧑‍💻 <b>FIVERR WORKFLOW</b>", ""]
         for t in tasks:
-            lines.append(f"• <code>{html.escape(t['id'][:8])}</code> — {html.escape(t['kind'])} — {html.escape(t['status'])} — {html.escape(t.get('title') or '')}")
-        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+            lines.append(
+                f"• <code>{html.escape(t['id'][:8])}</code> — "
+                f"{html.escape(t['kind'])} — {html.escape(t['status'])}"
+            )
+        await update.message.reply_text(
+            "\n".join(lines), parse_mode="HTML", disable_web_page_preview=True
+        )
         return
+
+    if sub == "pack":
+        if len(args) < 2:
+            await update.message.reply_text(
+                "Use <code>/fiverr pack TASK_ID</code> after approval.",
+                parse_mode="HTML",
+            )
+            return
+        task_id = args[1]
+        tasks = fiverr_agent.list_tasks(user_id, 50)
+        task = next((t for t in tasks if t["id"] == task_id or t["id"].startswith(task_id)), None)
+        if not task:
+            await update.message.reply_text("❌ Fiverr task not found.")
+            return
+        if task.get("status") not in {"approved_for_manual_execution", "awaiting_approval"}:
+            await update.message.reply_text(
+                "🟡 This task is not approved yet. Review the draft first."
+            )
+            return
+        await update.message.reply_text(
+            "<pre>" + html.escape(fiverr_agent.render_manual_execution_pack(task))[:11000] + "</pre>",
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+        return
+
     if sub in {"approve", "reject"}:
         if len(args) < 2:
-            await update.message.reply_text("Use <code>/fiverr approve APPROVAL_ID</code> or <code>/fiverr reject APPROVAL_ID</code>.", parse_mode="HTML")
+            await update.message.reply_text(
+                "Use <code>/fiverr approve APPROVAL_ID</code> or "
+                "<code>/fiverr reject APPROVAL_ID</code>.",
+                parse_mode="HTML",
+            )
             return
         result = fiverr_agent.decide_approval(args[1], user_id, sub == "approve")
         if not result:
             await update.message.reply_text("❌ Approval ID not found.")
             return
-        await update.message.reply_text(
-            "✅ Approval recorded. The prepared Fiverr work is approved for the next supported execution step."
-            if sub == "approve" else "🛑 Fiverr action rejected and recorded.")
+
+        task_id = str((result.get("payload") or {}).get("task_id") or "")
+        if sub == "approve":
+            if task_id:
+                task = fiverr_agent.update_task(
+                    task_id, user_id, status="approved_for_manual_execution",
+                    data={"approval_id": result["id"], "execution_mode": "manual"}
+                )
+            else:
+                task = None
+            await update.message.reply_text(
+                "✅ <b>FIVERR DRAFT APPROVED</b>\n\n"
+                "The Agent will not pretend to publish or send it. "
+                "Your approved manual execution pack is ready.\n\n"
+                + (f"Use <code>/fiverr pack {html.escape(task_id[:8])}</code>."
+                   if task_id else "No linked task was found."),
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+        else:
+            if task_id:
+                fiverr_agent.update_task(
+                    task_id, user_id, status="rejected",
+                    data={"approval_id": result["id"]}
+                )
+            await update.message.reply_text(
+                "🛑 Fiverr draft rejected and recorded. Send a new instruction when ready."
+            )
         return
 
     kind_map = {
         "gig": ("gig_creator", "Build a complete Fiverr Gig"),
+        "optimize": ("gig_optimizer", "Optimize an existing Fiverr Gig"),
         "reply": ("client_reply", "Prepare a Fiverr Buyer reply"),
         "offer": ("custom_offer", "Prepare a Fiverr Custom Offer"),
         "profile": ("profile_builder", "Build Fiverr profile copy"),
+        "seo": ("seo_research", "Research Fiverr keywords and tags"),
         "order": ("order_intake", "Plan a Fiverr order"),
+        "delivery": ("delivery_planner", "Build a Fiverr delivery plan"),
+        "portfolio": ("portfolio_builder", "Build a Fiverr portfolio case study"),
+        "pricing": ("pricing", "Prepare Fiverr pricing options"),
+        "analytics": ("analytics", "Analyze supplied Fiverr metrics"),
+        "brief": ("fiverr_brief", "Build a Fiverr workspace brief"),
         "policy": ("policy_guard", "Run a Fiverr policy check"),
     }
     if sub not in kind_map:
-        await update.message.reply_text(_fiverr_usage(), parse_mode="HTML", disable_web_page_preview=True)
+        await update.message.reply_text(
+            _fiverr_usage(), parse_mode="HTML", disable_web_page_preview=True
+        )
         return
+
     kind, title = kind_map[sub]
-    task = fiverr_agent.create_task(user_id, kind, title, {
-        "skill": kind, "step": "waiting_for_brief", "messages": []})
+    task = fiverr_agent.create_task(
+        user_id,
+        kind,
+        title,
+        {"skill": kind, "step": "waiting_for_brief", "messages": []},
+    )
     await update.message.reply_text(
         f"🧑‍💻 <b>FIVERR AGENT — {html.escape(kind.upper())}</b>\n\n"
-        "Task created. Send the details in your next Telegram message. "
-        "I will ask for anything missing and keep the task saved.\n\n"
+        "Tell me what you want done. You can give me a short brief or all the details.\n"
+        "I will keep the task saved, ask focused questions if needed, then prepare a "
+        "professional draft for your approval.\n\n"
         f"Task: <code>{html.escape(task['id'][:8])}</code>",
-        parse_mode="HTML")
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
+
 
 async def _fiverr_continue_task(update, context, text: str) -> bool:
     if fiverr_agent is None or not _fiverr_is_admin(update):
         return False
+
     user_id = str(update.effective_user.id)
     task = fiverr_agent.get_open_task(user_id)
     if not task or task.get("status") != "waiting_for_user":
         return False
+
     data = dict(task.get("data") or {})
     messages = list(data.get("messages") or [])
     messages.append({"role": "user", "content": text})
     data["messages"] = messages
     kind = str(task.get("kind") or "workflow")
     step = str(data.get("step") or "")
+
     if kind == "workspace_setup" and step == "setup_questions":
-        data["step"] = "connected"
         prompt = (
-            "Extract a Fiverr workspace profile from the user's message. "
-            "Return JSON only with keys: profile_url, username, seller_name, "
-            "main_service, target_buyer, starting_price. Use empty strings for missing values."
+            "Extract the Fiverr workspace details from this conversation. Return JSON only "
+            "with keys: profile_url, username, seller_name, main_service, target_buyer, "
+            "starting_price. Preserve known values and use empty strings for missing values.\n\n"
+            + fiverr_agent.task_context({"data": data})
         )
         try:
-            raw = await asyncio.to_thread(ai_engine.ask, user_id, prompt + "\n\nUser message:\n" + text, None)
-            match = re.search(r"\\{.*\\}", raw or "", flags=re.DOTALL)
+            raw = await asyncio.to_thread(
+                ai_engine.ask, user_id, prompt, None
+            )
+            match = re.search(r"\{.*\}", raw or "", flags=re.DOTALL)
             parsed = json.loads(match.group(0)) if match else {}
         except Exception:
             parsed = {}
+
         if not isinstance(parsed, dict):
             parsed = {}
+
         workspace = fiverr_agent.save_workspace(user_id, parsed)
+        missing = fiverr_agent.workspace_missing(workspace)
+        if missing:
+            data["workspace"] = workspace
+            data["step"] = "setup_questions"
+            fiverr_agent.update_task(
+                task["id"], user_id, status="waiting_for_user", data=data
+            )
+            await update.message.reply_text(
+                "🧑‍💻 <b>WORKSPACE ALMOST READY</b>\n\n"
+                "I saved what you gave me. I only need:\n"
+                + "\n".join(f"• {html.escape(item)}" for item in missing)
+                + "\n\nReply naturally with those details.",
+                parse_mode="HTML",
+            )
+            return True
+
+        data["workspace"] = workspace
+        data["step"] = "connected"
+        fiverr_agent.update_task(
+            task["id"], user_id, status="connected", data=data
+        )
         await update.message.reply_text(
-            fiverr_agent.workspace_text(workspace) +
-            "\n\n✅ Setup saved. Now use <code>/fiverr gig</code> and I will work from this context.",
+            fiverr_agent.workspace_text(workspace)
+            + "\n\n✅ <b>Workspace ready.</b> Use <code>/fiverr gig</code>, "
+              "<code>/fiverr optimize</code>, <code>/fiverr reply</code> or any other skill.",
             parse_mode="HTML",
             disable_web_page_preview=True,
         )
         return True
-    if step == "waiting_for_brief":
+
+    if step in {"waiting_for_brief", "needs_revision"}:
         data["step"] = "drafting"
         await update.message.chat.send_action("typing")
+        workspace = fiverr_agent.get_workspace(user_id)
         prompt = (
             f"{fiverr_agent.agent_system_instructions()}\n\n"
-            f"Skill: {kind}\nUser's request/details:\n{text}\n\n"
-            "If essential information is missing, ask no more than 3 concise questions. "
-            "Otherwise produce a complete draft. For gig_creator include title, category, "
-            "tags, packages, description, FAQs, requirements and gallery checklist. "
-            "Do not claim access to Fiverr account data."
+            f"SAVED FIVERR WORKSPACE:\n{json.dumps(workspace, ensure_ascii=False)}\n\n"
+            f"SKILL: {kind}\n\n"
+            "CONVERSATION SO FAR:\n" + fiverr_agent.task_context({"data": data}) + "\n\n"
+            "TASK:\n"
+            "First decide whether essential information is missing. If it is missing, "
+            "ask only the smallest number of focused questions (maximum 3) and do not "
+            "produce an approval-ready draft. If enough information exists, produce the "
+            "complete professional draft. For gig_creator include title, category, tags, "
+            "packages, delivery, revisions, description, FAQs, requirements and gallery "
+            "checklist. For other skills use the fields appropriate to that skill.\n"
+            "Never claim you accessed Fiverr."
         )
         try:
             answer = await asyncio.to_thread(ai_engine.ask, user_id, prompt, None)
         except Exception as exc:
             logger.warning("Fiverr Agent AI drafting failed: %s", exc)
-            answer = "I need more information. Tell me the exact service, target buyer, deliverables, turnaround time and starting price."
+            answer = (
+                "I need a few details before I can prepare this: "
+                "what exactly are you selling, who is the target buyer, and what price/"
+                "delivery range should I use?"
+            )
+
+        data["last_response"] = answer
+        if fiverr_agent.is_missing_information_response(answer):
+            data["step"] = "waiting_for_brief"
+            fiverr_agent.update_task(
+                task["id"], user_id, status="waiting_for_user", data=data
+            )
+            await update.message.reply_text(
+                "🧑‍💻 <b>FIVERR AGENT — MORE INFO NEEDED</b>\n\n"
+                + html.escape(answer[:5000]),
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+            return True
+
         data["draft"] = answer
         check = fiverr_agent.policy_check(answer)
         data["policy_check"] = check
         if check["ok"]:
             data["step"] = "awaiting_approval"
-            task = fiverr_agent.update_task(task["id"], user_id, status="awaiting_approval", data=data)
-            approval = fiverr_agent.create_approval(user_id, f"prepare_{kind}", {"task_id": task["id"], "draft": answer})
+            task = fiverr_agent.update_task(
+                task["id"], user_id, status="awaiting_approval", data=data
+            )
+            approval = fiverr_agent.create_approval(
+                user_id,
+                f"prepare_{kind}",
+                {"task_id": task["id"], "draft": answer, "policy": check},
+            )
             await update.message.reply_text(
-                "🧑‍💻 <b>FIVERR AGENT DRAFT READY</b>\n\n" + html.escape(answer[:6500]) +
-                f"\n\nApproval: <code>{html.escape(approval['id'])}</code>\n"
-                f"Use <code>/fiverr approve {html.escape(approval['id'])}</code> to approve the prepared work.",
-                parse_mode="HTML", disable_web_page_preview=True)
+                "🧑‍💻 <b>FIVERR AGENT — DRAFT READY FOR APPROVAL</b>\n\n"
+                + html.escape(answer[:6500])
+                + "\n\n🛡 <b>Policy check:</b> "
+                + html.escape(check["message"])
+                + f"\n\nApproval: <code>{html.escape(approval['id'])}</code>\n"
+                f"Approve with <code>/fiverr approve {html.escape(approval['id'])}</code>",
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
         else:
             data["step"] = "needs_revision"
-            fiverr_agent.update_task(task["id"], user_id, status="waiting_for_user", data=data)
+            fiverr_agent.update_task(
+                task["id"], user_id, status="waiting_for_user", data=data
+            )
             await update.message.reply_text(
-                "⚠️ <b>POLICY REVIEW FLAGGED THE DRAFT</b>\n\n" +
-                html.escape(check["message"]) +
-                "\n\nSend your revision instruction and I'll rebuild it.",
-                parse_mode="HTML")
+                "⚠️ <b>POLICY REVIEW NEEDS REVISION</b>\n\n"
+                + html.escape(check["message"])
+                + "\n\nSend your revision instruction and I will rebuild the draft.",
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
         return True
-    if step == "needs_revision":
-        data["step"] = "waiting_for_brief"
-        fiverr_agent.update_task(task["id"], user_id, status="waiting_for_user", data=data)
-        return await _fiverr_continue_task(update, context, text)
+
     return False
 
 async def events_command(update, context):
