@@ -3167,7 +3167,8 @@ def _fiverr_usage() -> str:
         "• <code>/fiverr analytics</code> — analyze supplied metrics\n"
         "• <code>/fiverr brief</code> — workspace brief\n"
         "• <code>/fiverr policy</code> — policy check\n"
-        "• <code>/fiverr tasks</code> — workflow history\n"
+        "• <code>/fiverr tasks</code> — workflow history\n        "• <code>/fiverr inbox</code> — synced Fiverr inbox events\n"
+        "• <code>/fiverr read ID</code> — mark an inbox item read\n"
         "• <code>/fiverr approve ID</code> / <code>reject ID</code>\n"
         "• <code>/fiverr pack TASK_ID</code> — manual execution pack\n\n"
         "After starting a task, I can ask questions here on Telegram and continue from your answers."
@@ -3252,6 +3253,49 @@ async def fiverr_command(update, context):
             )
         await update.message.reply_text(
             "\n".join(lines), parse_mode="HTML", disable_web_page_preview=True
+        )
+        return
+
+    if sub == "inbox":
+        items = fiverr_agent.list_inbox(user_id, 20)
+        if not items:
+            await update.message.reply_text(
+                "📥 <b>FIVERR INBOX</b>\n\nNo synced Fiverr messages yet. "
+                "The inbox becomes live when an official/supported integration sends events to the Agent.",
+                parse_mode="HTML", disable_web_page_preview=True
+            )
+            return
+        lines = ["📥 <b>FIVERR INBOX</b>", ""]
+        for item in items:
+            status = "🟡" if item.get("status") == "unread" else "⚪"
+            sender = item.get("sender_name") or item.get("sender_username") or "Buyer"
+            preview = str(item.get("message") or "").replace("\n", " ")[:180]
+            lines.append(
+                f"{status} <code>{html.escape(str(item['id'])[:8])}</code> "
+                f"<b>{html.escape(str(sender)[:60])}</b> — {html.escape(preview)}"
+            )
+        lines.append("\nUse <code>/fiverr read ID</code> after reviewing an item.")
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML", disable_web_page_preview=True)
+        return
+
+    if sub == "read":
+        if len(args) < 2:
+            await update.message.reply_text("Use <code>/fiverr read ID</code>.", parse_mode="HTML")
+            return
+        items = fiverr_agent.list_inbox(user_id, 50)
+        item = next((x for x in items if x["id"] == args[1] or x["id"].startswith(args[1])), None)
+        if not item:
+            await update.message.reply_text("❌ Fiverr inbox item not found.")
+            return
+        fiverr_agent.mark_inbox_read(item["id"], user_id)
+        sender = item.get("sender_name") or item.get("sender_username") or "Buyer"
+        await update.message.reply_text(
+            "📥 <b>FIVERR MESSAGE</b>\n\n"
+            f"From: <b>{html.escape(str(sender))}</b>\n"
+            f"{html.escape(str(item.get('message') or ''))}\n\n"
+            "Use <code>/fiverr reply</code> to prepare a response, then paste the buyer's "
+            "message/context when asked.",
+            parse_mode="HTML", disable_web_page_preview=True
         )
         return
 
