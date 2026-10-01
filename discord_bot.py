@@ -73,9 +73,9 @@ logger = logging.getLogger("king_zarry_discord")
 
 # STT Engine - shared with Telegram (after logger)
 try:
-    import stt_engine
+    import stt_engine_openrouter as stt_engine
     try:
-        logger.info(f"🎙️ STT Engine loaded: {stt_engine.provider_status()}")
+        logger.info(f"🎙️ STT Engine loaded: {stt_engine.provider_status()} | source={stt_engine.__file__}")
     except Exception:
         pass
 except Exception as e:
