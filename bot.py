@@ -2169,6 +2169,32 @@ def _agent_signal_is_late(analysis: dict) -> bool:
     return eq in ("LATE", "RISKY")
 
 
+def _agent_v2_verify_and_track(symbol: str, analysis: dict):
+    """Run Agent V2 verification and persist an accepted signal."""
+    try:
+        from agent_v2 import verify_setup, register_signal
+        verification = verify_setup(analysis)
+        analysis["agent_v2"] = verification
+        if verification.get("decision") != "SIGNAL":
+            return verification, None
+        signal_id = register_signal(symbol, analysis, verification)
+        return verification, signal_id
+    except Exception as e:
+        logger.warning("agent_v2 verification unavailable for %s: %s", symbol, e)
+        return {"decision": "SIGNAL", "score": None, "reasons": ["v2 unavailable"]}, None
+
+
+def _agent_v2_update_lifecycle(symbol: str, analysis: dict):
+    """Update existing V2 signals from the latest observed market price."""
+    try:
+        from agent_v2 import update_signal_lifecycle
+        price = analysis.get("price") or analysis.get("current_price")
+        return update_signal_lifecycle(symbol, price, analysis)
+    except Exception as e:
+        logger.debug("agent_v2 lifecycle update %s failed: %s", symbol, e)
+        return []
+
+
 def _agent_signal_fingerprint(symbol: str, analysis: dict) -> str:
     sig = str(analysis.get("signal") or "").upper()
     entry = str(analysis.get("entry") or analysis.get("price") or "")
@@ -2267,6 +2293,10 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
         sig = str(analysis.get("signal") or "WAIT").upper()
         price = analysis.get("price")
         late = _agent_signal_is_late(analysis)
+
+        lifecycle_events = _agent_v2_update_lifecycle(symbol, analysis)
+        if lifecycle_events:
+            logger.info("agent_v2 lifecycle %s: %s", symbol, ", ".join(str(e.get("event")) for e in lifecycle_events))
         scan_summary.append(
             f"{symbol}={sig}"
             + (f"@{price}" if price is not None else "")
@@ -2302,6 +2332,28 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
         if not _agent_signal_is_actionable(analysis):
             n_lowconf += 1
             continue
+
+        verification, signal_id = _agent_v2_verify_and_track(symbol, analysis)
+        if verification.get("decision") != "SIGNAL":
+            n_lowconf += 1
+            scan_summary.append(f"{symbol}=V2_WAIT(score={verification.get('score')})")
+            try:
+                from agent_core import tool_learn
+                tool_learn(
+                    user_id="telegram_agent",
+                    symbol=symbol,
+                    signal=sig,
+                    confidence=str(analysis.get("confidence") or ""),
+                    notes="agent_v2_verification_wait: " + "; ".join(verification.get("reasons") or [])[:500],
+                    outcome="v2_verification_wait",
+                    meta={"score": verification.get("score"), "threshold": verification.get("threshold")},
+                )
+            except Exception:
+                pass
+            continue
+
+        if signal_id:
+            analysis["signal_id"] = signal_id
 
         fp = _agent_signal_fingerprint(symbol, analysis)
         if last_map.get(symbol) == fp:
@@ -2385,8 +2437,14 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
             f"TP2: {html.escape(str(a.get('tp2') or '—'))}\n"
             f"  Conf: {html.escape(str(a.get('confidence') or '—'))} | "
             f"Trend: {html.escape(str(a.get('trend') or '—'))}"
+            + (f"\\n  Agent ID: <code>{html.escape(str(a.get('signal_id')))}</code>" if a.get("signal_id") else "")
+            + (f"\\n  V2 score: <b>{html.escape(str((a.get('agent_v2') or {}).get('score')))}</b>" if (a.get('agent_v2') or {}).get('score') is not None else "")
         )
         reasons = a.get("reasons") or []
+        if isinstance(a.get("agent_v2"), dict):
+            v2_reasons = a["agent_v2"].get("reasons") or []
+            if v2_reasons:
+                lines.append(f"  V2 check: {html.escape(str(v2_reasons[0])[:120])}")
         if isinstance(reasons, list) and reasons:
             lines.append(f"  Note: {html.escape(str(reasons[0])[:120])}")
         lines.append("")
