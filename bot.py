@@ -2307,13 +2307,17 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
         if lifecycle_events:
             logger.info("agent_v2 lifecycle %s: %s", symbol, ", ".join(str(e.get("event")) for e in lifecycle_events))
             try:
-                from agent_v2 import get_agent_preferences
+                from agent_v2 import get_agent_preferences, preferences_allow_now
                 for event in lifecycle_events:
                     for uid in get_all_users():
                         if not (is_subscribed(uid) or uid in ADMIN_IDS):
                             continue
                         prefs = get_agent_preferences(str(uid))
-                        if not prefs.get("lifecycle_alerts", True):
+                        if not preferences_allow_now(
+                            prefs,
+                            symbol=str(event.get("symbol") or ""),
+                            lifecycle=True,
+                        ):
                             continue
                         event_text = (
                             "🤖 <b>KING ZARRY AGENT</b>\n\n"
@@ -2555,7 +2559,7 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
                 from agent_v2 import get_agent_preferences, preferences_allow_now
                 prefs = get_agent_preferences(str(uid))
             except Exception:
-                prefs = {"watch_symbols": ["BTC/USD", "ETH/USD", "XAU/USD"], "signal_alerts": True}
+                prefs = {"watch_symbols": ["BTC/USD", "ETH/USD", "SOL/USD", "XAU/USD", "UNI/USD"], "signal_alerts": True}
             user_actionable = [
                 a for a in actionable
                 if preferences_allow_now(prefs, symbol=str(a.get("symbol") or ""), lifecycle=False)
@@ -3632,7 +3636,7 @@ def main():
                     text = chr(10).join([
                         "🤖 <b>KING ZARRY AGENT ONLINE</b>",
                         "",
-                        "Auto-watching: BTC · ETH · SOL · XAU",
+                        "Auto-watching: BTC · ETH · SOL · XAU · UNI",
                         f"Scan every <b>{AGENT_SIGNAL_INTERVAL_SEC}s</b>",
                         f"Audience: <b>{html.escape(str(AGENT_SIGNAL_AUDIENCE))}</b>",
                         "",
