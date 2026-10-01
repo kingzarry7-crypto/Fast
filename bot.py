@@ -2554,12 +2554,12 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
                     sig_icon = "🟢" if sig == "BUY" else "🔴" if sig == "SELL" else "⏳"
                     tf15 = mtf_data.get("15m") or {}
                     caption = (
-                        f"👑 KING ZARRY AI\\n"
-                        f"{sig_icon} {sig} • {sym} • 15M • MTF {mtf_data.get('mtf_bias','')}\\n"
-                        f"Entry: {float(tf15.get('entry_zone_low', 0)):,.2f} - {float(tf15.get('entry_zone_high', 0)):,.2f}\\n"
-                        f"SL: {float(tf15.get('stop_loss', 0)):,.2f}\\n"
-                        f"TP1: {float(tf15.get('tp1', 0)):,.2f}\\n"
-                        f"TP2: {float(tf15.get('tp2', 0)):,.2f}\\n"
+                        f"👑 KING ZARRY AI\n"
+                        f"{sig_icon} {sig} • {sym} • 15M • MTF {mtf_data.get('mtf_bias','')}\n"
+                        f"Entry: {float(tf15.get('entry_zone_low', 0)):,.2f} - {float(tf15.get('entry_zone_high', 0)):,.2f}\n"
+                        f"SL: {float(tf15.get('stop_loss', 0)):,.2f}\n"
+                        f"TP1: {float(tf15.get('tp1', 0)):,.2f}\n"
+                        f"TP2: {float(tf15.get('tp2', 0)):,.2f}\n"
                         f"TP3: {float(tf15.get('tp3', 0)):,.2f}"
                     )
                     await context.bot.send_photo(
