@@ -161,6 +161,23 @@ def _operation_skill(path: str, method: str, op: Dict[str, Any]) -> str:
     return "api_data" if method.lower() in ("get", "head") else "api_action"
 
 
+def _security_schemes(spec: Dict[str, Any]) -> List[Dict[str, Any]]:
+    schemes = (spec.get("components") or {}).get("securitySchemes") or spec.get("securityDefinitions") or {}
+    out = []
+    if isinstance(schemes, dict):
+        for name, item in schemes.items():
+            item = _resolve_ref(spec, item)
+            if isinstance(item, dict):
+                out.append({
+                    "name": str(name),
+                    "type": item.get("type"),
+                    "scheme": item.get("scheme"),
+                    "in": item.get("in"),
+                    "parameter": item.get("name"),
+                })
+    return out[:10]
+
+
 def _operations(spec: Dict[str, Any]) -> List[Dict[str, Any]]:
     paths = spec.get("paths") or {}
     out = []
@@ -240,6 +257,7 @@ def discover_one(cfg: Dict[str, str], force: bool = False) -> Dict[str, Any]:
         ),
         "openapi_found": True,
         "openapi_version": spec.get("openapi") or spec.get("swagger"),
+        "security_schemes": _security_schemes(spec),
     }
     _cache[cache_key] = result
     return result
@@ -333,12 +351,31 @@ def execute_read_tool(tool_name: str, parameters: Optional[Dict[str, Any]] = Non
             key_env = p.get("env")
             secret = _env(key_env) if key_env else ""
             headers = {"Accept": "application/json"}
-            # Generic APIs commonly use Bearer authentication. OpenAPI-specific
-            # security placement is intentionally not guessed for execution.
-            if secret:
+            query_params = dict(parameters)
+            # Follow the documented OpenAPI security placement when available.
+            schemes = p.get("security_schemes") or []
+            applied = False
+            if secret and schemes:
+                scheme = schemes[0]
+                stype = str(scheme.get("type") or "").lower()
+                location = str(scheme.get("in") or "").lower()
+                param_name = str(scheme.get("parameter") or "")
+                http_scheme = str(scheme.get("scheme") or "").lower()
+                if stype == "apikey" and param_name:
+                    if location == "query":
+                        query_params[param_name] = secret
+                    elif location == "header":
+                        headers[param_name] = secret
+                    applied = True
+                elif stype == "http" and http_scheme == "bearer":
+                    headers["Authorization"] = f"Bearer {secret}"
+                    applied = True
+            # For OpenAPI documents without a security declaration, use the
+            # conventional Bearer header as a compatibility fallback.
+            if secret and not applied:
                 headers["Authorization"] = f"Bearer {secret}"
             try:
-                resp = requests.get(url, headers=headers, params=parameters, timeout=_TIMEOUT)
+                resp = requests.get(url, headers=headers, params=query_params, timeout=_TIMEOUT)
                 body = resp.json() if "json" in (resp.headers.get("content-type") or "").lower() else resp.text[:12000]
                 return {"success": resp.status_code < 400, "status_code": resp.status_code, "data": body, "tool": tool_name}
             except Exception as exc:
