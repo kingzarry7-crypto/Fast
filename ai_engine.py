@@ -9,6 +9,11 @@ import time
 from typing import Optional, Tuple, List, Dict, Any
 import requests
 
+try:
+    import provider_registry
+except Exception:
+    provider_registry = None
+
 logger = logging.getLogger("ai_engine")
 
 def clean_env_str(v, default=""):
@@ -2159,6 +2164,16 @@ class AIEngine:
 
         history = self._load_memory_history(user_id, limit=20 if casual else 15)
         persistent_ctx = self._load_persistent_context(user_id)
+
+        # --- Owner/Admin identity context ---
+        # This is derived from configured admin IDs; no secret credentials are sent to the model.
+        try:
+            if provider_registry is not None:
+                persistent_ctx = (
+                    persistent_ctx + "\n\n" + provider_registry.owner_context(user_id)
+                ).strip()
+        except Exception as e:
+            logger.debug("Owner context injection skipped: %s", e)
 
         # --- Tavily ---
         tavily_context = ""
