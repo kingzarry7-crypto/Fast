@@ -271,6 +271,20 @@ export async function chat(
   return request<ChatResponse>("/api/chat", { method: "POST", body, signal: options?.signal });
 }
 
+// Backward-compatible chat method used by the existing useChat hook.
+export async function sendChatMessage(
+  message: string,
+  image?: { base64: string; mime?: string },
+  signal?: AbortSignal,
+  conversationId?: string
+): Promise<ChatResponse> {
+  return chat(message, {
+    image,
+    signal,
+    conversationId,
+  });
+}
+
 export async function healthCheck() {
   return request<{ status?: string }>("/health", { method: "GET" });
 }
@@ -393,7 +407,7 @@ export async function approveAgentAction(actionId: string, signal?: AbortSignal)
 
 export const api = {
   getBaseUrl, getMe, getCurrentUser, login, register, verifyEmail, resendVerification, forgotPassword, resetPassword, logout,
-  listConversations, createConversation, getConversation, getConversationMessages, chat, healthCheck, createCheckoutSession, getBillingConfig,
+  listConversations, createConversation, getConversation, getConversationMessages, chat, sendChatMessage, healthCheck, createCheckoutSession, getBillingConfig,
   getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, ttsSpeak,
   getMarkets, getMarketDetail, getSignals, getNews,
   getAgentStatus, runAgentGoal, generateMorningBrief, getLatestMorningBrief, listAgentJobs, approveAgentJob,
