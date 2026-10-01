@@ -3232,14 +3232,34 @@ async def fiverr_command(update, context):
         return
 
     if sub == "status":
-        workspace = fiverr_agent.get_workspace(user_id)
-        missing = fiverr_agent.workspace_missing(workspace)
-        message = fiverr_agent.workspace_text(workspace)
-        if missing:
-            message += "\n\n🟡 <b>Still needed:</b> " + ", ".join(html.escape(x) for x in missing)
-        await update.message.reply_text(
-            message, parse_mode="HTML", disable_web_page_preview=True
-        )
+        # Respond immediately so a Fiverr SQLite problem cannot make the command
+        # appear completely dead to the user.
+        status_msg = None
+        try:
+            status_msg = await update.message.reply_text("🧑‍💻 Checking Fiverr Agent workspace…")
+            workspace = fiverr_agent.get_workspace(user_id)
+            missing = fiverr_agent.workspace_missing(workspace)
+            message = fiverr_agent.workspace_text(workspace)
+            if missing:
+                message += "\n\n🟡 <b>Still needed:</b> " + ", ".join(html.escape(x) for x in missing)
+            if status_msg:
+                try:
+                    await status_msg.edit_text(
+                        message, parse_mode="HTML", disable_web_page_preview=True
+                    )
+                except Exception:
+                    await update.message.reply_text(
+                        message, parse_mode="HTML", disable_web_page_preview=True
+                    )
+        except Exception as e:
+            logger.exception("Fiverr status command failed: %s", e)
+            await update.message.reply_text(
+                "❌ <b>Fiverr Agent status failed.</b>\n\n"
+                f"Error: <code>{html.escape(type(e).__name__)}</code> — "
+                f"{html.escape(str(e)[:300])}",
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
         return
 
     if sub == "setup":
@@ -3426,12 +3446,31 @@ async def fiverr_command(update, context):
         return
 
     kind, title = kind_map[sub]
-    task = fiverr_agent.create_task(
-        user_id,
-        kind,
-        title,
-        {"skill": kind, "step": "waiting_for_brief", "messages": []},
+    # Acknowledge immediately; task persistence happens after the command is known
+    # to be received, so SQLite/DB errors are visible instead of silent.
+    await update.message.reply_text(
+        f"🧑‍💻 <b>FIVERR AGENT — {html.escape(kind.upper())}</b>\n\n"
+        "Starting your Fiverr task…",
+        parse_mode="HTML",
+        disable_web_page_preview=True,
     )
+    try:
+        task = fiverr_agent.create_task(
+            user_id,
+            kind,
+            title,
+            {"skill": kind, "step": "waiting_for_brief", "messages": []},
+        )
+    except Exception as e:
+        logger.exception("Fiverr task creation failed | kind=%s user=%s: %s", kind, user_id, e)
+        await update.message.reply_text(
+            "❌ <b>Fiverr task could not be saved.</b>\n\n"
+            f"Error: <code>{html.escape(type(e).__name__)}</code> — "
+            f"{html.escape(str(e)[:300])}",
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+        return
     await update.message.reply_text(
         f"🧑‍💻 <b>FIVERR AGENT — {html.escape(kind.upper())}</b>\n\n"
         "Tell me what you want done. You can give me a short brief or all the details.\n"
