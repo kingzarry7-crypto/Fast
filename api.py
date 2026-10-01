@@ -1540,50 +1540,62 @@ STRIPE_WEBHOOK_SECRET = (os.getenv("STRIPE_WEBHOOK_SECRET") or "").strip()
 # Paystack (preferred for NG / web VIP when set)
 PAYSTACK_SECRET_KEY = (os.getenv("PAYSTACK_SECRET_KEY") or "").strip()
 PAYSTACK_PUBLIC_KEY = (os.getenv("PAYSTACK_PUBLIC_KEY") or "").strip()
-# Amounts: if PAYSTACK_SECRET_KEY set, plan amounts are KOBO (NGN*100). Else Stripe cents (USD).
-def _parse_admin_emails() -> set:
-    """Build admin email set from ADMIN_EMAILS + ADMIN_EMAIL (strip spaces/quotes)."""
-    raw = ",".join(
-        [
-            os.getenv("ADMIN_EMAILS") or "",
-            os.getenv("ADMIN_EMAIL") or "",
-        ]
-    )
-    out = set()
-    for part in raw.split(","):
-        e = part.strip().strip(chr(34)+chr(39)).lower()
-        if e and "@" in e:
-            out.add(e)
-    return out
-
-
-ADMIN_EMAILS = _parse_admin_emails()
-# Optional second factor for /admin ONLY (NOT your website login password unless you choose that)
-ADMIN_PASSWORD = (os.getenv("ADMIN_PASSWORD") or "").strip().strip(chr(34) + chr(39))
-ADMIN_SESSION_COOKIE = "kz_admin_session"
-ADMIN_SESSION_DAYS = 7
-
-# Plan amounts: Paystack = KOBO (default NGN); Stripe = USD cents if no Paystack
-def _plan_amount(env_paystack: str, env_stripe: str, default_kobo: int, default_cents: int) -> int:
-    if (os.getenv("PAYSTACK_SECRET_KEY") or "").strip():
-        return int(os.getenv(env_paystack) or os.getenv(env_stripe) or default_kobo)
-    return int(os.getenv(env_stripe) or default_cents)
-
-# Defaults: ₦15,000 / ₦40,000 / ₦150,000 (kobo) OR $9.99 / $24.99 / $79.99 (cents)
-_AMOUNT_MONTHLY = _plan_amount("PAYSTACK_AMOUNT_MONTHLY", "STRIPE_AMOUNT_MONTHLY", 1500000, 999)
-_AMOUNT_QUARTERLY = _plan_amount("PAYSTACK_AMOUNT_QUARTERLY", "STRIPE_AMOUNT_QUARTERLY", 4000000, 2499)
-_AMOUNT_YEARLY = _plan_amount("PAYSTACK_AMOUNT_YEARLY", "STRIPE_AMOUNT_YEARLY", 15000000, 7999)
-STRIPE_AMOUNT_MONTHLY = _AMOUNT_MONTHLY
-STRIPE_AMOUNT_QUARTERLY = _AMOUNT_QUARTERLY
-STRIPE_AMOUNT_YEARLY = _AMOUNT_YEARLY
+# Multi-provider amounts (all can be live at once)
+# Paystack = NGN kobo · Stripe = USD cents · Stars = Telegram XTR
+PAYSTACK_AMOUNT_MONTHLY = int(os.getenv("PAYSTACK_AMOUNT_MONTHLY") or "1500000")
+PAYSTACK_AMOUNT_QUARTERLY = int(os.getenv("PAYSTACK_AMOUNT_QUARTERLY") or "4000000")
+PAYSTACK_AMOUNT_YEARLY = int(os.getenv("PAYSTACK_AMOUNT_YEARLY") or "15000000")
+STRIPE_AMOUNT_MONTHLY = int(os.getenv("STRIPE_AMOUNT_MONTHLY") or "999")
+STRIPE_AMOUNT_QUARTERLY = int(os.getenv("STRIPE_AMOUNT_QUARTERLY") or "2499")
+STRIPE_AMOUNT_YEARLY = int(os.getenv("STRIPE_AMOUNT_YEARLY") or "7999")
+STARS_MONTHLY = int(os.getenv("MONTHLY_STARS") or os.getenv("STARS_MONTHLY") or "150")
+STARS_QUARTERLY = int(os.getenv("THREE_MONTH_STARS") or os.getenv("STARS_QUARTERLY") or "500")
+STARS_YEARLY = int(os.getenv("YEARLY_STARS") or os.getenv("STARS_YEARLY") or "2500")
+TELEGRAM_BOT_USERNAME = (os.getenv("TELEGRAM_BOT_USERNAME") or "KingZarryAI_bot").strip().lstrip("@")
 
 WEB_PLAN_CATALOG = {
-    "monthly": {"name": "Monthly VIP", "days": 30, "amount": _AMOUNT_MONTHLY},
-    "quarterly": {"name": "90-Day VIP", "days": 90, "amount": _AMOUNT_QUARTERLY},
-    "3month": {"name": "90-Day VIP", "days": 90, "amount": _AMOUNT_QUARTERLY},
-    "yearly": {"name": "Yearly VIP", "days": 365, "amount": _AMOUNT_YEARLY},
+    "monthly": {
+        "name": "Monthly VIP",
+        "days": 30,
+        "amount_paystack": PAYSTACK_AMOUNT_MONTHLY,
+        "amount_stripe": STRIPE_AMOUNT_MONTHLY,
+        "stars": STARS_MONTHLY,
+        "amount": PAYSTACK_AMOUNT_MONTHLY if PAYSTACK_SECRET_KEY else STRIPE_AMOUNT_MONTHLY,
+    },
+    "quarterly": {
+        "name": "90-Day VIP",
+        "days": 90,
+        "amount_paystack": PAYSTACK_AMOUNT_QUARTERLY,
+        "amount_stripe": STRIPE_AMOUNT_QUARTERLY,
+        "stars": STARS_QUARTERLY,
+        "amount": PAYSTACK_AMOUNT_QUARTERLY if PAYSTACK_SECRET_KEY else STRIPE_AMOUNT_QUARTERLY,
+    },
+    "3month": {
+        "name": "90-Day VIP",
+        "days": 90,
+        "amount_paystack": PAYSTACK_AMOUNT_QUARTERLY,
+        "amount_stripe": STRIPE_AMOUNT_QUARTERLY,
+        "stars": STARS_QUARTERLY,
+        "amount": PAYSTACK_AMOUNT_QUARTERLY if PAYSTACK_SECRET_KEY else STRIPE_AMOUNT_QUARTERLY,
+    },
+    "yearly": {
+        "name": "Yearly VIP",
+        "days": 365,
+        "amount_paystack": PAYSTACK_AMOUNT_YEARLY,
+        "amount_stripe": STRIPE_AMOUNT_YEARLY,
+        "stars": STARS_YEARLY,
+        "amount": PAYSTACK_AMOUNT_YEARLY if PAYSTACK_SECRET_KEY else STRIPE_AMOUNT_YEARLY,
+    },
 }
-BILLING_PROVIDER = "paystack" if PAYSTACK_SECRET_KEY else ("stripe" if STRIPE_SECRET_KEY else "none")
+BILLING_METHODS = []
+if PAYSTACK_SECRET_KEY:
+    BILLING_METHODS.append("paystack")
+if STRIPE_SECRET_KEY:
+    BILLING_METHODS.append("stripe")
+BILLING_METHODS.append("stars")
+BILLING_PROVIDER = "multi" if len([m for m in BILLING_METHODS if m != "stars"]) > 1 else (
+    BILLING_METHODS[0] if BILLING_METHODS else "none"
+)
 BILLING_CURRENCY = "NGN" if PAYSTACK_SECRET_KEY else "USD"
 
 
@@ -1816,16 +1828,12 @@ def _require_admin(request: Request):
 
 class CheckoutRequest(BaseModel):
     plan: str = Field(..., min_length=2, max_length=32)
+    provider: Optional[str] = Field(default=None, max_length=16)
 
 
 @app.post("/api/billing/create-checkout-session")
 async def create_checkout_session(payload: CheckoutRequest, request: Request):
-    """Start web VIP payment. Prefers Paystack when PAYSTACK_SECRET_KEY is set; else Stripe."""
-    if not PAYSTACK_SECRET_KEY and not STRIPE_SECRET_KEY:
-        raise HTTPException(
-            status_code=503,
-            detail="Billing not configured. Set PAYSTACK_SECRET_KEY (or STRIPE_SECRET_KEY) on Railway.",
-        )
+    """Pay with Paystack, Stripe, or Telegram Stars (deep link)."""
     user_row = await asyncio.to_thread(_require_current_user, request)
     user_id = str(_row_value(user_row, "id", 0))
     email = str(_row_value(user_row, "email", 1) or "")
@@ -1833,12 +1841,47 @@ async def create_checkout_session(payload: CheckoutRequest, request: Request):
     if plan_key not in WEB_PLAN_CATALOG:
         raise HTTPException(status_code=400, detail="Invalid plan")
     plan = WEB_PLAN_CATALOG[plan_key]
+    provider = (payload.provider or "").strip().lower() or None
+    if provider not in (None, "paystack", "stripe", "stars"):
+        raise HTTPException(status_code=400, detail="provider must be paystack, stripe, or stars")
+
+    if provider == "stars":
+        stars_amt = int(plan.get("stars") or 0)
+        start_param = "3month" if plan_key in ("quarterly", "3month") else plan_key
+        if start_param not in ("monthly", "3month", "yearly"):
+            start_param = "buy"
+        bot = TELEGRAM_BOT_USERNAME or "KingZarryAI_bot"
+        return {
+            "status": "success",
+            "provider": "stars",
+            "url": f"https://t.me/{bot}?start={start_param}",
+            "stars": stars_amt,
+            "plan": plan_key,
+            "message": f"Complete payment with {stars_amt} Telegram Stars in the bot.",
+        }
+
+    if provider is None:
+        if PAYSTACK_SECRET_KEY:
+            provider = "paystack"
+        elif STRIPE_SECRET_KEY:
+            provider = "stripe"
+        else:
+            raise HTTPException(
+                status_code=503,
+                detail="Set PAYSTACK_SECRET_KEY and/or STRIPE_SECRET_KEY, or use provider=stars",
+            )
+
+    if provider == "paystack" and not PAYSTACK_SECRET_KEY:
+        raise HTTPException(status_code=503, detail="Paystack not configured")
+    if provider == "stripe" and not STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=503, detail="Stripe not configured")
+
     success_url = f"{FRONTEND_URL.rstrip('/')}/settings?checkout=success&plan={plan_key}"
     cancel_url = f"{FRONTEND_URL.rstrip('/')}/pricing?checkout=cancel"
 
     def _create_paystack():
         import json as _json
-        amount = int(plan["amount"])
+        amount = int(plan.get("amount_paystack") or 0)
         body = {
             "email": email or f"user{user_id}@kingzarryai.online",
             "amount": amount,
@@ -1888,7 +1931,7 @@ async def create_checkout_session(payload: CheckoutRequest, request: Request):
                     "quantity": 1,
                     "price_data": {
                         "currency": "usd",
-                        "unit_amount": int(plan["amount"]),
+                        "unit_amount": int(plan.get("amount_stripe") or 0),
                         "product_data": {
                             "name": plan["name"],
                             "description": f"King Zarry AI VIP — {plan['days']} days",
@@ -1913,7 +1956,7 @@ async def create_checkout_session(payload: CheckoutRequest, request: Request):
         }
 
     def _create():
-        if PAYSTACK_SECRET_KEY:
+        if provider == "paystack":
             return _create_paystack()
         return _create_stripe()
 
@@ -1928,22 +1971,33 @@ async def create_checkout_session(payload: CheckoutRequest, request: Request):
 
 @app.get("/api/billing/config")
 async def billing_config():
-    """Public pricing metadata for the frontend."""
+    """Public pricing: Paystack + Stripe + Stars all listed when configured."""
+    plans_out = {}
+    for k, v in WEB_PLAN_CATALOG.items():
+        if k == "3month":
+            continue
+        plans_out[k] = {
+            "name": v["name"],
+            "days": v["days"],
+            "paystack_kobo": v.get("amount_paystack"),
+            "paystack_ngn": round(int(v.get("amount_paystack") or 0) / 100, 2),
+            "stripe_cents": v.get("amount_stripe"),
+            "stripe_usd": round(int(v.get("amount_stripe") or 0) / 100, 2),
+            "stars": v.get("stars"),
+            "amount": v.get("amount"),
+            "amount_major": round(int(v.get("amount") or 0) / 100, 2),
+        }
     return {
         "status": "success",
         "provider": BILLING_PROVIDER,
+        "methods": BILLING_METHODS,
+        "paystack": bool(PAYSTACK_SECRET_KEY),
+        "stripe": bool(STRIPE_SECRET_KEY),
+        "stars": True,
+        "telegram_bot": TELEGRAM_BOT_USERNAME,
         "currency": BILLING_CURRENCY,
-        "configured": BILLING_PROVIDER != "none",
-        "plans": {
-            k: {
-                "name": v["name"],
-                "days": v["days"],
-                "amount": v["amount"],
-                "amount_major": round(v["amount"] / 100, 2),
-            }
-            for k, v in WEB_PLAN_CATALOG.items()
-            if k != "3month"
-        },
+        "configured": bool(PAYSTACK_SECRET_KEY or STRIPE_SECRET_KEY),
+        "plans": plans_out,
     }
 
 
