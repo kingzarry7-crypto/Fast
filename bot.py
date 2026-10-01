@@ -2550,13 +2550,57 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
     sent = 0
     for uid in targets:
         try:
+            # Global scanner discovers everything; delivery is personalized.
+            try:
+                from agent_v2 import get_agent_preferences, preferences_allow_now
+                prefs = get_agent_preferences(str(uid))
+            except Exception:
+                prefs = {"watch_symbols": ["BTC/USD", "ETH/USD", "XAU/USD"], "signal_alerts": True}
+            user_actionable = [
+                a for a in actionable
+                if preferences_allow_now(prefs, symbol=str(a.get("symbol") or ""), lifecycle=False)
+            ]
+            if not user_actionable:
+                continue
+
+            user_lines = [
+                "🤖 <b>KING ZARRY AGENT — YOUR WATCHLIST</b>",
+                "",
+                "New actionable setup(s):",
+                "",
+            ]
+            for a in user_actionable:
+                user_lines.append(
+                    f"• <b>{html.escape(str(a.get('symbol')))}</b> — "
+                    f"<b>{html.escape(str(a.get('signal') or '').upper())}</b>\n"
+                    f"  Price: {html.escape(str(a.get('price') or '—'))}\n"
+                    f"  Entry: {html.escape(str(a.get('entry') or '—'))} | "
+                    f"SL: {html.escape(str(a.get('stop_loss') or '—'))}\n"
+                    f"  TP1: {html.escape(str(a.get('tp1') or '—'))} | "
+                    f"TP2: {html.escape(str(a.get('tp2') or '—'))}\n"
+                    f"  Conf: {html.escape(str(a.get('confidence') or '—'))} | "
+                    f"Trend: {html.escape(str(a.get('trend') or '—'))}"
+                    + (f"\n  Agent ID: <code>{html.escape(str(a.get('signal_id')))}</code>" if a.get("signal_id") else "")
+                    + (f"\n  V2 score: <b>{html.escape(str((a.get('agent_v2') or {}).get('score')))}</b>" if (a.get('agent_v2') or {}).get('score') is not None else "")
+                )
+                v2 = a.get("agent_v2") or {}
+                reasons = v2.get("reasons") or a.get("reasons") or []
+                if reasons:
+                    user_lines.append(f"  Note: {html.escape(str(reasons[0])[:120])}")
+                user_lines.append("")
+            user_lines.append("<i>Not financial advice. Trading involves risk.</i>")
+
             await context.bot.send_message(
                 chat_id=uid,
-                text=text,
+                text="\n".join(user_lines),
                 parse_mode="HTML",
                 disable_web_page_preview=True,
             )
+
+            allowed_symbols = {str(a.get("symbol") or "").upper() for a in user_actionable}
             for sym, chart_buf, caption in charts:
+                if sym.upper() not in allowed_symbols:
+                    continue
                 try:
                     if hasattr(chart_buf, "seek"):
                         chart_buf.seek(0)
