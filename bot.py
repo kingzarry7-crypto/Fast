@@ -2391,6 +2391,35 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
                 pass
             continue
 
+        try:
+            from risk_guardian import evaluate_risk_guardian
+            guardian = evaluate_risk_guardian(symbol, analysis, verification)
+            analysis["risk_guardian"] = guardian
+            if guardian.get("status") != "APPROVE":
+                n_lowconf += 1
+                scan_summary.append(
+                    f"{symbol}=RISK_{guardian.get('status')}"
+                )
+                try:
+                    from agent_core import tool_learn
+                    tool_learn(
+                        user_id="telegram_agent",
+                        symbol=symbol,
+                        signal=sig,
+                        confidence=str(analysis.get("confidence") or ""),
+                        notes="risk_guardian: " + "; ".join(guardian.get("reasons") or [])[:500],
+                        outcome="risk_guardian_" + str(guardian.get("status") or "hold").lower(),
+                        meta={"checks": guardian.get("checks") or [], "score": verification.get("score")},
+                    )
+                except Exception:
+                    pass
+                continue
+        except Exception as guardian_error:
+            logger.warning("risk_guardian unavailable for %s: %s", symbol, guardian_error)
+            n_lowconf += 1
+            scan_summary.append(f"{symbol}=RISK_ERROR")
+            continue
+
         if signal_id:
             analysis["signal_id"] = signal_id
 
