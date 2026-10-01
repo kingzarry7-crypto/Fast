@@ -13,6 +13,11 @@ import os
 import re
 from typing import Dict, List, Any
 
+try:
+    import universal_api_discovery
+except Exception:
+    universal_api_discovery = None
+
 
 def _env(name: str) -> str:
     return re.sub(r"[\u200b\u200c\u200d\u2060\ufeff]", "", str(os.getenv(name) or "")).strip()
@@ -151,11 +156,24 @@ def snapshot() -> Dict[str, Any]:
         if _env(key)
     ]
 
+    universal = {"providers": [], "configured_count": 0}
+    if universal_api_discovery is not None:
+        try:
+            universal = universal_api_discovery.snapshot()
+            providers.extend(universal.get("providers", []))
+        except Exception as exc:
+            universal = {"providers": [], "configured_count": 0, "error": type(exc).__name__}
+
     return {
         "providers": providers,
         "service_credentials": service_credentials,
         "unknown_env_keys": unknown,
         "configured_count": len(providers),
+        "universal_api_count": len(universal.get("providers", [])),
+        "universal_api_tools": (
+            universal_api_discovery.tool_catalog()
+            if universal_api_discovery is not None else []
+        ),
     }
 
 
@@ -167,6 +185,16 @@ def signature(s: Dict[str, Any]) -> str:
         )
     parts.append("services:" + ",".join(x["env"] for x in s.get("service_credentials", [])))
     parts.append("unknown:" + ",".join(s["unknown_env_keys"]))
+    if universal_api_discovery is not None:
+        try:
+            parts.append("universal:" + universal_api_discovery.signature({
+                "providers": [
+                    p for p in s.get("providers", [])
+                    if p.get("adapter") in ("openapi_generic", "discovery_pending")
+                ]
+            }))
+        except Exception:
+            pass
     return "\n".join(sorted(parts))
 
 
@@ -212,6 +240,19 @@ def format_admin_report(s: Dict[str, Any], first_run: bool = False) -> str:
         for item in s["service_credentials"]:
             lines.append(f'• <code>{item["env"]}</code> — {item["name"]}')
             lines.append(f'  {item["what_it_is"]}')
+
+    universal_items = [
+        p for p in s.get("providers", [])
+        if p.get("adapter") in ("openapi_generic", "discovery_pending")
+    ]
+    if universal_items:
+        lines.append("")
+        lines.append("🧩 <b>Universal API Learning</b>")
+        if universal_api_discovery is not None:
+            try:
+                lines.extend(universal_api_discovery.report_lines({"providers": universal_items}))
+            except Exception:
+                pass
 
     if s["unknown_env_keys"]:
         lines.append("")
