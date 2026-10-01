@@ -29,6 +29,14 @@ from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("king_zarry_agent_v2")
 
+DEFAULT_AGENT_DELIVERY_SYMBOLS = [
+    "BTC/USD",
+    "ETH/USD",
+    "SOL/USD",
+    "XAU/USD",
+    "UNI/USD",
+]
+
 _DB_LOCK = threading.Lock()
 
 
@@ -889,7 +897,7 @@ def get_agent_preferences(user_id: str) -> Dict[str, Any]:
             ).fetchone()
             if not row:
                 return {
-                    "watch_symbols": ["BTC/USD", "ETH/USD", "XAU/USD"],
+                    "watch_symbols": list(DEFAULT_AGENT_DELIVERY_SYMBOLS),
                     "signal_alerts": True,
                     "lifecycle_alerts": True,
                     "morning_brief": True,
@@ -926,6 +934,9 @@ def save_agent_preferences(
     symbols = current["watch_symbols"] if watch_symbols is None else [
         str(x).strip().upper() for x in watch_symbols if str(x).strip()
     ][:30]
+    # Hard Telegram delivery allowlist: the Agent may scan wider, but it may
+    # never deliver a signal outside these five markets.
+    symbols = [x for x in symbols if x in DEFAULT_AGENT_DELIVERY_SYMBOLS]
     values = {
         "watch_symbols": symbols,
         "signal_alerts": current["signal_alerts"] if signal_alerts is None else bool(signal_alerts),
@@ -976,9 +987,13 @@ def preferences_allow_now(preferences: Dict[str, Any], symbol: Optional[str] = N
     if not lifecycle and not preferences.get("signal_alerts", True):
         return False
     symbols = preferences.get("watch_symbols") or []
-    if symbol and symbols:
+    if symbol:
         normalized = str(symbol).upper().strip()
-        if normalized not in {str(x).upper().strip() for x in symbols}:
+        # Absolute delivery guard: no Telegram signal/lifecycle event may
+        # escape the five approved delivery markets.
+        if normalized not in DEFAULT_AGENT_DELIVERY_SYMBOLS:
+            return False
+        if symbols and normalized not in {str(x).upper().strip() for x in symbols}:
             return False
     quiet_start = str(preferences.get("quiet_start") or "").strip()
     quiet_end = str(preferences.get("quiet_end") or "").strip()
