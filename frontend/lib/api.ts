@@ -320,6 +320,25 @@ export async function synthesizeSpeech(
   });
 }
 
+export async function getAgentV2(signal?: AbortSignal) {
+  return request<Record<string, unknown>>("/api/agent/v2", { method: "GET", signal });
+}
+
+export async function getAgentPreferences(signal?: AbortSignal) {
+  return request<Record<string, unknown>>("/api/agent/preferences", { method: "GET", signal });
+}
+
+export async function updateAgentPreferences(
+  preferences: Record<string, unknown>,
+  signal?: AbortSignal
+) {
+  return request<Record<string, unknown>>("/api/agent/preferences", {
+    method: "PUT",
+    body: preferences,
+    signal,
+  });
+}
+
 export async function getAgentStatus(signal?: AbortSignal) {
   return request<Record<string, unknown>>("/api/agent/status", { method: "GET", signal });
 }
@@ -432,6 +451,9 @@ export const api = {
   getConversationMessages,
   synthesizeSpeech,
   getAgentStatus,
+  getAgentV2,
+  getAgentPreferences,
+  updateAgentPreferences,
   runAgentGoal,
   generateMorningBrief,
   getLatestMorningBrief,
