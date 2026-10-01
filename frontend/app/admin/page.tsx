@@ -237,10 +237,7 @@ export default function AdminPage() {
                 REVENUE (WEB)
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Stat
-                  label="ACTIVE VIP"
-                  value={n(stats.active_subscribers)}
-                />
+                <Stat label="ACTIVE VIP" value={n(stats.active_subscribers)} />
                 <Stat label="PAYMENTS" value={n(stats.payments_count)} />
                 <Stat
                   label="REVENUE USD"
@@ -260,10 +257,11 @@ export default function AdminPage() {
                 {((stats.recent_users as Array<Record<string, unknown>> | undefined) || []).map((u, i) => {
                   const st = String(u.account_status || "active").toLowerCase();
                   const busy = actingId === String(u.id || "");
-                  const isSelf =
+                  const isSelf = Boolean(
                     user?.email &&
-                    u.email &&
-                    user.email.toLowerCase() === String(u.email).toLowerCase();
+                      u.email &&
+                      user.email.toLowerCase() === String(u.email).toLowerCase()
+                  );
                   return (
                     <div
                       key={String(u.id || i)}
@@ -293,7 +291,7 @@ export default function AdminPage() {
                           {String(u.created_at || "").slice(0, 19)}
                         </p>
                       </div>
-                      {!isSelf && u.id && (
+                      {!isSelf && Boolean(u.id) && (
                         <div className="flex flex-wrap gap-1.5 shrink-0">
                           {st !== "active" && (
                             <button
@@ -353,7 +351,8 @@ export default function AdminPage() {
                     </span>
                     <span className="font-mono-tech text-[10px] text-cyan-300/80">
                       {String(p.plan || "—").toUpperCase()} · $
-                      {((Number(p.amount_cents) || 0) / 100).toFixed(2)} · {String(p.status || "")}
+                      {((Number(p.amount_cents) || 0) / 100).toFixed(2)} ·{" "}
+                      {String(p.status || "")}
                     </span>
                   </div>
                 ))}
