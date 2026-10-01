@@ -34,6 +34,14 @@ from pydantic import BaseModel, EmailStr, Field
 import uvicorn
 
 from ai_engine import AIEngine
+
+try:
+    from fiverr_api import router as fiverr_api_router
+except Exception as _fiverr_api_import_error:
+    fiverr_api_router = None
+    logging.getLogger("king_zarry_api").warning(
+        "Fiverr Agent API unavailable: %s", type(_fiverr_api_import_error).__name__
+    )
 from database import (
     get_db_cursor,
     is_database_configured,
@@ -106,6 +114,9 @@ allowed_origins = [
 
 if not allowed_origins:
     allowed_origins = ["http://localhost:3000"]
+
+if fiverr_api_router is not None:
+    app.include_router(fiverr_api_router)
 
 app.add_middleware(
     CORSMiddleware,
