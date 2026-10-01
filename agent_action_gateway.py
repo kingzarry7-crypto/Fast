@@ -390,6 +390,37 @@ def plan_action_from_goal(goal: str, user_id: str) -> Dict[str, Any]:
             "message": "WhatsApp action prepared. Approve it to send through the official Meta connector.",
         }
 
+    # Safe account/position read: no approval and no order execution.
+    if any(k in lower for k in ("my positions", "open positions", "open trades", "trading account", "account status")):
+        try:
+            return {"status": "completed", "account": account_snapshot()}
+        except Exception as exc:
+            return {"status": "error", "detail": f"Could not read trading account: {type(exc).__name__}"}
+
+    # Close an existing position. Still approval-gated because it changes an account.
+    if any(k in lower for k in ("close position", "close trade", "close my")):
+        aliases = {
+            "btc": "BTC/USD", "bitcoin": "BTC/USD",
+            "eth": "ETH/USD", "ethereum": "ETH/USD",
+            "sol": "SOL/USD", "solana": "SOL/USD",
+            "xau": "XAU/USD", "gold": "XAU/USD",
+            "uni": "UNI/USD", "uniswap": "UNI/USD",
+        }
+        close_symbol = next((sym for key, sym in aliases.items() if re.search(rf"\b{re.escape(key)}\b", lower)), None)
+        if not close_symbol:
+            return {"status": "needs_details", "detail": "Tell me which approved market to close: BTC, ETH, SOL, XAU, or UNI."}
+        action = create_action(
+            user_id,
+            "trade.close_position",
+            {"symbol": close_symbol},
+            title=f"Close {close_symbol} position (approval required)",
+        )
+        return {
+            "status": "awaiting_approval",
+            "action": action,
+            "message": "Close action prepared. Approve it to close the selected position.",
+        }
+
     # Trade: explicit direction + quantity + one of the five symbols.
     side = "BUY" if re.search(r"\b(buy|long)\b", lower) else "SELL" if re.search(r"\b(sell|short)\b", lower) else None
     symbol = None
