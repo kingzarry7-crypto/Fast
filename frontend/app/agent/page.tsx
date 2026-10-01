@@ -11,7 +11,7 @@ import {
 } from "@/lib/api";
 
 export default function AgentPage() {
-  const { user } = useAuth();
+  const { user, refresh: refreshAuth } = useAuth();
   const isVip = Boolean(user?.is_subscribed);
   const [goal, setGoal] = useState("");
   const [running, setRunning] = useState(false);
@@ -30,8 +30,10 @@ export default function AgentPage() {
   const [actionStatus, setActionStatus] = useState<Record<string, unknown> | null>(null);
   const [actions, setActions] = useState<Record<string, unknown>[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refreshAgent = useCallback(async () => {
     if (!isVip) return;
     try {
       const [st, v2, j, learn, latest, actionSt, actionList] = await Promise.all([
@@ -64,9 +66,18 @@ export default function AgentPage() {
     }
   }, [isVip]);
 
+
   useEffect(() => {
-    if (isVip) refresh();
-  }, [refresh]);
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("checkout") === "success") {
+      refreshAuth?.();
+    }
+  }, [refreshAuth]);
+
+  useEffect(() => {
+    if (isVip) refreshAgent();
+  }, [refreshAgent, isVip]);
 
   const handleRunGoal = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,7 +99,7 @@ export default function AgentPage() {
         setBrief(res.brief as AgentBrief);
       }
       setGoal("");
-      await refresh();
+      await refreshAgent();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Agent run failed");
     } finally {
@@ -106,7 +117,7 @@ export default function AgentPage() {
         setBrief(res.brief);
         setSummary(res.brief.summary_text || "Morning brief ready.");
       }
-      await refresh();
+      await refreshAgent();
     } catch (err: unknown) {
       setError(
         err instanceof Error
@@ -122,7 +133,7 @@ export default function AgentPage() {
     if (!isVip) return;
     try {
       await api.approveAgentJob(jobId);
-      await refresh();
+      await refreshAgent();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Approve failed");
     }
@@ -135,24 +146,112 @@ export default function AgentPage() {
     ? (status!.tools_roadmap as string[])
     : [];
 
+
+  const startCheckout = async (plan: string) => {
+    setCheckoutError(null);
+    setCheckoutLoading(plan);
+    try {
+      const res = await api.createCheckoutSession(plan);
+      if (res?.url) {
+        window.location.href = res.url;
+        return;
+      }
+      setCheckoutError("Checkout did not return a payment link. Check billing keys on Railway.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Checkout failed";
+      setCheckoutError(msg);
+    } finally {
+      setCheckoutLoading(null);
+    }
+  };
+
   return (
     <ProtectedRoute>
       <div className="min-h-screen px-4 py-6 md:px-8 md:py-8 max-w-5xl mx-auto">
         {!isVip ? (
-          <section className="mx-auto max-w-3xl rounded-2xl border border-cyan-500/25 bg-[#020914]/90 p-6 sm:p-8 shadow-[0_0_40px_rgba(0,240,255,0.08)]">
-            <p className="font-mono-tech text-[10px] tracking-[0.35em] text-cyan-400/50 mb-3">AGENT ACCESS · VIP</p>
-            <h1 className="font-display text-2xl sm:text-3xl font-bold text-white tracking-wide">AGENT COMMAND IS VIP ONLY</h1>
-            <p className="mt-3 text-sm leading-relaxed text-cyan-200/70 max-w-2xl">The KING ZARRY AI Agent runs background jobs, market scans, morning briefs, and auto-learning workflows. Upgrade to VIP to unlock Agent access.</p>
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              {["Background agent jobs","Morning market briefs","Market scanning & analysis","Agent learning logs"].map((feature) => (
-                <div key={feature} className="rounded-lg border border-cyan-500/15 bg-black/20 px-3 py-2 text-xs font-mono-tech text-cyan-200/80"><span className="text-cyan-400 mr-2">▸</span>{feature}</div>
+          <section className="mx-auto max-w-3xl space-y-6">
+            <div className="rounded-2xl border border-cyan-500/25 bg-[#020914]/90 p-6 sm:p-8 shadow-[0_0_40px_rgba(0,240,255,0.08)]">
+              <p className="font-mono-tech text-[10px] tracking-[0.35em] text-cyan-400/50 mb-3">AGENT ACCESS · VIP REQUIRED</p>
+              <h1 className="font-display text-2xl sm:text-3xl font-bold text-white tracking-wide">
+                Unlock Agent Command
+              </h1>
+              <p className="mt-3 text-sm leading-relaxed text-cyan-200/70 max-w-2xl">
+                Background scans, morning briefs, job log, and auto-learn are VIP-only.
+                Free accounts can still use normal AI chat on the Command Centre.
+              </p>
+              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                {[
+                  "Background market agent jobs",
+                  "Morning market briefs",
+                  "Watchlist scans & analysis",
+                  "Learning log & job approvals",
+                ].map((feature) => (
+                  <div
+                    key={feature}
+                    className="rounded-lg border border-cyan-500/15 bg-black/20 px-3 py-2 text-xs font-mono-tech text-cyan-200/80"
+                  >
+                    <span className="text-cyan-400 mr-2">▸</span>
+                    {feature}
+                  </div>
+                ))}
+              </div>
+              {(checkoutError || error) && (
+                <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200 font-mono-tech">
+                  {checkoutError || error}
+                </div>
+              )}
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              {[
+                { plan: "monthly", label: "Monthly", hint: "30 days VIP" },
+                { plan: "quarterly", label: "90-Day", hint: "Best value stretch" },
+                { plan: "yearly", label: "Yearly", hint: "Full-year access" },
+              ].map((p) => (
+                <div
+                  key={p.plan}
+                  className="rounded-xl border border-cyan-500/20 bg-[#020914]/80 p-4 flex flex-col"
+                >
+                  <p className="font-display text-lg font-bold text-white">{p.label}</p>
+                  <p className="mt-1 text-[10px] font-mono-tech tracking-widest text-cyan-400/50">
+                    {p.hint}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={!!checkoutLoading}
+                    onClick={() => startCheckout(p.plan)}
+                    className="mt-4 w-full rounded-lg bg-cyan-400 px-3 py-2.5 text-[10px] font-bold tracking-widest text-black hover:bg-cyan-300 disabled:opacity-40 transition"
+                  >
+                    {checkoutLoading === p.plan ? "OPENING…" : "UPGRADE"}
+                  </button>
+                </div>
               ))}
             </div>
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <Link href="/pricing" className="inline-flex items-center justify-center rounded-lg bg-cyan-400 px-5 py-3 text-xs font-bold tracking-widest text-black hover:bg-cyan-300 transition">VIEW VIP PLANS</Link>
-              <Link href="/chat" className="inline-flex items-center justify-center rounded-lg border border-cyan-500/30 px-5 py-3 text-xs font-mono-tech tracking-widest text-cyan-200 hover:bg-cyan-500/10 transition">USE AI CHAT</Link>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Link
+                href="/pricing"
+                className="inline-flex items-center justify-center rounded-lg border border-cyan-500/30 px-5 py-3 text-xs font-mono-tech tracking-widest text-cyan-200 hover:bg-cyan-500/10 transition"
+              >
+                VIEW ALL PLANS
+              </Link>
+              <Link
+                href="/chat"
+                className="inline-flex items-center justify-center rounded-lg border border-cyan-500/30 px-5 py-3 text-xs font-mono-tech tracking-widest text-cyan-200 hover:bg-cyan-500/10 transition"
+              >
+                USE AI CHAT
+              </Link>
+              <button
+                type="button"
+                onClick={() => refreshAuth?.()}
+                className="inline-flex items-center justify-center rounded-lg border border-cyan-500/20 px-5 py-3 text-[10px] font-mono-tech tracking-widest text-cyan-400/60 hover:text-cyan-200 transition"
+              >
+                REFRESH STATUS
+              </button>
             </div>
-            <p className="mt-4 text-[10px] font-mono-tech text-cyan-400/40">Your normal AI chat remains available according to your current account limits.</p>
+            <p className="text-[10px] font-mono-tech text-cyan-400/40">
+              Already paid? Tap Refresh Status. Payments use Paystack or Stripe when configured on the API.
+            </p>
           </section>
         ) : (
         <header className="mb-8">
@@ -247,7 +346,7 @@ export default function AgentPage() {
                     <div className="text-[10px] font-mono-tech text-white">{String(action.action_type || "action")}</div>
                     <div className="text-[9px] font-mono-tech text-cyan-400/50 truncate">{String(payload.symbol || payload.to || "")} · {String(action.status || "")}</div>
                   </div>
-                  {pending && <button type="button" onClick={async () => { try { await api.approveAgentAction(id); await refresh(); } catch (err: unknown) { setError(err instanceof Error ? err.message : "Action approval failed"); } }} className="shrink-0 px-3 py-1.5 rounded-md bg-cyan-400 text-black text-[9px] font-bold tracking-widest">APPROVE</button>}
+                  {pending && <button type="button" onClick={async () => { try { await api.approveAgentAction(id); await refreshAgent(); } catch (err: unknown) { setError(err instanceof Error ? err.message : "Action approval failed"); } }} className="shrink-0 px-3 py-1.5 rounded-md bg-cyan-400 text-black text-[9px] font-bold tracking-widest">APPROVE</button>}
                 </div>;
               })}
             </div>
@@ -377,7 +476,7 @@ export default function AgentPage() {
             </h2>
             <button
               type="button"
-              onClick={() => refresh()}
+              onClick={() => refreshAgent()}
               className="text-[10px] font-mono-tech text-cyan-400/60 hover:text-cyan-200"
             >
               REFRESH
