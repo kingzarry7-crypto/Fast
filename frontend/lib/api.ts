@@ -328,6 +328,35 @@ export async function adminUnbanUser(userId: string, signal?: AbortSignal) {
   return request<{ status?: string }>("/api/admin/users/unban", { method: "POST", body: { user_id: userId }, signal });
 }
 
+export type TtsVoice = "bella" | "male";
+
+export async function synthesizeSpeech(
+  text: string,
+  style: string = "human",
+  signal?: AbortSignal,
+  voice: TtsVoice = "bella"
+): Promise<Blob> {
+  const response = await fetch(buildUrl("/api/tts"), {
+    method: "POST",
+    headers: {
+      Accept: "audio/mpeg",
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify({ text, style, voice }),
+    signal,
+  });
+  if (!response.ok) {
+    let message = response.statusText || `HTTP ${response.status}`;
+    try {
+      const data = await response.json();
+      if (data && typeof data.detail === "string") message = data.detail;
+    } catch { /* non-JSON error */ }
+    throw new ApiError({ status: response.status, message });
+  }
+  return response.blob();
+}
+
 export async function ttsSpeak(text: string, options?: { voice?: string; signal?: AbortSignal }): Promise<{ audio_base64?: string; mime?: string; url?: string }> {
   return request("/api/tts", { method: "POST", body: { text, voice: options?.voice }, signal: options?.signal });
 }
@@ -408,7 +437,7 @@ export async function approveAgentAction(actionId: string, signal?: AbortSignal)
 export const api = {
   getBaseUrl, getMe, getCurrentUser, login, register, verifyEmail, resendVerification, forgotPassword, resetPassword, logout,
   listConversations, createConversation, getConversation, getConversationMessages, chat, sendChatMessage, healthCheck, createCheckoutSession, getBillingConfig,
-  getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, ttsSpeak,
+  getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, ttsSpeak, synthesizeSpeech,
   getMarkets, getMarketDetail, getSignals, getNews,
   getAgentStatus, runAgentGoal, generateMorningBrief, getLatestMorningBrief, listAgentJobs, approveAgentJob,
   getAgentLearning, getAgentV2, getAgentIntelligence, getAgentPreferences, updateAgentPreferences,
