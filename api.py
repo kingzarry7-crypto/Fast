@@ -11,7 +11,7 @@ WEB ONLY - Secure Neon authentication and web chat
 - Uses HttpOnly session cookies
 - Protects /api/chat with authentication
 - Uses a web-only memory adapter for AIEngine
-- NEW: Injects live market data for BTC/ETH/SOL/XAU
+- NEW: Injects live market data for BTC/ETH/SOL/XAU/UNI
 - NEW: Supports image upload via base64 in /api/chat
 - FIXED: WebMemoryAdapter.add_message now writes to web_messages (matches get_history)
 """
@@ -871,6 +871,8 @@ def _enrich_with_market_data(message: str) -> str:
         asset = "ETH/USD"
     elif "sol" in msg_lower or "solana" in msg_lower:
         asset = "SOL/USD"
+    elif "uni" in msg_lower or "uniswap" in msg_lower:
+        asset = "UNI/USD"
 
     if not asset:
         return message
@@ -2531,7 +2533,7 @@ async def tts_endpoint(request: Request, body: TtsRequest):
 # MARKETS / SIGNALS / NEWS (web)
 # ============================================================
 
-DEFAULT_WEB_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD", "XAU/USD"]
+DEFAULT_WEB_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD", "XAU/USD", "UNI/USD"]
 
 
 def _safe_analyze(symbol: str, timeframe: str = "15m") -> Dict[str, Any]:
