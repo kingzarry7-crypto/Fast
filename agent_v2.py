@@ -24,6 +24,7 @@ import sqlite3
 import threading
 import uuid
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("king_zarry_agent_v2")
@@ -966,6 +967,36 @@ def save_agent_preferences(
         finally:
             conn.close()
     return values
+
+
+def preferences_allow_now(preferences: Dict[str, Any], symbol: Optional[str] = None, lifecycle: bool = False) -> bool:
+    """Return whether a Telegram Agent notification should be delivered now."""
+    if lifecycle and not preferences.get("lifecycle_alerts", True):
+        return False
+    if not lifecycle and not preferences.get("signal_alerts", True):
+        return False
+    symbols = preferences.get("watch_symbols") or []
+    if symbol and symbols:
+        normalized = str(symbol).upper().strip()
+        if normalized not in {str(x).upper().strip() for x in symbols}:
+            return False
+    quiet_start = str(preferences.get("quiet_start") or "").strip()
+    quiet_end = str(preferences.get("quiet_end") or "").strip()
+    if quiet_start and quiet_end:
+        try:
+            from datetime import time as dt_time
+            local_now = datetime.now(ZoneInfo("Africa/Lagos")).time()
+            start = dt_time.fromisoformat(quiet_start)
+            end = dt_time.fromisoformat(quiet_end)
+            if start <= end:
+                in_quiet = start <= local_now < end
+            else:
+                in_quiet = local_now >= start or local_now < end
+            if in_quiet:
+                return False
+        except Exception:
+            pass
+    return True
 
 
 def get_active_signals(limit: int = 20) -> List[Dict[str, Any]]:
