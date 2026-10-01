@@ -129,7 +129,7 @@ export async function login(email: string, password: string, signal?: AbortSigna
   const data = await request<AuthResponse>("/api/auth/login", {
     method: "POST", body: { email: normalizedEmail, password }, signal,
   });
-  return { ...data, user: normalizeUser(data.user) || undefined };
+  return { ...data, user: normalizeUser(data.user) };
 }
 
 export async function register(
@@ -141,7 +141,7 @@ export async function register(
   if (username) body.username = username;
   if (displayName) body.display_name = displayName;
   const data = await request<AuthResponse>("/api/auth/register", { method: "POST", body, signal });
-  return { ...data, user: normalizeUser(data.user) || undefined };
+  return { ...data, user: normalizeUser(data.user) };
 }
 
 export async function verifyEmail(email: string, code: string, signal?: AbortSignal) {
