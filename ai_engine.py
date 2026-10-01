@@ -1885,6 +1885,17 @@ class AIEngine:
         try:
             self.memory.add_message(user_id, "user", prompt)
             self.memory.add_message(user_id, "assistant", response)
+
+            # Durable learning is additive and deliberately isolated from the
+            # reply path. If extraction fails, the normal AI response remains
+            # successful and the existing conversation memory is preserved.
+            try:
+                from auto_learning import learn_from_message
+                learned = learn_from_message(self.memory, str(user_id), str(prompt))
+                if learned:
+                    logger.info("🧠 Auto-learning saved %s durable item(s) for %s", learned, user_id)
+            except Exception as learn_exc:
+                logger.debug("Auto-learning skipped: %s", type(learn_exc).__name__)
         except Exception as e:
             logger.warning(f"Memory save failed for {user_id}: {_redact_secrets(str(e))}")
 
