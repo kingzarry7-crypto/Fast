@@ -57,13 +57,20 @@ SUPPORTED_ACTIONS = {
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-def _connect():
+def _raw_connect():
     path = os.path.abspath(DB_PATH)
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     conn = sqlite3.connect(path, timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout=30000")
     return conn
+
+_DB_READY = False
+_DB_READY_LOCK = threading.Lock()
+
+def _connect():
+    _ensure_db()
+    return _raw_connect()
 
 def _initialize_schema(conn) -> None:
     conn.executescript("""
@@ -117,7 +124,7 @@ def init_db() -> None:
         conn = None
         try:
             with _LOCK:
-                conn = _connect()
+                conn = _raw_connect()
                 _initialize_schema(conn)
                 conn.commit()
             return
@@ -135,9 +142,6 @@ def init_db() -> None:
     if last_error is not None:
         raise last_error
 
-_DB_READY = False
-_DB_READY_LOCK = threading.Lock()
-
 def _ensure_db() -> None:
     global _DB_READY
     if _DB_READY:
@@ -146,7 +150,6 @@ def _ensure_db() -> None:
         if not _DB_READY:
             init_db()
             _DB_READY = True
-
 
 def _task(row) -> Dict[str, Any]:
     item = dict(row)
