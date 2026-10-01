@@ -163,6 +163,13 @@ except Exception as e:
 try:
     from ai_engine import AIEngine
     print("🔵 BOOT: ai_engine imported", flush=True)
+
+try:
+    import fiverr_agent
+    logger.info("🧑‍💻 Fiverr Agent loaded | skills=%d", len(fiverr_agent.SKILLS))
+except Exception as e:
+    fiverr_agent = None
+    logger.warning("Fiverr Agent import failed: %s", e)
 except Exception as e:
     print(f"❌ BOOT: ai_engine import failed | {e}", flush=True)
     raise
@@ -3132,6 +3139,149 @@ async def news_command(update, context):
         logger.error(f"News error: {e}")
         await update.message.reply_text("❌ News unavailable.", disable_web_page_preview=True)
 
+
+
+def _fiverr_is_admin(update) -> bool:
+    user = getattr(update, "effective_user", None)
+    return bool(user and (not ADMIN_IDS or user.id in ADMIN_IDS))
+
+def _fiverr_usage() -> str:
+    return (
+        "🧑‍💻 <b>FIVERR AGENT</b>\n\n"
+        "A separate Agent for your Fiverr business.\n\n"
+        "Commands:\n"
+        "• <code>/fiverr skills</code> — show all skills\n"
+        "• <code>/fiverr gig</code> — build a complete Gig draft\n"
+        "• <code>/fiverr reply</code> — prepare a Buyer reply\n"
+        "• <code>/fiverr offer</code> — prepare a Custom Offer\n"
+        "• <code>/fiverr profile</code> — build profile copy\n"
+        "• <code>/fiverr order</code> — turn requirements into a delivery plan\n"
+        "• <code>/fiverr policy</code> — check a draft for common policy risks\n"
+        "• <code>/fiverr tasks</code> — show open Fiverr tasks\n"
+        "• <code>/fiverr approve ID</code> / <code>reject ID</code>\n\n"
+        "After starting a task, I can ask questions here on Telegram and continue from your answers."
+    )
+
+async def fiverr_command(update, context):
+    if not update.message or not _fiverr_is_admin(update):
+        if update.message:
+            await update.message.reply_text("🧑‍💻 Fiverr Agent is private to the configured admin.")
+        return
+    if fiverr_agent is None:
+        await update.message.reply_text("❌ Fiverr Agent module is unavailable.")
+        return
+    args = list(getattr(context, "args", []) or [])
+    sub = (args[0].lower() if args else "help")
+    user_id = str(update.effective_user.id)
+
+    if sub in {"help", "start"}:
+        await update.message.reply_text(_fiverr_usage(), parse_mode="HTML", disable_web_page_preview=True)
+        return
+    if sub == "skills":
+        await update.message.reply_text(
+            "🧑‍💻 <b>FIVERR AGENT SKILLS</b>\n\n" + fiverr_agent.skills_text(),
+            parse_mode="HTML", disable_web_page_preview=True)
+        return
+    if sub == "tasks":
+        tasks = fiverr_agent.list_tasks(user_id, 10)
+        if not tasks:
+            await update.message.reply_text("🧑‍💻 No Fiverr Agent tasks yet.")
+            return
+        lines = ["🧑‍💻 <b>FIVERR TASKS</b>", ""]
+        for t in tasks:
+            lines.append(f"• <code>{html.escape(t['id'][:8])}</code> — {html.escape(t['kind'])} — {html.escape(t['status'])} — {html.escape(t.get('title') or '')}")
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+        return
+    if sub in {"approve", "reject"}:
+        if len(args) < 2:
+            await update.message.reply_text("Use <code>/fiverr approve APPROVAL_ID</code> or <code>/fiverr reject APPROVAL_ID</code>.", parse_mode="HTML")
+            return
+        result = fiverr_agent.decide_approval(args[1], user_id, sub == "approve")
+        if not result:
+            await update.message.reply_text("❌ Approval ID not found.")
+            return
+        await update.message.reply_text(
+            "✅ Approval recorded. The prepared Fiverr work is approved for the next supported execution step."
+            if sub == "approve" else "🛑 Fiverr action rejected and recorded.")
+        return
+
+    kind_map = {
+        "gig": ("gig_creator", "Build a complete Fiverr Gig"),
+        "reply": ("client_reply", "Prepare a Fiverr Buyer reply"),
+        "offer": ("custom_offer", "Prepare a Fiverr Custom Offer"),
+        "profile": ("profile_builder", "Build Fiverr profile copy"),
+        "order": ("order_intake", "Plan a Fiverr order"),
+        "policy": ("policy_guard", "Run a Fiverr policy check"),
+    }
+    if sub not in kind_map:
+        await update.message.reply_text(_fiverr_usage(), parse_mode="HTML", disable_web_page_preview=True)
+        return
+    kind, title = kind_map[sub]
+    task = fiverr_agent.create_task(user_id, kind, title, {
+        "skill": kind, "step": "waiting_for_brief", "messages": []})
+    await update.message.reply_text(
+        f"🧑‍💻 <b>FIVERR AGENT — {html.escape(kind.upper())}</b>\n\n"
+        "Task created. Send the details in your next Telegram message. "
+        "I will ask for anything missing and keep the task saved.\n\n"
+        f"Task: <code>{html.escape(task['id'][:8])}</code>",
+        parse_mode="HTML")
+
+async def _fiverr_continue_task(update, context, text: str) -> bool:
+    if fiverr_agent is None or not _fiverr_is_admin(update):
+        return False
+    user_id = str(update.effective_user.id)
+    task = fiverr_agent.get_open_task(user_id)
+    if not task or task.get("status") != "waiting_for_user":
+        return False
+    data = dict(task.get("data") or {})
+    messages = list(data.get("messages") or [])
+    messages.append({"role": "user", "content": text})
+    data["messages"] = messages
+    kind = str(task.get("kind") or "workflow")
+    step = str(data.get("step") or "")
+    if step == "waiting_for_brief":
+        data["step"] = "drafting"
+        await update.message.chat.send_action("typing")
+        prompt = (
+            f"{fiverr_agent.agent_system_instructions()}\n\n"
+            f"Skill: {kind}\nUser's request/details:\n{text}\n\n"
+            "If essential information is missing, ask no more than 3 concise questions. "
+            "Otherwise produce a complete draft. For gig_creator include title, category, "
+            "tags, packages, description, FAQs, requirements and gallery checklist. "
+            "Do not claim access to Fiverr account data."
+        )
+        try:
+            answer = await asyncio.to_thread(ai_engine.ask, user_id, prompt, None)
+        except Exception as exc:
+            logger.warning("Fiverr Agent AI drafting failed: %s", exc)
+            answer = "I need more information. Tell me the exact service, target buyer, deliverables, turnaround time and starting price."
+        data["draft"] = answer
+        check = fiverr_agent.policy_check(answer)
+        data["policy_check"] = check
+        if check["ok"]:
+            data["step"] = "awaiting_approval"
+            task = fiverr_agent.update_task(task["id"], user_id, status="awaiting_approval", data=data)
+            approval = fiverr_agent.create_approval(user_id, f"prepare_{kind}", {"task_id": task["id"], "draft": answer})
+            await update.message.reply_text(
+                "🧑‍💻 <b>FIVERR AGENT DRAFT READY</b>\n\n" + html.escape(answer[:6500]) +
+                f"\n\nApproval: <code>{html.escape(approval['id'])}</code>\n"
+                f"Use <code>/fiverr approve {html.escape(approval['id'])}</code> to approve the prepared work.",
+                parse_mode="HTML", disable_web_page_preview=True)
+        else:
+            data["step"] = "needs_revision"
+            fiverr_agent.update_task(task["id"], user_id, status="waiting_for_user", data=data)
+            await update.message.reply_text(
+                "⚠️ <b>POLICY REVIEW FLAGGED THE DRAFT</b>\n\n" +
+                html.escape(check["message"]) +
+                "\n\nSend your revision instruction and I'll rebuild it.",
+                parse_mode="HTML")
+        return True
+    if step == "needs_revision":
+        data["step"] = "waiting_for_brief"
+        fiverr_agent.update_task(task["id"], user_id, status="waiting_for_user", data=data)
+        return await _fiverr_continue_task(update, context, text)
+    return False
+
 async def events_command(update, context):
     if not await require_subscription(update):
         return
@@ -3332,7 +3482,12 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
             logger.warning(f"Voice follow-up failed: {ve}")
 
 async def handle_text(update, context):
-    if not update.message or not update.message.text:
+
+    try:
+        if await _fiverr_continue_task(update, context, update.message.text.strip()):
+            return
+    except Exception as fiverr_err:
+        logger.warning("Fiverr Agent continuation failed: %s", fiverr_err)    if not update.message or not update.message.text:
         return
     if update.message.text.startswith("/"):
         return
@@ -3557,6 +3712,7 @@ def main():
     application.add_handler(CommandHandler("alerts", alerts_command))
     application.add_handler(CommandHandler("cancelalert", cancelalert_command))
 
+    application.add_handler(CommandHandler("fiverr", fiverr_command))
     application.add_handler(PreCheckoutQueryHandler(precheckout_handler))
     application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
 
