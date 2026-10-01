@@ -267,6 +267,76 @@ def verify_setup(analysis: Dict[str, Any]) -> Dict[str, Any]:
     else:
         checks.append({"name": "stop_loss", "ok": True, "impact": 0})
 
+    # Real 4H/1H/15M/5M consensus from the existing market engine.
+    mtf = analysis.get("mtf")
+    if isinstance(mtf, dict):
+        mtf_signal = _direction(mtf.get("mtf_signal"))
+        if mtf_signal == signal:
+            score += 12
+            checks.append({"name": "mtf_consensus", "ok": True, "impact": 12, "value": mtf_signal})
+            reasons.append("multi-timeframe consensus agrees")
+        elif mtf_signal in ("BUY", "SELL"):
+            score -= 18
+            checks.append({"name": "mtf_consensus", "ok": False, "impact": -18, "value": mtf_signal})
+            reasons.append(f"MTF consensus conflicts ({mtf_signal})")
+        else:
+            score -= 5
+            checks.append({"name": "mtf_consensus", "ok": False, "impact": -5, "value": "WAIT"})
+            reasons.append("multi-timeframe consensus is WAIT")
+
+        tf4 = mtf.get("4h") or {}
+        tf1 = mtf.get("1h") or {}
+        tf15 = mtf.get("15m") or {}
+        tf5 = mtf.get("5m") or {}
+        trend4 = str(tf4.get("trend") or "").upper()
+        trend1 = str(tf1.get("trend") or "").upper()
+        sig15 = _direction(tf15.get("signal"))
+        sig5 = _direction(tf5.get("signal"))
+        if ((signal == "BUY" and trend4 == "BULLISH" and trend1 == "BULLISH") or
+            (signal == "SELL" and trend4 == "BEARISH" and trend1 == "BEARISH")):
+            score += 10
+            checks.append({"name": "htf_alignment", "ok": True, "impact": 10})
+            reasons.append("4H and 1H aligned")
+        else:
+            score -= 10
+            checks.append({"name": "htf_alignment", "ok": False, "impact": -10})
+            reasons.append("4H/1H alignment missing")
+
+        if sig15 == signal:
+            score += 5
+            checks.append({"name": "15m_setup", "ok": True, "impact": 5})
+        else:
+            score -= 8
+            checks.append({"name": "15m_setup", "ok": False, "impact": -8})
+            reasons.append("15M does not confirm")
+
+        if sig5 == signal:
+            score += 8
+            checks.append({"name": "5m_entry", "ok": True, "impact": 8})
+            reasons.append("5M entry timing confirmed")
+        elif sig5 == "WAIT":
+            score -= 4
+            checks.append({"name": "5m_entry", "ok": None, "impact": -4, "value": "WAIT"})
+            reasons.append("5M entry confirmation pending")
+        else:
+            score -= 12
+            checks.append({"name": "5m_entry", "ok": False, "impact": -12, "value": sig5})
+            reasons.append("5M direction conflicts")
+
+        if bool(mtf.get("conflict")):
+            score -= 12
+            checks.append({"name": "mtf_conflict", "ok": False, "impact": -12})
+            reasons.append("higher-timeframe conflict detected")
+
+        ai_verdict = str(mtf.get("ai_verdict") or "").upper()
+        if ai_verdict.startswith("REJECT"):
+            score -= 20
+            checks.append({"name": "ai_crosscheck", "ok": False, "impact": -20})
+            reasons.append("AI multi-timeframe cross-check rejected setup")
+        elif ai_verdict.startswith("CONFIRM"):
+            score += 4
+            checks.append({"name": "ai_crosscheck", "ok": True, "impact": 4})
+
     score = max(0.0, min(100.0, score))
     decision = "SIGNAL" if score >= _min_score() else "WAIT"
     if decision == "WAIT":
@@ -341,6 +411,25 @@ def init_agent_v2_db() -> None:
                     ON agent_signals(fingerprint, status);
                 CREATE INDEX IF NOT EXISTS idx_agent_signal_events_signal
                     ON agent_signal_events(signal_id, created_at);
+                CREATE TABLE IF NOT EXISTS agent_heartbeats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    status TEXT NOT NULL,
+                    scan_count INTEGER NOT NULL DEFAULT 0,
+                    actionable_count INTEGER NOT NULL DEFAULT 0,
+                    wait_count INTEGER NOT NULL DEFAULT 0,
+                    error_count INTEGER NOT NULL DEFAULT 0,
+                    last_scan_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS agent_preferences (
+                    user_id TEXT PRIMARY KEY,
+                    watch_symbols_json TEXT,
+                    signal_alerts INTEGER NOT NULL DEFAULT 1,
+                    lifecycle_alerts INTEGER NOT NULL DEFAULT 1,
+                    morning_brief INTEGER NOT NULL DEFAULT 1,
+                    quiet_start TEXT,
+                    quiet_end TEXT,
+                    updated_at TEXT NOT NULL
+                );
                 """
             )
             conn.commit()
@@ -704,6 +793,165 @@ def update_signal_lifecycle(
             logger.debug("Agent V2 learning mirror failed: %s", e)
 
     return events
+
+
+def record_agent_heartbeat(
+    *,
+    status: str = "online",
+    scan_count: int = 0,
+    actionable_count: int = 0,
+    wait_count: int = 0,
+    error_count: int = 0,
+) -> None:
+    init_agent_v2_db()
+    with _DB_LOCK:
+        conn = _connect()
+        try:
+            conn.execute(
+                """
+                INSERT INTO agent_heartbeats
+                (status, scan_count, actionable_count, wait_count, error_count, last_scan_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(status),
+                    int(scan_count),
+                    int(actionable_count),
+                    int(wait_count),
+                    int(error_count),
+                    _now_iso(),
+                ),
+            )
+            conn.execute(
+                """
+                DELETE FROM agent_heartbeats
+                WHERE id NOT IN (
+                    SELECT id FROM agent_heartbeats ORDER BY id DESC LIMIT 100
+                )
+                """
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def get_agent_health() -> Dict[str, Any]:
+    init_agent_v2_db()
+    with _DB_LOCK:
+        conn = _connect()
+        try:
+            row = conn.execute(
+                "SELECT * FROM agent_heartbeats ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            if not row:
+                return {"status": "starting", "last_scan_at": None, "seconds_since_scan": None}
+            last = datetime.fromisoformat(str(row["last_scan_at"]))
+            if last.tzinfo is None:
+                last = last.replace(tzinfo=timezone.utc)
+            age = max(0.0, (datetime.now(timezone.utc) - last).total_seconds())
+            state = "online" if age <= max(600, _env_int("AGENT_V2_HEARTBEAT_STALE_SEC", 900)) else "stale"
+            return {
+                "status": state,
+                "last_scan_at": str(row["last_scan_at"]),
+                "seconds_since_scan": round(age, 1),
+                "scan_count": int(row["scan_count"]),
+                "actionable_count": int(row["actionable_count"]),
+                "wait_count": int(row["wait_count"]),
+                "error_count": int(row["error_count"]),
+            }
+        finally:
+            conn.close()
+
+
+def get_agent_preferences(user_id: str) -> Dict[str, Any]:
+    init_agent_v2_db()
+    with _DB_LOCK:
+        conn = _connect()
+        try:
+            row = conn.execute(
+                "SELECT * FROM agent_preferences WHERE user_id = ?",
+                (str(user_id),),
+            ).fetchone()
+            if not row:
+                return {
+                    "watch_symbols": [],
+                    "signal_alerts": True,
+                    "lifecycle_alerts": True,
+                    "morning_brief": True,
+                    "quiet_start": None,
+                    "quiet_end": None,
+                }
+            try:
+                symbols = json.loads(row["watch_symbols_json"] or "[]")
+            except Exception:
+                symbols = []
+            return {
+                "watch_symbols": symbols if isinstance(symbols, list) else [],
+                "signal_alerts": bool(row["signal_alerts"]),
+                "lifecycle_alerts": bool(row["lifecycle_alerts"]),
+                "morning_brief": bool(row["morning_brief"]),
+                "quiet_start": row["quiet_start"],
+                "quiet_end": row["quiet_end"],
+            }
+        finally:
+            conn.close()
+
+
+def save_agent_preferences(
+    user_id: str,
+    *,
+    watch_symbols: Optional[List[str]] = None,
+    signal_alerts: Optional[bool] = None,
+    lifecycle_alerts: Optional[bool] = None,
+    morning_brief: Optional[bool] = None,
+    quiet_start: Optional[str] = None,
+    quiet_end: Optional[str] = None,
+) -> Dict[str, Any]:
+    current = get_agent_preferences(user_id)
+    symbols = current["watch_symbols"] if watch_symbols is None else [
+        str(x).strip().upper() for x in watch_symbols if str(x).strip()
+    ][:30]
+    values = {
+        "watch_symbols": symbols,
+        "signal_alerts": current["signal_alerts"] if signal_alerts is None else bool(signal_alerts),
+        "lifecycle_alerts": current["lifecycle_alerts"] if lifecycle_alerts is None else bool(lifecycle_alerts),
+        "morning_brief": current["morning_brief"] if morning_brief is None else bool(morning_brief),
+        "quiet_start": current["quiet_start"] if quiet_start is None else (str(quiet_start).strip() or None),
+        "quiet_end": current["quiet_end"] if quiet_end is None else (str(quiet_end).strip() or None),
+    }
+    init_agent_v2_db()
+    with _DB_LOCK:
+        conn = _connect()
+        try:
+            conn.execute(
+                """
+                INSERT INTO agent_preferences
+                (user_id, watch_symbols_json, signal_alerts, lifecycle_alerts, morning_brief, quiet_start, quiet_end, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    watch_symbols_json=excluded.watch_symbols_json,
+                    signal_alerts=excluded.signal_alerts,
+                    lifecycle_alerts=excluded.lifecycle_alerts,
+                    morning_brief=excluded.morning_brief,
+                    quiet_start=excluded.quiet_start,
+                    quiet_end=excluded.quiet_end,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    str(user_id),
+                    json.dumps(values["watch_symbols"]),
+                    int(values["signal_alerts"]),
+                    int(values["lifecycle_alerts"]),
+                    int(values["morning_brief"]),
+                    values["quiet_start"],
+                    values["quiet_end"],
+                    _now_iso(),
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    return values
 
 
 def get_active_signals(limit: int = 20) -> List[Dict[str, Any]]:
