@@ -223,17 +223,6 @@ def _search_instance(base_url: str, query: str, max_results: int, time_range: st
         parser = _SearchHTMLParser()
         parser.feed(html_response.text[:2_000_000])
         return parser.results[:max_results]
-            url = str(row.get("url") or "").strip()
-            if not url or urlparse(url).scheme not in ("http", "https"):
-                continue
-            out.append({
-                "title": re.sub(r"\s+", " ", str(row.get("title") or "Untitled")).strip(),
-                "url": url,
-                "content": re.sub(r"\s+", " ", str(row.get("content") or "")).strip(),
-                "engine": str(row.get("engine") or "searxng"),
-                "source": "SearXNG",
-            })
-        return out
     except Exception as exc:
         logger.warning("SearXNG search failed for %s: %s", base_url, type(exc).__name__)
         return []
