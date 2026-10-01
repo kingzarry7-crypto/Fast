@@ -41,8 +41,8 @@ def status() -> Dict[str, Any]:
 def send_text(to: str, text: str) -> Dict[str, Any]:
     token = _env("WHATSAPP_ACCESS_TOKEN")
     phone_id = _env("WHATSAPP_PHONE_NUMBER_ID")
-    version = _env("WHATSAPP_GRAPH_VERSION")
-    if not token or not phone_id or not version:
+    version = _env("WHATSAPP_GRAPH_VERSION") or "v25.0"
+    if not token or not phone_id:
         raise RuntimeError(
             "WhatsApp connector is not configured. Set WHATSAPP_ACCESS_TOKEN, "
             "WHATSAPP_PHONE_NUMBER_ID, and WHATSAPP_GRAPH_VERSION in Railway."
