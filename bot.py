@@ -175,8 +175,8 @@ except Exception as e:
     raise
 
 try:
-    import stt_engine
-    logger.info(f"🎙️ STT Engine loaded: {stt_engine.provider_status()}")
+    import stt_engine_openrouter as stt_engine
+    logger.info(f"🎙️ STT Engine loaded: {stt_engine.provider_status()} | source={stt_engine.__file__}")
 except Exception as e:
     stt_engine = None
     logger.warning(f"STT Engine import failed: {e}")
