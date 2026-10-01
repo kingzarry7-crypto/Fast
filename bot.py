@@ -2507,7 +2507,22 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
         targets |= set(ADMIN_IDS)
     elif AGENT_SIGNAL_AUDIENCE in ("subscribers", "vip", "subs"):
         try:
-               # Automatic Agent delivery uses the same complete presentation as /signal.
+            for uid in get_all_users():
+                if is_subscribed(uid) or uid in ADMIN_IDS:
+                    targets.add(uid)
+        except Exception:
+            targets |= set(ADMIN_IDS)
+    else:  # all
+        try:
+            targets |= set(get_all_users())
+        except Exception:
+            targets |= set(ADMIN_IDS)
+        targets |= set(ADMIN_IDS)
+
+    if not targets:
+        targets |= set(ADMIN_IDS)
+
+    # Automatic Agent delivery uses the same complete presentation as /signal.
     # Rebuild MTF/news here so Entry, SL, TP1/TP2/TP3 and the chart are generated
     # from the same analysis path used by /signal.
     sent = 0
@@ -2539,7 +2554,6 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
                     if not signal_text:
                         raise ValueError("empty formatted signal")
 
-                    # Same delivery semantics as /signal: complete text first, then chart.
                     chunks = [signal_text[i:i + 3800] for i in range(0, len(signal_text), 3800)]
                     for chunk in chunks:
                         await context.bot.send_message(
@@ -2569,8 +2583,6 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
                     )
                 except Exception as package_error:
                     logger.warning("agent complete signal package %s %s failed: %s", uid, sym, package_error)
-                    # Never fall back to the old lightweight signal. If the full
-                    # /signal-style package cannot be built, send no signal.
                     continue
 
             sent += 1
@@ -2578,7 +2590,18 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.debug(f"agent_signal_watch send {uid}: {e}")
 
-  from agent_core import tool_analyze_symbol
+    logger.info(f"agent_signal_watch: pushed {len(actionable)} signal(s) to {sent} chat(s)")
+
+
+async def agentscan_command(update, context):
+    """Admin-only: force one agent market scan and reply with results."""
+    user = update.effective_user
+    if not user or user.id not in ADMIN_IDS:
+        await update.message.reply_text("Admin only.")
+        return
+    await update.message.reply_text("🤖 Agent scanning BTC/ETH/SOL/XAU…")
+    try:
+        from agent_core import tool_analyze_symbol
     except Exception as e:
         await update.message.reply_text(f"agent_core error: {type(e).__name__}")
         return
@@ -2642,7 +2665,6 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
                 )
             except Exception as e:
                 logger.warning("agentscan send failed %s: %s", uid, e)
-
 
 
 async def notification_job(context: ContextTypes.DEFAULT_TYPE):
