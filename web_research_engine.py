@@ -43,6 +43,69 @@ _RESEARCH_TERMS = (
     "latest", "today", "current", "recent", "news", "what happened",
 )
 
+class _SearchHTMLParser(HTMLParser):
+    """Small parser for SearXNG HTML when an instance disables format=json."""
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.results: List[Dict[str, Any]] = []
+        self._in_article = False
+        self._depth = 0
+        self._current: Dict[str, Any] = {}
+        self._capture_title = False
+        self._capture_content = False
+        self._parts: List[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs_dict = dict(attrs)
+        classes = set(str(attrs_dict.get("class") or "").split())
+        if tag.lower() == "article" and ("result" in classes or "result-default" in classes):
+            self._in_article = True
+            self._depth = 1
+            self._current = {}
+            self._parts = []
+            return
+        if not self._in_article:
+            return
+        if tag.lower() == "a" and not self._current.get("url"):
+            href = str(attrs_dict.get("href") or "").strip()
+            if href.startswith(("http://", "https://")):
+                self._current["url"] = href
+                self._capture_title = True
+        if tag.lower() == "p":
+            self._capture_content = True
+
+    def handle_endtag(self, tag):
+        if not self._in_article:
+            return
+        if tag.lower() == "a" and self._capture_title:
+            self._capture_title = False
+        if tag.lower() == "p":
+            self._capture_content = False
+        if tag.lower() == "article":
+            title = re.sub(r"\s+", " ", str(self._current.get("title") or "")).strip()
+            content = re.sub(r"\s+", " ", " ".join(self._parts)).strip()
+            url = str(self._current.get("url") or "").strip()
+            if url:
+                self.results.append({
+                    "title": title or "Untitled",
+                    "url": url,
+                    "content": content,
+                    "engine": "searxng-html",
+                    "source": "SearXNG",
+                })
+            self._in_article = False
+            self._depth = 0
+
+    def handle_data(self, data):
+        if not self._in_article:
+            return
+        value = html.unescape(data or "")
+        if self._capture_title:
+            self._current["title"] = (self._current.get("title") or "") + " " + value
+        if self._capture_content:
+            self._parts.append(value)
+
+
 class _TextExtractor(HTMLParser):
     _SKIP = {"script", "style", "noscript", "svg", "nav", "footer", "header", "form"}
 
@@ -124,11 +187,42 @@ def _search_instance(base_url: str, query: str, max_results: int, time_range: st
             headers={"Accept": "application/json", "User-Agent": "KingZarryAI/1.0"},
             timeout=_TIMEOUT,
         )
-        response.raise_for_status()
-        payload = response.json()
-        rows = payload.get("results") or []
-        out = []
-        for row in rows[:max_results]:
+        if response.ok:
+            try:
+                payload = response.json()
+                rows = payload.get("results") or []
+                out = []
+                for row in rows[:max_results]:
+                    url = str(row.get("url") or "").strip()
+                    if not url or urlparse(url).scheme not in ("http", "https"):
+                        continue
+                    out.append({
+                        "title": re.sub(r"\s+", " ", str(row.get("title") or "Untitled")).strip(),
+                        "url": url,
+                        "content": re.sub(r"\s+", " ", str(row.get("content") or "")).strip(),
+                        "engine": str(row.get("engine") or "searxng"),
+                        "source": "SearXNG",
+                    })
+                return out
+            except Exception:
+                pass
+
+        # Some public instances intentionally disable JSON output.
+        html_response = requests.get(
+            base_url + "/search",
+            params={
+                "q": query,
+                "language": "en",
+                "safesearch": 1,
+                **({"time_range": time_range} if time_range else {}),
+            },
+            headers={"Accept": "text/html", "User-Agent": "KingZarryAI/1.0"},
+            timeout=_TIMEOUT,
+        )
+        html_response.raise_for_status()
+        parser = _SearchHTMLParser()
+        parser.feed(html_response.text[:2_000_000])
+        return parser.results[:max_results]
             url = str(row.get("url") or "").strip()
             if not url or urlparse(url).scheme not in ("http", "https"):
                 continue
