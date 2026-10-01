@@ -36,6 +36,12 @@ SKILLS = {
     "analytics": "Interpret seller metrics supplied by the user and propose factual experiments.",
     "fiverr_brief": "Produce a daily/weekly Fiverr workspace brief from supplied account data.",
     "workflow": "Remember an open Fiverr task and ask the user for missing information through Telegram.",
+    "inbox_manager": "Store and triage Fiverr inbox events supplied by a supported integration.",
+    "gig_manager": "Track Gig creation and optimization work as persistent tasks.",
+    "offer_manager": "Track Custom Offer preparation and approval.",
+    "order_manager": "Track buyer/order intake and requirements.",
+    "delivery_manager": "Track delivery preparation and QA.",
+    "integration_bridge": "Receive structured events from an official/supported integration without credentials or session cookies.",
 }
 
 SUPPORTED_ACTIONS = {
@@ -227,6 +233,69 @@ def decide_approval(approval_id: str, user_id: str, approved: bool) -> Optional[
         finally:
             conn.close()
 
+def ingest_inbox_message(user_id: str, message: str, external_id: Optional[str] = None,
+                         conversation_id: Optional[str] = None, sender_name: Optional[str] = None,
+                         sender_username: Optional[str] = None, subject: Optional[str] = None,
+                         received_at: Optional[str] = None, raw: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Store an inbox event supplied by an official/supported integration."""
+    item_id = str(uuid.uuid4())
+    now = received_at or _now()
+    with _LOCK:
+        conn = _connect()
+        try:
+            if external_id:
+                old = conn.execute("SELECT * FROM fiverr_agent_inbox WHERE telegram_user_id=? AND external_id=? LIMIT 1",
+                                   (str(user_id), str(external_id))).fetchone()
+                if old:
+                    item = dict(old)
+                    item["raw"] = json.loads(item.pop("raw_json") or "{}")
+                    return item
+            conn.execute("""INSERT INTO fiverr_agent_inbox
+                (id,telegram_user_id,external_id,conversation_id,sender_name,sender_username,subject,message,received_at,status,raw_json)
+                VALUES(?,?,?,?,?,?,?,?,?,'unread',?)""",
+                (item_id, str(user_id), str(external_id) if external_id else None,
+                 str(conversation_id) if conversation_id else None, str(sender_name or "")[:200],
+                 str(sender_username or "")[:200], str(subject or "")[:300], str(message)[:12000],
+                 str(now), json.dumps(raw or {}, ensure_ascii=False)))
+            conn.commit()
+            row = conn.execute("SELECT * FROM fiverr_agent_inbox WHERE id=?", (item_id,)).fetchone()
+            item = dict(row)
+            item["raw"] = json.loads(item.pop("raw_json") or "{}")
+            return item
+        finally:
+            conn.close()
+
+def list_inbox(user_id: str, limit: int = 20, unread_only: bool = False) -> List[Dict[str, Any]]:
+    with _LOCK:
+        conn = _connect()
+        try:
+            sql = "SELECT * FROM fiverr_agent_inbox WHERE telegram_user_id=?"
+            params: List[Any] = [str(user_id)]
+            if unread_only:
+                sql += " AND status='unread'"
+            sql += " ORDER BY received_at DESC LIMIT ?"
+            params.append(max(1, min(int(limit), 50)))
+            rows = conn.execute(sql, params).fetchall()
+            out = []
+            for row in rows:
+                item = dict(row)
+                item["raw"] = json.loads(item.pop("raw_json") or "{}")
+                out.append(item)
+            return out
+        finally:
+            conn.close()
+
+def mark_inbox_read(item_id: str, user_id: str) -> bool:
+    with _LOCK:
+        conn = _connect()
+        try:
+            cur = conn.execute("UPDATE fiverr_agent_inbox SET status='read' WHERE id=? AND telegram_user_id=?",
+                               (str(item_id), str(user_id)))
+            conn.commit()
+            return bool(cur.rowcount)
+        finally:
+            conn.close()
+
 def get_workspace(user_id: str) -> Dict[str, Any]:
     with _LOCK:
         conn = _connect()
@@ -397,5 +466,5 @@ OPERATING STANDARD
     a supported integration actually returned success.
 11. Without an official/supported Fiverr execution integration, produce an approved
     manual execution pack instead of pretending to perform the action.
-12. Before approval, show the user the actual draft and policy-check result.
+12. Before approval, show the user the actual draft and policy-check result.\n13. Supported integration events may be stored and routed to Telegram; never fabricate them.\n14. Never request or store Fiverr passwords, 2FA codes, recovery codes or session cookies.
 """
