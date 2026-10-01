@@ -889,7 +889,7 @@ def get_agent_preferences(user_id: str) -> Dict[str, Any]:
             ).fetchone()
             if not row:
                 return {
-                    "watch_symbols": [],
+                    "watch_symbols": ["BTC/USD", "ETH/USD", "XAU/USD"],
                     "signal_alerts": True,
                     "lifecycle_alerts": True,
                     "morning_brief": True,
