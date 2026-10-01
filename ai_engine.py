@@ -2255,7 +2255,7 @@ class AIEngine:
                 if ctx:
                     tavily_context = ctx
                     tavily_sources = srcs
-                    prompt_for_providers = f"{original_prompt}\n\n--- LIVE WEB SEARCH CONTEXT (Tavily) ---\n{tavily_context}\n--- END WEB CONTEXT ---\n"
+                    prompt_for_providers = f"{prompt_for_providers}\n\n--- LIVE WEB SEARCH CONTEXT (Tavily) ---\n{tavily_context}\n--- END WEB CONTEXT ---\n"
         except Exception as e:
             logger.warning(f"Tavily failed: {_redact_secrets(str(e))}")
 
