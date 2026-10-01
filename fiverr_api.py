@@ -209,10 +209,54 @@ def policy_check(
     return {"status": "success", **fiverr_agent.policy_check(body.draft)}
 
 
+
+class InboxEventRequest(BaseModel):
+    user_id: str = Field(min_length=1, max_length=120)
+    message: str = Field(min_length=1, max_length=12000)
+    external_id: Optional[str] = Field(default=None, max_length=200)
+    conversation_id: Optional[str] = Field(default=None, max_length=200)
+    sender_name: Optional[str] = Field(default=None, max_length=200)
+    sender_username: Optional[str] = Field(default=None, max_length=200)
+    subject: Optional[str] = Field(default=None, max_length=300)
+    received_at: Optional[str] = Field(default=None, max_length=80)
+    raw: Dict[str, Any] = Field(default_factory=dict)
+
 @router.get("/checklist")
 def checklist(x_fiverr_agent_key: Optional[str] = Header(default=None)) -> Dict[str, Any]:
     _authorize(x_fiverr_agent_key)
     return {"status": "success", "checklist": fiverr_agent.gig_checklist()}
+
+
+
+@router.post("/inbox/events")
+def ingest_inbox_event(body: InboxEventRequest, x_fiverr_agent_key: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+    """Receive an event from an official/supported integration; never logs into or scrapes Fiverr."""
+    _authorize(x_fiverr_agent_key)
+    item = fiverr_agent.ingest_inbox_message(
+        body.user_id, body.message, external_id=body.external_id,
+        conversation_id=body.conversation_id, sender_name=body.sender_name,
+        sender_username=body.sender_username, subject=body.subject,
+        received_at=body.received_at, raw=body.raw,
+    )
+    return {"status": "success", "inbox_item": item}
+
+
+@router.get("/inbox/{user_id}")
+def get_inbox(user_id: str, limit: int = 20, unread_only: bool = False,
+              x_fiverr_agent_key: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+    _authorize(x_fiverr_agent_key)
+    return {"status": "success", "inbox": fiverr_agent.list_inbox(
+        user_id, max(1, min(limit, 50)), unread_only=unread_only
+    )}
+
+
+@router.post("/inbox/{item_id}/read")
+def read_inbox(item_id: str, body: DecisionRequest,
+               x_fiverr_agent_key: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+    _authorize(x_fiverr_agent_key)
+    if not fiverr_agent.mark_inbox_read(item_id, body.user_id):
+        raise HTTPException(status_code=404, detail="Fiverr inbox item not found")
+    return {"status": "success", "read": True}
 
 
 @router.post("/draft")
