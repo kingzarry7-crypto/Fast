@@ -64,39 +64,42 @@ export default function SignalsPage() {
         )}
 
         <div className="space-y-4">
-          {rows.map((s) => (
-            <div key={s.symbol} className="kz-panel p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                <p className="font-display text-lg text-white tracking-wider">
-                  {s.symbol}
-                </p>
-                <span
-                  className={`px-2.5 py-1 rounded-md border text-[10px] font-mono-tech tracking-widest ${badge(
-                    s.signal
-                  )}`}
-                >
-                  {String(s.signal || "WAIT").toUpperCase()}
-                </span>
+          {rows.map((s) => {
+            const reasons = Array.isArray(s.reasons) ? s.reasons : [];
+            return (
+              <div key={String(s.symbol || "")} className="kz-panel p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                  <p className="font-display text-lg text-white tracking-wider">
+                    {String(s.symbol || "—")}
+                  </p>
+                  <span
+                    className={`px-2.5 py-1 rounded-md border text-[10px] font-mono-tech tracking-widest ${badge(
+                      s.signal
+                    )}`}
+                  >
+                    {String(s.signal || "WAIT").toUpperCase()}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono-tech text-[10px] text-cyan-300/70 mb-3">
+                  <span>Price {s.price != null ? String(s.price) : "—"}</span>
+                  <span>Conf {s.confidence != null ? String(s.confidence) : "—"}</span>
+                  <span>Entry {s.entry != null ? String(s.entry) : "—"}</span>
+                  <span>SL {s.stop_loss != null ? String(s.stop_loss) : "—"}</span>
+                  <span>TP1 {s.tp1 != null ? String(s.tp1) : "—"}</span>
+                  <span>TP2 {s.tp2 != null ? String(s.tp2) : "—"}</span>
+                  <span>TP3 {s.tp3 != null ? String(s.tp3) : "—"}</span>
+                  <span>Trend {String(s.trend || "—")}</span>
+                </div>
+                {reasons.length > 0 && (
+                  <ul className="text-xs text-cyan-200/50 space-y-1 list-disc list-inside">
+                    {reasons.slice(0, 5).map((r, i) => (
+                      <li key={i}>{String(r)}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono-tech text-[10px] text-cyan-300/70 mb-3">
-                <span>Price {s.price != null ? String(s.price) : "—"}</span>
-                <span>Conf {s.confidence != null ? String(s.confidence) : "—"}</span>
-                <span>Entry {s.entry != null ? String(s.entry) : "—"}</span>
-                <span>SL {s.stop_loss != null ? String(s.stop_loss) : "—"}</span>
-                <span>TP1 {s.tp1 != null ? String(s.tp1) : "—"}</span>
-                <span>TP2 {s.tp2 != null ? String(s.tp2) : "—"}</span>
-                <span>TP3 {s.tp3 != null ? String(s.tp3) : "—"}</span>
-                <span>Trend {String(s.trend || "—")}</span>
-              </div>
-              {(s.reasons || []).length > 0 && (
-                <ul className="text-xs text-cyan-200/50 space-y-1 list-disc list-inside">
-                  {(s.reasons || []).slice(0, 5).map((r, i) => (
-                    <li key={i}>{r}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <p className="mt-8 text-[10px] font-mono-tech text-cyan-400/30 tracking-wider">
