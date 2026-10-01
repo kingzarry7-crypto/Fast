@@ -2304,39 +2304,8 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
         price = analysis.get("price")
         late = _agent_signal_is_late(analysis)
 
-        lifecycle_events = _agent_v2_update_lifecycle(symbol, analysis)
-        if lifecycle_events:
-            logger.info("agent_v2 lifecycle %s: %s", symbol, ", ".join(str(e.get("event")) for e in lifecycle_events))
-            try:
-                from agent_v2 import get_agent_preferences, preferences_allow_now
-                for event in lifecycle_events:
-                    for uid in get_all_users():
-                        if not (is_subscribed(uid) or uid in ADMIN_IDS):
-                            continue
-                        prefs = get_agent_preferences(str(uid))
-                        if not preferences_allow_now(
-                            prefs,
-                            symbol=str(event.get("symbol") or ""),
-                            lifecycle=True,
-                        ):
-                            continue
-                        event_text = (
-                            "🤖 <b>KING ZARRY AGENT</b>\n\n"
-                            f"<b>{html.escape(str(event.get('symbol')))}</b> "
-                            f"{html.escape(str(event.get('direction')))}\n"
-                            f"ID: <code>{html.escape(str(event.get('signal_id')))}</code>\n"
-                            f"Event: <b>{html.escape(str(event.get('event')))}</b>\n"
-                            f"Observed: <b>{html.escape(str(event.get('price')))}</b>"
-                        )
-                        try:
-                            await context.bot.send_message(
-                                chat_id=int(uid), text=event_text,
-                                parse_mode="HTML", disable_web_page_preview=True,
-                            )
-                        except Exception as send_error:
-                            logger.debug("Agent V2 lifecycle notify %s failed: %s", uid, send_error)
-            except Exception as notify_error:
-                logger.debug("Agent V2 lifecycle notification skipped: %s", notify_error)
+        # Lifecycle state changes stay internal. Telegram receives only the
+        # complete /signal-style package below, never a raw lifecycle event.
         scan_summary.append(
             f"{symbol}={sig}"
             + (f"@{price}" if price is not None else "")
@@ -2538,58 +2507,18 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
         targets |= set(ADMIN_IDS)
     elif AGENT_SIGNAL_AUDIENCE in ("subscribers", "vip", "subs"):
         try:
-            for uid in get_all_users():
-                if is_subscribed(uid) or uid in ADMIN_IDS:
-                    targets.add(uid)
-        except Exception:
-            targets |= set(ADMIN_IDS)
-    else:  # all
-        try:
-            targets |= set(get_all_users())
-        except Exception:
-            targets |= set(ADMIN_IDS)
-        targets |= set(ADMIN_IDS)
-
-    if not targets:
-        targets |= set(ADMIN_IDS)
-
-    job_id = None
-    try:
-        job_id = create_job(
-            user_id="telegram_agent",
-            job_type="signal_push",
-            title=f"Signal push {len(actionable)} assets",
-            payload={"symbols": [a.get("symbol") for a in actionable]},
-            needs_approval=False,
-        )
-    except Exception:
-        pass
-
-    # Charts for each actionable signal (same as /signal charts)
-    charts = []
-    for a in actionable:
-        sym = str(a.get("symbol") or "")
-        if not sym:
-            continue
-        try:
-            mtf_data = await asyncio.to_thread(analyze_multi_timeframe, sym)
-            chart_buf = await asyncio.to_thread(build_signal_chart, mtf_data)
-            sig = mtf_data.get("mtf_signal") or (mtf_data.get("15m") or {}).get("signal") or a.get("signal")
-            sig_icon = "🟢" if sig == "BUY" else "🔴" if sig == "SELL" else "⏳"
-            caption = f"🤖 AGENT • {sig_icon} {sig} • {sym}" + chr(10) + "Auto signal — not financial advice."
-            charts.append((sym, chart_buf, caption))
-        except Exception as e:
-            logger.warning("agent_signal_watch chart %s: %s", sym, e)
-
+               # Automatic Agent delivery uses the same complete presentation as /signal.
+    # Rebuild MTF/news here so Entry, SL, TP1/TP2/TP3 and the chart are generated
+    # from the same analysis path used by /signal.
     sent = 0
     for uid in targets:
         try:
-            # Global scanner discovers everything; delivery is personalized.
             try:
                 from agent_v2 import get_agent_preferences, preferences_allow_now
                 prefs = get_agent_preferences(str(uid))
             except Exception:
                 prefs = {"watch_symbols": ["BTC/USD", "ETH/USD", "SOL/USD", "XAU/USD", "UNI/USD"], "signal_alerts": True}
+
             user_actionable = [
                 a for a in actionable
                 if preferences_allow_now(prefs, symbol=str(a.get("symbol") or ""), lifecycle=False)
@@ -2597,106 +2526,59 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
             if not user_actionable:
                 continue
 
-            user_lines = [
-                "🤖 <b>KING ZARRY AGENT — YOUR WATCHLIST</b>",
-                "",
-                "New actionable setup(s):",
-                "",
-            ]
             for a in user_actionable:
-                user_lines.append(
-                    f"• <b>{html.escape(str(a.get('symbol')))}</b> — "
-                    f"<b>{html.escape(str(a.get('signal') or '').upper())}</b>\n"
-                    f"  Price: {html.escape(str(a.get('price') or '—'))}\n"
-                    f"  Entry: {html.escape(str(a.get('entry') or '—'))} | "
-                    f"SL: {html.escape(str(a.get('stop_loss') or '—'))}\n"
-                    f"  TP1: {html.escape(str(a.get('tp1') or '—'))} | "
-                    f"TP2: {html.escape(str(a.get('tp2') or '—'))}\n"
-                    f"  Conf: {html.escape(str(a.get('confidence') or '—'))} | "
-                    f"Trend: {html.escape(str(a.get('trend') or '—'))}"
-                    + (f"\n  Agent ID: <code>{html.escape(str(a.get('signal_id')))}</code>" if a.get("signal_id") else "")
-                    + (f"\n  V2 score: <b>{html.escape(str((a.get('agent_v2') or {}).get('score')))}</b>" if (a.get('agent_v2') or {}).get('score') is not None else "")
-                )
-                v2 = a.get("agent_v2") or {}
-                reasons = v2.get("reasons") or a.get("reasons") or []
-                if reasons:
-                    user_lines.append(f"  Note: {html.escape(str(reasons[0])[:120])}")
-                user_lines.append("")
-            user_lines.append("<i>Not financial advice. Trading involves risk.</i>")
-
-            await context.bot.send_message(
-                chat_id=uid,
-                text="\n".join(user_lines),
-                parse_mode="HTML",
-                disable_web_page_preview=True,
-            )
-
-            allowed_symbols = {str(a.get("symbol") or "").upper() for a in user_actionable}
-            for sym, chart_buf, caption in charts:
-                if sym.upper() not in allowed_symbols:
+                sym = str(a.get("symbol") or "").strip()
+                if not sym:
                     continue
                 try:
-                    if hasattr(chart_buf, "seek"):
-                        chart_buf.seek(0)
+                    mtf_data = await asyncio.to_thread(analyze_multi_timeframe, sym)
+                    news_data = await asyncio.to_thread(news_engine.get_news_for_asset, sym)
+                    mtf_data = await asyncio.to_thread(ai_confirm_signal_mtf, mtf_data, news_data)
+
+                    signal_text = format_signal_mtf(mtf_data, news_data)
+                    if not signal_text:
+                        raise ValueError("empty formatted signal")
+
+                    # Same delivery semantics as /signal: complete text first, then chart.
+                    chunks = [signal_text[i:i + 3800] for i in range(0, len(signal_text), 3800)]
+                    for chunk in chunks:
+                        await context.bot.send_message(
+                            chat_id=int(uid),
+                            text=chunk,
+                            parse_mode="HTML",
+                            disable_web_page_preview=True,
+                        )
+
+                    chart = await asyncio.to_thread(build_signal_chart, mtf_data)
+                    sig = mtf_data.get("mtf_signal", (mtf_data.get("15m") or {}).get("signal", "WAIT"))
+                    sig_icon = "🟢" if sig == "BUY" else "🔴" if sig == "SELL" else "⏳"
+                    tf15 = mtf_data.get("15m") or {}
+                    caption = (
+                        f"👑 KING ZARRY AI\\n"
+                        f"{sig_icon} {sig} • {sym} • 15M • MTF {mtf_data.get('mtf_bias','')}\\n"
+                        f"Entry: {float(tf15.get('entry_zone_low', 0)):,.2f} - {float(tf15.get('entry_zone_high', 0)):,.2f}\\n"
+                        f"SL: {float(tf15.get('stop_loss', 0)):,.2f}\\n"
+                        f"TP1: {float(tf15.get('tp1', 0)):,.2f}\\n"
+                        f"TP2: {float(tf15.get('tp2', 0)):,.2f}\\n"
+                        f"TP3: {float(tf15.get('tp3', 0)):,.2f}"
+                    )
                     await context.bot.send_photo(
-                        chat_id=uid,
-                        photo=chart_buf,
+                        chat_id=int(uid),
+                        photo=chart,
                         caption=caption[:1024],
                     )
-                    if hasattr(chart_buf, "seek"):
-                        chart_buf.seek(0)
-                except Exception as ce:
-                    logger.debug("agent chart send %s %s: %s", uid, sym, ce)
+                except Exception as package_error:
+                    logger.warning("agent complete signal package %s %s failed: %s", uid, sym, package_error)
+                    # Never fall back to the old lightweight signal. If the full
+                    # /signal-style package cannot be built, send no signal.
+                    continue
+
             sent += 1
             await asyncio.sleep(0.08)
         except Exception as e:
             logger.debug(f"agent_signal_watch send {uid}: {e}")
 
-    if job_id:
-        try:
-            _update_job(job_id, status="done", result={"sent": sent, "count": len(actionable)})
-        except Exception:
-            pass
-
-    logger.info(f"agent_signal_watch: pushed {len(actionable)} signal(s) to {sent} chat(s)")
-
-
-
-
-async def intelligence_command(update, context):
-    """VIP Market Intelligence Agent: context/news/macro, separate from signals."""
-    if not await require_subscription(update):
-        return
-    await update.message.chat.send_action("typing")
-    status = await update.message.reply_text(
-        "🧠 <b>MARKET INTELLIGENCE AGENT</b>\\n\\nScanning market regime, news, macro events and crypto intelligence…",
-        parse_mode="HTML",
-    )
-    try:
-        from agent_intelligence import get_market_intelligence, format_market_intelligence
-        data = await asyncio.to_thread(get_market_intelligence)
-        await send_long_message(update.message, html.escape(format_market_intelligence(data)), is_raw_html=True)
-        try:
-            await status.delete()
-        except Exception:
-            pass
-    except Exception as exc:
-        logger.exception("Market Intelligence Agent failed: %s", exc)
-        try:
-            await status.edit_text("❌ <b>Market Intelligence Agent</b>\\n\\nLive intelligence is temporarily unavailable.", parse_mode="HTML")
-        except Exception:
-            await update.message.reply_text("❌ Market Intelligence Agent unavailable.")
-
-
-async def agentscan_command(update, context):
-    """Admin-only: force one agent market scan and reply with results."""
-    user = update.effective_user
-    if not user or user.id not in ADMIN_IDS:
-        await update.message.reply_text("Admin only.")
-        return
-    await update.message.reply_text("🤖 Agent scanning BTC/ETH/SOL/XAU…")
-    try:
-        from agent_core import tool_analyze_symbol
+  from agent_core import tool_analyze_symbol
     except Exception as e:
         await update.message.reply_text(f"agent_core error: {type(e).__name__}")
         return
