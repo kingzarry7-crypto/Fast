@@ -1781,7 +1781,8 @@ async def start_command(update, context):
           "📊 <b>15M SIGNALS - MTF 4H→1H→15M→5M</b>\n"
           "Signals only come when you use a command:\n"
           "/signal XAU\n/signal BTC\n/signal ETH\n/signal SOL\n\n📋 <b>One-Day Plan</b>\n/plan BTC\n/plan XAU\n\n📰 <b>News</b>\n/news BTC\n/events\n\n⚡ Quick:\n/xau\n/btc\n/eth\n/sol\n\n"
-          "🧠 <b>Market Intelligence</b>\n/intel — live market regime, news, macro and crypto context\n\n          "🔔 <b>Price alerts</b>\n/alert XAU above 4329\n/alerts\n\n"
+          "🧠 <b>Market Intelligence</b>\n/intel — live market regime, news, macro and crypto context\n\n"
+          "🔔 <b>Price alerts</b>\n/alert XAU above 4329\n/alerts\n\n"
           "💎 <b>VIP</b>\n/buy\n/status\n/history\n/paysupport\n\n📸 Send a chart for AI Vision")
     await send_long_message(update.message,text,is_raw_html=True)
 
