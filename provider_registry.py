@@ -18,6 +18,11 @@ try:
 except Exception:
     universal_api_discovery = None
 
+try:
+    import web_research_engine
+except Exception:
+    web_research_engine = None
+
 
 def _env(name: str) -> str:
     return re.sub(r"[\u200b\u200c\u200d\u2060\ufeff]", "", str(os.getenv(name) or "")).strip()
@@ -164,11 +169,22 @@ def snapshot() -> Dict[str, Any]:
         except Exception as exc:
             universal = {"providers": [], "configured_count": 0, "error": type(exc).__name__}
 
+    web_research = {"configured": False, "instances": 0}
+    if web_research_engine is not None:
+        try:
+            web_research = {
+                "configured": bool(web_research_engine.is_configured()),
+                "instances": len(web_research_engine._env_urls()),
+            }
+        except Exception:
+            web_research = {"configured": False, "instances": 0}
+
     return {
         "providers": providers,
         "service_credentials": service_credentials,
         "unknown_env_keys": unknown,
         "configured_count": len(providers),
+        "web_research": web_research,
         "universal_api_count": len(universal.get("providers", [])),
         "universal_api_tools": (
             universal_api_discovery.tool_catalog()
@@ -185,6 +201,8 @@ def signature(s: Dict[str, Any]) -> str:
         )
     parts.append("services:" + ",".join(x["env"] for x in s.get("service_credentials", [])))
     parts.append("unknown:" + ",".join(s["unknown_env_keys"]))
+    wr = s.get("web_research") or {}
+    parts.append(f'web_research:{bool(wr.get("configured"))}|instances={wr.get("instances", 0)}')
     if universal_api_discovery is not None:
         try:
             parts.append("universal:" + universal_api_discovery.signature({
@@ -253,6 +271,18 @@ def format_admin_report(s: Dict[str, Any], first_run: bool = False) -> str:
                 lines.extend(universal_api_discovery.report_lines({"providers": universal_items}))
             except Exception:
                 pass
+
+    web_research = s.get("web_research") or {}
+    lines.append("")
+    if web_research.get("configured"):
+        lines.append(
+            f'🌐 <b>Deep Web Research: ACTIVE</b> — '
+            f'{web_research.get("instances", 1)} SearXNG instance(s)'
+        )
+        lines.append("   Multi-source search + public page fetching enabled for research/current questions.")
+    else:
+        lines.append("🌐 <b>Deep Web Research: NOT CONFIGURED</b>")
+        lines.append("   Add SEARXNG_URL or SEARXNG_URLS to enable multi-source free web research.")
 
     if s["unknown_env_keys"]:
         lines.append("")
