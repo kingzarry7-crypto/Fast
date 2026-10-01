@@ -2721,6 +2721,19 @@ async def agent_status_endpoint(request: Request):
         )
 
 
+@app.get("/api/agent/intelligence")
+async def agent_intelligence_endpoint(request: Request):
+    """VIP Market Intelligence Agent snapshot."""
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    await asyncio.to_thread(_require_web_vip, user_row)
+    try:
+        from agent_intelligence import get_market_intelligence
+        return await asyncio.to_thread(get_market_intelligence)
+    except Exception as exc:
+        logger.error("market intelligence failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Market Intelligence Agent unavailable")
+
+
 @app.get("/api/agent/v2")
 async def agent_v2_endpoint(request: Request):
     """VIP Agent V2 dashboard: health, active signals, performance."""
