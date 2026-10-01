@@ -164,6 +164,9 @@ except Exception as e:
 try:
     from ai_engine import AIEngine
     print("🔵 BOOT: ai_engine imported", flush=True)
+except Exception as e:
+    print(f"❌ BOOT: ai_engine import failed | {e}", flush=True)
+    raise
 
 try:
     import fiverr_agent
