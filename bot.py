@@ -176,7 +176,7 @@ except Exception as e:
 
 try:
     import stt_engine_openrouter as stt_engine
-    logger.info(f"🎙️ STT Engine loaded: {stt_engine.provider_status()} | source={stt_engine.__file__}")
+    logger.info(f"🎙️ STT Engine loaded: {stt_engine.provider_status()} | source={stt_engine.__file__} | build={getattr(stt_engine, "STT_ENGINE_BUILD", "UNKNOWN")}")
 except Exception as e:
     stt_engine = None
     logger.warning(f"STT Engine import failed: {e}")
@@ -3417,7 +3417,7 @@ async def handle_voice(update, context):
             await update.message.reply_text("❌ Voice message too large after download.")
             return
         await update.message.chat.send_action("typing")
-        logger.info(f"🎙️ Sending audio to Groq STT: {file_name} {file_size} bytes")
+        logger.info(f"🎙️ Sending audio to OpenRouter-first STT: {file_name} {file_size} bytes")
         try:
             transcription = await asyncio.to_thread(stt_engine.transcribe_file, temp_path, file_name)
         except Exception as e:
