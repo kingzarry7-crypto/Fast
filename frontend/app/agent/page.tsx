@@ -24,6 +24,8 @@ export default function AgentPage() {
   const [status, setStatus] = useState<Record<string, unknown> | null>(null);
   const [v2, setV2] = useState<Record<string, unknown> | null>(null);
   const [v2Loading, setV2Loading] = useState(false);
+  const [watchlist, setWatchlist] = useState<string[]>(["BTC/USD", "ETH/USD", "XAU/USD"]);
+  const [watchSaving, setWatchSaving] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!isVip) return;
@@ -37,6 +39,11 @@ export default function AgentPage() {
       ]);
       if (st) setStatus(st);
       if (v2) setV2(v2);
+      try {
+        const pref = await api.getAgentPreferences();
+        const p = (pref.preferences || {}) as Record<string, unknown>;
+        if (Array.isArray(p.watch_symbols)) setWatchlist(p.watch_symbols as string[]);
+      } catch {}
       setJobs(j.jobs || []);
       setLearning(learn.learning || []);
       if (latest?.brief) {
@@ -255,6 +262,27 @@ export default function AgentPage() {
             )}
           </section>
         </div>
+
+        <section className="mt-6 rounded-xl border border-cyan-500/20 bg-[#020914]/80 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div><p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/40">DELIVERY FILTER · GLOBAL SCAN</p><h2 className="mt-1 font-mono-tech text-sm tracking-[0.2em] text-cyan-200">MY WATCHLIST</h2></div>
+            <span className="text-[9px] font-mono-tech text-cyan-400/40">Agent scans all market</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+            {["BTC/USD","ETH/USD","SOL/USD","XAU/USD","XRP/USD","UNI/USD"].map((symbol) => {
+              const checked = watchlist.includes(symbol);
+              return <button key={symbol} type="button" disabled={watchSaving} onClick={async () => {
+                const next = checked ? watchlist.filter(x => x !== symbol) : [...watchlist, symbol];
+                setWatchlist(next); setWatchSaving(true);
+                try { await api.updateAgentPreferences({ watch_symbols: next }); } catch { setWatchlist(watchlist); }
+                finally { setWatchSaving(false); }
+              }} className={`rounded-lg border px-3 py-2 text-left text-[10px] font-mono-tech transition ${checked ? "border-cyan-400/50 bg-cyan-500/10 text-cyan-100" : "border-cyan-500/10 text-cyan-400/40"}`}>
+                <span className="mr-2">{checked ? "☑" : "☐"}</span>{symbol}
+              </button>;
+            })}
+          </div>
+          <p className="mt-3 text-[9px] font-mono-tech text-cyan-400/30">Discovery is global. Telegram pushes only signals matching your selected symbols.</p>
+        </section>
 
         <section className="mt-6 rounded-xl border border-cyan-500/20 bg-[#020914]/80 p-5">
           <div className="flex items-center justify-between mb-4">
