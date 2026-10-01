@@ -45,7 +45,7 @@ export default function RootLayout({
           <div className="kz-bg-radial" />
           <div className="relative z-10 flex h-full min-h-0 w-full">
             <Sidebar />
-            <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
               {children}
             </main>
           </div>
