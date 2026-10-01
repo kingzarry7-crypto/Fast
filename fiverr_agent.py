@@ -227,6 +227,52 @@ def decide_approval(approval_id: str, user_id: str, approved: bool) -> Optional[
         finally:
             conn.close()
 
+def get_workspace(user_id: str) -> Dict[str, Any]:
+    with _LOCK:
+        conn = _connect()
+        try:
+            row = conn.execute(
+                "SELECT data_json FROM fiverr_agent_tasks WHERE telegram_user_id=? AND kind='workspace_setup' ORDER BY updated_at DESC LIMIT 1",
+                (str(user_id),),
+            ).fetchone()
+            if not row:
+                return {}
+            try:
+                data = json.loads(row["data_json"] or "{}")
+                return dict(data.get("workspace") or {})
+            except Exception:
+                return {}
+        finally:
+            conn.close()
+
+def save_workspace(user_id: str, workspace: Dict[str, Any]) -> Dict[str, Any]:
+    existing = get_workspace(user_id)
+    merged = dict(existing)
+    merged.update({k: v for k, v in (workspace or {}).items() if v not in (None, "")})
+    task = create_task(user_id, "workspace_setup", "Fiverr workspace connection", {"workspace": merged, "step": "connected"})
+    update_task(task["id"], user_id, status="connected", data={"workspace": merged, "step": "connected"})
+    return merged
+
+def workspace_text(workspace: Dict[str, Any]) -> str:
+    if not workspace:
+        return "🧑‍💻 <b>FIVERR WORKSPACE</b>\n\nNot configured yet. Use <code>/fiverr setup</code>."
+    lines = ["🧑‍💻 <b>FIVERR WORKSPACE</b>", ""]
+    labels = [
+        ("profile_url", "Profile"),
+        ("username", "Username"),
+        ("seller_name", "Seller name"),
+        ("main_service", "Main service"),
+        ("target_buyer", "Target buyer"),
+        ("starting_price", "Starting price"),
+    ]
+    for key, label in labels:
+        value = workspace.get(key)
+        if value:
+            lines.append(f"• <b>{label}:</b> {value}")
+    lines += ["", "🟢 Agent workspace is ready for Telegram-controlled Fiverr work.",
+              "🔐 Fiverr account/public actions still require supported integration and approval."]
+    return "\n".join(lines)
+
 def skills_text() -> str:
     return "\n".join(f"• <b>{k}</b> — {v}" for k, v in SKILLS.items())
 
