@@ -320,6 +320,10 @@ export async function synthesizeSpeech(
   });
 }
 
+export async function getAgentIntelligence(signal?: AbortSignal) {
+  return request<Record<string, unknown>>("/api/agent/intelligence", { method: "GET", signal });
+}
+
 export async function getAgentV2(signal?: AbortSignal) {
   return request<Record<string, unknown>>("/api/agent/v2", { method: "GET", signal });
 }
@@ -451,6 +455,7 @@ export const api = {
   getConversationMessages,
   synthesizeSpeech,
   getAgentStatus,
+  getAgentIntelligence,
   getAgentV2,
   getAgentPreferences,
   updateAgentPreferences,
