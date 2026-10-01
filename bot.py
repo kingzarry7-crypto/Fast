@@ -2471,7 +2471,7 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
         return
 
     lines = [
-        "🤖 <b>KING ZARRY AGENT — LIVE SIGNAL</b>",
+        "🤖 <b>KING ZARRY AI • SIGNAL AGENT — LIVE SIGNAL</b>",
         "",
         "Auto-scan found actionable setup(s):",
         "",
@@ -2551,6 +2551,8 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
                     mtf_data = await asyncio.to_thread(ai_confirm_signal_mtf, mtf_data, news_data)
 
                     signal_text = format_signal_mtf(mtf_data, news_data)
+                    # Automatic delivery must identify the actual agent that generated the signal.
+                    signal_text = "🤖 <b>SIGNAL AGENT</b>\n\n" + signal_text
                     if not signal_text:
                         raise ValueError("empty formatted signal")
 
@@ -2568,7 +2570,7 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
                     sig_icon = "🟢" if sig == "BUY" else "🔴" if sig == "SELL" else "⏳"
                     tf15 = mtf_data.get("15m") or {}
                     caption = (
-                        f"👑 KING ZARRY AI\n"
+                        f"👑 KING ZARRY AI • SIGNAL AGENT\n"
                         f"{sig_icon} {sig} • {sym} • 15M • MTF {mtf_data.get('mtf_bias','')}\n"
                         f"Entry: {float(tf15.get('entry_zone_low', 0)):,.2f} - {float(tf15.get('entry_zone_high', 0)):,.2f}\n"
                         f"SL: {float(tf15.get('stop_loss', 0)):,.2f}\n"
