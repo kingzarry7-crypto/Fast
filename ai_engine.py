@@ -14,6 +14,11 @@ try:
 except Exception:
     provider_registry = None
 
+try:
+    import universal_api_discovery
+except Exception:
+    universal_api_discovery = None
+
 logger = logging.getLogger("ai_engine")
 
 def clean_env_str(v, default=""):
@@ -2175,6 +2180,25 @@ class AIEngine:
         except Exception as e:
             logger.debug("Owner context injection skipped: %s", e)
 
+        # --- Universal API learning/tool catalog ---
+        # Secrets stay in Railway ENV. The model receives only capabilities and
+        # documented tool names/parameters, never API keys.
+        try:
+            if universal_api_discovery is not None:
+                api_ctx = universal_api_discovery.context_for_ai()
+                if api_ctx:
+                    persistent_ctx = (
+                        persistent_ctx
+                        + "\n\n--- UNIVERSAL API CAPABILITIES ---\n"
+                        + api_ctx
+                        + "\nFor a discovered READ/GET tool, request execution with exactly "
+                        "<universal_tool_call>{\\\"name\\\":\\\"TOOL_NAME\\\",\\\"parameters\\\":{...}}</universal_tool_call>. "
+                        "Never invent a tool or secret. Write/action operations are not automatically executed.\n"
+                        + "--- END UNIVERSAL API CAPABILITIES ---"
+                    ).strip()
+        except Exception as e:
+            logger.debug("Universal API context skipped: %s", e)
+
         # --- Tavily ---
         tavily_context = ""
         tavily_sources = []
@@ -2246,6 +2270,52 @@ class AIEngine:
                 return "Sorry, I couldn't pull that up because of a security rule 🔒 Try rephrasing, e.g. 'Show my alerts'."
             self._save_memory(user_id, original_prompt, sanitized)
             return sanitized
+
+        # --- Universal API tool execution ---
+        # This runs before the legacy alert tool. Only discovered GET/HEAD
+        # operations are auto-executable; mutations remain blocked until a
+        # dedicated adapter/approval exists.
+        try:
+            universal_match = re.search(
+                r"<universal_tool_call>\\s*(\\{.*?\\})\\s*</universal_tool_call>",
+                first_response,
+                re.IGNORECASE | re.DOTALL,
+            )
+            if universal_match and universal_api_discovery is not None:
+                try:
+                    request_obj = json.loads(universal_match.group(1))
+                except Exception:
+                    request_obj = {}
+                tool_name = str(request_obj.get("name") or "").strip()
+                params = request_obj.get("parameters") if isinstance(request_obj.get("parameters"), dict) else {}
+                if tool_name:
+                    logger.info("Universal API tool requested: %s", tool_name)
+                    result = universal_api_discovery.execute_read_tool(tool_name, params)
+                    result_json = json.dumps(result, indent=2, default=str)
+                    second_prompt = (
+                        f"User asked: {original_prompt}\\n\\n"
+                        f"Universal API tool {tool_name} execution result:\\n{result_json}\\n\\n"
+                        "Answer the user using only that result. If execution was blocked because "
+                        "the operation is a write/action or the API needs a custom adapter, clearly "
+                        "tell the owner that code/approval is required. Never expose secrets, "
+                        "internal tool markup, or database details."
+                    )
+                    second_resp = self._call_providers(second_prompt, history, None, persistent_ctx)
+                    if second_resp:
+                        final_clean = _sanitize_final_response(second_resp)
+                        final_clean = clean_ai_response(final_clean)
+                        if final_clean:
+                            self._save_memory(user_id, original_prompt, final_clean)
+                            return final_clean
+                    if result.get("success"):
+                        fallback = json.dumps(result.get("data"), ensure_ascii=False, default=str)
+                        self._save_memory(user_id, original_prompt, fallback)
+                        return fallback
+                    if result.get("error") == "write_operation_requires_adapter_or_approval":
+                        return "I found the API capability, but that action changes data or creates something. It needs a dedicated safe adapter or explicit approval before I execute it."
+                    return "I recognized the API tool, but the API request could not be completed safely."
+        except Exception as e:
+            logger.warning("Universal API execution path failed: %s", type(e).__name__)
 
         tool_requests = _detect_tool_requests(first_response)
         if tool_requests:
