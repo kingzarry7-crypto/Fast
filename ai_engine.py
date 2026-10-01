@@ -2277,7 +2277,7 @@ class AIEngine:
         # dedicated adapter/approval exists.
         try:
             universal_match = re.search(
-                r"<universal_tool_call>\\s*(\\{.*?\\})\\s*</universal_tool_call>",
+                r"<universal_tool_call>\s*(\{.*?\})\s*</universal_tool_call>",
                 first_response,
                 re.IGNORECASE | re.DOTALL,
             )
@@ -2293,8 +2293,8 @@ class AIEngine:
                     result = universal_api_discovery.execute_read_tool(tool_name, params)
                     result_json = json.dumps(result, indent=2, default=str)
                     second_prompt = (
-                        f"User asked: {original_prompt}\\n\\n"
-                        f"Universal API tool {tool_name} execution result:\\n{result_json}\\n\\n"
+                        f"User asked: {original_prompt}\n\n"
+                        f"Universal API tool {tool_name} execution result:\n{result_json}\n\n"
                         "Answer the user using only that result. If execution was blocked because "
                         "the operation is a write/action or the API needs a custom adapter, clearly "
                         "tell the owner that code/approval is required. Never expose secrets, "
