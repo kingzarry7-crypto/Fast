@@ -154,7 +154,7 @@ if not _telegram_token_ok:
 print("🔵 BOOT: proceeding with module imports...", flush=True)
 
 try:
-    from memory import Memory
+    from shared_memory import SharedMemory
     print("🔵 BOOT: memory imported", flush=True)
 except Exception as e:
     print(f"❌ BOOT: memory import failed | {e}", flush=True)
@@ -194,7 +194,7 @@ except Exception as e:
 
 print("🔵 BOOT: initializing Memory instance...", flush=True)
 try:
-    memory_instance = Memory(MEMORY_DB_PATH)
+    memory_instance = SharedMemory("telegram", MEMORY_DB_PATH)
     print("🔵 BOOT: Memory instance created", flush=True)
 except Exception as e:
     print(f"❌ BOOT: Memory init failed | {e}", flush=True)
