@@ -38,7 +38,7 @@ try:
 except Exception:
     DEFAULT_SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD", "BNB/USD", "XRP/USD", "XAU/USD"]
 
-RISKY_JOB_TYPES = {"social_post", "whatsapp_send", "browser_action", "email_send"}
+RISKY_JOB_TYPES = {"social_post", "whatsapp_send", "browser_action", "email_send", "trade_order"}
 
 _DB_LOCK = threading.Lock()
 
