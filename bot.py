@@ -6,6 +6,7 @@ print("=" * 60, flush=True)
 import os
 import re
 import html
+import json
 import sys
 import asyncio
 import base64
@@ -3150,6 +3151,8 @@ def _fiverr_usage() -> str:
         "🧑‍💻 <b>FIVERR AGENT</b>\n\n"
         "A separate Agent for your Fiverr business.\n\n"
         "Commands:\n"
+        "• <code>/fiverr setup</code> — connect/configure your Fiverr workspace\n"
+        "• <code>/fiverr status</code> — show Fiverr workspace status\n"
         "• <code>/fiverr skills</code> — show all skills\n"
         "• <code>/fiverr gig</code> — build a complete Gig draft\n"
         "• <code>/fiverr reply</code> — prepare a Buyer reply\n"
@@ -3176,6 +3179,40 @@ async def fiverr_command(update, context):
 
     if sub in {"help", "start"}:
         await update.message.reply_text(_fiverr_usage(), parse_mode="HTML", disable_web_page_preview=True)
+        return
+    if sub == "status":
+        workspace = fiverr_agent.get_workspace(user_id)
+        await update.message.reply_text(
+            fiverr_agent.workspace_text(workspace),
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+        return
+    if sub == "setup":
+        task = fiverr_agent.create_task(
+            user_id,
+            "workspace_setup",
+            "Connect Fiverr workspace",
+            {
+                "skill": "workflow",
+                "step": "setup_questions",
+                "messages": [],
+                "workspace": fiverr_agent.get_workspace(user_id),
+            },
+        )
+        await update.message.reply_text(
+            "🧑‍💻 <b>FIVERR AGENT SETUP</b>\n\n"
+            "Send these details in your next message:\n"
+            "1. Your Fiverr profile URL or username\n"
+            "2. Your seller/display name\n"
+            "3. Your main service\n"
+            "4. Your target buyer\n"
+            "5. Your starting price/package range\n\n"
+            "Do not send your Fiverr password, 2FA code, recovery code, or session cookie.\n\n"
+            f"Setup task: <code>{html.escape(task['id'][:8])}</code>",
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
         return
     if sub == "skills":
         await update.message.reply_text(
@@ -3239,6 +3276,29 @@ async def _fiverr_continue_task(update, context, text: str) -> bool:
     data["messages"] = messages
     kind = str(task.get("kind") or "workflow")
     step = str(data.get("step") or "")
+    if kind == "workspace_setup" and step == "setup_questions":
+        data["step"] = "connected"
+        prompt = (
+            "Extract a Fiverr workspace profile from the user's message. "
+            "Return JSON only with keys: profile_url, username, seller_name, "
+            "main_service, target_buyer, starting_price. Use empty strings for missing values."
+        )
+        try:
+            raw = await asyncio.to_thread(ai_engine.ask, user_id, prompt + "\n\nUser message:\n" + text, None)
+            match = re.search(r"\\{.*\\}", raw or "", flags=re.DOTALL)
+            parsed = json.loads(match.group(0)) if match else {}
+        except Exception:
+            parsed = {}
+        if not isinstance(parsed, dict):
+            parsed = {}
+        workspace = fiverr_agent.save_workspace(user_id, parsed)
+        await update.message.reply_text(
+            fiverr_agent.workspace_text(workspace) +
+            "\n\n✅ Setup saved. Now use <code>/fiverr gig</code> and I will work from this context.",
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+        return True
     if step == "waiting_for_brief":
         data["step"] = "drafting"
         await update.message.chat.send_action("typing")
