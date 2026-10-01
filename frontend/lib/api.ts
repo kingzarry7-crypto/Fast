@@ -10,7 +10,6 @@ import type {
 } from "@/types";
 
 function getBaseUrl(): string {
-  // Prefer same-origin so mobile browsers accept the session cookie (Vercel rewrite → Railway).
   const sameOrigin =
     (process.env.NEXT_PUBLIC_API_SAME_ORIGIN || "true").trim().toLowerCase() === "true" ||
     (process.env.NEXT_PUBLIC_API_SAME_ORIGIN || "").trim() === "1";
@@ -29,7 +28,6 @@ export class ApiError extends Error {
   status: number;
   detail?: string;
   raw?: unknown;
-
   constructor(data: ApiErrorData) {
     super(data.message || "Request failed");
     this.name = "ApiError";
@@ -52,7 +50,6 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     Accept: "application/json",
     ...(options.headers || {}),
   };
-
   let fetchBody: string | undefined;
   if (options.body !== undefined && method !== "GET" && method !== "HEAD") {
     headers["Content-Type"] = "application/json";
@@ -62,7 +59,6 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       throw new ApiError({ status: 400, message: "Invalid request body" });
     }
   }
-
   const url = buildUrl(path);
   let response: Response;
   try {
@@ -78,7 +74,6 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       error instanceof Error ? error.message : "Network error — is the API reachable?";
     throw new ApiError({ status: 0, message, raw: error });
   }
-
   const contentType = response.headers.get("content-type") || "";
   let data: unknown = null;
   if (contentType.includes("application/json")) {
@@ -95,7 +90,6 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       data = null;
     }
   }
-
   if (!response.ok) {
     const obj = data && typeof data === "object" ? (data as Record<string, unknown>) : null;
     const detail =
@@ -109,7 +103,6 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       `HTTP ${response.status}`;
     throw new ApiError({ status: response.status, message, detail, raw: data });
   }
-
   return data as T;
 }
 
@@ -246,7 +239,13 @@ export async function healthCheck() {
   return request<{ status?: string }>("/health", { method: "GET" });
 }
 
-export async function createCheckoutSession(plan: string, signal?: AbortSignal) {
+export async function createCheckoutSession(
+  plan: string,
+  signal?: AbortSignal,
+  provider?: "paystack" | "stripe" | "stars" | string,
+) {
+  const body: Record<string, string> = { plan };
+  if (provider) body.provider = provider;
   return request<{
     status: string;
     url?: string;
@@ -255,21 +254,23 @@ export async function createCheckoutSession(plan: string, signal?: AbortSignal) 
     provider?: string;
     access_code?: string;
     public_key?: string;
+    stars?: number;
+    message?: string;
   }>("/api/billing/create-checkout-session", {
     method: "POST",
-    body: { plan },
+    body,
     signal,
   });
 }
 
-/** Public billing metadata (provider, currency, plan amounts). */
 export async function getBillingConfig(signal?: AbortSignal) {
   return request<{
     status?: string;
     provider?: string;
     currency?: string;
     configured?: boolean;
-    plans?: Record<string, { name?: string; days?: number; amount?: number; amount_major?: number }>;
+    methods?: string[];
+    plans?: Record<string, unknown>;
   }>("/api/billing/config", { method: "GET", signal });
 }
 
@@ -351,7 +352,6 @@ export async function getNews(signal?: AbortSignal) {
   return request<{ items?: unknown[] }>("/api/news", { method: "GET", signal });
 }
 
-// ---- Agent ----
 export type AgentBrief = {
   summary_text?: string;
   [key: string]: unknown;
