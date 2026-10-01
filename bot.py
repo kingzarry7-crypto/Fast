@@ -2593,6 +2593,17 @@ async def agent_signal_watch_job(context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"agent_signal_watch: pushed {len(actionable)} signal(s) to {sent} chat(s)")
 
 
+async def intelligence_command(update, context):
+    """Compatibility handler for /intel and /intelligence.
+
+    The command registrations expect this function, but this deployment
+    previously omitted its definition. Reuse the existing agent scan
+    implementation so startup succeeds without duplicating or changing
+    the market-analysis logic.
+    """
+    return await agentscan_command(update, context)
+
+
 async def agentscan_command(update, context):
     """Admin-only: force one agent market scan and reply with results."""
     user = update.effective_user
