@@ -630,7 +630,16 @@ TWELVE_CANONICAL = {
 
 
 def get_agent_watch_symbols():
-    """Symbols the always-on agent scans. Override with env AGENT_WATCH_SYMBOLS=BTC/USD,ETH/USD,..."""
+    """Return the background Agent scan universe.
+    
+    AGENT_SCAN_ALL_MARKET=true uses the full supported Agent universe.
+    AGENT_WATCH_SYMBOLS can still provide a smaller explicit universe when
+    full-market scanning is disabled.
+    """
+    scan_all = _clean_env_str(os.getenv("AGENT_SCAN_ALL_MARKET"), "true").lower() in ("1", "true", "yes", "on")
+    if scan_all:
+        return list(AGENT_WATCH_SYMBOLS_DEFAULT)
+
     raw = (os.getenv("AGENT_WATCH_SYMBOLS") or "").strip()
     if raw:
         parts = [p.strip().upper().replace(" ", "") for p in raw.replace(";", ",").split(",") if p.strip()]
