@@ -392,6 +392,8 @@ def tool_analyze_symbol(symbol: str, timeframe: str = "15m") -> Dict[str, Any]:
             else data.get("late_score"),
             "entry_quality": data.get("entry_quality")
             or (data.get("late_entry_data") or {}).get("quality"),
+            # Preserve the real market engine's MTF evidence for Agent V2.
+            "mtf_data": data.get("mtf_data") if isinstance(data.get("mtf_data"), dict) else {},
         }
     except Exception as e:
         logger.warning("tool_analyze_symbol failed %s: %s", symbol, e)
