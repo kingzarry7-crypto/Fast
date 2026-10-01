@@ -3758,7 +3758,9 @@ async def handle_text(update, context):
         if await _fiverr_continue_task(update, context, update.message.text.strip()):
             return
     except Exception as fiverr_err:
-        logger.warning("Fiverr Agent continuation failed: %s", fiverr_err)    if not update.message or not update.message.text:
+        logger.warning("Fiverr Agent continuation failed: %s", fiverr_err)
+
+    if not update.message or not update.message.text:
         return
     if update.message.text.startswith("/"):
         return
