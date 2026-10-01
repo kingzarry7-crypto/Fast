@@ -773,9 +773,18 @@ def plan_and_run(
 def agent_status() -> Dict[str, Any]:
     init_agent_db()
     return {
-        "phase": 1,
-        "tools_live": ["market", "news_risk", "memory_learn", "morning_brief", "job_log"],
-        "tools_roadmap": ["browser_user_device", "social_oauth", "whatsapp_business"],
+        "phase": 2,
+        "tools_live": [
+            "market",
+            "news_risk",
+            "memory_learn",
+            "morning_brief",
+            "job_log",
+            "action_gateway",
+            "paper_trading",
+            "whatsapp_cloud_api",
+        ],
+        "tools_roadmap": ["browser_user_device", "calendar", "email", "additional_oauth_connectors"],
         "db": _agent_db_path(),
         "default_symbols": DEFAULT_SYMBOLS,
         "risky_job_types": sorted(RISKY_JOB_TYPES),
