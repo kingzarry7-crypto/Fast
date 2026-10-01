@@ -1,4 +1,4 @@
-print("🇳🇬 BOTPY-V4-FIXED-LOADED 🇳🇬", flush=True)
+print("🇳🇬 BOTPY-V5-FIXED-LOADED 🇳🇬", flush=True)
 print("=" * 60, flush=True)
 print("🔵 BOOT: bot.py starting...", flush=True)
 print("=" * 60, flush=True)
