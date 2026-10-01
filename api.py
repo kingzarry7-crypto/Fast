@@ -40,6 +40,21 @@ from database import (
     check_database_health,
 )
 
+# External Agent Action Gateway is additive: existing Signal/Intelligence/Chat flows remain unchanged.
+try:
+    from agent_action_gateway import (
+        connector_status as _connector_status,
+        account_snapshot as _account_snapshot,
+        create_action as _create_action,
+        approve_action as _approve_action,
+        list_actions as _list_actions,
+    )
+except Exception as _action_import_error:
+    _connector_status = _account_snapshot = _create_action = _approve_action = _list_actions = None
+    logging.getLogger("king_zarry_api").warning(
+        "Action Gateway unavailable: %s", type(_action_import_error).__name__
+    )
+
 logger = logging.getLogger("king_zarry_api")
 
 # ============================================================
@@ -909,6 +924,47 @@ async def _run_web_ai(
 # ============================================================
 # ROOT
 # ============================================================
+
+
+
+@app.get("/api/whatsapp/webhook")
+async def whatsapp_webhook_verify(request: Request):
+    """Meta WhatsApp webhook verification endpoint."""
+    try:
+        from whatsapp_connector import verify_webhook_challenge
+        mode = request.query_params.get("hub.mode", "")
+        token = request.query_params.get("hub.verify_token", "")
+        challenge = request.query_params.get("hub.challenge", "")
+        verified = verify_webhook_challenge(mode, token, challenge)
+        if verified is None:
+            raise HTTPException(status_code=403, detail="Webhook verification failed")
+        return Response(content=verified, media_type="text/plain")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("WhatsApp webhook verify failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="WhatsApp connector unavailable")
+
+
+@app.post("/api/whatsapp/webhook")
+async def whatsapp_webhook_receive(request: Request):
+    """Receive official Meta WhatsApp webhook events. Incoming messages are acknowledged; no auto-reply is sent yet."""
+    raw = await request.body()
+    try:
+        from whatsapp_connector import verify_signature
+        if not verify_signature(raw, request.headers.get("X-Hub-Signature-256", "")):
+            raise HTTPException(status_code=403, detail="Invalid WhatsApp webhook signature")
+        event = json.loads(raw.decode("utf-8") or "{}")
+        logger.info("WhatsApp webhook received | entries=%s", len(event.get("entry") or []))
+        return {"status": "received"}
+    except HTTPException:
+        raise
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid webhook JSON")
+    except Exception as exc:
+        logger.error("WhatsApp webhook receive failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="WhatsApp connector unavailable")
+
 
 @app.get("/")
 def read_root():
@@ -2684,6 +2740,16 @@ class AgentApproveRequest(BaseModel):
     job_id: str = Field(min_length=1, max_length=80)
 
 
+class AgentActionRequest(BaseModel):
+    action_type: str = Field(min_length=3, max_length=60)
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    title: str = Field(default="Agent action", min_length=1, max_length=200)
+
+
+class AgentActionApproveRequest(BaseModel):
+    action_id: str = Field(min_length=1, max_length=80)
+
+
 @app.get("/api/agent/status")
 async def agent_status_endpoint(request: Request):
     """Agent capability status. Features require VIP (except this probe)."""
@@ -2732,6 +2798,89 @@ async def agent_intelligence_endpoint(request: Request):
     except Exception as exc:
         logger.error("market intelligence failed: %s", type(exc).__name__)
         raise HTTPException(status_code=500, detail="Market Intelligence Agent unavailable")
+
+
+@app.get("/api/agent/actions/status")
+async def agent_action_status_endpoint(request: Request):
+    """Connector readiness + hard safety limits for the Agent Action Gateway."""
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    await asyncio.to_thread(_require_web_vip, user_row)
+    if _connector_status is None:
+        raise HTTPException(status_code=503, detail="Action Gateway unavailable")
+    try:
+        return {"status": "success", **await asyncio.to_thread(_connector_status)}
+    except Exception as exc:
+        logger.error("agent action status failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Could not load action connector status")
+
+
+@app.get("/api/agent/actions/account")
+async def agent_action_account_endpoint(request: Request):
+    """Read connected trading account/positions. No order is placed."""
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    await asyncio.to_thread(_require_web_vip, user_row)
+    if _account_snapshot is None:
+        raise HTTPException(status_code=503, detail="Action Gateway unavailable")
+    try:
+        return {"status": "success", **await asyncio.to_thread(_account_snapshot)}
+    except Exception as exc:
+        logger.error("agent action account failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Could not load trading account")
+
+
+@app.get("/api/agent/actions")
+async def agent_actions_endpoint(request: Request):
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    user_id = await asyncio.to_thread(_require_web_vip, user_row)
+    if _list_actions is None:
+        raise HTTPException(status_code=503, detail="Action Gateway unavailable")
+    try:
+        return {"status": "success", "actions": await asyncio.to_thread(_list_actions, user_id, 40)}
+    except Exception as exc:
+        logger.error("agent action list failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Could not load agent actions")
+
+
+@app.post("/api/agent/actions")
+async def create_agent_action_endpoint(request: Request, body: AgentActionRequest):
+    """Create an approval-gated external action. It does not execute immediately."""
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    user_id = await asyncio.to_thread(_require_web_vip, user_row)
+    if _create_action is None:
+        raise HTTPException(status_code=503, detail="Action Gateway unavailable")
+    try:
+        action = await asyncio.to_thread(
+            _create_action,
+            user_id,
+            body.action_type,
+            body.payload,
+            body.title,
+        )
+        return {"status": "awaiting_approval", "action": action}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.error("agent action create failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Could not create agent action")
+
+
+@app.post("/api/agent/actions/approve")
+async def approve_agent_action_endpoint(request: Request, body: AgentActionApproveRequest):
+    """Approve exactly one pending action; trading is re-checked by Risk Guardian before execution."""
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    user_id = await asyncio.to_thread(_require_web_vip, user_row)
+    if _approve_action is None:
+        raise HTTPException(status_code=503, detail="Action Gateway unavailable")
+    try:
+        action = await asyncio.to_thread(_approve_action, body.action_id, user_id)
+        return {"status": "success", "action": action}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except Exception as exc:
+        logger.error("agent action approve failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Could not approve agent action")
 
 
 @app.get("/api/agent/v2")
