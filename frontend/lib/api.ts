@@ -117,7 +117,13 @@ export async function getMe(signal?: AbortSignal): Promise<MeResponse> {
   return { ...data, user: normalizeUser(data.user)! };
 }
 
-// Backward-compatible alias used by AppProviders. Keep getMe() as the canonical implementation.\nexport async function getCurrentUser(signal?: AbortSignal): Promise<AuthUser> {\n  const data = await getMe(signal);\n  return data.user;\n}\n\nexport async function login(email: string, password: string, signal?: AbortSignal): Promise<AuthResponse> {
+// Backward-compatible alias used by AppProviders. Keep getMe() as the canonical implementation.
+export async function getCurrentUser(signal?: AbortSignal): Promise<AuthUser> {
+  const data = await getMe(signal);
+  return data.user;
+}
+
+export async function login(email: string, password: string, signal?: AbortSignal): Promise<AuthResponse> {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail || !password) throw new ApiError({ status: 400, message: "Email and password required" });
   const data = await request<AuthResponse>("/api/auth/login", {
