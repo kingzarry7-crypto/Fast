@@ -19,6 +19,11 @@ try:
 except Exception:
     universal_api_discovery = None
 
+try:
+    import web_research_engine
+except Exception:
+    web_research_engine = None
+
 logger = logging.getLogger("ai_engine")
 
 def clean_env_str(v, default=""):
@@ -2160,10 +2165,16 @@ class AIEngine:
             logger.info("Media routing returned None - falling back to text provider")
 
         needs_web = False
+        needs_research = False
         try:
-            needs_web = bool(original_prompt) and self._should_use_tavily(original_prompt)
+            tavily_needed = bool(original_prompt) and self._should_use_tavily(original_prompt)
         except Exception:
-            needs_web = False
+            tavily_needed = False
+        try:
+            needs_research = bool(original_prompt) and web_research_engine is not None and web_research_engine.is_configured() and web_research_engine.should_research(original_prompt)
+        except Exception:
+            needs_research = False
+        needs_web = bool(tavily_needed or needs_research)
         casual = _is_casual_chat(original_prompt, has_image=bool(image), needs_web=needs_web)
         logger.info(f"Chat mode: {'CASUAL' if casual else 'TRADING/NEWS'}")
 
@@ -2198,6 +2209,38 @@ class AIEngine:
                     ).strip()
         except Exception as e:
             logger.debug("Universal API context skipped: %s", e)
+
+        # --- Multi-source web research (SearXNG) ---
+        research_context = ""
+        research_sources = []
+        try:
+            if original_prompt and needs_research and web_research_engine is not None:
+                lower = original_prompt.lower()
+                wants_deep = any(k in lower for k in [
+                    "deep research", "deep search", "detailed research",
+                    "comprehensive research", "thorough research", "in-depth",
+                    "investigate", "fact check", "fact-check", "compare sources",
+                ])
+                research_result = web_research_engine.research(
+                    original_prompt,
+                    deep=wants_deep,
+                    max_results=10 if wants_deep else 7,
+                )
+                if research_result.get("success"):
+                    research_context = web_research_engine.format_for_ai(
+                        research_result,
+                        max_chars=30000 if wants_deep else 22000,
+                    )
+                    research_sources = research_result.get("sources", [])
+                    if research_context:
+                        prompt_for_providers = (
+                            f"{original_prompt}\n\n{research_context}\n"
+                            "Use the supplied sources as evidence. Compare sources when they disagree, "
+                            "prefer primary/official sources for factual claims, and do not invent facts "
+                            "or citations.\n"
+                        )
+        except Exception as e:
+            logger.warning(f"Multi-source web research failed: {_redact_secrets(str(e))}")
 
         # --- Tavily ---
         tavily_context = ""
@@ -2358,10 +2401,27 @@ class AIEngine:
         if not final:
             final = "Hmm, I blanked out there 😅 say that again for me?"
 
-        if tavily_sources:
-            footer = self._format_tavily_sources_footer(tavily_sources)
-            if footer and "**Sources:**" not in final and "Sources:" not in final:
-                final = final + footer
+        combined_sources = []
+        combined_sources.extend(research_sources or [])
+        combined_sources.extend(tavily_sources or [])
+        if combined_sources:
+            # Prefer the multi-source research list first, then legacy Tavily sources.
+            seen_urls = set()
+            unique_sources = []
+            for source in combined_sources:
+                url = str(source.get("url") or "").strip()
+                if not url or url in seen_urls:
+                    continue
+                seen_urls.add(url)
+                unique_sources.append(source)
+            if unique_sources:
+                footer = (
+                    web_research_engine.sources_footer(unique_sources, limit=8)
+                    if web_research_engine is not None
+                    else self._format_tavily_sources_footer(unique_sources)
+                )
+                if footer and "**Sources:**" not in final and "Sources:" not in final:
+                    final = final + footer
 
         self._save_memory(user_id, original_prompt, final)
         return final
