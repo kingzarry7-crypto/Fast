@@ -156,8 +156,8 @@ GROQ_API_KEY = clean_env_str(os.getenv("GROQ_API_KEY"))
 FAL_KEY = clean_env_str(os.getenv("FAL_KEY"))
 
 # FIX 3: valid Groq vision model default
-GROQ_VISION_MODEL = clean_env_str(os.getenv("GROQ_VISION_MODEL"), "meta-llama/llama-4-scout-17b-16e-instruct")
-GROQ_TEXT_MODEL = clean_env_str(os.getenv("GROQ_TEXT_MODEL"), "llama-3.3-70b-versatile")
+GROQ_VISION_MODEL = clean_env_str(os.getenv("GROQ_VISION_MODEL"), "qwen/qwen3.8-27b")
+GROQ_TEXT_MODEL = clean_env_str(os.getenv("GROQ_TEXT_MODEL") or os.getenv("GROQ_MODEL"), "openai/gpt-oss-20b")
 
 TEXT_TO_VIDEO_MODEL = clean_env_str(os.getenv("TEXT_TO_VIDEO_MODEL"), "fal-ai/ltx-video")
 IMAGE_TO_VIDEO_MODEL = clean_env_str(os.getenv("IMAGE_TO_VIDEO_MODEL"), "fal-ai/ltx-video/image-to-video")
