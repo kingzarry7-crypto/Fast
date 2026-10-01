@@ -61,12 +61,12 @@ class _TextExtractor(HTMLParser):
 
     def handle_data(self, data):
         if not self._skip:
-            value = re.sub(r"\\s+", " ", html.unescape(data or "")).strip()
+            value = re.sub(r"\s+", " ", html.unescape(data or "")).strip()
             if value:
                 self.parts.append(value)
 
     def text(self) -> str:
-        return re.sub(r"\\s+", " ", " ".join(self.parts)).strip()
+        return re.sub(r"\s+", " ", " ".join(self.parts)).strip()
 
 
 def _env_urls() -> List[str]:
@@ -93,11 +93,11 @@ def should_research(prompt: str) -> bool:
     if any(term in low for term in _RESEARCH_TERMS):
         return True
     # Questions that are clearly asking for live/current information.
-    return bool(re.search(r"\\b(latest|today|now|currently|as of|this week|this month)\\b", low))
+    return bool(re.search(r"\b(latest|today|now|currently|as of|this week|this month)\b", low))
 
 
 def _query_variants(prompt: str, deep: bool) -> List[str]:
-    base = re.sub(r"\\s+", " ", str(prompt or "")).strip()[:500]
+    base = re.sub(r"\s+", " ", str(prompt or "")).strip()[:500]
     if not base:
         return []
     queries = [base]
@@ -133,9 +133,9 @@ def _search_instance(base_url: str, query: str, max_results: int, time_range: st
             if not url or urlparse(url).scheme not in ("http", "https"):
                 continue
             out.append({
-                "title": re.sub(r"\\s+", " ", str(row.get("title") or "Untitled")).strip(),
+                "title": re.sub(r"\s+", " ", str(row.get("title") or "Untitled")).strip(),
                 "url": url,
-                "content": re.sub(r"\\s+", " ", str(row.get("content") or "")).strip(),
+                "content": re.sub(r"\s+", " ", str(row.get("content") or "")).strip(),
                 "engine": str(row.get("engine") or "searxng"),
                 "source": "SearXNG",
             })
