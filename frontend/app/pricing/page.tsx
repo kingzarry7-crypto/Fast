@@ -92,7 +92,7 @@ const faqs = [
   },
   {
     q: "How does payment work?",
-    a: "Pay with card on the web via Stripe. Telegram Stars remain available for bot VIP. After Stripe payment, webhook activates VIP on your web account.",
+    a: "Pay on the web with Paystack (NGN) or Stripe if configured. Telegram Stars remain for bot VIP only. After payment, the webhook activates web VIP on your account.",
   },
   {
     q: "What happens when my membership expires?",
@@ -113,7 +113,7 @@ export default function KingZarryPricingPage() {
   const { user, isAuthenticated } = useAuth();
   const router = useRouter();
 
-  const startStripeCheckout = async () => {
+  const startCheckout = async () => {
     setCheckoutError(null);
     if (!isAuthenticated) {
       router.push("/login?next=/pricing");
@@ -123,16 +123,18 @@ export default function KingZarryPricingPage() {
     try {
       const plan = selectedPlan === "quarterly" ? "quarterly" : selectedPlan;
       const res = await api.createCheckoutSession(plan);
-      if (res.checkout_url) {
-        window.location.href = res.checkout_url;
+      const payUrl = (res as { url?: string; checkout_url?: string }).url
+        || (res as { checkout_url?: string }).checkout_url;
+      if (payUrl) {
+        window.location.href = payUrl;
         return;
       }
-      setCheckoutError("No checkout URL returned");
+      setCheckoutError("No payment link returned. Check PAYSTACK_SECRET_KEY or STRIPE_SECRET_KEY on Railway.");
     } catch (e) {
       setCheckoutError(
         e instanceof ApiError
           ? e.detail || e.message
-          : "Checkout failed. Is STRIPE_SECRET_KEY set on the API?"
+          : "Checkout failed. Set PAYSTACK_SECRET_KEY (or Stripe) on the API."
       );
     } finally {
       setCheckoutLoading(false);
@@ -145,12 +147,13 @@ export default function KingZarryPricingPage() {
     setSelectedPlan(planId);
   };
 
-  const usdLabel =
+  // Display hints — live amount comes from checkout / Railway env (Paystack kobo or Stripe cents)
+  const priceLabel =
     selectedPlan === "monthly"
-      ? "$9.99"
+      ? "Monthly VIP"
       : selectedPlan === "yearly"
-        ? "$79.99"
-        : "$24.99";
+        ? "Yearly VIP"
+        : "90-Day VIP";
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#03060a] text-cyan-100 selection:bg-cyan-400 selection:text-black">
@@ -225,7 +228,7 @@ export default function KingZarryPricingPage() {
             CHOOSE YOUR ACCESS
           </h2>
           <p className="mt-2 max-w-2xl font-mono text-xs leading-relaxed text-cyan-400/60">
-            Pay with card (Stripe) or Telegram Stars. Card unlocks web VIP via
+            Pay with Paystack/Stripe on the web, or Telegram Stars on the bot. Card unlocks web VIP via
             webhook.
           </p>
           {user?.is_subscribed && (
@@ -268,7 +271,7 @@ export default function KingZarryPricingPage() {
                       {price}
                     </span>
                     <span className="ml-2 font-mono text-[10px] text-cyan-400">
-                      USD · {plan.stars} STARS ALT
+                      Web VIP · Telegram Stars alt: {plan.stars}
                     </span>
                   </div>
                   <p className="text-xs leading-relaxed text-cyan-200/75">
@@ -310,13 +313,13 @@ export default function KingZarryPricingPage() {
                 {selectedPlanData?.name}
               </h3>
               <p className="mt-1 font-mono text-[10px] text-cyan-300/70">
-                {usdLabel} · {selectedPlanData?.duration}
+                {priceLabel} · {selectedPlanData?.duration}
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
-                onClick={startStripeCheckout}
+                onClick={startCheckout}
                 disabled={checkoutLoading}
                 className="inline-flex items-center justify-center rounded-lg bg-cyan-400 px-6 py-3 font-mono text-xs font-bold tracking-widest text-black shadow-[0_0_20px_rgba(0,240,255,0.2)] transition hover:bg-cyan-300 disabled:opacity-50"
               >
@@ -346,7 +349,7 @@ export default function KingZarryPricingPage() {
             </p>
           )}
           <p className="mt-4 border-t border-cyan-500/10 pt-3 font-mono text-[9px] text-cyan-400/50">
-            Web: Stripe card → webhook → VIP. Telegram Stars: bot only. After
+            Web: Paystack or Stripe → webhook → VIP. Telegram Stars: bot only. After
             card payment, open Settings to confirm status.
           </p>
         </section>
