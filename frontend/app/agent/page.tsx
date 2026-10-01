@@ -24,7 +24,7 @@ export default function AgentPage() {
   const [status, setStatus] = useState<Record<string, unknown> | null>(null);
   const [v2, setV2] = useState<Record<string, unknown> | null>(null);
   const [v2Loading, setV2Loading] = useState(false);
-  const [watchlist, setWatchlist] = useState<string[]>(["BTC/USD", "ETH/USD", "XAU/USD"]);
+  const [watchlist, setWatchlist] = useState<string[]>(["BTC/USD", "ETH/USD", "SOL/USD", "XAU/USD", "UNI/USD"]);
   const [watchSaving, setWatchSaving] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -269,7 +269,7 @@ export default function AgentPage() {
             <span className="text-[9px] font-mono-tech text-cyan-400/40">Agent scans all market</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-            {["BTC/USD","ETH/USD","SOL/USD","XAU/USD","XRP/USD","UNI/USD"].map((symbol) => {
+            {["BTC/USD","ETH/USD","SOL/USD","XAU/USD","UNI/USD"].map((symbol) => {
               const checked = watchlist.includes(symbol);
               return <button key={symbol} type="button" disabled={watchSaving} onClick={async () => {
                 const next = checked ? watchlist.filter(x => x !== symbol) : [...watchlist, symbol];
@@ -281,7 +281,7 @@ export default function AgentPage() {
               </button>;
             })}
           </div>
-          <p className="mt-3 text-[9px] font-mono-tech text-cyan-400/30">Discovery is global. Telegram pushes only signals matching your selected symbols.</p>
+          <p className="mt-3 text-[9px] font-mono-tech text-cyan-400/30">Discovery is global. Telegram delivery is hard-limited to BTC, ETH, SOL, XAU and UNI.</p>
         </section>
 
         <section className="mt-6 rounded-xl border border-cyan-500/20 bg-[#020914]/80 p-5">
