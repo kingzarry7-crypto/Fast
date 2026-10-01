@@ -24,6 +24,7 @@ export default function AgentPage() {
   const [status, setStatus] = useState<Record<string, unknown> | null>(null);
   const [v2, setV2] = useState<Record<string, unknown> | null>(null);
   const [v2Loading, setV2Loading] = useState(false);
+  const [intel, setIntel] = useState<Record<string, unknown> | null>(null);
   const [watchlist, setWatchlist] = useState<string[]>(["BTC/USD", "ETH/USD", "SOL/USD", "XAU/USD", "UNI/USD"]);
   const [watchSaving, setWatchSaving] = useState(false);
 
@@ -39,6 +40,7 @@ export default function AgentPage() {
       ]);
       if (st) setStatus(st);
       if (v2) setV2(v2);
+      try { const intelData = await api.getAgentIntelligence(); setIntel(intelData); } catch {}
       try {
         const pref = await api.getAgentPreferences();
         const p = (pref.preferences || {}) as Record<string, unknown>;
@@ -264,6 +266,23 @@ export default function AgentPage() {
         </div>
 
         <section className="mt-6 rounded-xl border border-cyan-500/20 bg-[#020914]/80 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div><p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/40">INTELLIGENCE AGENT · LIVE CONTEXT</p><h2 className="mt-1 font-mono-tech text-sm tracking-[0.2em] text-cyan-200">MARKET INTELLIGENCE</h2></div>
+            <button type="button" onClick={async () => { try { const r = await api.getAgentIntelligence(); setIntel(r); } catch {} }} className="px-3 py-1.5 rounded-md border border-cyan-500/30 text-[10px] font-mono-tech text-cyan-200 hover:bg-cyan-500/10">SYNC</button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-lg border border-cyan-500/10 p-3"><div className="text-[9px] text-cyan-400/40">MARKETS</div><div className="mt-1 text-sm font-mono-tech text-white">{String(((intel?.markets as unknown[]) || []).length)}</div></div>
+            <div className="rounded-lg border border-cyan-500/10 p-3"><div className="text-[9px] text-cyan-400/40">MACRO EVENTS</div><div className="mt-1 text-sm font-mono-tech text-white">{String(((intel?.macro as Record<string, unknown> | undefined)?.event_count) ?? 0)}</div></div>
+            <div className="rounded-lg border border-cyan-500/10 p-3"><div className="text-[9px] text-cyan-400/40">STATUS</div><div className="mt-1 text-sm font-mono-tech text-emerald-300">{String(intel?.status || "STARTING").toUpperCase()}</div></div>
+            <div className="rounded-lg border border-cyan-500/10 p-3"><div className="text-[9px] text-cyan-400/40">ROLE</div><div className="mt-1 text-sm font-mono-tech text-cyan-200">INTEL</div></div>
+          </div>
+          <div className="mt-4 space-y-2">
+            {(((intel?.markets as Record<string, unknown>[]) || [])).map((m) => <div key={String(m.symbol)} className="rounded-lg border border-cyan-500/10 px-3 py-2 text-[10px] font-mono-tech text-cyan-100"><span className="text-white">{String(m.symbol)}</span> · {String(m.trend || "UNKNOWN")} · news {String(m.news_risk || "UNKNOWN")}</div>)}
+          </div>
+          <p className="mt-3 text-[9px] font-mono-tech text-cyan-400/30">This agent explains market context; it does not replace the Signal Agent.</p>
+        </section>
+
+<section className="mt-6 rounded-xl border border-cyan-500/20 bg-[#020914]/80 p-5">
           <div className="flex items-center justify-between mb-4">
             <div><p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/40">DELIVERY FILTER · GLOBAL SCAN</p><h2 className="mt-1 font-mono-tech text-sm tracking-[0.2em] text-cyan-200">MY WATCHLIST</h2></div>
             <span className="text-[9px] font-mono-tech text-cyan-400/40">Agent scans all market</span>
