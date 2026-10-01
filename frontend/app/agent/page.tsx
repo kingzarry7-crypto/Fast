@@ -119,22 +119,6 @@ export default function AgentPage() {
     ? (status!.tools_roadmap as string[])
     : [];
 
-        <section className="mt-6 rounded-xl border border-cyan-500/20 bg-[#020914]/80 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div><p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/40">AGENT V2 · LIVE TELEMETRY</p><h2 className="mt-1 font-mono-tech text-sm tracking-[0.2em] text-cyan-200">COMMAND CENTER</h2></div>
-            <button type="button" onClick={async () => { setV2Loading(true); try { setV2(await api.getAgentV2()); } catch {} finally { setV2Loading(false); } }} disabled={v2Loading} className="px-3 py-1.5 rounded-md border border-cyan-500/30 text-[10px] font-mono-tech text-cyan-200 hover:bg-cyan-500/10 disabled:opacity-40">{v2Loading ? "SYNC…" : "SYNC"}</button>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="rounded-lg border border-cyan-500/10 p-3"><div className="text-[9px] text-cyan-400/40">HEALTH</div><div className="mt-1 text-sm font-mono-tech text-emerald-300">{String((v2?.health as Record<string, unknown> | undefined)?.status || "STARTING").toUpperCase()}</div></div>
-            <div className="rounded-lg border border-cyan-500/10 p-3"><div className="text-[9px] text-cyan-400/40">ACTIVE</div><div className="mt-1 text-sm font-mono-tech text-white">{String((v2?.performance as Record<string, unknown> | undefined)?.active ?? 0)}</div></div>
-            <div className="rounded-lg border border-cyan-500/10 p-3"><div className="text-[9px] text-cyan-400/40">TRACKED</div><div className="mt-1 text-sm font-mono-tech text-white">{String((v2?.performance as Record<string, unknown> | undefined)?.total ?? 0)}</div></div>
-            <div className="rounded-lg border border-cyan-500/10 p-3"><div className="text-[9px] text-cyan-400/40">WIN RATE</div><div className="mt-1 text-sm font-mono-tech text-white">{String((v2?.performance as Record<string, unknown> | undefined)?.win_rate ?? "—")}{(v2?.performance as Record<string, unknown> | undefined)?.win_rate == null ? "" : "%"}</div></div>
-          </div>
-          <div className="mt-4 grid gap-2">
-            {Array.isArray(v2?.active_signals) && (v2.active_signals as Record<string, unknown>[]).length ? (v2.active_signals as Record<string, unknown>[]).slice(0, 8).map((sig, i) => <div key={String(sig.signal_id || i)} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-cyan-500/10 px-3 py-2"><span className="text-xs font-mono-tech text-white">{String(sig.symbol || "—")} · {String(sig.direction || "—")}</span><span className="text-[10px] font-mono-tech text-cyan-300">{String(sig.signal_id || "—")} · {String(sig.status || "ACTIVE")}</span></div>) : <p className="text-xs text-cyan-400/40 font-mono-tech">No active V2 signals. The Agent is monitoring.</p>}
-          </div>
-          <p className="mt-3 text-[9px] font-mono-tech text-cyan-400/30">Last scan: {String((v2?.health as Record<string, unknown> | undefined)?.last_scan_at || "—")}</p>
-        </section>
   return (
     <ProtectedRoute>
       <div className="min-h-screen px-4 py-6 md:px-8 md:py-8 max-w-5xl mx-auto">
@@ -272,6 +256,22 @@ export default function AgentPage() {
           </section>
         </div>
 
+        <section className="mt-6 rounded-xl border border-cyan-500/20 bg-[#020914]/80 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div><p className="font-mono-tech text-[9px] tracking-[0.3em] text-cyan-400/40">AGENT V2 · LIVE TELEMETRY</p><h2 className="mt-1 font-mono-tech text-sm tracking-[0.2em] text-cyan-200">COMMAND CENTER</h2></div>
+            <button type="button" onClick={async () => { setV2Loading(true); try { setV2(await api.getAgentV2()); } catch {} finally { setV2Loading(false); } }} disabled={v2Loading} className="px-3 py-1.5 rounded-md border border-cyan-500/30 text-[10px] font-mono-tech text-cyan-200 hover:bg-cyan-500/10 disabled:opacity-40">{v2Loading ? "SYNC…" : "SYNC"}</button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-lg border border-cyan-500/10 p-3"><div className="text-[9px] text-cyan-400/40">HEALTH</div><div className="mt-1 text-sm font-mono-tech text-emerald-300">{String((v2?.health as Record<string, unknown> | undefined)?.status || "STARTING").toUpperCase()}</div></div>
+            <div className="rounded-lg border border-cyan-500/10 p-3"><div className="text-[9px] text-cyan-400/40">ACTIVE</div><div className="mt-1 text-sm font-mono-tech text-white">{String((v2?.performance as Record<string, unknown> | undefined)?.active ?? 0)}</div></div>
+            <div className="rounded-lg border border-cyan-500/10 p-3"><div className="text-[9px] text-cyan-400/40">TRACKED</div><div className="mt-1 text-sm font-mono-tech text-white">{String((v2?.performance as Record<string, unknown> | undefined)?.total ?? 0)}</div></div>
+            <div className="rounded-lg border border-cyan-500/10 p-3"><div className="text-[9px] text-cyan-400/40">WIN RATE</div><div className="mt-1 text-sm font-mono-tech text-white">{String((v2?.performance as Record<string, unknown> | undefined)?.win_rate ?? "—")}{(v2?.performance as Record<string, unknown> | undefined)?.win_rate == null ? "" : "%"}</div></div>
+          </div>
+          <div className="mt-4 grid gap-2">
+            {Array.isArray(v2?.active_signals) && (v2.active_signals as Record<string, unknown>[]).length ? (v2.active_signals as Record<string, unknown>[]).slice(0, 8).map((sig, i) => <div key={String(sig.signal_id || i)} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-cyan-500/10 px-3 py-2"><span className="text-xs font-mono-tech text-white">{String(sig.symbol || "—")} · {String(sig.direction || "—")}</span><span className="text-[10px] font-mono-tech text-cyan-300">{String(sig.signal_id || "—")} · {String(sig.status || "ACTIVE")}</span></div>) : <p className="text-xs text-cyan-400/40 font-mono-tech">No active V2 signals. The Agent is monitoring.</p>}
+          </div>
+          <p className="mt-3 text-[9px] font-mono-tech text-cyan-400/30">Last scan: {String((v2?.health as Record<string, unknown> | undefined)?.last_scan_at || "—")}</p>
+        </section>
         {(summary || brief) && (
           <section className="mt-6 rounded-xl border border-cyan-500/20 bg-[#020914]/80 p-5">
             <h2 className="font-mono-tech text-xs tracking-[0.25em] text-cyan-300 mb-3">
