@@ -57,7 +57,7 @@ class ProviderTransientError(RuntimeError):
 
 # Env
 GROQ_API_KEY = clean_env_str(os.getenv("GROQ_API_KEY"))
-GROQ_MODEL = clean_env_str(os.getenv("GROQ_MODEL"), "llama-3.3-70b-versatile")
+GROQ_MODEL = clean_env_str(os.getenv("GROQ_MODEL"), "openai/gpt-oss-20b")
 GROQ_VISION_MODEL = clean_env_str(os.getenv("GROQ_VISION_MODEL"), "meta-llama/llama-4-scout-17b-16e-instruct")
 GROQ_URL = clean_env_str(os.getenv("GROQ_URL"), "https://api.groq.com/openai/v1/chat/completions")
 
@@ -1804,7 +1804,8 @@ class AIEngine:
         logger.info(f"✅ Crypto Vision ready (free tier) | endpoint={CRYPTOVISION_BASE_URL}")
 
     def _get_provider_order(self) -> List[str]:
-        return ["openrouter", "groq", "gemini"]
+        # Groq is the primary fast/free text provider. OpenRouter and Gemini remain fallbacks.
+        return ["groq", "openrouter", "gemini"]
 
     def _should_use_tavily(self, prompt: str) -> bool:
         if not self._tavily_module:
