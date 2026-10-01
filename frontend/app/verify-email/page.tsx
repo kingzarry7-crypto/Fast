@@ -40,7 +40,7 @@ function VerifyForm() {
     setResending(true);
     setError(null);
     try {
-      const r = await api.resendVerificationCode(email);
+      const r = await api.resendVerification(email);
       setInfo(
         r.dev_code
           ? `${r.message || "Code sent."} Dev code: ${r.dev_code}`
