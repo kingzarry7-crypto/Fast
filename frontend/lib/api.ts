@@ -278,7 +278,12 @@ export async function getSignals(signal?: AbortSignal) {
   return request<{ signals?: MarketSnapshot[] }>("/api/signals", { method: "GET", signal });
 }
 export async function getNews(signal?: AbortSignal) {
-  return request<{ items?: unknown[] }>("/api/news", { method: "GET", signal });
+  return request<{
+    items?: unknown[];
+    assets?: unknown[];
+    global_headlines?: unknown[];
+    status?: string;
+  }>("/api/news", { method: "GET", signal });
 }
 
 export type AgentBrief = { summary_text?: string; [key: string]: unknown };
