@@ -49,8 +49,9 @@ export default function AdminPage() {
       setIsAdmin(!!me.is_admin);
       setRequiresPassword(!!me.requires_password);
       if (!me.is_admin) {
+        const hint = typeof me.hint === "string" ? me.hint : "";
         setError(
-          me.hint ||
+          hint ||
             (me.admin_emails_configured === false
               ? "Set ADMIN_EMAIL on Railway to your login email."
               : "Your login email must match ADMIN_EMAIL on Railway.")
@@ -87,7 +88,7 @@ export default function AdminPage() {
     setUnlocking(true);
     setError(null);
     try {
-      await api.unlockAdmin(password.trim());
+      await api.adminUnlock(password.trim());
       setRequiresPassword(false);
       setPassword("");
       const data = await api.getAdminStats();
@@ -103,7 +104,7 @@ export default function AdminPage() {
     }
   };
 
-  const n = (v?: number) => String(v ?? 0);
+  const n = (v: unknown) => String(typeof v === "number" ? v : Number(v) || 0);
 
   const setStatus = async (
     userId: string,
@@ -117,7 +118,11 @@ export default function AdminPage() {
     setActingId(userId);
     setError(null);
     try {
-      await api.setAdminUserStatus(userId, status);
+      if (status === "active") {
+        await api.adminUnbanUser(userId);
+      } else {
+        await api.adminBanUser(userId, status);
+      }
       await loadMeAndStats();
     } catch (e) {
       setError(
@@ -129,7 +134,6 @@ export default function AdminPage() {
       setActingId(null);
     }
   };
-
 
   return (
     <ProtectedRoute>
@@ -230,7 +234,7 @@ export default function AdminPage() {
 
             <section>
               <p className="font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/40 mb-3">
-                REVENUE (STRIPE WEB)
+                REVENUE (WEB)
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Stat
@@ -249,25 +253,25 @@ export default function AdminPage() {
               <p className="font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/40 mb-4">
                 RECENT USERS
               </p>
-              {(!stats.recent_users || stats.recent_users.length === 0) && (
+              {(!stats.recent_users || !(stats.recent_users as unknown[]).length) && (
                 <p className="text-sm text-cyan-400/50">No users yet.</p>
               )}
               <div className="space-y-2 max-h-80 overflow-y-auto kz-scroll">
-                {(stats.recent_users || []).map((u, i) => {
+                {((stats.recent_users as Array<Record<string, unknown>> | undefined) || []).map((u, i) => {
                   const st = String(u.account_status || "active").toLowerCase();
-                  const busy = actingId === u.id;
+                  const busy = actingId === String(u.id || "");
                   const isSelf =
                     user?.email &&
                     u.email &&
                     user.email.toLowerCase() === String(u.email).toLowerCase();
                   return (
                     <div
-                      key={u.id || i}
+                      key={String(u.id || i)}
                       className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-cyan-500/10 py-3 text-sm"
                     >
                       <div className="min-w-0">
                         <p className="font-mono-tech text-xs text-white truncate">
-                          {u.email || "—"}
+                          {String(u.email || "—")}
                           {isSelf ? " (you)" : ""}
                         </p>
                         <p className="font-mono-tech text-[10px] text-cyan-300/70">
@@ -295,7 +299,7 @@ export default function AdminPage() {
                             <button
                               type="button"
                               disabled={busy}
-                              onClick={() => setStatus(u.id!, "active")}
+                              onClick={() => setStatus(String(u.id), "active")}
                               className="px-2.5 py-1 rounded-md text-[9px] font-mono-tech tracking-wider border border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/10 disabled:opacity-40"
                             >
                               ACTIVATE
@@ -305,7 +309,7 @@ export default function AdminPage() {
                             <button
                               type="button"
                               disabled={busy}
-                              onClick={() => setStatus(u.id!, "suspended")}
+                              onClick={() => setStatus(String(u.id), "suspended")}
                               className="px-2.5 py-1 rounded-md text-[9px] font-mono-tech tracking-wider border border-amber-500/40 text-amber-200 hover:bg-amber-500/10 disabled:opacity-40"
                             >
                               SUSPEND
@@ -315,7 +319,7 @@ export default function AdminPage() {
                             <button
                               type="button"
                               disabled={busy}
-                              onClick={() => setStatus(u.id!, "banned")}
+                              onClick={() => setStatus(String(u.id), "banned")}
                               className="px-2.5 py-1 rounded-md text-[9px] font-mono-tech tracking-wider border border-red-500/40 text-red-200 hover:bg-red-500/10 disabled:opacity-40"
                             >
                               BAN
@@ -331,26 +335,25 @@ export default function AdminPage() {
 
             <section className="kz-panel p-6">
               <p className="font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/40 mb-4">
-                RECENT STRIPE PAYMENTS
+                RECENT WEB PAYMENTS
               </p>
-              {(!stats.recent_payments ||
-                stats.recent_payments.length === 0) && (
+              {(!stats.recent_payments || !(stats.recent_payments as unknown[]).length) && (
                 <p className="text-sm text-cyan-400/50">
                   No web payments yet. Telegram Stars stay on the bot.
                 </p>
               )}
               <div className="space-y-2">
-                {(stats.recent_payments || []).map((p, i) => (
+                {((stats.recent_payments as Array<Record<string, unknown>> | undefined) || []).map((p, i) => (
                   <div
-                    key={`${p.created_at}-${i}`}
+                    key={`${String(p.created_at)}-${i}`}
                     className="flex flex-wrap justify-between gap-2 border-b border-cyan-500/10 py-2 text-sm"
                   >
                     <span className="font-mono-tech text-xs">
-                      {p.email || "—"}
+                      {String(p.email || "—")}
                     </span>
                     <span className="font-mono-tech text-[10px] text-cyan-300/80">
-                      {(p.plan || "—").toUpperCase()} · $
-                      {((p.amount_cents || 0) / 100).toFixed(2)} · {p.status}
+                      {String(p.plan || "—").toUpperCase()} · $
+                      {((Number(p.amount_cents) || 0) / 100).toFixed(2)} · {String(p.status || "")}
                     </span>
                   </div>
                 ))}
@@ -359,9 +362,8 @@ export default function AdminPage() {
 
             <p className="text-xs text-cyan-400/40">
               Logged in as admin
-              {stats.admin_email ? ` (${stats.admin_email})` : ""}. VIP web
-              revenue is Stripe only. Telegram Star revenue is separate on the
-              bot.
+              {stats.admin_email ? ` (${String(stats.admin_email)})` : ""}. Web
+              VIP is Paystack/Stripe. Telegram Stars are separate on the bot.
             </p>
           </div>
         )}
