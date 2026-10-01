@@ -58,7 +58,7 @@ class ProviderTransientError(RuntimeError):
 # Env
 GROQ_API_KEY = clean_env_str(os.getenv("GROQ_API_KEY"))
 GROQ_MODEL = clean_env_str(os.getenv("GROQ_MODEL"), "openai/gpt-oss-20b")
-GROQ_VISION_MODEL = clean_env_str(os.getenv("GROQ_VISION_MODEL"), "meta-llama/llama-4-scout-17b-16e-instruct")
+GROQ_VISION_MODEL = clean_env_str(os.getenv("GROQ_VISION_MODEL"), "qwen/qwen3.8-27b")
 GROQ_URL = clean_env_str(os.getenv("GROQ_URL"), "https://api.groq.com/openai/v1/chat/completions")
 
 GEMINI_API_KEY = clean_env_str(os.getenv("GEMINI_API_KEY"))
@@ -2060,8 +2060,10 @@ class AIEngine:
             try:
                 resp = None
                 if provider == "openrouter" and OPENROUTER_API_KEY:
+                    logger.info("AI provider attempt: openrouter | model=%s", OPENROUTER_MODEL)
                     resp = self._openrouter(prompt_text, history, image, persistent_ctx, casual)
                 elif provider == "groq" and GROQ_API_KEY:
+                    logger.info("AI provider attempt: groq | model=%s", GROQ_VISION_MODEL if image else GROQ_MODEL)
                     resp = self._groq(prompt_text, history, image, persistent_ctx, casual)
                 elif provider == "gemini" and GEMINI_API_KEY:
                     resp = self._gemini(prompt_text, history, image, persistent_ctx, casual)
@@ -2072,6 +2074,7 @@ class AIEngine:
                 if resp:
                     cleaned = clean_ai_response(resp)
                     if cleaned:
+                        logger.info("AI provider success: %s", provider)
                         return cleaned
             except Exception as e:
                 last_err = _sanitize_exception_message(e)
