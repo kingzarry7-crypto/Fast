@@ -454,9 +454,9 @@ def tool_learn(
     # Also mirror a short fact into Memory when available (Telegram-style memory DB)
     if user_id:
         try:
-            from memory import Memory
+            from shared_memory import SharedMemory
 
-            mem = Memory()
+            mem = SharedMemory("agent")
             fact = f"Agent observed {symbol} signal={signal} confidence={confidence} ({outcome})"
             if hasattr(mem, "add_fact"):
                 mem.add_fact(user_id, fact, category="agent_learning", source="agent")
