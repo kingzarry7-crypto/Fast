@@ -3482,6 +3482,45 @@ async def fiverr_command(update, context):
     )
 
 
+def _parse_fiverr_setup_fields(text: str) -> Dict[str, str]:
+    """Parse labeled Fiverr setup fields locally so setup does not depend on the AI."""
+    raw = str(text or "").strip()
+    parsed: Dict[str, str] = {}
+    if not raw:
+        return parsed
+    labels = {
+        "display name": "seller_name",
+        "seller/display name": "seller_name",
+        "seller name": "seller_name",
+        "main service": "main_service",
+        "target buyer": "target_buyer",
+        "starting price": "starting_price",
+        "starting price/package range": "starting_price",
+        "fiverr username": "username",
+        "username": "username",
+        "fiverr profile url": "profile_url",
+        "profile url": "profile_url",
+    }
+    for line in raw.splitlines():
+        if ":" not in line:
+            continue
+        label, value = line.split(":", 1)
+        label = re.sub(r"^\s*(?:\d+[.)]\s*)?", "", label).strip().lower()
+        value = value.strip().strip("`")
+        key = labels.get(label)
+        if key and value:
+            parsed[key] = value
+    username = parsed.get("username") or parsed.get("profile_url")
+    if username:
+        username = username.strip().lstrip("@")
+        if username.lower().startswith(("http://", "https://")):
+            parsed["profile_url"] = username
+            parsed.setdefault("username", username.rstrip("/").split("/")[-1].lstrip("@"))
+        else:
+            parsed["username"] = username
+            parsed["profile_url"] = username
+    return parsed
+
 async def _fiverr_continue_task(update, context, text: str) -> bool:
     if fiverr_agent is None or not _fiverr_is_admin(update):
         return False
@@ -3499,25 +3538,28 @@ async def _fiverr_continue_task(update, context, text: str) -> bool:
     step = str(data.get("step") or "")
 
     if kind == "workspace_setup" and step == "setup_questions":
-        prompt = (
-            "Extract the Fiverr workspace details from this conversation. Return JSON only "
-            "with keys: profile_url, username, seller_name, main_service, target_buyer, "
-            "starting_price. Preserve known values and use empty strings for missing values.\n\n"
-            + fiverr_agent.task_context({"data": data})
-        )
-        try:
-            raw = await asyncio.to_thread(
-                ai_engine.ask, user_id, prompt, None
+        # Parse labeled setup fields locally first. AI is only a fallback for natural-language replies.
+        parsed = _parse_fiverr_setup_fields(text)
+        existing_workspace = fiverr_agent.get_workspace(user_id)
+        if not parsed:
+            prompt = (
+                "Extract the Fiverr workspace details from this conversation. Return JSON only "
+                "with keys: profile_url, username, seller_name, main_service, target_buyer, "
+                "starting_price. Preserve known values and use empty strings for missing values.\n\n"
+                + fiverr_agent.task_context({"data": data})
             )
-            match = re.search(r"\{.*\}", raw or "", flags=re.DOTALL)
-            parsed = json.loads(match.group(0)) if match else {}
-        except Exception:
-            parsed = {}
-
+            try:
+                raw = await asyncio.to_thread(ai_engine.ask, user_id, prompt, None)
+                match = re.search(r"\{.*\}", raw or "", flags=re.DOTALL)
+                parsed = json.loads(match.group(0)) if match else {}
+            except Exception:
+                parsed = {}
         if not isinstance(parsed, dict):
             parsed = {}
-
-        workspace = fiverr_agent.save_workspace(user_id, parsed)
+        # Never erase fields already saved in the workspace.
+        merged_input = dict(existing_workspace or {})
+        merged_input.update({k: v for k, v in parsed.items() if v not in (None, "")})
+        workspace = fiverr_agent.save_workspace(user_id, merged_input)
         missing = fiverr_agent.workspace_missing(workspace)
         if missing:
             data["workspace"] = workspace
