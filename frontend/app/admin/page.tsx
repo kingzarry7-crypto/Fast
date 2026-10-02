@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/hooks/useAuth";
@@ -40,6 +40,11 @@ export default function AdminPage() {
   const [password, setPassword] = useState("");
   const [unlocking, setUnlocking] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [emailAudience, setEmailAudience] = useState<"active" | "all" | "subscribers">("active");
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailResult, setEmailResult] = useState<string | null>(null);
 
   const loadMeAndStats = async () => {
     setLoading(true);
@@ -82,7 +87,7 @@ export default function AdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, user?.email]);
 
-  const handleUnlock = async (e: React.FormEvent) => {
+  const handleUnlock = async (e: FormEvent) => {
     e.preventDefault();
     if (!password.trim() || unlocking) return;
     setUnlocking(true);
@@ -132,6 +137,32 @@ export default function AdminPage() {
       );
     } finally {
       setActingId(null);
+    }
+  };
+
+  const handleEmailBroadcast = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!emailSubject.trim() || !emailBody.trim() || emailSending) return;
+    setEmailSending(true);
+    setEmailResult(null);
+    try {
+      const r = await api.adminEmailBroadcast({
+        subject: emailSubject.trim(),
+        message: emailBody.trim(),
+        audience: emailAudience,
+      });
+      setEmailResult(
+        r.message ||
+          `Sent ${r.sent ?? 0} / ${r.total ?? 0} (failed ${r.failed ?? 0})`
+      );
+    } catch (err) {
+      setEmailResult(
+        err instanceof ApiError
+          ? err.detail || err.message
+          : "Broadcast failed"
+      );
+    } finally {
+      setEmailSending(false);
     }
   };
 
@@ -329,6 +360,57 @@ export default function AdminPage() {
                   );
                 })}
               </div>
+            </section>
+
+            <section className="kz-panel p-6">
+              <p className="font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/40 mb-2">
+                EMAIL BROADCAST (RESEND)
+              </p>
+              <p className="text-xs text-cyan-200/50 mb-4">
+                Sends a product-style email via your verified domain. Requires RESEND_API_KEY and
+                EMAIL_FROM on Railway. Cap ~100 recipients per send.
+              </p>
+              <form onSubmit={handleEmailBroadcast} className="space-y-3">
+                <input
+                  type="text"
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  placeholder="Subject — e.g. King Zarry AI update"
+                  className="w-full rounded-lg bg-black/40 border border-cyan-500/25 px-3 py-2 text-sm text-white"
+                  maxLength={200}
+                />
+                <textarea
+                  value={emailBody}
+                  onChange={(e) => setEmailBody(e.target.value)}
+                  placeholder={"What shipped this week:\n• New signals\n• Billing update\n• Agent morning brief"}
+                  rows={6}
+                  className="w-full rounded-lg bg-black/40 border border-cyan-500/25 px-3 py-2 text-sm text-white font-mono"
+                  maxLength={20000}
+                />
+                <div className="flex flex-wrap items-center gap-3">
+                  <select
+                    value={emailAudience}
+                    onChange={(e) =>
+                      setEmailAudience(e.target.value as "active" | "all" | "subscribers")
+                    }
+                    className="rounded-lg bg-black/40 border border-cyan-500/25 px-3 py-2 text-xs text-cyan-100"
+                  >
+                    <option value="active">Active accounts</option>
+                    <option value="all">All (not banned)</option>
+                    <option value="subscribers">VIP / subscribers</option>
+                  </select>
+                  <button
+                    type="submit"
+                    disabled={emailSending || !emailSubject.trim() || !emailBody.trim()}
+                    className="px-4 py-2 rounded-lg bg-cyan-400 text-black text-xs font-bold tracking-widest disabled:opacity-40"
+                  >
+                    {emailSending ? "SENDING…" : "SEND EMAIL"}
+                  </button>
+                </div>
+                {emailResult && (
+                  <p className="text-sm text-cyan-200/80 font-mono-tech">{emailResult}</p>
+                )}
+              </form>
             </section>
 
             <section className="kz-panel p-6">
