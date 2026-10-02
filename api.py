@@ -1,4 +1,4 @@
-"""Emergency api.py bootstrap: load known-good source from GitHub commit."""
+"""Emergency api.py bootstrap: load known-good source from GitHub commit + patches."""
 import os
 import urllib.request
 
@@ -15,6 +15,23 @@ def _load_good():
         code = f.read()
     ns = {"__name__": "api", "__file__": path}
     exec(compile(code, path, "exec"), ns, ns)
+
+    # Harden admin stats (missing last_login_at / aborted transactions → 500)
+    try:
+        from admin_stats_fix import install_admin_stats_fix
+        install_admin_stats_fix(
+            ns["app"],
+            require_admin=ns["_require_admin"],
+            get_db_cursor=ns["get_db_cursor"],
+            row_value=ns["_row_value"],
+            ensure_billing_tables=ns.get("_ensure_billing_tables"),
+            is_database_configured=ns.get("is_database_configured"),
+        )
+    except Exception as e:
+        log = ns.get("logger")
+        if log:
+            log.warning("admin stats fix install: %s", type(e).__name__)
+
     try:
         from admin_email_broadcast import install_email_broadcast
         install_email_broadcast(
