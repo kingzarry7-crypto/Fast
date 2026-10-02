@@ -461,14 +461,19 @@ def gig_checklist() -> List[str]:
     ]
 
 def workspace_missing(workspace: Dict[str, Any]) -> List[str]:
+    # A Fiverr username is a valid identifier for setup, so either
+    # profile_url OR username satisfies the first requirement.
+    missing = []
+    if not str(workspace.get("profile_url") or workspace.get("username") or "").strip():
+        missing.append("Fiverr profile URL or username")
     required = [
-        ("profile_url", "Fiverr profile URL or username"),
         ("seller_name", "seller/display name"),
         ("main_service", "main service"),
         ("target_buyer", "target buyer"),
         ("starting_price", "starting price/package range"),
     ]
-    return [label for key, label in required if not str(workspace.get(key) or "").strip()]
+    missing.extend(label for key, label in required if not str(workspace.get(key) or "").strip())
+    return missing
 
 
 def task_context(task: Dict[str, Any]) -> str:
