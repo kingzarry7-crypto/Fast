@@ -5,6 +5,8 @@ import asyncio
 import logging
 from typing import Any, Dict
 
+from fastapi import Request
+
 logger = logging.getLogger("king_zarry_api")
 
 
@@ -50,7 +52,7 @@ def install_admin_stats_fix(
         logger.warning("admin stats route replace: %s", type(e).__name__)
 
     @app.get("/api/admin/stats")
-    async def admin_stats_fixed(request):
+    async def admin_stats_fixed(request: Request):
         user_row, email = require_admin(request)
         _ = user_row
 
