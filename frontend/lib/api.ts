@@ -328,6 +328,30 @@ export async function adminUnbanUser(userId: string, signal?: AbortSignal) {
   return request<{ status?: string }>("/api/admin/users/unban", { method: "POST", body: { user_id: userId }, signal });
 }
 
+export async function adminEmailBroadcast(
+  payload: { subject: string; message: string; audience?: string; html?: string },
+  signal?: AbortSignal
+) {
+  return request<{
+    status?: string;
+    sent?: number;
+    failed?: number;
+    total?: number;
+    audience?: string;
+    message?: string;
+    from?: string;
+  }>("/api/admin/email-broadcast", {
+    method: "POST",
+    body: {
+      subject: payload.subject,
+      message: payload.message,
+      audience: payload.audience || "active",
+      html: payload.html,
+    },
+    signal,
+  });
+}
+
 export type TtsVoice = "bella" | "male";
 
 export async function synthesizeSpeech(
@@ -437,7 +461,7 @@ export async function approveAgentAction(actionId: string, signal?: AbortSignal)
 export const api = {
   getBaseUrl, getMe, getCurrentUser, login, register, verifyEmail, resendVerification, forgotPassword, resetPassword, logout,
   listConversations, createConversation, getConversation, getConversationMessages, chat, sendChatMessage, healthCheck, createCheckoutSession, getBillingConfig,
-  getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, ttsSpeak, synthesizeSpeech,
+  getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, adminEmailBroadcast, ttsSpeak, synthesizeSpeech,
   getMarkets, getMarketDetail, getSignals, getNews,
   getAgentStatus, runAgentGoal, generateMorningBrief, getLatestMorningBrief, listAgentJobs, approveAgentJob,
   getAgentLearning, getAgentV2, getAgentIntelligence, getAgentPreferences, updateAgentPreferences,
