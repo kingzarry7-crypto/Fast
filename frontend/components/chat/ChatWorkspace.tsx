@@ -67,6 +67,7 @@ export default function ChatWorkspace({
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [voicePanelOpen, setVoicePanelOpen] = useState(false);
   const [callMode, setCallMode] = useState(false);
+  const callModeRef = useRef(false);
   const lastVoiceResponseRef = useRef<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -289,7 +290,7 @@ export default function ChatWorkspace({
 
   const sendVoiceText = async (text: string) => {
     const spokenText = text.trim();
-    if (!spokenText || sending || !callMode) return;
+    if (!spokenText || sending || !callModeRef.current) return;
     const res = await send(spokenText, capability);
     if (res && (res as { conversation_id?: string }).conversation_id) {
       const cid = (res as { conversation_id: string }).conversation_id;
@@ -305,6 +306,7 @@ export default function ChatWorkspace({
 
     const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
     lastVoiceResponseRef.current = lastAssistant?.id ? String(lastAssistant.id) : null;
+    callModeRef.current = true;
     setCallMode(true);
 
     setTimeout(() => {
@@ -315,6 +317,7 @@ export default function ChatWorkspace({
   };
 
   const endVoiceCall = () => {
+    callModeRef.current = false;
     setCallMode(false);
     stopListening();
     stopSpeaking();
