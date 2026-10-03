@@ -223,7 +223,7 @@ export function useVoice() {
     [stop, speakBrowser]
   );
 
-  const listen = useCallback((onResult: (text: string) => void) => {
+  const listen = useCallback((onResult: (text: string) => void, continuous = false) => {
     if (typeof window === "undefined") return;
     const W = window as unknown as {
       SpeechRecognition?: new () => SpeechRecognitionInstance;
@@ -242,11 +242,17 @@ export function useVoice() {
     recognitionRef.current = recognition;
     recognition.lang = "en-US";
     recognition.interimResults = false;
-    recognition.continuous = false;
+    recognition.continuous = continuous;
 
     recognition.onresult = (e: SpeechRecognitionEvent) => {
-      const transcript = e.results[0]?.[0]?.transcript || "";
-      if (transcript) onResult(transcript);
+      // In continuous mode, each final result becomes a natural turn.
+      // Do not expose interim speech as typed text.
+      for (let i = 0; i < e.results.length; i += 1) {
+        const result = e.results[i];
+        if (!result?.isFinal) continue;
+        const transcript = result?.[0]?.transcript || "";
+        if (transcript.trim()) onResult(transcript.trim());
+      }
     };
     recognition.onerror = () => setListening(false);
     recognition.onend = () => setListening(false);
@@ -276,6 +282,7 @@ export function useVoice() {
     listening,
     listen,
     stopListening,
+    listenContinuous: (onResult: (text: string) => void) => listen(onResult, true),
     supported,
     style,
     setVoiceStyle,
