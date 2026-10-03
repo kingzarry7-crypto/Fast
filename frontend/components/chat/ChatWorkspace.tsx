@@ -74,6 +74,7 @@ export default function ChatWorkspace({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {
     speak,
+    speakInstant,
     stop: stopSpeaking,
     speaking: isSpeaking,
     listening,
@@ -137,9 +138,9 @@ export default function ChatWorkspace({
       String(last.id || "") !== lastVoiceResponseRef.current
     ) {
       lastVoiceResponseRef.current = String(last.id || "");
-      speak(last.text);
+      speakInstant(last.text);
     }
-  }, [callMode, messages, sending, speak]);
+  }, [callMode, messages, sending, speakInstant]);
 
   useEffect(() => {
     if (!callMode || sending || isSpeaking || listening) return;
