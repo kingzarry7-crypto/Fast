@@ -66,6 +66,8 @@ export default function ChatWorkspace({
   const [attachError, setAttachError] = useState<string | null>(null);
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [voicePanelOpen, setVoicePanelOpen] = useState(false);
+  const [callMode, setCallMode] = useState(false);
+  const lastVoiceResponseRef = useRef<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -123,6 +125,35 @@ export default function ChatWorkspace({
       clearTimeout(t2);
     };
   }, [sending]);
+
+  useEffect(() => {
+    if (!callMode || sending || !messages.length) return;
+    const last = messages[messages.length - 1];
+    if (
+      last?.role === "assistant" &&
+      last.text &&
+      !String(last.id || "").startsWith("error") &&
+      String(last.id || "") !== lastVoiceResponseRef.current
+    ) {
+      lastVoiceResponseRef.current = String(last.id || "");
+      speak(last.text);
+    }
+  }, [callMode, messages, sending, speak]);
+
+  useEffect(() => {
+    if (!callMode || sending || isSpeaking || listening) return;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant" || !last.text) return;
+
+    const timer = window.setTimeout(() => {
+      if (!callMode) return;
+      listen((text) => {
+        void sendVoiceText(text);
+      });
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [callMode, sending, isSpeaking, listening, messages, listen]);
 
   useEffect(() => {
     if (!autoSpeak || sending || !messages.length) return;
@@ -256,6 +287,39 @@ export default function ChatWorkspace({
     }
   };
 
+  const sendVoiceText = async (text: string) => {
+    const spokenText = text.trim();
+    if (!spokenText || sending || !callMode) return;
+    const res = await send(spokenText, capability);
+    if (res && (res as { conversation_id?: string }).conversation_id) {
+      const cid = (res as { conversation_id: string }).conversation_id;
+      setConversationId(cid);
+      refreshConversations();
+    }
+  };
+
+  const startVoiceCall = () => {
+    if (!voiceSupported || callMode) return;
+    stopSpeaking();
+    stopListening();
+
+    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+    lastVoiceResponseRef.current = lastAssistant?.id ? String(lastAssistant.id) : null;
+    setCallMode(true);
+
+    setTimeout(() => {
+      listen((text) => {
+        void sendVoiceText(text);
+      });
+    }, 150);
+  };
+
+  const endVoiceCall = () => {
+    setCallMode(false);
+    stopListening();
+    stopSpeaking();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = input.trim();
@@ -274,6 +338,13 @@ export default function ChatWorkspace({
       refreshConversations();
     }
   };
+
+  useEffect(() => {
+    return () => {
+      stopListening();
+      stopSpeaking();
+    };
+  }, [stopListening, stopSpeaking]);
 
   const isVip = Boolean(user?.is_subscribed || membership?.isVip);
   const showSideHistory = !embedMode;
@@ -307,9 +378,27 @@ export default function ChatWorkspace({
                 {coreState === "idle" ? "READY" : coreState.toUpperCase()}
               </span>
             </div>
-            <button type="button" onClick={handleNewChat} disabled={sending} className="px-2 py-0.5 rounded-md border border-cyan-500/25 text-[9px] tracking-widest text-cyan-200 disabled:opacity-40">
-              + NEW
-            </button>
+            <div className="flex items-center gap-1.5">
+              {voiceSupported && (
+                <button
+                  type="button"
+                  onClick={callMode ? endVoiceCall : startVoiceCall}
+                  disabled={sending && !callMode}
+                  className={
+                    "px-2.5 py-1 rounded-full border text-[9px] tracking-widest transition " +
+                    (callMode
+                      ? "border-red-400/50 bg-red-500/10 text-red-200"
+                      : "border-cyan-400/30 bg-cyan-500/5 text-cyan-200 hover:bg-cyan-500/10")
+                  }
+                  title={callMode ? "End AI voice call" : "Start AI voice call"}
+                >
+                  {callMode ? "● END CALL" : "☎ CALL AI"}
+                </button>
+              )}
+              <button type="button" onClick={handleNewChat} disabled={sending || callMode} className="px-2 py-0.5 rounded-md border border-cyan-500/25 text-[9px] tracking-widest text-cyan-200 disabled:opacity-40">
+                + NEW
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -395,6 +484,20 @@ export default function ChatWorkspace({
             </div>
           )}
 
+          {callMode && (
+            <div className="mb-2 flex items-center justify-between rounded-xl border border-cyan-400/20 bg-cyan-500/5 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span className={"h-2 w-2 rounded-full " + (isSpeaking ? "bg-cyan-300 animate-pulse" : listening ? "bg-emerald-300 animate-pulse" : "bg-amber-300 animate-pulse")} />
+                <span className="text-[10px] tracking-[0.2em] text-cyan-100">
+                  {isSpeaking ? "KING ZARRY IS SPEAKING" : listening ? "LISTENING…" : sending ? "THINKING…" : "READY"}
+                </span>
+              </div>
+              <button type="button" onClick={endVoiceCall} className="text-[9px] tracking-widest text-red-300 hover:text-red-100">
+                END
+              </button>
+            </div>
+          )}
+
           {voicePanelOpen && (
             <div className="mb-2 rounded-lg border border-cyan-500/15 bg-black/40 p-2">
               <div className="flex flex-wrap gap-1">
@@ -425,13 +528,13 @@ export default function ChatWorkspace({
               onChange={(e) => setInput(e.target.value)}
               onPaste={handlePaste}
               placeholder="Message King Zarry AI…"
-              disabled={sending}
+              disabled={sending || callMode}
               className="min-w-0 flex-1 bg-transparent px-1 py-1.5 text-sm text-white placeholder-zinc-500 outline-none disabled:opacity-50"
             />
 
             {voiceSupported && (
               <>
-                <button type="button" onClick={() => (listening ? stopListening() : listen((t) => setInput(t)))} className={"hidden sm:flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] " + (listening ? "text-red-300" : "text-zinc-500 hover:text-cyan-300")} title="Mic">{listening ? "■" : "🎤"}</button>
+                {!callMode && <button type="button" onClick={() => (listening ? stopListening() : listen((t) => setInput(t)))} className={"hidden sm:flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] " + (listening ? "text-red-300" : "text-zinc-500 hover:text-cyan-300")} title="Mic">{listening ? "■" : "🎤"}</button>}
                 <button type="button" onClick={() => setVoicePanelOpen((v) => !v)} className="hidden sm:flex h-8 shrink-0 items-center justify-center rounded-full px-2 text-[9px] tracking-widest text-zinc-500 hover:text-cyan-300" title="Voice">VOICE</button>
               </>
             )}
