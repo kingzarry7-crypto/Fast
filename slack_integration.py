@@ -29,6 +29,7 @@ SLACK_BOT_TOKEN = (os.getenv("SLACK_BOT_TOKEN") or "").strip()
 SLACK_SIGNING_SECRET = (os.getenv("SLACK_SIGNING_SECRET") or "").strip()
 SLACK_MAX_AGE_SECONDS = max(60, int(os.getenv("SLACK_MAX_EVENT_AGE", "300") or "300"))
 SLACK_REPLY_TIMEOUT = max(5, int(os.getenv("SLACK_REPLY_TIMEOUT", "30") or "30"))
+SLACK_BRIDGE_KEY = (os.getenv("KING_ZARRY_SLACK_BRIDGE_KEY") or "").strip()
 
 _memory = None
 _ai = None
@@ -80,6 +81,13 @@ def _mark_event_seen(event_id: str) -> bool:
         return False
 
 
+def _ask_ai(user_id: str, prompt: str) -> str:
+    ai = _get_ai()
+    response = ai.ask(user_id=str(user_id), prompt=str(prompt), image=None)
+    response_text = str(response or "").strip()
+    return response_text or "I’m here, but I didn’t get a usable response from the AI engine."
+
+
 def _post_message(channel: str, text: str, thread_ts: Optional[str] = None) -> None:
     if not SLACK_BOT_TOKEN:
         raise RuntimeError("SLACK_BOT_TOKEN is not configured")
@@ -124,11 +132,7 @@ def _process_event(event: Dict[str, Any]) -> None:
         return
 
     try:
-        ai = _get_ai()
-        response = ai.ask(user_id=str(user_id), prompt=prompt, image=None)
-        response_text = str(response or "").strip()
-        if not response_text:
-            response_text = "I’m here, but I didn’t get a usable response from the AI engine."
+        response_text = _ask_ai(user_id=str(user_id), prompt=prompt)
         thread_ts = event.get("thread_ts")
         if event.get("channel_type") != "im" and not thread_ts:
             thread_ts = event.get("ts")
@@ -185,11 +189,51 @@ def install_slack_integration(app):
 
         return JSONResponse({"ok": True})
 
+    @app.post("/api/slack/vercel")
+    async def slack_vercel_bridge(request: Request):
+        """Process a Slack message delivered by the Vercel Connect/Eve bridge.
+
+        Vercel Connect owns Slack authentication and outbound posting. This
+        endpoint only invokes KING ZARRY AI and returns the generated text.
+        It is protected by a separate shared service key and never exposes
+        Slack credentials to the Fast backend.
+        """
+        if not SLACK_BRIDGE_KEY:
+            return JSONResponse({"ok": False, "error": "bridge_not_configured"}, status_code=503)
+
+        supplied = (request.headers.get("X-King-Zarry-Bridge-Key") or "").strip()
+        if not supplied or not hmac.compare_digest(supplied, SLACK_BRIDGE_KEY):
+            return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+
+        try:
+            payload = await request.json()
+        except Exception:
+            return JSONResponse({"ok": False, "error": "invalid_json"}, status_code=400)
+
+        user_id = str(payload.get("user_id") or "").strip()
+        prompt = str(payload.get("prompt") or "").strip()
+        if not user_id or not prompt:
+            return JSONResponse({"ok": False, "error": "user_id_and_prompt_required"}, status_code=400)
+        if len(prompt) > 12000:
+            return JSONResponse({"ok": False, "error": "prompt_too_long"}, status_code=413)
+
+        try:
+            response_text = _ask_ai(user_id=user_id, prompt=prompt)
+            return {"ok": True, "response": response_text[:39000]}
+        except Exception as exc:
+            return JSONResponse(
+                {"ok": False, "error": "ai_processing_failed", "detail": type(exc).__name__},
+                status_code=500,
+            )
+
     @app.get("/api/slack/health")
     async def slack_health():
         configured = bool(SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET)
+        bridge_configured = bool(SLACK_BRIDGE_KEY)
         return {
-            "ok": configured,
+            "ok": configured or bridge_configured,
+            "legacy_events": configured,
+            "vercel_connect_bridge": bridge_configured,
             "platform": "slack",
             "ai_engine": bool(AIEngine),
             "memory": bool(SharedMemory),
@@ -197,7 +241,9 @@ def install_slack_integration(app):
         }
 
     print(
-        "🤝 Slack Events bridge installed | configured="
-        + str(bool(SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET)),
+        "🤝 Slack bridge installed | legacy_configured="
+        + str(bool(SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET))
+        + " | vercel_connect_bridge="
+        + str(bool(SLACK_BRIDGE_KEY)),
         flush=True,
     )

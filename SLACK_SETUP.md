@@ -35,6 +35,24 @@ Under **Event Subscriptions**:
 
 Install/reinstall the app to the workspace after changing scopes.
 
+
+## Vercel Connect mode (recommended for cordovan-lamp)
+
+If Slack is managed by the existing Vercel Connect connector \`slack/cordovan-lamp\`, do not put a Slack \`xoxb-\` token or Slack signing secret into Railway.
+
+The Vercel/Eve Slack project receives and verifies Slack events through Vercel Connect, then calls this backend bridge:
+
+\`POST /api/slack/vercel\`
+
+Set one shared service secret in both the Railway backend and the Vercel Slack project:
+
+- Railway: \`KING_ZARRY_SLACK_BRIDGE_KEY\`
+- Vercel: \`KING_ZARRY_SLACK_BRIDGE_KEY\`
+
+The Vercel project sends the key in \`X-King-Zarry-Bridge-Key\` and sends JSON containing \`user_id\` and \`prompt\`. The backend invokes the existing \`AIEngine\` and returns the answer. Vercel Connect remains responsible for the Slack credential, webhook verification, and posting the reply.
+
+The old \`/api/slack/events\` path remains available as a legacy direct-Slack-token mode. It is not used by the Vercel Connect path.
+
 ## Behavior
 
 - In a channel: mention the bot, e.g. `@KING ZARRY AI hi`.
