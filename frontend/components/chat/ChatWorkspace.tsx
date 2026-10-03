@@ -67,7 +67,9 @@ export default function ChatWorkspace({
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [voicePanelOpen, setVoicePanelOpen] = useState(false);
   const [callMode, setCallMode] = useState(false);
+  const [callMuted, setCallMuted] = useState(false);
   const callModeRef = useRef(false);
+  const callMutedRef = useRef(false);
   const lastVoiceResponseRef = useRef<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -79,6 +81,7 @@ export default function ChatWorkspace({
     speaking: isSpeaking,
     listening,
     listen,
+    listenContinuous,
     stopListening,
     supported: voiceSupported,
     style: voiceStyle,
@@ -143,19 +146,19 @@ export default function ChatWorkspace({
   }, [callMode, messages, sending, speakInstant]);
 
   useEffect(() => {
-    if (!callMode || sending || isSpeaking || listening) return;
+    if (!callMode || callMuted || sending || isSpeaking || listening) return;
     const last = messages[messages.length - 1];
     if (!last || last.role !== "assistant" || !last.text) return;
 
     const timer = window.setTimeout(() => {
       if (!callMode) return;
-      listen((text) => {
+      listenContinuous((text) => {
         void sendVoiceText(text);
       });
     }, 350);
 
     return () => window.clearTimeout(timer);
-  }, [callMode, sending, isSpeaking, listening, messages, listen]);
+  }, [callMode, callMuted, sending, isSpeaking, listening, messages, listenContinuous]);
 
   useEffect(() => {
     if (!autoSpeak || sending || !messages.length) return;
@@ -308,6 +311,8 @@ export default function ChatWorkspace({
     const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
     lastVoiceResponseRef.current = lastAssistant?.id ? String(lastAssistant.id) : null;
     callModeRef.current = true;
+    callMutedRef.current = false;
+    setCallMuted(false);
     setCallMode(true);
 
     setTimeout(() => {
@@ -319,9 +324,26 @@ export default function ChatWorkspace({
 
   const endVoiceCall = () => {
     callModeRef.current = false;
+    callMutedRef.current = false;
+    setCallMuted(false);
     setCallMode(false);
     stopListening();
     stopSpeaking();
+  };
+
+  const toggleCallMute = () => {
+    const next = !callMutedRef.current;
+    callMutedRef.current = next;
+    setCallMuted(next);
+    if (next) {
+      stopListening();
+      return;
+    }
+    if (!callModeRef.current || sending || isSpeaking) return;
+    window.setTimeout(() => {
+      if (!callModeRef.current || callMutedRef.current || sending || isSpeaking) return;
+      listenContinuous((text) => { void sendVoiceText(text); });
+    }, 120);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
