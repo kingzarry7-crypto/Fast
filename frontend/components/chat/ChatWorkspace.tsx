@@ -406,11 +406,32 @@ export default function ChatWorkspace({
         )}
       </div>
 
+      {embedMode && (
+        <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-end border-b border-white/5 bg-[#05080f]/70 px-3 py-1.5 backdrop-blur-sm">
+          {voiceSupported && (
+            <button
+              type="button"
+              onClick={callMode ? endVoiceCall : startVoiceCall}
+              disabled={sending && !callMode}
+              className={
+                "rounded-full border px-3 py-1.5 text-[9px] tracking-[0.18em] transition " +
+                (callMode
+                  ? "border-red-400/50 bg-red-500/10 text-red-200"
+                  : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20")
+              }
+              title={callMode ? "End AI voice call" : "Start AI voice call"}
+            >
+              {callMode ? "● END CALL" : "☎ CALL AI"}
+            </button>
+          )}
+        </div>
+      )}
+
       <div
         ref={listRef}
         className={
           "absolute inset-x-0 overflow-y-auto overscroll-y-contain kz-scroll px-3 sm:px-4 " +
-          ((!isVip && membership) || showSideHistory ? "top-10" : "top-0") +
+          ((!isVip && membership) || showSideHistory || embedMode ? "top-10" : "top-0") +
           " bottom-[72px]"
         }
       >
