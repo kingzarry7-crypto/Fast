@@ -1,11 +1,12 @@
-"""Emergency api.py bootstrap: load known-good source from GitHub commit + patches."""
+"""api.py bootstrap: load known-good source + patches. Cache bust v3."""
 import os
 import urllib.request
 
 GOOD_URL = "https://raw.githubusercontent.com/kingzarry7-crypto/Fast/d53e44a4f5f511f7660bd02f3db0852a8cb36462/api.py"
+CACHE_NAME = "_api_good_cache_v3.py"
 
 def _load_good():
-    path = os.path.join(os.path.dirname(__file__), "_api_good_cache.py")
+    path = os.path.join(os.path.dirname(__file__), CACHE_NAME)
     if not os.path.isfile(path) or os.path.getsize(path) < 10000:
         with urllib.request.urlopen(GOOD_URL, timeout=60) as resp:
             data = resp.read()
@@ -16,7 +17,6 @@ def _load_good():
     ns = {"__name__": "api", "__file__": path}
     exec(compile(code, path, "exec"), ns, ns)
 
-    # Harden admin stats (missing last_login_at / aborted transactions → 500)
     try:
         from admin_stats_fix import install_admin_stats_fix
         install_admin_stats_fix(
@@ -27,6 +27,9 @@ def _load_good():
             ensure_billing_tables=ns.get("_ensure_billing_tables"),
             is_database_configured=ns.get("is_database_configured"),
         )
+        log = ns.get("logger")
+        if log:
+            log.info("admin_stats_fix installed")
     except Exception as e:
         log = ns.get("logger")
         if log:
