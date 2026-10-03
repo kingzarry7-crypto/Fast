@@ -163,6 +163,20 @@ export function useVoice() {
     setProvider("browser");
   }, []);
 
+  // Low-latency speech path for live voice calls.
+  // Browser speech starts as soon as the text arrives instead of waiting
+  // for a complete ElevenLabs audio file to download.
+  const speakInstant = useCallback(
+    (text: string, overrideStyle?: VoiceStyle) => {
+      const clean = cleanForSpeech(text);
+      if (!clean) return;
+      const mode = overrideStyle || styleRef.current;
+      stop();
+      speakBrowser(clean, mode);
+    },
+    [stop, speakBrowser]
+  );
+
   const speak = useCallback(
     async (text: string, overrideStyle?: VoiceStyle) => {
       const clean = cleanForSpeech(text);
@@ -256,6 +270,7 @@ export function useVoice() {
 
   return {
     speak,
+    speakInstant,
     stop,
     speaking,
     listening,
