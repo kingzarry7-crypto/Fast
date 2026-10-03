@@ -2166,6 +2166,13 @@ class AIEngine:
 
         needs_web = False
         needs_research = False
+        explicit_urls = []
+        try:
+            if web_research_engine is not None:
+                explicit_urls = web_research_engine.extract_urls(original_prompt)
+        except Exception:
+            explicit_urls = []
+        has_direct_url = bool(explicit_urls)
         try:
             tavily_needed = bool(original_prompt) and self._should_use_tavily(original_prompt)
         except Exception:
@@ -2174,7 +2181,7 @@ class AIEngine:
             needs_research = bool(original_prompt) and web_research_engine is not None and web_research_engine.is_configured() and web_research_engine.should_research(original_prompt)
         except Exception:
             needs_research = False
-        needs_web = bool(tavily_needed or needs_research)
+        needs_web = bool(tavily_needed or needs_research or has_direct_url)
         casual = _is_casual_chat(original_prompt, has_image=bool(image), needs_web=needs_web)
         logger.info(f"Chat mode: {'CASUAL' if casual else 'TRADING/NEWS'}")
 
@@ -2209,6 +2216,36 @@ class AIEngine:
                     ).strip()
         except Exception as e:
             logger.debug("Universal API context skipped: %s", e)
+
+        # --- Direct URL reading ---
+        direct_url_context = ""
+        direct_url_sources = []
+        try:
+            if explicit_urls and web_research_engine is not None:
+                pages = [
+                    web_research_engine.fetch_url(url, max_chars=18000)
+                    for url in explicit_urls
+                ]
+                direct_url_context = web_research_engine.format_url_context(
+                    pages,
+                    max_chars=30000,
+                )
+                direct_url_sources = [
+                    {
+                        "title": str(page.get("final_url") or page.get("url") or "Web page"),
+                        "url": str(page.get("final_url") or page.get("url") or ""),
+                    }
+                    for page in pages
+                    if page.get("success")
+                ]
+                if direct_url_context:
+                    prompt_for_providers = (
+                        f"{original_prompt}\n\n{direct_url_context}"
+                        "Use the direct page content above as the primary source for questions about the pasted URL. "
+                        "Do not claim you read content that was not supplied. If the page could not be read, say so clearly.\n"
+                    )
+        except Exception as e:
+            logger.warning(f"Direct URL reading failed: {_redact_secrets(str(e))}")
 
         # --- Multi-source web research (SearXNG) ---
         research_context = ""
