@@ -1,9 +1,22 @@
-"""api.py bootstrap: load known-good source + patches. Cache bust v4."""
+"""api.py bootstrap: load known-good source + patches. Cache bust v5."""
 import os
 import urllib.request
 
 GOOD_URL = "https://raw.githubusercontent.com/kingzarry7-crypto/Fast/d53e44a4f5f511f7660bd02f3db0852a8cb36462/api.py"
-CACHE_NAME = "_api_good_cache_v4.py"
+CACHE_NAME = "_api_good_cache_v5.py"
+
+
+def _parse_admin_emails():
+    raw = ",".join(
+        [os.getenv("ADMIN_EMAILS") or "", os.getenv("ADMIN_EMAIL") or ""]
+    )
+    out = set()
+    for part in raw.split(","):
+        p = part.strip().strip('"').strip("'").lower()
+        if p and "@" in p:
+            out.add(p)
+    return out
+
 
 def _load_good():
     path = os.path.join(os.path.dirname(__file__), CACHE_NAME)
@@ -17,8 +30,31 @@ def _load_good():
     ns = {"__name__": "api", "__file__": path}
     exec(compile(code, path, "exec"), ns, ns)
 
+    # CRITICAL: good api.py references these but never assigns them → NameError on admin
+    ns["ADMIN_EMAILS"] = _parse_admin_emails()
+    ns["ADMIN_PASSWORD"] = (os.getenv("ADMIN_PASSWORD") or "").strip()
+    ns["ADMIN_SESSION_COOKIE"] = (
+        os.getenv("ADMIN_SESSION_COOKIE") or "king_zarry_admin_session"
+    ).strip()
+    try:
+        ns["ADMIN_SESSION_DAYS"] = max(
+            1, min(int(os.getenv("ADMIN_SESSION_DAYS", "7") or 7), 90)
+        )
+    except Exception:
+        ns["ADMIN_SESSION_DAYS"] = 7
+
+    print(
+        "ADMIN_ENV",
+        "emails=",
+        len(ns["ADMIN_EMAILS"]),
+        "password_set=",
+        bool(ns["ADMIN_PASSWORD"]),
+        flush=True,
+    )
+
     try:
         from admin_stats_fix import install_admin_stats_fix
+
         install_admin_stats_fix(
             ns["app"],
             require_admin=ns["_require_admin"],
@@ -34,10 +70,11 @@ def _load_good():
         )
         print("ADMIN_PATCHES_INSTALLED", flush=True)
     except Exception as e:
-        print("ADMIN_PATCHES_FAILED", type(e).__name__, flush=True)
+        print("ADMIN_PATCHES_FAILED", type(e).__name__, str(e)[:120], flush=True)
 
     try:
         from admin_email_broadcast import install_email_broadcast
+
         install_email_broadcast(
             ns["app"],
             require_admin=ns["_require_admin"],
@@ -49,9 +86,11 @@ def _load_good():
         )
     except Exception as e:
         print("EMAIL_BROADCAST_INSTALL_FAILED", type(e).__name__, flush=True)
+
     g = globals()
     for k, v in ns.items():
         if not k.startswith("__"):
             g[k] = v
+
 
 _load_good()
