@@ -153,6 +153,7 @@ export default function ChatWorkspace({
     const timer = window.setTimeout(() => {
       if (!callMode) return;
       listenContinuous((text) => {
+        stopListening();
         void sendVoiceText(text);
       });
     }, 350);
