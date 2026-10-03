@@ -94,3 +94,11 @@ def _load_good():
 
 
 _load_good()
+
+
+# Slack integration is additive and does not replace the existing API.
+try:
+    from slack_integration import install_slack_integration
+    install_slack_integration(globals().get("app"))
+except Exception as e:
+    print("SLACK_INTEGRATION_INSTALL_FAILED", type(e).__name__, str(e)[:160], flush=True)
