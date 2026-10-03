@@ -532,16 +532,34 @@ export default function ChatWorkspace({
           )}
 
           {callMode && (
-            <div className="mb-2 flex items-center justify-between rounded-xl border border-cyan-400/20 bg-cyan-500/5 px-3 py-2">
-              <div className="flex items-center gap-2">
-                <span className={"h-2 w-2 rounded-full " + (isSpeaking ? "bg-cyan-300 animate-pulse" : listening ? "bg-emerald-300 animate-pulse" : "bg-amber-300 animate-pulse")} />
-                <span className="text-[10px] tracking-[0.2em] text-cyan-100">
-                  {isSpeaking ? "KING ZARRY IS SPEAKING" : listening ? "LISTENING…" : sending ? "THINKING…" : "READY"}
-                </span>
+            <div className="mb-2 rounded-2xl border border-cyan-400/20 bg-[#07101b]/95 px-4 py-3 shadow-xl shadow-cyan-950/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={"relative flex h-10 w-10 items-center justify-center rounded-full border " + (isSpeaking ? "border-cyan-300/70 bg-cyan-400/10" : listening ? "border-emerald-300/70 bg-emerald-400/10" : "border-zinc-600 bg-zinc-900")}>
+                    <span className={"text-lg " + (isSpeaking ? "animate-pulse" : "")}>👑</span>
+                    {isSpeaking && <span className="absolute inset-0 rounded-full border border-cyan-300/30 animate-ping" />}
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold tracking-[0.18em] text-white">KING ZARRY AI</p>
+                    <p className="mt-0.5 text-[9px] tracking-[0.14em] text-zinc-400">
+                      {callMuted ? "MIC MUTED" : isSpeaking ? "SPEAKING" : listening ? "LISTENING" : sending ? "THINKING" : "READY"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={toggleCallMute} className={"flex h-9 items-center justify-center rounded-full border px-3 text-[10px] tracking-wider transition " + (callMuted ? "border-red-400/60 bg-red-500/15 text-red-200" : "border-zinc-600 bg-zinc-900 text-zinc-200 hover:border-cyan-400/50")}>
+                    {callMuted ? "🔇 UNMUTE" : "🎙 MUTE"}
+                  </button>
+                  <button type="button" onClick={endVoiceCall} className="flex h-9 items-center justify-center rounded-full border border-red-400/50 bg-red-500/10 px-3 text-[10px] tracking-wider text-red-200 hover:bg-red-500/20">
+                    END
+                  </button>
+                </div>
               </div>
-              <button type="button" onClick={endVoiceCall} className="text-[9px] tracking-widest text-red-300 hover:text-red-100">
-                END
-              </button>
+              <div className="mt-3 flex h-5 items-end justify-center gap-1">
+                {[0,1,2,3,4,5,6,7,8,9,10,11].map((i) => (
+                  <span key={i} className={"w-1 rounded-full bg-cyan-300/70 transition-all " + (isSpeaking || listening ? "animate-pulse" : "")} style={{ height: (8 + ((i * 7) % 13)) + "px", animationDelay: (i * 45) + "ms" }} />
+                ))}
+              </div>
             </div>
           )}
 
@@ -558,6 +576,7 @@ export default function ChatWorkspace({
             </div>
           )}
 
+          {!callMode && (
           <div className="flex items-center gap-2 rounded-full border border-zinc-600/60 bg-zinc-900/90 px-2 py-1.5 shadow-lg shadow-black/40">
             <button
               type="button"
@@ -596,6 +615,7 @@ export default function ChatWorkspace({
                 <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
+          )}
           </div>
         </div>
       </form>
