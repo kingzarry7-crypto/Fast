@@ -149,6 +149,99 @@ def is_configured() -> bool:
     return bool(_env_urls())
 
 
+def extract_urls(text: str) -> List[str]:
+    """Return explicit public http(s) URLs pasted into a user message."""
+    raw = re.findall(r"https?://[^\s<>'\"\)\]]+", str(text or ""), flags=re.IGNORECASE)
+    urls = []
+    for value in raw:
+        value = value.rstrip(".,;:!?")
+        parsed = urlparse(value)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            continue
+        # Refuse localhost/private-network targets to avoid SSRF.
+        host = (parsed.hostname or "").lower()
+        if host in {"localhost", "127.0.0.1", "::1"} or host.startswith(("10.", "192.168.", "169.254.")):
+            continue
+        if host.startswith("172."):
+            try:
+                if 16 <= int(host.split(".")[1]) <= 31:
+                    continue
+            except Exception:
+                pass
+        urls.append(value)
+    return list(dict.fromkeys(urls))[:5]
+
+
+def fetch_url(url: str, max_chars: int = 18000) -> Dict[str, Any]:
+    """Fetch one explicit public URL and extract readable page text."""
+    parsed = urlparse(str(url or "").strip())
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return {"success": False, "url": url, "error": "Invalid public URL"}
+
+    try:
+        response = requests.get(
+            str(url).strip(),
+            headers={
+                "Accept": "text/html,application/xhtml+xml,text/plain,application/pdf",
+                "User-Agent": "KingZarryAI/1.0 (+public-page-reader)",
+            },
+            timeout=_TIMEOUT,
+            allow_redirects=True,
+        )
+        response.raise_for_status()
+        final = urlparse(response.url)
+        if final.scheme not in ("http", "https") or not final.netloc:
+            return {"success": False, "url": url, "error": "Unsafe redirect"}
+
+        content_type = (response.headers.get("content-type") or "").lower()
+        if "html" in content_type or "xhtml" in content_type:
+            parser = _TextExtractor()
+            parser.feed(response.text[:2_000_000])
+            page_text = parser.text()
+        elif "text/" in content_type:
+            page_text = re.sub(r"\s+", " ", response.text).strip()
+        else:
+            return {
+                "success": False,
+                "url": url,
+                "final_url": response.url,
+                "error": f"Unsupported page type: {content_type or 'unknown'}",
+            }
+
+        page_text = page_text[:max(1000, min(int(max_chars), 30000))]
+        if not page_text:
+            return {"success": False, "url": url, "final_url": response.url, "error": "No readable text found"}
+
+        return {
+            "success": True,
+            "url": url,
+            "final_url": response.url,
+            "content_type": content_type,
+            "content": page_text,
+        }
+    except Exception as exc:
+        logger.warning("Direct URL fetch failed: %s", type(exc).__name__)
+        return {"success": False, "url": url, "error": "Could not read this public URL"}
+
+
+def format_url_context(pages: List[Dict[str, Any]], max_chars: int = 30000) -> str:
+    chunks = []
+    used = 0
+    for idx, page in enumerate(pages, 1):
+        if not page.get("success"):
+            continue
+        url = str(page.get("final_url") or page.get("url") or "").strip()
+        content = str(page.get("content") or "").strip()
+        block = f"PAGE {idx}: {url}\nCONTENT:\n{content}"
+        if used + len(block) > max_chars:
+            break
+        chunks.append(block)
+        used += len(block)
+    if not chunks:
+        return ""
+    return "--- DIRECT URL PAGE CONTENT ---\n" + "\n\n".join(chunks) + "\n--- END DIRECT URL PAGE CONTENT ---\n\n"
+
+
 def should_research(prompt: str) -> bool:
     low = str(prompt or "").strip().lower()
     if not low:
