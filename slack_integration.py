@@ -103,8 +103,8 @@ def _post_message(channel: str, text: str, thread_ts: Optional[str] = None) -> N
 
 def _clean_prompt(text: str) -> str:
     text = re.sub(r"<@[A-Z0-9]+>", " ", text or "")
-    text = re.sub(r"<#[A-Z0-9]+\\|([^>]+)>", r"\\1", text)
-    text = re.sub(r"\\s+", " ", text).strip()
+    text = re.sub(r"<#[A-Z0-9]+\|([^>]+)>", r"\1", text)
+    text = re.sub(r"\s+", " ", text).strip()
     return text
 
 
