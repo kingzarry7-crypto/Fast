@@ -20,6 +20,7 @@ const PITCH_MAP: Record<VoiceStyle, number> = {
 };
 
 interface SpeechRecognitionEvent {
+  resultIndex?: number;
   results: {
     length: number;
     [index: number]: {
@@ -247,7 +248,8 @@ export function useVoice() {
     recognition.onresult = (e: SpeechRecognitionEvent) => {
       // In continuous mode, each final result becomes a natural turn.
       // Do not expose interim speech as typed text.
-      for (let i = 0; i < e.results.length; i += 1) {
+      const start = continuous ? (e.resultIndex ?? 0) : 0;
+      for (let i = start; i < e.results.length; i += 1) {
         const result = e.results[i];
         if (!result?.isFinal) continue;
         const transcript = result?.[0]?.transcript || "";
