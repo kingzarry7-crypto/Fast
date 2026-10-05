@@ -285,6 +285,94 @@ export async function sendChatMessage(
   });
 }
 
+export async function streamChatMessage(
+  message: string,
+  options: {
+    conversationId?: string;
+    signal?: AbortSignal;
+    onDelta: (text: string) => void;
+    onStart?: (provider?: string) => void;
+  }
+): Promise<{ reply: string; conversation_id?: string }> {
+  const trimmed = (message || "").trim();
+  if (!trimmed) throw new ApiError({ status: 400, message: "Message required" });
+  if (trimmed.length > 4000) throw new ApiError({ status: 400, message: "Message too long" });
+
+  const response = await fetch(buildUrl("/api/chat/stream"), {
+    method: "POST",
+    headers: {
+      Accept: "text/event-stream",
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify({
+      message: trimmed,
+      ...(options.conversationId ? { conversation_id: options.conversationId } : {}),
+    }),
+    signal: options.signal,
+  });
+
+  if (!response.ok) {
+    let message = response.statusText || `HTTP ${response.status}`;
+    try {
+      const data = await response.json();
+      if (data && typeof data.detail === "string") message = data.detail;
+    } catch { /* non-JSON response */ }
+    throw new ApiError({ status: response.status, message });
+  }
+
+  if (!response.body) throw new ApiError({ status: 502, message: "Streaming response unavailable" });
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let reply = "";
+  let conversationId: string | undefined;
+  let streamError = "";
+
+  const consumeEvent = (raw: string) => {
+    const line = raw.split(/\\r?\\n/).find((value) => value.startsWith("data:"));
+    if (!line) return;
+    try {
+      const event = JSON.parse(line.slice(5).trim()) as Record<string, unknown>;
+      if (event.type === "start") {
+        options.onStart?.(typeof event.provider === "string" ? event.provider : undefined);
+      } else if (event.type === "delta" && typeof event.text === "string") {
+        reply += event.text;
+        options.onDelta(event.text);
+      } else if (event.type === "done") {
+        if (typeof event.conversation_id === "string") conversationId = event.conversation_id;
+        if (typeof event.text === "string" && event.text) reply = event.text;
+      } else if (event.type === "error") {
+        streamError = typeof event.message === "string" ? event.message : "Streaming failed";
+      }
+    } catch {
+      // Ignore malformed SSE frames; the final fallback/error frame handles failure.
+    }
+  };
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const frames = buffer.split(/\\r?\\n\\r?\\n/);
+      buffer = frames.pop() || "";
+      for (const frame of frames) consumeEvent(frame);
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) consumeEvent(buffer);
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (!reply.trim() && streamError) {
+    throw new ApiError({ status: 502, message: streamError });
+  }
+  if (!reply.trim()) throw new ApiError({ status: 502, message: "AI streaming returned no response" });
+  return { reply, conversation_id: conversationId };
+}
+
 export async function healthCheck() {
   return request<{ status?: string }>("/health", { method: "GET" });
 }
