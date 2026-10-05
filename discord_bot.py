@@ -926,6 +926,30 @@ class KingZarryAI(discord.Client):
         except Exception as e:
             print(f"❌ COMMAND SYNC ERROR: {_redact(repr(e))}", flush=True)
 
+    @app_commands.command(name="link", description="Link Discord to your KING ZARRY shared memory")
+    @app_commands.describe(code="One-time memory link code from the KING ZARRY web dashboard")
+    async def link_memory(self, interaction: discord.Interaction, code: str):
+        await interaction.response.defer(ephemeral=True)
+        try:
+            from memory_link_bridge import redeem_link_code
+            result = await asyncio.to_thread(
+                redeem_link_code,
+                "discord",
+                str(interaction.user.id),
+                code,
+                str(interaction.user.name),
+            )
+            if not result:
+                await interaction.followup.send("❌ Invalid, expired, or already-used memory link code.", ephemeral=True)
+                return
+            await interaction.followup.send(
+                "✅ 🧠 Memory linked. Your KING ZARRY Web + Discord memory can now stay connected.",
+                ephemeral=True,
+            )
+        except Exception as exc:
+            logger.warning("Discord memory link failed: %s", type(exc).__name__)
+            await interaction.followup.send("⚠️ Shared memory linking is temporarily unavailable.", ephemeral=True)
+
     async def on_ready(self):
         print("\n" + "="*60, flush=True)
         print("👑 KING ZARRY AI DISCORD IS ONLINE", flush=True)
