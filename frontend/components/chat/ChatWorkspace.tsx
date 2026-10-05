@@ -610,7 +610,7 @@ export default function ChatWorkspace({
                   {callIsMuted ? "🔇" : "🎙"}
                 </button>
                 <button type="button" onClick={endVoiceCall} aria-label="End AI voice call" className="flex h-16 w-16 items-center justify-center rounded-full border border-red-300/60 bg-red-500/20 text-xl text-red-100 shadow-lg shadow-red-950/30 transition hover:bg-red-500/30">
-                  <span className="rotate-[135deg]">⌕</span>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="rotate-[135deg]"><path d="M7.2 4.8 9.5 3.7c.7-.3 1.5 0 1.8.7l1.1 2.7c.2.5.1 1.1-.3 1.5l-1.4 1.2a13.2 13.2 0 0 0 3.5 3.5l1.2-1.4c.4-.4 1-.5 1.5-.3l2.7 1.1c.7.3 1 1.1.7 1.8l-1.1 2.3c-.3.7-1 1.1-1.7 1.1C10.1 17.9 6.1 13.9 6.1 7c0-.7.4-1.4 1.1-1.7Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </button>
               </div>
             </div>
