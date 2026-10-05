@@ -6,6 +6,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import ChatWorkspace from "@/components/chat/ChatWorkspace";
 import RobotHead from "@/components/RobotHead";
 import WorkPanel from "@/components/dashboard/WorkPanel";
+import RevenuePanel from "@/components/dashboard/RevenuePanel";
 import { useAuth } from "@/hooks/useAuth";
 import { api, type ConversationItem, type MarketSnapshot } from "@/lib/api";
 
@@ -73,6 +74,7 @@ export default function DashboardPage() {
 
             <button type="button" onClick={newChat} className="rounded-md border border-cyan-400/40 bg-cyan-400/10 px-2.5 py-1.5 font-mono-tech text-[10px] tracking-widest text-cyan-200 hover:bg-cyan-400/20 shrink-0">+ NEW</button>
             <WorkPanel />
+            <RevenuePanel />
 
             <div className="relative shrink-0">
               <button type="button" onClick={() => setChatsOpen((v) => !v)} className="rounded-md border border-cyan-500/20 px-2.5 py-1.5 font-mono-tech text-[10px] tracking-widest text-cyan-300/80 hover:bg-cyan-500/10">
