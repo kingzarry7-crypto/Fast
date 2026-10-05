@@ -78,6 +78,16 @@ def install_workflow_api(app, require_current_user, row_value=None):
         if len(goal) > 4000: raise HTTPException(status_code=400, detail='goal is too long')
         return {'status':'ok','workflow':engine.create_workflow(user_id,goal)}
 
+    @app.get('/api/revenue')
+    def revenue_dashboard_route(request: Request):
+        row=require_current_user(request)
+        user_id=uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        from revenue_engine import revenue_dashboard
+        workflows=engine.list_workflows(user_id,50)
+        return {'status':'ok','revenue':revenue_dashboard(workflows)}
+
     @app.get('/api/workflows')
     def list_workflows_route(request: Request):
         row=require_current_user(request)
