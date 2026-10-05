@@ -131,12 +131,10 @@ export function ChatMessage({
     >
       <div
         className={
-          "relative max-w-[min(100%,36rem)] rounded-2xl px-4 py-3 text-sm leading-relaxed " +
-          (isUser
-            ? "bg-[#031322]/80 border border-cyan-500/15 text-[#c8e6f5] rounded-br-md shadow-[0_0_24px_rgba(0,0,0,0.18)]"
-            : isError
-              ? "bg-red-950/25 border border-red-400/30 text-red-100 rounded-bl-md"
-              : "bg-[#031322]/80 border border-cyan-500/15 text-[#c8e6f5] rounded-bl-md")
+          "relative w-full px-1 py-3 text-sm leading-relaxed " +
+          (isError
+            ? "text-red-100"
+            : "text-[#c8e6f5]")
         }
       >
         {imagePreviewUrl ? (
@@ -144,7 +142,7 @@ export function ChatMessage({
           <img
             src={imagePreviewUrl}
             alt="attachment"
-            className="mb-2 max-h-48 rounded-lg border border-zinc-700 object-cover"
+            className="mb-2 max-h-48 rounded-lg object-cover"
           />
         ) : null}
 
@@ -160,8 +158,8 @@ export function ChatMessage({
 
         {!isUser && !isError && content && !isStreaming ? (
           <>
-            <div className="mt-3 flex flex-wrap items-center gap-0.5 border-t border-cyan-500/10 pt-2 opacity-75 transition-opacity group-hover:opacity-100">
-              <button type="button" onClick={handleCopy} className="flex h-8 w-8 items-center justify-center rounded-md text-cyan-100/45 hover:bg-cyan-400/10 hover:text-cyan-100" title="Copy" aria-label="Copy">⧉</button>
+            <div className="mt-3 flex flex-wrap items-center gap-0.5 pt-1 opacity-75 transition-opacity group-hover:opacity-100">
+              <button type="button" onClick={handleCopy} className="flex h-8 w-8 items-center justify-center rounded-md text-cyan-100/45 hover:bg-transparent hover:text-cyan-100" title="Copy" aria-label="Copy">⧉</button>
               <button type="button" onClick={handleShare} className="flex h-8 w-8 items-center justify-center rounded-md text-cyan-100/45 hover:bg-cyan-400/10 hover:text-cyan-100" title="Share" aria-label="Share">↗</button>
               {onRegenerate ? <button type="button" onClick={onRegenerate} className="flex h-8 w-8 items-center justify-center rounded-md text-cyan-100/45 hover:bg-cyan-400/10 hover:text-cyan-100" title="Regenerate" aria-label="Regenerate">↻</button> : null}
               <button type="button" onClick={() => setLiked((v) => (v === "up" ? null : "up"))} className="flex h-8 w-8 items-center justify-center rounded-md text-cyan-100/45 hover:bg-cyan-400/10 hover:text-cyan-100" title="Like" aria-label="Like">♡</button>
@@ -180,7 +178,7 @@ export function ChatMessage({
                   •••
                 </button>
                 {moreOpen ? (
-                  <div className="absolute bottom-10 right-0 z-50 w-52 overflow-hidden rounded-xl border border-cyan-500/20 bg-[#020914]/98 p-1.5 shadow-2xl backdrop-blur-xl">
+                  <div className="absolute bottom-10 right-0 z-50 w-52 overflow-hidden rounded-xl border border-cyan-500/20 bg-[#06101a]/98 p-1.5 shadow-2xl backdrop-blur-xl">
                     <button type="button" onClick={() => { void handleCopy(); setMoreOpen(false); }} className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-cyan-100/75 hover:bg-cyan-400/10 hover:text-cyan-50">⧉ <span className="ml-2">Copy response</span></button>
                     <button type="button" onClick={() => { void handleShare(); setMoreOpen(false); }} className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-cyan-100/75 hover:bg-cyan-400/10 hover:text-cyan-50">↗ <span className="ml-2">Share response</span></button>
                     {onRegenerate ? <button type="button" onClick={() => { setMoreOpen(false); onRegenerate(); }} className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-cyan-100/75 hover:bg-cyan-400/10 hover:text-cyan-50">↻ <span className="ml-2">Regenerate response</span></button> : null}
