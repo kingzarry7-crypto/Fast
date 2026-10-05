@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Optional
 
 from trading_connector import APPROVED_SYMBOLS, normalize_symbol, get_account, list_positions, place_market_order, close_position, status as trading_status
 from whatsapp_connector import send_text as whatsapp_send_text, status as whatsapp_status
+from action_risk_policy import risk_for_action, requires_approval, validate_payload
 
 logger = logging.getLogger("king_zarry_action_gateway")
 
@@ -33,6 +34,8 @@ ACTION_TYPES = {
     "trade.close_position",
     "whatsapp.send",
 }
+
+RISK_LEVELS = {action: risk_for_action(action) for action in ACTION_TYPES}
 
 _LOCK = threading.Lock()
 
@@ -76,14 +79,51 @@ def init_db() -> None:
                     approved_at TEXT,
                     executed_at TEXT,
                     result_json TEXT,
-                    error TEXT
+                    error TEXT,
+                    risk_level TEXT NOT NULL DEFAULT 'red',
+                    approval_fingerprint TEXT
                 );
                 CREATE INDEX IF NOT EXISTS idx_agent_actions_user ON agent_actions(user_id, created_at);
+                CREATE TABLE IF NOT EXISTS agent_action_events (
+                    id TEXT PRIMARY KEY,
+                    action_id TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    details_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_agent_action_events_action ON agent_action_events(action_id, created_at);
                 """
             )
+            for migration in (
+                "ALTER TABLE agent_actions ADD COLUMN risk_level TEXT NOT NULL DEFAULT 'red'",
+                "ALTER TABLE agent_actions ADD COLUMN approval_fingerprint TEXT",
+            ):
+                try:
+                    conn.execute(migration)
+                except sqlite3.OperationalError:
+                    pass
             conn.commit()
         finally:
             conn.close()
+
+
+def _audit(action_id: str, user_id: str, event_type: str, details: Optional[Dict[str, Any]] = None) -> None:
+    try:
+        init_db()
+        safe = _sanitize_payload(dict(details or {}))
+        with _LOCK:
+            conn = _connect()
+            try:
+                conn.execute(
+                    "INSERT INTO agent_action_events (id, action_id, user_id, event_type, details_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (str(uuid.uuid4()), str(action_id), str(user_id), str(event_type), json.dumps(safe), _now()),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+    except Exception as exc:
+        logger.warning("Action audit write failed: %s", type(exc).__name__)
 
 
 def _sanitize_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -115,7 +155,9 @@ def create_action(
     if not user_id:
         raise ValueError("user_id required")
 
-    clean = dict(payload or {})
+    clean = validate_payload(action_type, dict(payload or {}))
+    clean.pop("_risk_level", None)
+    clean.pop("_approval_required", None)
     if action_type.startswith("trade."):
         symbol = normalize_symbol(str(clean.get("symbol") or ""))
         if symbol not in APPROVED_SYMBOLS:
@@ -127,20 +169,25 @@ def create_action(
 
     action_id = str(uuid.uuid4())
     now = _now()
+    risk_level = risk_for_action(action_type)
+    approval_required = requires_approval(action_type)
+    fingerprint = uuid.uuid5(uuid.NAMESPACE_URL, json.dumps({"action_type": action_type, "payload": clean}, sort_keys=True, separators=(",", ":"))).hex
     with _LOCK:
         conn = _connect()
         try:
             conn.execute(
                 """
                 INSERT INTO agent_actions
-                (id, user_id, action_type, payload_json, status, needs_approval, created_at)
-                VALUES (?, ?, ?, ?, 'awaiting_approval', 1, ?)
+                (id, user_id, action_type, payload_json, status, needs_approval, created_at, risk_level, approval_fingerprint)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (action_id, str(user_id), action_type, json.dumps(clean), now),
+                (action_id, str(user_id), action_type, json.dumps(clean), "awaiting_approval" if approval_required else "approved", int(approval_required), now, risk_level, fingerprint),
             )
             conn.commit()
         finally:
             conn.close()
+
+    _audit(action_id, str(user_id), "action_created", {"risk_level": risk_level, "approval_required": approval_required, "action_type": action_type})
 
     try:
         from agent_core import create_job
@@ -303,13 +350,27 @@ def approve_action(action_id: str, user_id: str) -> Dict[str, Any]:
     if action["status"] not in {"awaiting_approval", "approved"}:
         return action
     now = _now()
-    _update(action_id, user_id, status="approved", approved_at=action.get("approved_at") or now)
+    if action.get("status") == "awaiting_approval":
+        with _LOCK:
+            conn = _connect()
+            try:
+                cur = conn.execute(
+                    "UPDATE agent_actions SET status='approved', approved_at=? WHERE id=? AND user_id=? AND status='awaiting_approval'",
+                    (now, str(action_id), str(user_id)),
+                )
+                conn.commit()
+                if cur.rowcount != 1:
+                    return get_action(action_id, user_id) or action
+            finally:
+                conn.close()
+        _audit(action_id, str(user_id), "approval_granted", {"risk_level": action.get("risk_level", "red")})
     try:
         return execute_action(action_id, user_id)
     except Exception as exc:
         logger.error("action execution failed: %s: %s", type(exc).__name__, str(exc)[:300])
         _update(action_id, user_id, status="failed", executed_at=_now(), error=str(exc)[:1200])
         updated = get_action(action_id, user_id) or action
+        _audit(action_id, str(user_id), "execution_failed", {"risk_level": action.get("risk_level", "red"), "error_type": type(exc).__name__})
         _record_agent_job_result(updated, "failed", error=str(exc)[:1200])
         return updated
 
@@ -323,8 +384,28 @@ def execute_action(action_id: str, user_id: str) -> Dict[str, Any]:
     if action["status"] == "awaiting_approval":
         raise PermissionError("approval is required before execution")
 
+    if action["status"] == "approved":
+        with _LOCK:
+            conn = _connect()
+            try:
+                cur = conn.execute(
+                    "UPDATE agent_actions SET status='executing' WHERE id=? AND user_id=? AND status='approved'",
+                    (str(action_id), str(user_id)),
+                )
+                conn.commit()
+                if cur.rowcount != 1:
+                    return get_action(action_id, user_id) or action
+            finally:
+                conn.close()
+        _audit(action_id, str(user_id), "execution_claimed", {"risk_level": action.get("risk_level", "red")})
+        action = get_action(action_id, user_id) or action
+    elif action["status"] != "executing":
+        return action
+
     action_type = action["action_type"]
     payload = action["payload"]
+
+    validate_payload(action_type, payload)
 
     if action_type == "whatsapp.send":
         result = whatsapp_send_text(payload["to"], payload["text"])
@@ -356,6 +437,7 @@ def execute_action(action_id: str, user_id: str) -> Dict[str, Any]:
         result=result,
         error=None,
     )
+    _audit(action_id, str(user_id), "execution_completed", {"risk_level": action.get("risk_level", "red")})
     _record_agent_job_result(updated or action, "completed", result=result)
     return updated or action
 
