@@ -2,9 +2,8 @@ from fastapi import Request, HTTPException
 
 def install_workflow_api(app, require_current_user, row_value=None):
     import workflow_engine as engine
-    from workflow_store import save_workflow
+    from workflow_store import save_workflow, decide_approval
 
-    # Prefer the existing Tavily integration when SearXNG is not configured.
     original_research = engine._research
     def research_with_fallback(goal):
         result = original_research(goal)
@@ -20,7 +19,6 @@ def install_workflow_api(app, require_current_user, row_value=None):
         return result
     engine._research = research_with_fallback
 
-    # Prepare supported external actions before the approval card is shown.
     original_create = engine.create_workflow
     def create_with_action_preview(user_id, goal):
         item = original_create(user_id, goal)
@@ -29,24 +27,17 @@ def install_workflow_api(app, require_current_user, row_value=None):
             for step in item.get("plan", []):
                 if step.get("action") == "external_action" and step.get("status") == "waiting_for_approval":
                     action_plan = plan_action_from_goal(goal, str(user_id))
-                    if action_plan.get("status") == "awaiting_approval":
-                        step["output"] = {
-                            "supported_action": True,
-                            "action": action_plan.get("action"),
-                            "message": action_plan.get("message"),
-                        }
-                    else:
-                        step["output"] = {
-                            "supported_action": False,
-                            "message": action_plan.get("detail") or "This goal needs a connector-specific execution adapter.",
-                        }
+                    step["output"] = {
+                        "supported_action": action_plan.get("status") == "awaiting_approval",
+                        "action": action_plan.get("action"),
+                        "message": action_plan.get("message") or action_plan.get("detail"),
+                    }
             save_workflow(item)
         except Exception:
             pass
         return item
     engine.create_workflow = create_with_action_preview
 
-    # After the user approves, execute a prepared Action Gateway action.
     original_execute = engine._execute_step
     def execute_with_gateway(item, step):
         if step.get("action") == "external_action":
@@ -56,9 +47,20 @@ def install_workflow_api(app, require_current_user, row_value=None):
                 from agent_action_gateway import approve_action
                 result = approve_action(action_id, str(item["user_id"]))
                 return {"success": result.get("status") == "completed", "action": result}
-            return original_execute(item, step)
         return original_execute(item, step)
     engine._execute_step = execute_with_gateway
+
+    original_approve = engine.approve_workflow
+    def approve_with_persistence(workflow_id, user_id, approved):
+        current = engine.get_workflow(workflow_id, user_id)
+        if current:
+            for step in current.get("plan", []):
+                approval_id = step.get("approval_id")
+                if approval_id:
+                    decide_approval(approval_id, str(user_id), bool(approved))
+                    break
+        return original_approve(workflow_id, user_id, approved)
+    engine.approve_workflow = approve_with_persistence
 
     def uid(row):
         try:
@@ -69,16 +71,11 @@ def install_workflow_api(app, require_current_user, row_value=None):
 
     @app.post('/api/workflows')
     async def create_workflow_route(request: Request):
-        row = require_current_user(request)
-        user_id = uid(row)
-        if not user_id:
-            raise HTTPException(status_code=401, detail='Authenticated user required')
-        body = await request.json()
-        goal = str((body or {}).get('goal') or '').strip()
-        if not goal:
-            raise HTTPException(status_code=400, detail='goal is required')
-        if len(goal) > 4000:
-            raise HTTPException(status_code=400, detail='goal is too long')
+        row=require_current_user(request); user_id=uid(row)
+        if not user_id: raise HTTPException(status_code=401, detail='Authenticated user required')
+        body=await request.json(); goal=str((body or {}).get('goal') or '').strip()
+        if not goal: raise HTTPException(status_code=400, detail='goal is required')
+        if len(goal) > 4000: raise HTTPException(status_code=400, detail='goal is too long')
         return {'status':'ok','workflow':engine.create_workflow(user_id,goal)}
 
     @app.get('/api/workflows')
@@ -100,8 +97,7 @@ def install_workflow_api(app, require_current_user, row_value=None):
 
     @app.post('/api/workflows/{workflow_id}/approve')
     async def approve_route(workflow_id: str, request: Request):
-        row=require_current_user(request)
-        body=await request.json()
+        row=require_current_user(request); body=await request.json()
         approved=bool((body or {}).get('approved'))
         try:
             result=engine.approve_workflow(workflow_id,uid(row),approved)
@@ -109,4 +105,9 @@ def install_workflow_api(app, require_current_user, row_value=None):
             raise HTTPException(status_code=404, detail='Workflow not found')
         return {'status':'ok','workflow':result}
 
+    try:
+        from workflow_scheduler import start
+        start()
+    except Exception as exc:
+        print('KZ_WORKFLOW_SCHEDULER_FAILED', type(exc).__name__, flush=True)
     print('KZ_WORKFLOW_API_INSTALLED', flush=True)
