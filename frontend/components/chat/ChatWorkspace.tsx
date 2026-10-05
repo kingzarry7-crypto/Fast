@@ -169,7 +169,11 @@ export default function ChatWorkspace({
 
   useEffect(() => {
     const el = listRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    const frame = window.requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [messages, sending]);
 
   const handleNewChat = async () => {
@@ -488,12 +492,12 @@ export default function ChatWorkspace({
       <div
         ref={listRef}
         className={
-          "absolute inset-x-0 overflow-y-auto overscroll-y-contain kz-scroll px-3 sm:px-4 " +
+          "absolute inset-x-0 top-0 bottom-[88px] overflow-y-auto overscroll-y-contain kz-scroll px-3 sm:px-4 " +
           ((!isVip && membership) || showSideHistory || embedMode ? "top-10" : "top-0") +
-          " bottom-[72px]"
+          ""
         }
       >
-        <div className="mx-auto w-full max-w-2xl space-y-2.5 py-4 pb-6">
+        <div className="mx-auto w-full max-w-2xl space-y-2.5 py-4 pb-28">
           {showSideHistory && historyOpen && (
             <div className="mb-3 rounded-xl border border-cyan-500/15 bg-black/40 p-2 max-h-40 overflow-y-auto">
               {conversations.map((c) => (
