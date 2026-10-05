@@ -683,8 +683,7 @@ export default function KingZarryHistoryPage() {
             {linkError && <div className="mt-2 text-[9px] font-mono text-red-300">{linkError}</div>}
           </div>
 
-
-
+          <div className="p-3 rounded-lg border border-cyan-500/20 bg-cyan-950/20 backdrop-blur-md max-w-md">
             <div className="flex items-center justify-between text-[10px] font-mono text-cyan-400/80 mb-1">
               <span className="font-bold tracking-wider">
                 AI MEMORY INSIGHT
