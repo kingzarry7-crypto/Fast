@@ -13,6 +13,8 @@ export default function OpportunityPanel() {
   const [category, setCategory] = useState("clients");
   const [items, setItems] = useState<Opportunity[]>([]);
   const [error, setError] = useState("");
+  const [prospect, setProspect] = useState<any>(null);
+  const [preparing, setPreparing] = useState(false);
 
   async function hunt() {
     setLoading(true); setError("");
@@ -25,7 +27,7 @@ export default function OpportunityPanel() {
     finally { setLoading(false); }
   }
 
-  return <div className="relative shrink-0">
+  async function prepare(o: Opportunity) {\n    setPreparing(true); setError("");\n    try {\n      const r = await fetch("/api/acquisition/prepare", { method:"POST", headers:{"Content-Type":"application/json"}, credentials:"include", body:JSON.stringify({opportunity:o}) });\n      const data = await r.json(); if (!r.ok) throw new Error(data?.detail || "Preparation failed");\n      setProspect(data.acquisition);\n    } catch (e) { setError(e instanceof Error ? e.message : "Preparation failed"); } finally { setPreparing(false); }\n  }\n\n  return <div className="relative shrink-0">
     <button type="button" onClick={() => setOpen(v => !v)} className="rounded-md border border-emerald-400/30 bg-emerald-400/5 px-2.5 py-1.5 font-mono-tech text-[10px] tracking-widest text-emerald-300 hover:bg-emerald-400/10">HUNT</button>
     {open && <>
       <button className="fixed inset-0 z-40 cursor-default" aria-label="Close opportunities" onClick={() => setOpen(false)} />
@@ -41,9 +43,9 @@ export default function OpportunityPanel() {
           <div className="flex items-start justify-between gap-2"><div className="text-xs font-medium text-zinc-200">{o.title}</div><span className="shrink-0 font-mono-tech text-[10px] text-emerald-300">{o.score}/100</span></div>
           <div className="mt-1 text-[10px] text-zinc-500">{o.confidence.toUpperCase()} · potential $${o.estimated_value.toFixed(0)}</div>
           <p className="mt-2 line-clamp-3 text-[10px] leading-relaxed text-zinc-500">{o.summary || "No summary available."}</p>
-          <div className="mt-2 flex gap-2"><a href={o.url} target="_blank" rel="noreferrer" className="rounded border border-cyan-400/20 px-2 py-1 font-mono-tech text-[9px] text-cyan-300">SOURCE</a></div>
+          <div className="mt-2 flex gap-2"><button onClick={()=>prepare(o)} disabled={preparing} className="rounded border border-emerald-400/20 px-2 py-1 font-mono-tech text-[9px] text-emerald-300 disabled:opacity-50">{preparing ? "PREPARING" : "PREPARE"}</button><a href={o.url} target="_blank" rel="noreferrer" className="rounded border border-cyan-400/20 px-2 py-1 font-mono-tech text-[9px] text-cyan-300">SOURCE</a></div>
         </div>)}</div>
-        <div className="mt-3 border-t border-white/5 pt-2 text-[9px] text-zinc-600">Research signals are not guaranteed jobs, clients, or income. Verify before acting.</div>
+        {prospect && <div className="mt-3 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-3"><div className="font-mono-tech text-[9px] tracking-widest text-emerald-300">ACQUISITION DRAFT · {prospect.qualification?.fit_score}/100</div><div className="mt-2 text-[10px] text-zinc-300">{prospect.outreach?.subject}</div><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{prospect.outreach?.message}</p><div className="mt-2 text-[9px] text-amber-300">DRAFT ONLY — explicit approval is required before external outreach.</div></div>}<div className="mt-3 border-t border-white/5 pt-2 text-[9px] text-zinc-600">Research signals are not guaranteed jobs, clients, or income. Verify before acting.</div>
       </div>
     </>}
   </div>;
