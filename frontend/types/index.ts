@@ -25,6 +25,7 @@ export interface ChatMessage {
   timestamp: string;
   status?: string;
   capability?: string;
+  suggestions?: string[];
   imagePreviewUrl?: string;
   imageName?: string;
 }
