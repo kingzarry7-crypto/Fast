@@ -115,15 +115,6 @@ def install_workflow_api(app, require_current_user, row_value=None):
         from client_acquisition import prepare
         return {'status':'ok','acquisition':prepare(user_id,opportunity)}
 
-    @app.post('/api/delivery/prepare')
-    def delivery_prepare_route(request: Request):
-        row = require_current_user(request)
-        user_id = uid(row)
-        if not user_id:
-            raise HTTPException(status_code=401, detail='Authenticated user required')
-        body = request.json() if False else {}
-        raise HTTPException(status_code=405, detail='Use the async delivery endpoint')
-
     @app.post('/api/delivery/package')
     async def delivery_package_route(request: Request):
         row = require_current_user(request)
