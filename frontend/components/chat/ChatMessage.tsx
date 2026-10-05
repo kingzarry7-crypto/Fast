@@ -16,6 +16,7 @@ export interface ChatMessageProps {
   onRegenerate?: () => void;
   onSpeak?: () => void;
   onSuggestion?: (text: string) => void;
+  suggestions?: string[];
   className?: string;
 }
 
@@ -31,6 +32,7 @@ export function ChatMessage({
   onRegenerate,
   onSpeak,
   onSuggestion,
+  suggestions = [],
   className = "",
 }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
@@ -106,28 +108,7 @@ export function ChatMessage({
     setMoreOpen(false);
   };
 
-  const getSuggestions = () => {
-    const text = content.toLowerCase();
-    if (/code|coding|program|javascript|typescript|python|react|next\.js|api|error|bug|github/.test(text)) {
-      return ["Show me the code", "Explain this", "Fix it for me"];
-    }
-    if (/search|research|source|study|according|evidence|compare/.test(text)) {
-      return ["Go deeper", "Compare the sources", "Summarize this"];
-    }
-    if (/step|how to|setup|install|configure|build|deploy/.test(text)) {
-      return ["Show me the steps", "Do it for me", "What comes next?"];
-    }
-    if (/image|picture|photo|design|logo|visual/.test(text)) {
-      return ["Create another version", "Improve the design", "Give me more ideas"];
-    }
-    if (/video|voice|audio|music/.test(text)) {
-      return ["Make another version", "Explain how it works", "What can I do next?"];
-    }
-    if (/price|cost|money|package|fiverr|business/.test(text)) {
-      return ["Give me more options", "Compare them", "What do you recommend?"];
-    }
-    return ["Tell me more", "Give me an example", "What should I do next?"];
-  };
+
 
   if (isSystem) {
     return (
@@ -206,14 +187,14 @@ export function ChatMessage({
                     <button type="button" onClick={() => { handleSave(); setMoreOpen(false); }} className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white">▣ <span className="ml-2">{saved ? "Remove from saved" : "Save response"}</span></button>
                     {onSpeak ? <button type="button" onClick={() => { setMoreOpen(false); onSpeak(); }} className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white">◉ <span className="ml-2">Speak response</span></button> : null}
                     <button type="button" onClick={handleDownload} className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white">↓ <span className="ml-2">Download as TXT</span></button>
-                    {onSuggestion ? <button type="button" onClick={handleMoreSuggestions} className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white">✦ <span className="ml-2">Show follow-up options</span></button> : null}
+                    {onSuggestion && suggestions.length ? <button type="button" onClick={handleMoreSuggestions} className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white">✦ <span className="ml-2">Show follow-up options</span></button> : null}
                   </div>
                 ) : null}
               </div>
             </div>
-            {onSuggestion && suggestionsOpen ? (
+            {onSuggestion && suggestionsOpen && suggestions.length ? (
               <div className="mt-2 flex flex-wrap gap-2">
-                {getSuggestions().map((suggestion) => (
+                {suggestions.map((suggestion) => (
                   <button key={suggestion} type="button" onClick={() => onSuggestion(suggestion)} className="rounded-full border border-cyan-500/20 bg-[#07111d] px-3 py-1.5 text-[11px] text-cyan-100/80 transition hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-100">
                     {suggestion}
                   </button>
