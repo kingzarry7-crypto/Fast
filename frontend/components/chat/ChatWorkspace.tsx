@@ -540,6 +540,33 @@ export default function ChatWorkspace({
             />
           ))}
 
+          {sending && (
+            <div className="flex items-center gap-3 px-1 py-2" aria-live="polite">
+              <div
+                className={
+                  "kz-call-core-wrap flex h-11 w-11 shrink-0 items-center justify-center " +
+                  (messages[messages.length - 1]?.role === "assistant" && messages[messages.length - 1]?.text
+                    ? "kz-call-speaking"
+                    : "kz-call-thinking")
+                }
+              >
+                <AICore
+                  state={
+                    messages[messages.length - 1]?.role === "assistant" && messages[messages.length - 1]?.text
+                      ? "speaking"
+                      : "thinking"
+                  }
+                  size={42}
+                />
+              </div>
+              <span className="text-xs font-medium tracking-wide text-cyan-200/80">
+                {messages[messages.length - 1]?.role === "assistant" && messages[messages.length - 1]?.text
+                  ? "Responding"
+                  : "Thinking"}
+              </span>
+            </div>
+          )}
+
           {historyLoading && <p className="text-xs text-zinc-500">Loading…</p>}
           {error && (
             <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>
