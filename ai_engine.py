@@ -1823,8 +1823,11 @@ class AIEngine:
         logger.info(f"✅ GDELT 2.0 DOC API ready (free, no key) | endpoint={GDELT_DOC_API_URL}")
         logger.info(f"✅ Crypto Vision ready (free tier) | endpoint={CRYPTOVISION_BASE_URL}")
 
-    def _get_provider_order(self) -> List[str]:
-        # Groq is the primary fast/free text provider. OpenRouter and Gemini remain fallbacks.
+    def _get_provider_order(self, provider_override: Optional[str] = None) -> List[str]:
+        if provider_override:
+            provider = str(provider_override).strip().lower()
+            if provider in {"groq", "openrouter", "chutes", "gemini"}:
+                return [provider] + [p for p in ["groq", "openrouter", "chutes", "gemini"] if p != provider]
         return ["groq", "openrouter", "chutes", "gemini"]
 
     def _should_use_tavily(self, prompt: str) -> bool:
@@ -2067,8 +2070,8 @@ class AIEngine:
             return None
         return None
 
-    def _call_providers_once(self, prompt_text: str, history, image, persistent_ctx: str, casual: bool = False):
-        providers = self._get_provider_order()
+    def _call_providers_once(self, prompt_text: str, history, image, persistent_ctx: str, casual: bool = False, provider_override: Optional[str] = None):
+        providers = self._get_provider_order(provider_override)
         seen = set()
         finite_providers = []
         for p in providers:
@@ -2105,8 +2108,8 @@ class AIEngine:
         logger.error(f"All providers failed: {last_err}")
         return None
 
-    def _call_providers(self, prompt_text: str, history, image, persistent_ctx: str, casual: bool = False):
-        out = self._call_providers_once(prompt_text, history, image, persistent_ctx, casual)
+    def _call_providers(self, prompt_text: str, history, image, persistent_ctx: str, casual: bool = False, provider_override: Optional[str] = None):
+        out = self._call_providers_once(prompt_text, history, image, persistent_ctx, casual, provider_override)
         # Safety net: normal chat must never turn into a signal dump.
         if casual and out and _looks_like_signal(out):
             logger.info("Casual reply looked like a signal - retrying once as normal chat")
@@ -2115,7 +2118,7 @@ class AIEngine:
                 + "\n\n(Reply like a normal friend in a normal chat. No trading signals, entries, "
                 "stop loss, take profit or risk warnings - they did not ask for that.)"
             )
-            out2 = self._call_providers_once(retry_prompt, history, image, persistent_ctx, casual)
+            out2 = self._call_providers_once(retry_prompt, history, image, persistent_ctx, casual, provider_override)
             if out2 and not _looks_like_signal(out2):
                 return out2
             return "Lol I almost went full trader mode on you 😅 anyway, what's up?"
@@ -2124,6 +2127,19 @@ class AIEngine:
     def ask(self, user_id: str, prompt: str, image=None) -> str:
         user_id = str(user_id)
         original_prompt = str(prompt or "").strip()
+
+        # Explicit provider commands apply to this request only. Normal requests
+        # keep the automatic Groq -> OpenRouter -> Chutes -> Gemini chain.
+        provider_override = None
+        provider_command = re.search(
+            r"\b(?:use|switch\s+to|run\s+on|answer\s+with|force)\s+(groq|openrouter|chutes|gemini)\b",
+            original_prompt,
+            re.IGNORECASE,
+        )
+        if provider_command:
+            provider_override = provider_command.group(1).lower()
+            logger.info("Explicit AI provider requested: %s", provider_override)
+
         prompt_for_providers = original_prompt
         if not prompt_for_providers and not image:
             return "Hey, I'm listening 👀 what's on your mind?"
@@ -2333,7 +2349,7 @@ class AIEngine:
         except Exception as e:
             logger.warning(f"Crypto Vision failed: {_redact_secrets(str(e))}")
 
-        first_response = self._call_providers(prompt_for_providers, history, image, persistent_ctx, casual)
+        first_response = self._call_providers(prompt_for_providers, history, image, persistent_ctx, casual, provider_override)
         if not first_response:
             return "My brain lagged for a sec 😅 try me again in a moment."
 
