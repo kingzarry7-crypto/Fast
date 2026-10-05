@@ -571,19 +571,18 @@ export default function ChatWorkspace({
       </div>
 
       {callMode && (
-        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-hidden bg-[#02070d]/98 backdrop-blur-xl">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,rgba(0,220,255,0.16),transparent_42%)]" />
+        <div className="fixed inset-0 z-[100] bg-[#02070d]/98 backdrop-blur-xl">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,220,255,0.16),transparent_42%)]" />
           <div className="pointer-events-none absolute inset-0 kz-call-stars opacity-40" />
 
-          <div className="relative z-10 flex w-full flex-1 flex-col items-center justify-center px-4 pb-32">
+          <div className="absolute left-1/2 top-1/2 z-[101] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
             <div className={"kz-call-core-wrap " + (callIsSpeaking ? "kz-call-speaking" : callIsListening ? "kz-call-listening" : sending ? "kz-call-thinking" : "")}>
               <AICore
                 state={callIsSpeaking ? "speaking" : callIsListening ? "listening" : sending ? "thinking" : "idle"}
                 size={280}
               />
             </div>
-
-            <div className="mt-8 text-center">
+            <div className="mt-10 text-center">
               <p className="font-display text-sm font-semibold tracking-[0.3em] text-white">KING ZARRY AI</p>
               <p className="mt-2 font-mono-tech text-[10px] tracking-[0.28em] text-cyan-300/70">
                 {callIsMuted ? "MIC MUTED" : callIsSpeaking ? "SPEAKING" : callIsListening ? "LISTENING" : sending ? "THINKING" : "READY"}
@@ -591,25 +590,27 @@ export default function ChatWorkspace({
             </div>
           </div>
 
-          <div className="absolute bottom-8 left-0 right-0 z-[110] flex items-center justify-center gap-5 px-5 pb-[env(safe-area-inset-bottom)]">
+          <div className="absolute bottom-7 left-0 right-0 z-[110] flex items-center justify-center gap-3 px-4 pb-[env(safe-area-inset-bottom)]">
             <button
               type="button"
               onClick={toggleCallMute}
               aria-label={callIsMuted ? "Unmute microphone" : "Mute microphone"}
-              className={"flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-2 text-2xl shadow-2xl transition " + (callIsMuted ? "border-red-400 bg-red-500/25 text-red-100" : "border-cyan-300/50 bg-zinc-900/90 text-white hover:border-cyan-300 hover:bg-cyan-400/15")}
+              className={"flex h-14 min-w-[112px] items-center justify-center gap-2 rounded-full border px-5 text-xs font-semibold tracking-widest shadow-2xl transition " + (callIsMuted ? "border-red-400 bg-red-500/25 text-red-100" : "border-cyan-300/40 bg-zinc-900/95 text-white hover:border-cyan-300 hover:bg-cyan-400/15")}
             >
-              {callIsMuted ? "🔇" : "🎙️"}
+              <span className="text-lg">{callIsMuted ? "🔇" : "🎙️"}</span>
+              <span>{callIsMuted ? "UNMUTE" : "MUTE"}</span>
             </button>
 
             <button
               type="button"
               onClick={endVoiceCall}
               aria-label="End AI voice call"
-              className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-2 border-red-400/70 bg-red-500/25 text-red-100 shadow-2xl transition hover:bg-red-500/40"
+              className="flex h-14 min-w-[112px] items-center justify-center gap-2 rounded-full border border-red-400/70 bg-red-500/25 px-5 text-xs font-semibold tracking-widest text-red-100 shadow-2xl transition hover:bg-red-500/40"
             >
-              <svg width="25" height="25" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path d="M7.2 4.8 9.5 3.7c.7-.3 1.5 0 1.8.7l1.1 2.7c.2.5.1 1.1-.3 1.5l-1.4 1.2a13.2 13.2 0 0 0 3.5 3.5l1.2-1.4c.4-.4 1-.5 1.5-.3l2.7 1.1c.7.3 1 1.1.7 1.8l-1.1 2.3c-.3.7-1 1.1-1.7 1.1C10.1 17.9 6.1 13.9 6.1 7c0-.7.4-1.4 1.1-1.7Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
+              <span>END</span>
             </button>
           </div>
         </div>
