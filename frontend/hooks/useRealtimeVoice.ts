@@ -153,6 +153,22 @@ export function useRealtimeVoice() {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
+        if (pc.iceGatheringState !== "complete") {
+          await new Promise<void>((resolve) => {
+            const onIceGathering = () => {
+              if (pc.iceGatheringState === "complete") {
+                pc.removeEventListener("icegatheringstatechange", onIceGathering);
+                resolve();
+              }
+            };
+            pc.addEventListener("icegatheringstatechange", onIceGathering);
+            window.setTimeout(() => {
+              pc.removeEventListener("icegatheringstatechange", onIceGathering);
+              resolve();
+            }, 5000);
+          });
+        }
+
         const localSdp = pc.localDescription?.sdp;
         if (!localSdp) throw new Error("Could not create WebRTC offer");
 
