@@ -28,9 +28,8 @@ def install_agent_task_api(app: Any, require_current_user: Any, require_vip: Any
     @app.get("/api/agent/tasks/status")
     async def agent_task_status_endpoint(request: Request):
         try:
-            user = require_current_user(request)
-            if not user:
-                raise HTTPException(status_code=401, detail="Authentication required")
+            user_row = require_current_user(request)
+            require_vip(user_row)
             return {"status": "success", **task_status()}
         except HTTPException:
             raise
@@ -40,10 +39,8 @@ def install_agent_task_api(app: Any, require_current_user: Any, require_vip: Any
     @app.get("/api/agent/tasks")
     async def agent_task_list_endpoint(request: Request):
         try:
-            user = require_current_user(request)
-            if not user:
-                raise HTTPException(status_code=401, detail="Authentication required")
-            user_id = str(user.get("id") if isinstance(user, dict) else getattr(user, "id", user))
+            user_row = require_current_user(request)
+            user_id = str(require_vip(user_row))
             return {"status": "success", "tasks": list_tasks(user_id)}
         except HTTPException:
             raise
