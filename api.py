@@ -113,6 +113,20 @@ try:
 except Exception as e:
     print("PLATFORM_STATUS_PATCH_FAILED", type(e).__name__, str(e)[:160], flush=True)
 
+# Real per-user Settings control center. Additive: existing APIs remain intact.
+try:
+    from web_settings_patch import install_web_settings, install_ai_settings_behavior
+
+    install_web_settings(
+        globals().get("app"),
+        require_current_user=globals().get("_require_current_user"),
+        get_db_cursor=globals().get("get_db_cursor"),
+        row_value=globals().get("_row_value"),
+    )
+    install_ai_settings_behavior(globals().get("get_db_cursor"))
+except Exception as e:
+    print("WEB_SETTINGS_PATCH_FAILED", type(e).__name__, str(e)[:160], flush=True)
+
 # Optional WebRTC realtime voice is additive. Existing voice/chat remains the fallback.
 try:
     from realtime_voice import install_realtime_voice
