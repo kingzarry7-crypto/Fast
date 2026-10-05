@@ -12,6 +12,7 @@ export default function RegisterPage() {
   const { register } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -75,15 +76,26 @@ export default function RegisterPage() {
               <label className="block font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/60 mb-2">
                 PASSWORD
               </label>
-              <input
-                type="password"
+              <div className="relative">
+                <input
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={8}
                 autoComplete="new-password"
-                className="w-full bg-black/40 border border-cyan-500/25 focus:border-cyan-400 rounded-md px-4 py-3 text-sm text-white outline-none transition-colors font-mono-tech tracking-wider"
-              />
+                className="w-full bg-black/40 border border-cyan-500/25 focus:border-cyan-400 rounded-md pl-4 pr-12 py-3 text-sm text-white outline-none transition-colors font-mono-tech tracking-wider"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((value) => !value)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-cyan-400/60 hover:text-cyan-300 transition-colors"
+                >
+                  {showPassword ? "HIDE" : "SHOW"}
+                </button>
+              </div>
               <p className="font-mono-tech text-[9px] tracking-widest text-cyan-400/30 mt-1.5">
                 MIN 8 CHARACTERS
               </p>
