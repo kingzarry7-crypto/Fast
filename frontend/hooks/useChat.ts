@@ -116,7 +116,7 @@ export function useChat(
               role: "assistant",
               text: "",
               timestamp: now(),
-              status: "AI CORE • STREAMING",
+              status: "",
               capability,
             },
           ]);
@@ -129,7 +129,7 @@ export function useChat(
                 setMessages((prev) =>
                   prev.map((item) =>
                     item.id === aiId
-                      ? { ...item, text: (item.text || "") + delta, status: "AI CORE • STREAMING" }
+                      ? { ...item, text: (item.text || "") + delta, status: "" }
                       : item
                   )
                 );
@@ -138,7 +138,7 @@ export function useChat(
                 setMessages((prev) =>
                   prev.map((item) =>
                     item.id === aiId
-                      ? { ...item, status: provider ? "AI CORE • STREAMING • " + provider.toUpperCase() : "AI CORE • STREAMING" }
+                      ? { ...item, status: "" }
                       : item
                   )
                 );
