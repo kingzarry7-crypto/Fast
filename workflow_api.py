@@ -115,6 +115,49 @@ def install_workflow_api(app, require_current_user, row_value=None):
         from client_acquisition import prepare
         return {'status':'ok','acquisition':prepare(user_id,opportunity)}
 
+    @app.post('/api/delivery/prepare')
+    def delivery_prepare_route(request: Request):
+        row = require_current_user(request)
+        user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        body = request.json() if False else {}
+        raise HTTPException(status_code=405, detail='Use the async delivery endpoint')
+
+    @app.post('/api/delivery/package')
+    async def delivery_package_route(request: Request):
+        row = require_current_user(request)
+        user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        body = await request.json()
+        workflow_id = str((body or {}).get('workflow_id') or '')
+        if not workflow_id:
+            raise HTTPException(status_code=400, detail='workflow_id is required')
+        workflow = engine.get_workflow(workflow_id, user_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail='Workflow not found')
+        from delivery_agent import prepare
+        return {'status': 'ok', 'delivery': prepare(user_id, workflow)}
+
+    @app.post('/api/delivery/verify')
+    async def delivery_verify_route(request: Request):
+        row = require_current_user(request)
+        user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        body = await request.json()
+        package = dict((body or {}).get('delivery') or {})
+        if str(package.get('workflow_id') or '') == '':
+            raise HTTPException(status_code=400, detail='delivery.workflow_id is required')
+        workflow = engine.get_workflow(str(package.get('workflow_id')), user_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail='Workflow not found')
+        from delivery_agent import prepare, verify
+        fresh = prepare(user_id, workflow)
+        checks = dict((body or {}).get('checks') or {})
+        return {'status': 'ok', 'delivery': verify(fresh, checks)}
+
     @app.get('/api/workflows')
     def list_workflows_route(request: Request):
         row=require_current_user(request)
