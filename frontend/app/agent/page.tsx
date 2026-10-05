@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/hooks/useAuth";
-import { api, type AgentBrief, type AgentJob } from "@/lib/api";
+import { api, type AgentBrief, type AgentJob, type AgentTask } from "@/lib/api";
 
 export default function AgentPage() {
   const { user, refresh: refreshAuth } = useAuth();
@@ -16,6 +16,9 @@ export default function AgentPage() {
   const [summary, setSummary] = useState<string | null>(null);
   const [brief, setBrief] = useState<AgentBrief | null>(null);
   const [jobs, setJobs] = useState<AgentJob[]>([]);
+  const [tasks, setTasks] = useState<AgentTask[]>([]);
+  const [taskGoal, setTaskGoal] = useState("");
+  const [taskRunning, setTaskRunning] = useState(false);
   const [learning, setLearning] = useState<Record<string, unknown>[]>([]);
   const [status, setStatus] = useState<Record<string, unknown> | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
@@ -24,14 +27,16 @@ export default function AgentPage() {
   const refreshAgent = useCallback(async () => {
     if (!isVip) return;
     try {
-      const [st, j, learn, latest] = await Promise.all([
+      const [st, j, taskData, learn, latest] = await Promise.all([
         api.getAgentStatus().catch(() => null),
         api.listAgentJobs().catch(() => ({ jobs: [] as AgentJob[] })),
+        api.listAgentTasks().catch(() => ({ tasks: [] as AgentTask[] })),
         api.getAgentLearning().catch(() => ({ learning: [] as Record<string, unknown>[] })),
         api.getLatestMorningBrief().catch(() => ({ brief: null })),
       ]);
       if (st) setStatus(st);
       setJobs(j.jobs || []);
+      setTasks(taskData.tasks || []);
       setLearning(learn.learning || []);
       if (latest?.brief) {
         setBrief(latest.brief);
@@ -72,6 +77,27 @@ export default function AgentPage() {
       setError(err instanceof Error ? err.message : "Agent run failed");
     } finally {
       setRunning(false);
+    }
+  };
+
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const g = taskGoal.trim();
+    if (!isVip || !g || taskRunning) return;
+    setTaskRunning(true);
+    setError(null);
+    try {
+      const res = await api.createAgentTask(g, 6);
+      if (res.task) {
+        setTasks((prev) => [res.task!, ...prev.filter((x) => x.id !== res.task?.id)].slice(0, 20));
+        setSummary("Agent task queued. You can watch each step below.");
+      }
+      setTaskGoal("");
+      await refreshAgent();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Agent task failed");
+    } finally {
+      setTaskRunning(false);
     }
   };
 
@@ -180,6 +206,41 @@ export default function AgentPage() {
             )}
 
             <div className="grid gap-6 lg:grid-cols-2">
+              <section className="rounded-xl border border-cyan-500/20 bg-[#020914]/80 p-5 space-y-4">
+                <h2 className="font-mono-tech text-xs tracking-[0.25em] text-cyan-300">TASK EXECUTOR · V5.3</h2>
+                <p className="text-[10px] font-mono-tech text-cyan-400/50">
+                  Give the Agent a bounded multi-step goal. Safe steps run automatically; risky actions stay approval-gated.
+                </p>
+                <form onSubmit={handleCreateTask} className="space-y-3">
+                  <textarea
+                    value={taskGoal}
+                    onChange={(e) => setTaskGoal(e.target.value)}
+                    rows={3}
+                    placeholder='e.g. "Analyze BTC then analyze ETH then prepare a summary"'
+                    disabled={taskRunning}
+                    className="w-full rounded-lg bg-black/40 border border-cyan-500/25 px-3 py-2 text-sm text-white outline-none font-mono-tech resize-none"
+                  />
+                  <button type="submit" disabled={taskRunning || !taskGoal.trim()} className="px-4 py-2 rounded-lg bg-cyan-400 text-black text-xs font-bold tracking-widest disabled:opacity-40">
+                    {taskRunning ? "QUEUING…" : "START TASK"}
+                  </button>
+                </form>
+                <div className="space-y-2 max-h-56 overflow-y-auto">
+                  {tasks.length === 0 ? (
+                    <p className="text-[10px] font-mono-tech text-cyan-400/40">No multi-step tasks yet.</p>
+                  ) : tasks.slice(0, 8).map((task) => (
+                    <div key={String(task.id)} className="rounded-lg border border-cyan-500/10 px-3 py-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[10px] font-mono-tech text-cyan-200/80 truncate">{String(task.goal || "Task")}</span>
+                        <span className="text-[9px] font-mono-tech text-emerald-300/80">{String(task.status || "queued")}</span>
+                      </div>
+                      <div className="mt-1 text-[9px] font-mono-tech text-cyan-400/45">
+                        step {Number(task.current_step || 0) + 1}/{String(task.total_steps || 0)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
               <section className="rounded-xl border border-cyan-500/20 bg-[#020914]/80 p-5 space-y-4">
                 <h2 className="font-mono-tech text-xs tracking-[0.25em] text-cyan-300">RUN GOAL</h2>
                 <form onSubmit={handleRunGoal} className="space-y-3">
