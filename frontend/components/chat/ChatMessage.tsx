@@ -15,6 +15,7 @@ export interface ChatMessageProps {
   onCopy?: (content: string) => void;
   onRegenerate?: () => void;
   onSpeak?: () => void;
+  onSuggestion?: (text: string) => void;
   className?: string;
 }
 
@@ -29,6 +30,7 @@ export function ChatMessage({
   onCopy,
   onRegenerate,
   onSpeak,
+  onSuggestion,
   className = "",
 }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
@@ -128,20 +130,28 @@ export function ChatMessage({
           </div>
         )}
 
-        {!isUser && !isError && content ? (
-          <div className="mt-2.5 flex flex-wrap items-center gap-1 opacity-70 transition-opacity group-hover:opacity-100">
-            <button type="button" onClick={handleCopy} className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200" title="Copy">{copied ? "Copied" : "Copy"}</button>
-            <button type="button" onClick={() => setLiked((v) => (v === "up" ? null : "up"))} className={"rounded-md border px-2 py-1 text-[10px] " + (liked === "up" ? "border-zinc-500 text-zinc-200 bg-zinc-800" : "border-zinc-700 text-zinc-400 hover:bg-zinc-800")} title="Like">Like</button>
-            <button type="button" onClick={() => setLiked((v) => (v === "down" ? null : "down"))} className={"rounded-md border px-2 py-1 text-[10px] " + (liked === "down" ? "border-zinc-500 text-zinc-200 bg-zinc-800" : "border-zinc-700 text-zinc-400 hover:bg-zinc-800")} title="Dislike">Dislike</button>
-            <button type="button" onClick={handleShare} className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200" title="Share">{shared ? "Shared" : "Share"}</button>
-            <button type="button" onClick={handleSave} className={"rounded-md border px-2 py-1 text-[10px] " + (saved ? "border-zinc-500 text-zinc-200 bg-zinc-800" : "border-zinc-700 text-zinc-400 hover:bg-zinc-800")} title="Save">{saved ? "Saved" : "Save"}</button>
-            {onSpeak ? (
-              <button type="button" onClick={onSpeak} className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200" title="Speak">Speak</button>
+        {!isUser && !isError && content && !isStreaming ? (
+          <>
+            <div className="mt-3 flex flex-wrap items-center gap-0.5 border-t border-zinc-800/70 pt-2 opacity-75 transition-opacity group-hover:opacity-100">
+              <button type="button" onClick={handleCopy} className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Copy" aria-label="Copy">⧉</button>
+              <button type="button" onClick={handleShare} className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Share" aria-label="Share">↗</button>
+              {onRegenerate ? <button type="button" onClick={onRegenerate} className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Regenerate" aria-label="Regenerate">↻</button> : null}
+              <button type="button" onClick={() => setLiked((v) => (v === "up" ? null : "up"))} className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Like" aria-label="Like">♡</button>
+              <button type="button" onClick={() => setLiked((v) => (v === "down" ? null : "down"))} className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Dislike" aria-label="Dislike">♧</button>
+              <button type="button" onClick={handleSave} className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Save" aria-label="Save">▣</button>
+              {onSpeak ? <button type="button" onClick={onSpeak} className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Speak" aria-label="Speak">◉</button> : null}
+              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="More" aria-label="More">•••</button>
+            </div>
+            {onSuggestion ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {["Tell me more", "Give me an example", "What should I do next?"].map((suggestion) => (
+                  <button key={suggestion} type="button" onClick={() => onSuggestion(suggestion)} className="rounded-full border border-cyan-500/20 bg-[#07111d] px-3 py-1.5 text-[11px] text-cyan-100/80 transition hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-100">
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
             ) : null}
-            {onRegenerate ? (
-              <button type="button" onClick={onRegenerate} className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200" title="Regenerate">Retry</button>
-            ) : null}
-          </div>
+          </>
         ) : null}
       </div>
     </div>
