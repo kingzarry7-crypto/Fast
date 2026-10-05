@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import AICore from "@/components/AICore";
 import ChatMessage, { ThinkingIndicator } from "@/components/chat/ChatMessage";
 import { useChat } from "@/hooks/useChat";
 import { useVoice, type VoiceStyle } from "@/hooks/useVoice";
+import { useRealtimeVoice } from "@/hooks/useRealtimeVoice";
 import { api, type ConversationItem } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
@@ -90,6 +91,20 @@ export default function ChatWorkspace({
     setVoice,
   } = useVoice();
 
+  const {
+    supported: realtimeSupported,
+    enabled: realtimeEnabled,
+    active: realtimeActive,
+    muted: realtimeMuted,
+    speaking: realtimeSpeaking,
+    listening: realtimeListening,
+    start: startRealtime,
+    stop: stopRealtime,
+    toggleMute: toggleRealtimeMute,
+  } = useRealtimeVoice();
+
+  const voiceCallSupported = voiceSupported || (realtimeSupported && realtimeEnabled);
+
   const refreshConversations = async () => {
     try {
       const list = await api.listConversations();
@@ -132,7 +147,7 @@ export default function ChatWorkspace({
   }, [sending]);
 
   useEffect(() => {
-    if (!callMode || sending || !messages.length) return;
+    if (!callMode || realtimeActive || sending || !messages.length) return;
     const last = messages[messages.length - 1];
     if (
       last?.role === "assistant" &&
@@ -146,7 +161,7 @@ export default function ChatWorkspace({
   }, [callMode, messages, sending, speakInstant]);
 
   useEffect(() => {
-    if (!callMode || callMuted || sending || isSpeaking || listening) return;
+    if (!callMode || realtimeActive || callMuted || sending || isSpeaking || listening) return;
     const last = messages[messages.length - 1];
     if (!last || last.role !== "assistant" || !last.text) return;
 
@@ -162,7 +177,7 @@ export default function ChatWorkspace({
   }, [callMode, callMuted, sending, isSpeaking, listening, messages, listenContinuous]);
 
   useEffect(() => {
-    if (!autoSpeak || sending || !messages.length) return;
+    if (!autoSpeak || realtimeActive || sending || !messages.length) return;
     const last = messages[messages.length - 1];
     if (last?.role === "assistant" && last.text && !String(last.id || "").startsWith("error")) {
       speak(last.text);
@@ -304,8 +319,23 @@ export default function ChatWorkspace({
     }
   };
 
+  const saveRealtimeTranscript = useCallback(async (
+    role: "user" | "assistant",
+    text: string
+  ) => {
+    try {
+      const saved = await api.saveRealtimeTranscript(conversationId, role, text);
+      if (saved.conversation_id && saved.conversation_id !== conversationId) {
+        setConversationId(saved.conversation_id);
+        void refreshConversations();
+      }
+    } catch {
+      // Audio continues even if transcript persistence is temporarily unavailable.
+    }
+  }, [conversationId]);
+
   const startVoiceCall = () => {
-    if (!voiceSupported || callMode) return;
+    if (!voiceCallSupported || callMode) return;
     stopSpeaking();
     stopListening();
 
@@ -315,6 +345,19 @@ export default function ChatWorkspace({
     callMutedRef.current = false;
     setCallMuted(false);
     setCallMode(true);
+
+    if (realtimeSupported && realtimeEnabled) {
+      void startRealtime(conversationId, (role, text) => {
+        void saveRealtimeTranscript(role, text);
+      }).then((started) => {
+        if (started || !callModeRef.current) return;
+        setTimeout(() => {
+          if (!callModeRef.current) return;
+          listen((text) => { void sendVoiceText(text); });
+        }, 150);
+      });
+      return;
+    }
 
     setTimeout(() => {
       listen((text) => {
@@ -328,11 +371,16 @@ export default function ChatWorkspace({
     callMutedRef.current = false;
     setCallMuted(false);
     setCallMode(false);
+    stopRealtime();
     stopListening();
     stopSpeaking();
   };
 
   const toggleCallMute = () => {
+    if (realtimeActive) {
+      toggleRealtimeMute();
+      return;
+    }
     const next = !callMutedRef.current;
     callMutedRef.current = next;
     setCallMuted(next);
@@ -368,12 +416,17 @@ export default function ChatWorkspace({
 
   useEffect(() => {
     return () => {
+      stopRealtime();
+      stopRealtime();
       stopListening();
       stopSpeaking();
     };
-  }, [stopListening, stopSpeaking]);
+  }, [stopRealtime, stopListening, stopSpeaking]);
 
   const isVip = Boolean(user?.is_subscribed || membership?.isVip);
+  const callIsMuted = realtimeActive ? realtimeMuted : callMuted;
+  const callIsSpeaking = realtimeActive ? realtimeSpeaking : isSpeaking;
+  const callIsListening = realtimeActive ? realtimeListening : listening;
   const showSideHistory = !embedMode;
 
   return (
@@ -406,7 +459,7 @@ export default function ChatWorkspace({
               </span>
             </div>
             <div className="flex items-center gap-1.5">
-              {voiceSupported && (
+              {voiceCallSupported && (
                 <button
                   type="button"
                   onClick={callMode ? endVoiceCall : startVoiceCall}
@@ -432,7 +485,7 @@ export default function ChatWorkspace({
 
       {embedMode && (
         <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-end border-b border-white/5 bg-[#05080f]/70 px-3 py-1.5 backdrop-blur-sm">
-          {voiceSupported && (
+          {voiceCallSupported && (
             <button
               type="button"
               onClick={callMode ? endVoiceCall : startVoiceCall}
@@ -536,20 +589,20 @@ export default function ChatWorkspace({
             <div className="mb-2 rounded-2xl border border-cyan-400/20 bg-[#07101b]/95 px-4 py-3 shadow-xl shadow-cyan-950/20">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className={"relative flex h-10 w-10 items-center justify-center rounded-full border " + (isSpeaking ? "border-cyan-300/70 bg-cyan-400/10" : listening ? "border-emerald-300/70 bg-emerald-400/10" : "border-zinc-600 bg-zinc-900")}>
-                    <span className={"text-lg " + (isSpeaking ? "animate-pulse" : "")}>👑</span>
-                    {isSpeaking && <span className="absolute inset-0 rounded-full border border-cyan-300/30 animate-ping" />}
+                  <div className={"relative flex h-10 w-10 items-center justify-center rounded-full border " + (callIsSpeaking ? "border-cyan-300/70 bg-cyan-400/10" : callIsListening ? "border-emerald-300/70 bg-emerald-400/10" : "border-zinc-600 bg-zinc-900")}>
+                    <span className={"text-lg " + (callIsSpeaking ? "animate-pulse" : "")}>👑</span>
+                    {callIsSpeaking && <span className="absolute inset-0 rounded-full border border-cyan-300/30 animate-ping" />}
                   </div>
                   <div>
                     <p className="text-[10px] font-semibold tracking-[0.18em] text-white">KING ZARRY AI</p>
                     <p className="mt-0.5 text-[9px] tracking-[0.14em] text-zinc-400">
-                      {callMuted ? "MIC MUTED" : isSpeaking ? "SPEAKING" : listening ? "LISTENING" : sending ? "THINKING" : "READY"}
+                      {callIsMuted ? "MIC MUTED" : callIsSpeaking ? "SPEAKING" : callIsListening ? "LISTENING" : sending ? "THINKING" : "READY"}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button type="button" onClick={toggleCallMute} className={"flex h-9 items-center justify-center rounded-full border px-3 text-[10px] tracking-wider transition " + (callMuted ? "border-red-400/60 bg-red-500/15 text-red-200" : "border-zinc-600 bg-zinc-900 text-zinc-200 hover:border-cyan-400/50")}>
-                    {callMuted ? "🔇 UNMUTE" : "🎙 MUTE"}
+                  <button type="button" onClick={toggleCallMute} className={"flex h-9 items-center justify-center rounded-full border px-3 text-[10px] tracking-wider transition " + (callIsMuted ? "border-red-400/60 bg-red-500/15 text-red-200" : "border-zinc-600 bg-zinc-900 text-zinc-200 hover:border-cyan-400/50")}>
+                    {callIsMuted ? "🔇 UNMUTE" : "🎙 MUTE"}
                   </button>
                   <button type="button" onClick={endVoiceCall} className="flex h-9 items-center justify-center rounded-full border border-red-400/50 bg-red-500/10 px-3 text-[10px] tracking-wider text-red-200 hover:bg-red-500/20">
                     END
@@ -558,7 +611,7 @@ export default function ChatWorkspace({
               </div>
               <div className="mt-3 flex h-5 items-end justify-center gap-1">
                 {[0,1,2,3,4,5,6,7,8,9,10,11].map((i) => (
-                  <span key={i} className={"w-1 rounded-full bg-cyan-300/70 transition-all " + (isSpeaking || listening ? "animate-pulse" : "")} style={{ height: (8 + ((i * 7) % 13)) + "px", animationDelay: (i * 45) + "ms" }} />
+                  <span key={i} className={"w-1 rounded-full bg-cyan-300/70 transition-all " + (callIsSpeaking || callIsListening ? "animate-pulse" : "")} style={{ height: (8 + ((i * 7) % 13)) + "px", animationDelay: (i * 45) + "ms" }} />
                 ))}
               </div>
             </div>

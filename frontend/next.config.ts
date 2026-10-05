@@ -20,6 +20,18 @@ const API_UPSTREAM = (
   .replace(/\/+$/, "");
 
 const nextConfig: NextConfig = {
+  // Additive security headers. No CSP is forced here because the app uses
+  // several runtime integrations and we do not want to break existing UI.
+  async headers() {
+    return [{
+      source: "/(.*)",
+      headers: [
+        { key: "X-Content-Type-Options", value: "nosniff" },
+        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        { key: "Permissions-Policy", value: "camera=(self), microphone=(self), geolocation=()" },
+      ],
+    }];
+  },
   async rewrites() {
     if (!API_UPSTREAM) return [];
     return [
