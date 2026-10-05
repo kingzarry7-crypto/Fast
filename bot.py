@@ -57,7 +57,8 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("apscheduler").setLevel(logging.WARNING)
 
 logger = logging.getLogger("king_zarry")
-\nfrom channel_work import create as work_create, list_recent as work_list, get as work_get, approve as work_approve, format_workflow as work_format, format_recent as work_format_recent
+
+from channel_work import create as work_create, list_recent as work_list, get as work_get, approve as work_approve, format_workflow as work_format, format_recent as work_format_recent
 
 def clean_env_str(value, default=""):
     if not value:
