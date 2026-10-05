@@ -320,8 +320,39 @@ export default function ChatWorkspace({
     }
   }, [conversationId]);
 
+  const playCallStartSound = () => {
+    try {
+      const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+      const ctx = new AudioContextCtor();
+      const now = ctx.currentTime;
+      const notes = [
+        { frequency: 880, start: 0, duration: 0.16 },
+        { frequency: 1174.66, start: 0.2, duration: 0.16 },
+        { frequency: 880, start: 0.4, duration: 0.22 },
+      ];
+      for (const note of notes) {
+        const oscillator = ctx.createOscillator();
+        const gain = ctx.createGain();
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(note.frequency, now + note.start);
+        gain.gain.setValueAtTime(0.0001, now + note.start);
+        gain.gain.exponentialRampToValueAtTime(0.12, now + note.start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + note.start + note.duration);
+        oscillator.connect(gain);
+        gain.connect(ctx.destination);
+        oscillator.start(now + note.start);
+        oscillator.stop(now + note.start + note.duration + 0.02);
+      }
+      window.setTimeout(() => void ctx.close(), 1000);
+    } catch {
+      // Some browsers may block Web Audio; the voice call still starts normally.
+    }
+  };
+
   const startVoiceCall = () => {
     if (!voiceCallSupported || callMode) return;
+    playCallStartSound();
     stopSpeaking();
     stopListening();
 
