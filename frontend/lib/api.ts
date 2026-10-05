@@ -510,10 +510,17 @@ export async function approveAgentAction(actionId: string, signal?: AbortSignal)
   return request<{ status?: string }>("/api/agent/actions/approve", { method: "POST", body: { action_id: actionId }, signal });
 }
 
+export async function createMemoryLinkCode(signal?: AbortSignal) {
+  return request<{ status?: string; code: string; expires_in_minutes: number; instructions?: string }>(
+    "/api/memory/link-code",
+    { method: "POST", signal }
+  );
+}
+
 export const api = {
   getBaseUrl, getMe, getCurrentUser, login, register, verifyEmail, resendVerification, forgotPassword, resetPassword, logout,
   listConversations, createConversation, getConversation, getConversationMessages, chat, sendChatMessage, healthCheck,
-  getRealtimeStatus, startRealtimeCall, saveRealtimeTranscript, createCheckoutSession, getBillingConfig,
+  getRealtimeStatus, startRealtimeCall, saveRealtimeTranscript, createMemoryLinkCode, createCheckoutSession, getBillingConfig,
   getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, adminEmailBroadcast, ttsSpeak, synthesizeSpeech,
   getMarkets, getMarketDetail, getSignals, getNews,
   getAgentStatus, runAgentGoal, generateMorningBrief, getLatestMorningBrief, listAgentJobs, approveAgentJob,
