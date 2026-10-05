@@ -12,8 +12,8 @@ class AgentTaskCreateRequest(BaseModel):
     max_steps: int = Field(default=6, ge=1, le=8)
 
 
-def install_agent_task_api(app: Any, require_current_user: Any) -> None:
-    if app is None or require_current_user is None:
+def install_agent_task_api(app: Any, require_current_user: Any, require_vip: Any) -> None:
+    if app is None or require_current_user is None or require_vip is None:
         raise RuntimeError("agent task patch requires app and current-user auth")
 
     from agent_task_engine import (
