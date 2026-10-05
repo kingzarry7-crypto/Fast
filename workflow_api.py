@@ -88,6 +88,22 @@ def install_workflow_api(app, require_current_user, row_value=None):
         workflows=engine.list_workflows(user_id,50)
         return {'status':'ok','revenue':revenue_dashboard(workflows)}
 
+    @app.get('/api/opportunities/hunt')
+    def opportunities_hunt_route(request: Request, category: str = 'clients', query: str = '', max_results: int = 12):
+        row = require_current_user(request); user_id = uid(row)
+        if not user_id: raise HTTPException(status_code=401, detail='Authenticated user required')
+        from opportunity_hunter import hunt
+        return hunt(user_id, category=category, query=query, max_results=max_results)
+
+    @app.post('/api/opportunities/{opportunity_id}/prepare')
+    async def opportunity_prepare_route(opportunity_id: str, request: Request):
+        row = require_current_user(request); user_id = uid(row)
+        body = await request.json(); opportunity = dict((body or {}).get('opportunity') or {})
+        if str(opportunity.get('id') or '') != str(opportunity_id):
+            raise HTTPException(status_code=400, detail='Opportunity id mismatch')
+        from opportunity_hunter import create_work_for_opportunity
+        return {'status':'ok','workflow':create_work_for_opportunity(user_id, opportunity)}
+
     @app.get('/api/workflows')
     def list_workflows_route(request: Request):
         row=require_current_user(request)
