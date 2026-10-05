@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState } from "react";
-import AICore from "@/components/AICore";
 
 export interface ChatMessageProps {
   id?: string;
@@ -149,34 +148,5 @@ export function ChatMessage({
   );
 }
 
-export function ThinkingIndicator({
-  phase = "thinking",
-}: {
-  phase?: "reading" | "thinking" | "searching" | "responding";
-}) {
-  const labels: Record<string, string> = {
-    reading: "Reading",
-    thinking: "Thinking",
-    searching: "Searching",
-    responding: "Responding",
-  };
-  const phaseLabel = labels[phase] || "Thinking";
-
-  return (
-    <div className="flex items-center gap-3 py-2 px-1">
-      <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-cyan-500/20 bg-[#030a12]/90 shadow-[0_0_24px_rgba(0,240,255,0.08)]">
-        <AICore state={phase === "responding" ? "speaking" : phase === "searching" ? "listening" : "thinking"} size={42} />
-      </div>
-      <div className="flex min-w-0 items-center gap-2 rounded-full border border-cyan-500/15 bg-[#050d17]/90 px-4 py-2 shadow-[0_0_20px_rgba(0,240,255,0.06)]">
-        <span className="font-medium text-cyan-200">{phaseLabel}</span>
-        <span className="inline-flex gap-1" aria-hidden="true">
-          <span className="kz-typing-dot h-1.5 w-1.5 rounded-full bg-cyan-300" />
-          <span className="kz-typing-dot h-1.5 w-1.5 rounded-full bg-cyan-300" />
-          <span className="kz-typing-dot h-1.5 w-1.5 rounded-full bg-cyan-300" />
-        </span>
-      </div>
-    </div>
-  );
-}
 
 export default ChatMessage;
