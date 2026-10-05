@@ -94,7 +94,7 @@ def _stream_openai_compatible(
         if response.status_code >= 400:
             body = response.text[:400]
             raise RuntimeError(f"provider_http_{response.status_code}: {body}")
-        for raw in response.iter_lines(decode_unicode=True):
+        for raw in response.iter_lines(chunk_size=1, decode_unicode=True):
             line = (raw or "").strip()
             if not line or line.startswith(":"):
                 continue
@@ -191,8 +191,20 @@ def _build_stream_generator(
                 provider_name,
                 type(exc).__name__,
             )
-            # If headers are already sent, send a structured error. The client
-            # can then retry through the existing non-streaming endpoint.
+            # Never append a second provider's full response after partial
+            # output: that would duplicate text in the UI. The frontend can
+            # keep the partial response rather than silently corrupting it.
+            if full_text.strip():
+                cleaned = ai_engine.clean_ai_response(full_text).strip()
+                if cleaned:
+                    engine._save_memory(user_id, message, cleaned)
+                yield _sse({
+                    "type": "done",
+                    "conversation_id": conversation_id,
+                    "text": cleaned,
+                    "partial": True,
+                })
+                return
             yield _sse({
                 "type": "provider_error",
                 "provider": provider_name,
