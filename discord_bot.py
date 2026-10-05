@@ -24,7 +24,8 @@ from shared_memory import SharedMemory
 from ai_engine import AIEngine
 from news_engine import news_engine
 import market as market_engine
-from channel_work import create as work_create, list_recent as work_list, get as work_get, approve as work_approve, format_workflow as work_format, format_recent as work_format_recent
+from channel_work import create as work_create, list_recent as work_list, get as work_get, approve as work_approve, format_workflow as work_format, format_recent as work_format_recent, format_workflow_text as work_format_text, format_recent_text as work_format_recent_text
+from work_intent import parse as parse_work_intent
 
 # Shared personal price alerts (same table as Telegram)
 try:
@@ -993,6 +994,33 @@ class KingZarryAI(discord.Client):
             if is_audio and not ct.startswith("image/"): audio_attachments.append(a)
         if not content and not images and not audio_attachments: return
 
+        # Natural-language Work control uses the same persistent engine as Web and Telegram.
+        # Only clear Work intents are intercepted; ordinary conversation remains on the AI path.
+        if content and not images and not audio_attachments:
+            intent = parse_work_intent(content)
+            if intent:
+                try:
+                    async with message.channel.typing():
+                        if intent["kind"] == "create":
+                            item = await asyncio.to_thread(work_create, str(message.author.id), intent["goal"].strip())
+                            await message.reply(work_format_text(item), mention_author=False)
+                            return
+                        workflow_id = intent["workflow_id"].strip()
+                        item = await asyncio.to_thread(work_get, str(message.author.id), workflow_id)
+                        if not item:
+                            await message.reply("❌ I couldn't find that KZ Work workflow.", mention_author=False)
+                            return
+                        if intent["kind"] == "status":
+                            await message.reply(work_format_text(item), mention_author=False)
+                            return
+                        item = await asyncio.to_thread(work_approve, str(message.author.id), workflow_id, intent["kind"] == "approve")
+                        await message.reply(work_format_text(item), mention_author=False)
+                        return
+                except Exception:
+                    logger.exception("Natural-language KZ Work routing failed")
+                    await message.reply("⚠️ KZ Work is temporarily unavailable. Please try again.", mention_author=False)
+                    return
+
         is_voice_transcription = False
         if audio_attachments and not content:
             if stt_engine is None:
@@ -1598,7 +1626,7 @@ async def work_slash(interaction, goal: str):
     await interaction.response.defer()
     try:
         item = await asyncio.to_thread(work_create, str(interaction.user.id), goal.strip())
-        await interaction.followup.send(work_format(item), ephemeral=True)
+        await interaction.followup.send(work_format_text(item), ephemeral=True)
     except Exception as exc:
         logger.error("KZ Work create failed: %s", _redact(repr(exc)))
         await interaction.followup.send("⚠️ KZ Work is temporarily unavailable.", ephemeral=True)
@@ -1642,7 +1670,7 @@ async def mywork_slash(interaction):
         return
     await interaction.response.defer(ephemeral=True)
     items = await asyncio.to_thread(work_list, str(interaction.user.id), 5)
-    await interaction.followup.send(work_format_recent(items), ephemeral=True)
+    await interaction.followup.send(work_format_recent_text(items), ephemeral=True)
 
 @client.tree.command(name="clear_memory", description="Clear memory")
 async def clear_memory(interaction):
