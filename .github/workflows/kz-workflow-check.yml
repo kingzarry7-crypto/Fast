@@ -5,12 +5,16 @@ on:
     paths:
       - "workflow_*.py"
       - "workflow_api.py"
+      - "workflow_scheduler.py"
+      - "revenue_engine.py"
       - "api.py"
       - ".github/workflows/kz-workflow-check.yml"
   pull_request:
     paths:
       - "workflow_*.py"
       - "workflow_api.py"
+      - "workflow_scheduler.py"
+      - "revenue_engine.py"
       - "api.py"
 
 jobs:
@@ -22,4 +26,6 @@ jobs:
         with:
           python-version: "3.12"
       - name: Compile workflow modules
-        run: python -m py_compile workflow_models.py workflow_store.py workflow_engine.py workflow_api.py api.py
+        run: python -m py_compile workflow_models.py workflow_store.py workflow_engine.py workflow_api.py workflow_scheduler.py revenue_engine.py api.py
+      - name: Run workflow planner tests
+        run: python -m unittest test_workflow_engine.py
