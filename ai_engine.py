@@ -90,6 +90,11 @@ OPENROUTER_URL = clean_env_str(
     "https://openrouter.ai/api/v1/chat/completions",
 )
 
+# Chutes is an OpenAI-compatible additive text fallback.
+CHUTES_API_KEY = clean_env_str(os.getenv("CHUTES_API_KEY"))
+CHUTES_MODEL = clean_env_str(os.getenv("CHUTES_MODEL"), "google/gemma-4-31B-turbo-TEE")
+CHUTES_URL = clean_env_str(os.getenv("CHUTES_URL"), "https://llm.chutes.ai/v1/chat/completions")
+
 # Keep normal chat responsive: fail over quickly instead of repeated long waits.
 AI_PROVIDER_TIMEOUT = max(8, int(clean_env_str(os.getenv("AI_PROVIDER_TIMEOUT"), "18")))
 AI_PROVIDER_RETRIES = max(0, int(clean_env_str(os.getenv("AI_PROVIDER_RETRIES"), "0")))
@@ -268,7 +273,7 @@ Trading Rules (apply ONLY when the user asked for a trade setup or market analys
 - Never guarantee profits. Add one short risk note when giving a trade setup.
 - If data missing, say DATA UNAVAILABLE.
 
-Provider chain is OpenRouter -> Groq -> Gemini (no direct OpenAI, no direct xAI). Use only existing tools.
+Provider chain is Groq -> OpenRouter -> Chutes -> Gemini. Chutes is an OpenAI-compatible text fallback. Use only configured providers.
 
 SAFE TOOL USAGE - CRITICAL SECURITY RULES:
 - You have access to ONE safe application-level tool: get_user_alert_status
@@ -1820,7 +1825,7 @@ class AIEngine:
 
     def _get_provider_order(self) -> List[str]:
         # Groq is the primary fast/free text provider. OpenRouter and Gemini remain fallbacks.
-        return ["groq", "openrouter", "gemini"]
+        return ["groq", "openrouter", "chutes", "gemini"]
 
     def _should_use_tavily(self, prompt: str) -> bool:
         if not self._tavily_module:
@@ -2080,6 +2085,9 @@ class AIEngine:
                 elif provider == "groq" and GROQ_API_KEY:
                     logger.info("AI provider attempt: groq | model=%s", GROQ_VISION_MODEL if image else GROQ_MODEL)
                     resp = self._groq(prompt_text, history, image, persistent_ctx, casual)
+                elif provider == "chutes" and CHUTES_API_KEY:
+                    logger.info("AI provider attempt: chutes | model=%s", CHUTES_MODEL)
+                    resp = self._chutes(prompt_text, history, image, persistent_ctx, casual)
                 elif provider == "gemini" and GEMINI_API_KEY:
                     resp = self._gemini(prompt_text, history, image, persistent_ctx, casual)
                 elif provider == "openai" and OPENROUTER_API_KEY:
@@ -2582,6 +2590,16 @@ class AIEngine:
         data = resp.json()
         return data["choices"][0]["message"]["content"]
 
+    def _chutes(self, prompt: str, history: List[dict], image: Optional[Tuple[str, bytes]], persistent_ctx: str = "", casual: bool = False) -> Optional[str]:
+        if not CHUTES_API_KEY or image:
+            return None
+        messages = self._build_openai_messages(prompt, history, image, persistent_ctx, casual=casual)
+        headers = {"Authorization": f"Bearer {CHUTES_API_KEY}", "Content-Type": "application/json"}
+        payload = {"model": CHUTES_MODEL, "messages": messages, "temperature": 0.85 if casual else 0.7, "max_tokens": 2000}
+        resp = self._request_with_retry(CHUTES_URL, headers, payload, "chutes", max_retries=AI_PROVIDER_RETRIES, timeout=AI_PROVIDER_TIMEOUT)
+        data = resp.json()
+        return data["choices"][0]["message"]["content"]
+
     def _groq(self, prompt: str, history: List[dict], image: Optional[Tuple[str, bytes]], persistent_ctx: str = "", casual: bool = False) -> Optional[str]:
         if not GROQ_API_KEY:
             return None
@@ -2681,6 +2699,8 @@ class AIEngine:
             "openrouter": bool(OPENROUTER_API_KEY),
             "groq": bool(GROQ_API_KEY),
             "gemini": bool(GEMINI_API_KEY),
+            "chutes": bool(CHUTES_API_KEY),
+            "chutes_model": CHUTES_MODEL,
             "elevenlabs": bool(self.eleven_client),
             "agnes": bool(AGNES_API_KEY),
             "agnes_image": AGNES_IMAGE_MODEL,
