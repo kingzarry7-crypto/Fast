@@ -79,10 +79,10 @@ def install_platform_status(app, require_current_user=None):
         raise RuntimeError("platform status patch requires app and auth dependency")
 
     @app.get("/api/platforms/status")
-    def platform_status():
+    def platform_status(request: Request):
         # This endpoint is intentionally authenticated. It reports configuration/
         # reachability only; credentials are never returned to the browser.
-        require_current_user()
+        require_current_user(request)
         telegram = _telegram_status()
         discord = _discord_status()
         return {
