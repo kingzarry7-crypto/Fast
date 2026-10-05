@@ -57,6 +57,7 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("apscheduler").setLevel(logging.WARNING)
 
 logger = logging.getLogger("king_zarry")
+\nfrom channel_work import create as work_create, list_recent as work_list, get as work_get, approve as work_approve, format_workflow as work_format, format_recent as work_format_recent
 
 def clean_env_str(value, default=""):
     if not value:
@@ -4059,7 +4060,46 @@ def start_discord_if_configured():
         return None
 
 
-async def memory_link_command(update, context):
+
+async def work_command(update, context):
+    """Start, inspect, approve, or reject a persistent KZ Work workflow."""
+    user = update.effective_user
+    if not user or not update.message:
+        return
+    args = list(context.args or [])
+    try:
+        if not args:
+            await update.message.reply_text(work_format_recent(await asyncio.to_thread(work_list, str(user.id), 5)), parse_mode="HTML")
+            return
+        action = args[0].lower()
+        if action in {"approve", "reject", "status"}:
+            if len(args) < 2:
+                await update.message.reply_text("Usage: /work approve WORKFLOW_ID | /work reject WORKFLOW_ID | /work status WORKFLOW_ID")
+                return
+            workflow_id = args[1].strip()
+            if action == "status":
+                item = await asyncio.to_thread(work_get, str(user.id), workflow_id)
+                if not item:
+                    await update.message.reply_text("❌ Workflow not found.")
+                    return
+                await update.message.reply_text(work_format(item), parse_mode="HTML")
+                return
+            item = await asyncio.to_thread(work_approve, str(user.id), workflow_id, action == "approve")
+            await update.message.reply_text(work_format(item), parse_mode="HTML")
+            return
+        goal = " ".join(args).strip()
+        if not goal:
+            await update.message.reply_text("Tell me what you want KZ to get done.")
+            return
+        if len(goal) > 4000:
+            await update.message.reply_text("❌ Work goal is too long. Keep it under 4000 characters.")
+            return
+        item = await asyncio.to_thread(work_create, str(user.id), goal)
+        await update.message.reply_text(work_format(item), parse_mode="HTML")
+    except Exception as exc:
+        logger.exception("KZ Work command failed")
+        await update.message.reply_text("⚠️ KZ Work is temporarily unavailable. Please try again.")
+\n\nasync def memory_link_command(update, context):
     """Link this Telegram identity to the user's KING ZARRY shared memory."""
     user = update.effective_user
     if not user or not update.message:
@@ -4115,7 +4155,7 @@ def main():
     print("🔵 MAIN: Application built OK", flush=True)
 
     application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("link", memory_link_command))
+    application.add_handler(CommandHandler("work", work_command))\n    application.add_handler(CommandHandler("link", memory_link_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("buy", buy_command))
     application.add_handler(CommandHandler("monthly", monthly_command))
