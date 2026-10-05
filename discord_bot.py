@@ -1643,7 +1643,8 @@ async def mywork_slash(interaction):
     await interaction.response.defer(ephemeral=True)
     items = await asyncio.to_thread(work_list, str(interaction.user.id), 5)
     await interaction.followup.send(work_format_recent(items), ephemeral=True)
-\n@client.tree.command(name="clear_memory", description="Clear memory")
+
+@client.tree.command(name="clear_memory", description="Clear memory")
 async def clear_memory(interaction):
     if not await ensure_not_banned(interaction): return
     await interaction.response.defer(ephemeral=True)
