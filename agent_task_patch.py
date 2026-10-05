@@ -50,10 +50,8 @@ def install_agent_task_api(app: Any, require_current_user: Any, require_vip: Any
     @app.post("/api/agent/tasks")
     async def agent_task_create_endpoint(request: Request, body: AgentTaskCreateRequest):
         try:
-            user = require_current_user(request)
-            if not user:
-                raise HTTPException(status_code=401, detail="Authentication required")
-            user_id = str(user.get("id") if isinstance(user, dict) else getattr(user, "id", user))
+            user_row = require_current_user(request)
+            user_id = str(require_vip(user_row))
             task = run_task(user_id, body.goal, max_steps=body.max_steps)
             return {"status": "success", "task": task}
         except HTTPException:
