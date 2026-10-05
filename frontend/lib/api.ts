@@ -600,7 +600,7 @@ export async function approveAgentAction(actionId: string, signal?: AbortSignal)
 
 export const api = {
   getBaseUrl, getMe, getCurrentUser, login, register, verifyEmail, resendVerification, forgotPassword, resetPassword, logout,
-  listConversations, createConversation, getConversation, getConversationMessages, chat, sendChatMessage, healthCheck,
+  listConversations, createConversation, getConversation, getConversationMessages, chat, sendChatMessage, streamChatMessage, healthCheck,
   getRealtimeStatus, startRealtimeCall, saveRealtimeTranscript, createCheckoutSession, getBillingConfig,
   getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, adminEmailBroadcast, ttsSpeak, synthesizeSpeech,
   getMarkets, getMarketDetail, getSignals, getNews,
