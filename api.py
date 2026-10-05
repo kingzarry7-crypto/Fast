@@ -128,6 +128,7 @@ try:
     install_agent_task_api(
         globals().get("app"),
         require_current_user=globals().get("_require_current_user"),
+        require_vip=globals().get("_require_web_vip"),
     )
 except Exception as e:
     print("AGENT_TASK_ENGINE_PATCH_FAILED", type(e).__name__, str(e)[:160], flush=True)
