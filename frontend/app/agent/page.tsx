@@ -58,6 +58,16 @@ export default function AgentPage() {
     if (isVip) refreshAgent();
   }, [refreshAgent, isVip]);
 
+  useEffect(() => {
+    if (!isVip) return;
+    const timer = window.setInterval(() => {
+      if (tasks.some((task) => ["queued", "running"].includes(String(task.status)))) {
+        refreshAgent();
+      }
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [isVip, tasks, refreshAgent]);
+
   const handleRunGoal = async (e: React.FormEvent) => {
     e.preventDefault();
     const g = goal.trim();
@@ -234,7 +244,7 @@ export default function AgentPage() {
                         <span className="text-[9px] font-mono-tech text-emerald-300/80">{String(task.status || "queued")}</span>
                       </div>
                       <div className="mt-1 text-[9px] font-mono-tech text-cyan-400/45">
-                        step {Number(task.current_step || 0) + 1}/{String(task.total_steps || 0)}
+                        step {Math.min(Number(task.current_step || 0) + 1, Number(task.total_steps || 0))}/{String(task.total_steps || 0)}
                       </div>
                     </div>
                   ))}
