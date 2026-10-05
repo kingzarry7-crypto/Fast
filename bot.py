@@ -4158,7 +4158,8 @@ def main():
     print("🔵 MAIN: Application built OK", flush=True)
 
     application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("work", work_command))\n    application.add_handler(CommandHandler("link", memory_link_command))
+    application.add_handler(CommandHandler("work", work_command))
+    application.add_handler(CommandHandler("link", memory_link_command)
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("buy", buy_command))
     application.add_handler(CommandHandler("monthly", monthly_command))
