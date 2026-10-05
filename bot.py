@@ -59,6 +59,7 @@ logging.getLogger("apscheduler").setLevel(logging.WARNING)
 logger = logging.getLogger("king_zarry")
 
 from channel_work import create as work_create, list_recent as work_list, get as work_get, approve as work_approve, format_workflow as work_format, format_recent as work_format_recent
+from work_intent import parse as parse_work_intent
 
 def clean_env_str(value, default=""):
     if not value:
@@ -3892,16 +3893,22 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
 
 async def handle_text(update, context):
 
+    if not update.message or not update.message.text:
+        return
+    if update.message.text.startswith("/"):
+        return
+
+    try:
+        if await handle_natural_work_intent(update, context, update.message.text.strip()):
+            return
+    except Exception as work_err:
+        logger.warning("Natural Work intent check failed: %s", work_err)
+
     try:
         if await _fiverr_continue_task(update, context, update.message.text.strip()):
             return
     except Exception as fiverr_err:
         logger.warning("Fiverr Agent continuation failed: %s", fiverr_err)
-
-    if not update.message or not update.message.text:
-        return
-    if update.message.text.startswith("/"):
-        return
     await update.message.chat.send_action("typing")
     try:
         await _process_telegram_text_pipeline(update, context, update.message.text.strip(), is_voice_transcription=False)
@@ -4100,6 +4107,44 @@ async def work_command(update, context):
     except Exception as exc:
         logger.exception("KZ Work command failed")
         await update.message.reply_text("⚠️ KZ Work is temporarily unavailable. Please try again.")
+
+
+
+async def handle_natural_work_intent(update, context, text):
+    """Route clear natural-language Work requests through the shared engine."""
+    intent = parse_work_intent(text)
+    if not intent or not update.message:
+        return False
+    user = update.effective_user
+    if not user:
+        return False
+    try:
+        if intent["kind"] == "create":
+            goal = intent["goal"].strip()
+            await update.message.chat.send_action("typing")
+            item = await asyncio.to_thread(work_create, str(user.id), goal)
+            await update.message.reply_text(work_format(item), parse_mode="HTML")
+            return True
+        workflow_id = intent["workflow_id"].strip()
+        item = await asyncio.to_thread(work_get, str(user.id), workflow_id)
+        if not item:
+            await update.message.reply_text("❌ I couldn't find that KZ Work workflow.")
+            return True
+        if intent["kind"] == "status":
+            await update.message.reply_text(work_format(item), parse_mode="HTML")
+            return True
+        item = await asyncio.to_thread(
+            work_approve,
+            str(user.id),
+            workflow_id,
+            intent["kind"] == "approve",
+        )
+        await update.message.reply_text(work_format(item), parse_mode="HTML")
+        return True
+    except Exception:
+        logger.exception("Natural-language KZ Work routing failed")
+        await update.message.reply_text("⚠️ KZ Work is temporarily unavailable. Please try again.")
+        return True
 
 
 async def memory_link_command(update, context):
