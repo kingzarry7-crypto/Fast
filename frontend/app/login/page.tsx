@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AICore from "@/components/AICore";
 import HeroRings from "@/components/HeroRings";
@@ -9,7 +9,6 @@ import { useAuth } from "@/hooks/useAuth";
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -67,12 +66,6 @@ export default function LoginPage() {
         </div>
 
         <div className="kz-glass p-6 mt-8">
-          {searchParams.get("reset") === "1" && !error && (
-            <div className="mb-4 bg-cyan-500/10 border border-cyan-500/30 rounded-md px-4 py-2 text-xs text-cyan-200 font-mono-tech">
-              Password updated. Sign in with your new password.
-            </div>
-          )}
-
           {error && (
             <div className="mb-4 bg-red-500/10 border border-red-500/30 rounded-md px-4 py-2 text-xs text-red-300 font-mono-tech">
               <span>{error}</span>
