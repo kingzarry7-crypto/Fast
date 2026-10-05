@@ -39,3 +39,39 @@ def format_recent(items: list[dict[str, Any]]) -> str:
     for item in items[:5]:
         lines.append(f"• <code>{item.get('id','')[:8]}</code> {str(item.get('status','')).replace('_',' ')} — {str(item.get('goal',''))[:120]}")
     return "\n".join(lines)
+
+def format_workflow_text(item: dict[str, Any]) -> str:
+    status = str(item.get("status", "unknown")).replace("_", " ").upper()
+    risk = str(item.get("risk", "green")).upper()
+    potential = float(item.get("potential_revenue") or 0)
+    lines = [
+        "🤖 KZ WORK",
+        "",
+        f"Goal: {str(item.get('goal', ''))[:900]}",
+        f"Status: {status}",
+        f"Risk: {risk}",
+        f"Potential: ${potential:.0f}",
+        f"ID: {item.get('id', '')}",
+    ]
+    waiting = next((s for s in item.get("plan", []) if s.get("status") == "waiting_for_approval"), None)
+    if waiting:
+        lines += [
+            "",
+            "🟡 APPROVAL REQUIRED",
+            str(waiting.get("title", "Consequential action"))[:700],
+            f"Approve with /work_approve {item.get('id')}",
+            f"Reject with /work_reject {item.get('id')}",
+        ]
+    return "\n".join(lines)
+
+def format_recent_text(items: list[dict[str, Any]]) -> str:
+    if not items:
+        return "🤖 KZ WORK\n\nNo workflows yet. Use /work to start one."
+    lines = ["🤖 RECENT KZ WORK", ""]
+    for item in items[:5]:
+        lines.append(
+            f"• {str(item.get('id',''))[:8]} "
+            f"{str(item.get('status','')).replace('_',' ')} — "
+            f"{str(item.get('goal',''))[:120]}"
+        )
+    return "\n".join(lines)
