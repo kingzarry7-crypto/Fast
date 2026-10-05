@@ -30,6 +30,9 @@ _OPENROUTER_MODEL = ai_engine.OPENROUTER_MODEL
 _GROQ_URL = ai_engine.GROQ_URL
 _GROQ_KEY = ai_engine.GROQ_API_KEY
 _GROQ_MODEL = ai_engine.GROQ_MODEL
+_CHUTES_URL = ai_engine.CHUTES_URL
+_CHUTES_KEY = ai_engine.CHUTES_API_KEY
+_CHUTES_MODEL = ai_engine.CHUTES_MODEL
 
 
 class StreamChatRequest(BaseModel):
@@ -124,6 +127,13 @@ def _provider_streams(messages: list):
             url=_OPENROUTER_URL,
             key=_OPENROUTER_KEY,
             model=_OPENROUTER_MODEL,
+            messages=messages,
+        )
+    if _CHUTES_KEY:
+        yield "chutes", _stream_openai_compatible(
+            url=_CHUTES_URL,
+            key=_CHUTES_KEY,
+            model=_CHUTES_MODEL,
             messages=messages,
         )
 
