@@ -31,3 +31,33 @@ def revenue_summary(workflows: List[Dict[str, Any]]) -> Dict[str, Any]:
         "profit_confirmed": round(confirmed - costs, 2),
         "warning": "Potential revenue is not income until a supported payment record confirms receipt.",
     }
+
+
+def revenue_dashboard(workflows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Build a conservative revenue pipeline view from persistent workflows."""
+    rows = list(workflows or [])
+    active = [x for x in rows if x.get("status") not in {"completed", "failed", "paused"}]
+    completed = [x for x in rows if x.get("status") == "completed"]
+    waiting = [x for x in rows if x.get("status") == "waiting_for_approval"]
+    potential = sum(float(x.get("potential_revenue") or 0) for x in rows)
+    costs = sum(float(x.get("estimated_cost") or 0) for x in rows)
+    return {
+        "potential_revenue": round(potential, 2),
+        "confirmed_revenue": 0.0,
+        "estimated_cost": round(costs, 2),
+        "confirmed_profit": round(-costs, 2),
+        "active_work": len(active),
+        "waiting_for_approval": len(waiting),
+        "completed_work": len(completed),
+        "pipeline": [
+            {
+                "workflow_id": x.get("id"),
+                "goal": x.get("goal"),
+                "status": x.get("status"),
+                "potential_revenue": float(x.get("potential_revenue") or 0),
+                "risk": x.get("risk"),
+            }
+            for x in rows[:20]
+        ],
+        "warning": "Potential revenue is a forecast, not income. Confirmed revenue remains zero until a supported payment record confirms receipt.",
+    }
