@@ -24,6 +24,7 @@ from shared_memory import SharedMemory
 from ai_engine import AIEngine
 from news_engine import news_engine
 import market as market_engine
+from channel_work import create as work_create, list_recent as work_list, get as work_get, approve as work_approve, format_workflow as work_format, format_recent as work_format_recent
 
 # Shared personal price alerts (same table as Telegram)
 try:
@@ -1581,7 +1582,68 @@ async def imagevideo(interaction, image: discord.Attachment, motion: str):
             try: os.remove(vp)
             except OSError: pass
 
-@client.tree.command(name="clear_memory", description="Clear memory")
+
+@client.tree.command(name="work", description="Give KING ZARRY AI a goal to work on")
+@app_commands.describe(goal="What you want KZ to get done")
+async def work_slash(interaction, goal: str):
+    if not await ensure_not_banned(interaction):
+        return
+    if not goal.strip():
+        await interaction.response.send_message("Tell me what you want KZ to get done.", ephemeral=True)
+        return
+    if len(goal) > 4000:
+        await interaction.response.send_message("❌ Work goal is too long (max 4000 characters).", ephemeral=True)
+        return
+    await track_user(interaction.user)
+    await interaction.response.defer()
+    try:
+        item = await asyncio.to_thread(work_create, str(interaction.user.id), goal.strip())
+        await interaction.followup.send(work_format(item), ephemeral=True)
+    except Exception as exc:
+        logger.error("KZ Work create failed: %s", _redact(repr(exc)))
+        await interaction.followup.send("⚠️ KZ Work is temporarily unavailable.", ephemeral=True)
+
+@client.tree.command(name="work_status", description="Show a KZ Work workflow")
+@app_commands.describe(workflow_id="The workflow ID")
+async def work_status_slash(interaction, workflow_id: str):
+    if not await ensure_not_banned(interaction):
+        return
+    await interaction.response.defer(ephemeral=True)
+    item = await asyncio.to_thread(work_get, str(interaction.user.id), workflow_id.strip())
+    await interaction.followup.send(work_format(item) if item else "❌ Workflow not found.", ephemeral=True)
+
+@client.tree.command(name="work_approve", description="Approve a waiting KZ Work action")
+@app_commands.describe(workflow_id="The workflow ID to approve")
+async def work_approve_slash(interaction, workflow_id: str):
+    if not await ensure_not_banned(interaction):
+        return
+    await interaction.response.defer(ephemeral=True)
+    try:
+        item = await asyncio.to_thread(work_approve, str(interaction.user.id), workflow_id.strip(), True)
+        await interaction.followup.send(work_format(item), ephemeral=True)
+    except Exception:
+        await interaction.followup.send("❌ Workflow not found or approval failed.", ephemeral=True)
+
+@client.tree.command(name="work_reject", description="Reject a waiting KZ Work action")
+@app_commands.describe(workflow_id="The workflow ID to reject")
+async def work_reject_slash(interaction, workflow_id: str):
+    if not await ensure_not_banned(interaction):
+        return
+    await interaction.response.defer(ephemeral=True)
+    try:
+        item = await asyncio.to_thread(work_approve, str(interaction.user.id), workflow_id.strip(), False)
+        await interaction.followup.send(work_format(item), ephemeral=True)
+    except Exception:
+        await interaction.followup.send("❌ Workflow not found or rejection failed.", ephemeral=True)
+
+@client.tree.command(name="mywork", description="List your recent KZ Work workflows")
+async def mywork_slash(interaction):
+    if not await ensure_not_banned(interaction):
+        return
+    await interaction.response.defer(ephemeral=True)
+    items = await asyncio.to_thread(work_list, str(interaction.user.id), 5)
+    await interaction.followup.send(work_format_recent(items), ephemeral=True)
+\n@client.tree.command(name="clear_memory", description="Clear memory")
 async def clear_memory(interaction):
     if not await ensure_not_banned(interaction): return
     await interaction.response.defer(ephemeral=True)
