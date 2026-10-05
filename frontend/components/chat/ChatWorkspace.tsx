@@ -532,6 +532,7 @@ export default function ChatWorkspace({
               status={m.status}
               isError={String(m.id || "").startsWith("error")}
               imagePreviewUrl={m.imagePreviewUrl}
+              suggestions={m.suggestions}
               onSpeak={
                 m.role === "assistant"
                   ? () => (isSpeaking ? stopSpeaking() : speak(m.text || ""))
