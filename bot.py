@@ -4100,7 +4100,9 @@ async def work_command(update, context):
     except Exception as exc:
         logger.exception("KZ Work command failed")
         await update.message.reply_text("⚠️ KZ Work is temporarily unavailable. Please try again.")
-\n\nasync def memory_link_command(update, context):
+
+
+async def memory_link_command(update, context):
     """Link this Telegram identity to the user's KING ZARRY shared memory."""
     user = update.effective_user
     if not user or not update.message:
