@@ -1,0 +1,25 @@
+name: KZ Workflow Engine Check
+
+on:
+  push:
+    paths:
+      - "workflow_*.py"
+      - "workflow_api.py"
+      - "api.py"
+      - ".github/workflows/kz-workflow-check.yml"
+  pull_request:
+    paths:
+      - "workflow_*.py"
+      - "workflow_api.py"
+      - "api.py"
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile workflow modules
+        run: python -m py_compile workflow_models.py workflow_store.py workflow_engine.py workflow_api.py api.py
