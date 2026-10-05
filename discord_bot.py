@@ -1638,7 +1638,7 @@ async def work_status_slash(interaction, workflow_id: str):
         return
     await interaction.response.defer(ephemeral=True)
     item = await asyncio.to_thread(work_get, str(interaction.user.id), workflow_id.strip())
-    await interaction.followup.send(work_format(item) if item else "❌ Workflow not found.", ephemeral=True)
+    await interaction.followup.send(work_format_text(item) if item else "❌ Workflow not found.", ephemeral=True)
 
 @client.tree.command(name="work_approve", description="Approve a waiting KZ Work action")
 @app_commands.describe(workflow_id="The workflow ID to approve")
@@ -1648,7 +1648,7 @@ async def work_approve_slash(interaction, workflow_id: str):
     await interaction.response.defer(ephemeral=True)
     try:
         item = await asyncio.to_thread(work_approve, str(interaction.user.id), workflow_id.strip(), True)
-        await interaction.followup.send(work_format(item), ephemeral=True)
+        await interaction.followup.send(work_format_text(item), ephemeral=True)
     except Exception:
         await interaction.followup.send("❌ Workflow not found or approval failed.", ephemeral=True)
 
