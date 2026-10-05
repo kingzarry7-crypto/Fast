@@ -66,10 +66,8 @@ def install_agent_task_api(app: Any, require_current_user: Any, require_vip: Any
     @app.get("/api/agent/tasks/{task_id}")
     async def agent_task_get_endpoint(request: Request, task_id: str):
         try:
-            user = require_current_user(request)
-            if not user:
-                raise HTTPException(status_code=401, detail="Authentication required")
-            user_id = str(user.get("id") if isinstance(user, dict) else getattr(user, "id", user))
+            user_row = require_current_user(request)
+            user_id = str(require_vip(user_row))
             task = _load(task_id, user_id)
             if not task:
                 raise HTTPException(status_code=404, detail="Task not found")
@@ -82,10 +80,8 @@ def install_agent_task_api(app: Any, require_current_user: Any, require_vip: Any
     @app.post("/api/agent/tasks/{task_id}/cancel")
     async def agent_task_cancel_endpoint(request: Request, task_id: str):
         try:
-            user = require_current_user(request)
-            if not user:
-                raise HTTPException(status_code=401, detail="Authentication required")
-            user_id = str(user.get("id") if isinstance(user, dict) else getattr(user, "id", user))
+            user_row = require_current_user(request)
+            user_id = str(require_vip(user_row))
             task = cancel_task(task_id, user_id)
             if not task:
                 raise HTTPException(status_code=404, detail="Task not found")
