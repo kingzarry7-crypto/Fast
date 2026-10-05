@@ -621,6 +621,32 @@ export async function getPlatformStatus(signal?: AbortSignal): Promise<PlatformS
   });
 }
 
+export type ChatBehaviorPreferences = {
+  signalsOnly: boolean;
+  humanReplies: boolean;
+  rememberPreferences: boolean;
+  riskReminder: boolean;
+};
+
+export async function getChatBehaviorPreferences(
+  signal?: AbortSignal
+): Promise<{ status?: string; preferences: ChatBehaviorPreferences }> {
+  return request<{ status?: string; preferences: ChatBehaviorPreferences }>(
+    "/api/settings/preferences",
+    { method: "GET", signal }
+  );
+}
+
+export async function saveChatBehaviorPreferences(
+  preferences: ChatBehaviorPreferences,
+  signal?: AbortSignal
+): Promise<{ status?: string; preferences: ChatBehaviorPreferences }> {
+  return request<{ status?: string; preferences: ChatBehaviorPreferences }>(
+    "/api/settings/preferences",
+    { method: "POST", body: preferences, signal }
+  );
+}
+
 export async function createMemoryLinkCode(signal?: AbortSignal) {
   return request<{ status?: string; code: string; expires_in_minutes: number; instructions?: string }>(
     "/api/memory/link-code",
@@ -631,7 +657,7 @@ export async function createMemoryLinkCode(signal?: AbortSignal) {
 export const api = {
   getBaseUrl, getMe, getCurrentUser, login, register, verifyEmail, resendVerification, forgotPassword, resetPassword, logout,
   listConversations, createConversation, getConversation, getConversationMessages, chat, sendChatMessage, streamChatMessage, healthCheck,
-  getRealtimeStatus, startRealtimeCall, saveRealtimeTranscript, getPlatformStatus, createMemoryLinkCode, createCheckoutSession, getBillingConfig,
+  getRealtimeStatus, startRealtimeCall, saveRealtimeTranscript, getPlatformStatus, getChatBehaviorPreferences, saveChatBehaviorPreferences, createMemoryLinkCode, createCheckoutSession, getBillingConfig,
   getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, adminEmailBroadcast, ttsSpeak, synthesizeSpeech,
   getMarkets, getMarketDetail, getSignals, getNews,
   getAgentStatus, runAgentGoal, generateMorningBrief, getLatestMorningBrief, listAgentJobs, approveAgentJob,
