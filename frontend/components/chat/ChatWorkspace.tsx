@@ -570,6 +570,51 @@ export default function ChatWorkspace({
         </div>
       </div>
 
+      {callMode && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-hidden bg-[#02070d]/98 backdrop-blur-xl">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,rgba(0,220,255,0.16),transparent_42%)]" />
+          <div className="pointer-events-none absolute inset-0 kz-call-stars opacity-40" />
+
+          <div className="relative z-10 flex w-full flex-1 flex-col items-center justify-center px-4 pb-32">
+            <div className={"kz-call-core-wrap " + (callIsSpeaking ? "kz-call-speaking" : callIsListening ? "kz-call-listening" : sending ? "kz-call-thinking" : "")}>
+              <AICore
+                state={callIsSpeaking ? "speaking" : callIsListening ? "listening" : sending ? "thinking" : "idle"}
+                size={280}
+              />
+            </div>
+
+            <div className="mt-8 text-center">
+              <p className="font-display text-sm font-semibold tracking-[0.3em] text-white">KING ZARRY AI</p>
+              <p className="mt-2 font-mono-tech text-[10px] tracking-[0.28em] text-cyan-300/70">
+                {callIsMuted ? "MIC MUTED" : callIsSpeaking ? "SPEAKING" : callIsListening ? "LISTENING" : sending ? "THINKING" : "READY"}
+              </p>
+            </div>
+          </div>
+
+          <div className="absolute bottom-8 left-0 right-0 z-[110] flex items-center justify-center gap-5 px-5 pb-[env(safe-area-inset-bottom)]">
+            <button
+              type="button"
+              onClick={toggleCallMute}
+              aria-label={callIsMuted ? "Unmute microphone" : "Mute microphone"}
+              className={"flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-2 text-2xl shadow-2xl transition " + (callIsMuted ? "border-red-400 bg-red-500/25 text-red-100" : "border-cyan-300/50 bg-zinc-900/90 text-white hover:border-cyan-300 hover:bg-cyan-400/15")}
+            >
+              {callIsMuted ? "🔇" : "🎙️"}
+            </button>
+
+            <button
+              type="button"
+              onClick={endVoiceCall}
+              aria-label="End AI voice call"
+              className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-2 border-red-400/70 bg-red-500/25 text-red-100 shadow-2xl transition hover:bg-red-500/40"
+            >
+              <svg width="25" height="25" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M7.2 4.8 9.5 3.7c.7-.3 1.5 0 1.8.7l1.1 2.7c.2.5.1 1.1-.3 1.5l-1.4 1.2a13.2 13.2 0 0 0 3.5 3.5l1.2-1.4c.4-.4 1-.5 1.5-.3l2.7 1.1c.7.3 1 1.1.7 1.8l-1.1 2.3c-.3.7-1 1.1-1.7 1.1C10.1 17.9 6.1 13.9 6.1 7c0-.7.4-1.4 1.1-1.7Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       <form
         onSubmit={handleSubmit}
         className="absolute inset-x-0 bottom-0 z-30 border-t border-white/10 bg-[#05080f]/95 backdrop-blur-md px-3 sm:px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
@@ -584,37 +629,7 @@ export default function ChatWorkspace({
             </div>
           )}
 
-          {callMode && (
-            <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center overflow-hidden bg-[#02070d]/96 backdrop-blur-xl">
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,220,255,0.14),transparent_48%)]" />
-              <div className="pointer-events-none absolute inset-0 kz-call-stars opacity-40" />
 
-              <div className="relative z-10 flex min-h-0 flex-1 w-full flex-col items-center justify-center px-5 pb-28 pt-10">
-                <div className={"kz-call-core-wrap " + (callIsSpeaking ? "kz-call-speaking" : callIsListening ? "kz-call-listening" : sending ? "kz-call-thinking" : "")}>
-                  <AICore
-                    state={callIsSpeaking ? "speaking" : callIsListening ? "listening" : sending ? "thinking" : "idle"}
-                    size={Math.min(330, typeof window !== "undefined" ? Math.max(210, window.innerWidth * 0.68) : 300)}
-                  />
-                </div>
-
-                <div className="mt-10 text-center">
-                  <p className="font-display text-xs font-semibold tracking-[0.3em] text-white">KING ZARRY AI</p>
-                  <p className="mt-2 font-mono-tech text-[10px] tracking-[0.28em] text-cyan-300/60">
-                    {callIsMuted ? "MIC MUTED" : callIsSpeaking ? "SPEAKING" : callIsListening ? "LISTENING" : sending ? "THINKING" : "READY"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="absolute bottom-0 left-0 right-0 z-20 flex items-center justify-center gap-4 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-                <button type="button" onClick={toggleCallMute} aria-label={callIsMuted ? "Unmute microphone" : "Mute microphone"} className={"flex h-14 w-14 items-center justify-center rounded-full border text-lg shadow-lg transition " + (callIsMuted ? "border-red-400/70 bg-red-500/20 text-red-100" : "border-white/20 bg-white/10 text-white hover:border-cyan-300/60 hover:bg-cyan-400/10")}>
-                  {callIsMuted ? "🔇" : "🎙"}
-                </button>
-                <button type="button" onClick={endVoiceCall} aria-label="End AI voice call" className="flex h-16 w-16 items-center justify-center rounded-full border border-red-300/60 bg-red-500/20 text-xl text-red-100 shadow-lg shadow-red-950/30 transition hover:bg-red-500/30">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="rotate-[135deg]"><path d="M7.2 4.8 9.5 3.7c.7-.3 1.5 0 1.8.7l1.1 2.7c.2.5.1 1.1-.3 1.5l-1.4 1.2a13.2 13.2 0 0 0 3.5 3.5l1.2-1.4c.4-.4 1-.5 1.5-.3l2.7 1.1c.7.3 1 1.1.7 1.8l-1.1 2.3c-.3.7-1 1.1-1.7 1.1C10.1 17.9 6.1 13.9 6.1 7c0-.7.4-1.4 1.1-1.7Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                </button>
-              </div>
-            </div>
-          )}
 
           {voicePanelOpen && (
             <div className="mb-2 rounded-lg border border-cyan-500/15 bg-black/40 p-2">
