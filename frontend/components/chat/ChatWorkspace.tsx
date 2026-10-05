@@ -585,33 +585,33 @@ export default function ChatWorkspace({
           )}
 
           {callMode && (
-            <div className="mb-2 rounded-2xl border border-cyan-400/20 bg-[#07101b]/95 px-4 py-3 shadow-xl shadow-cyan-950/20">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={"relative flex h-10 w-10 items-center justify-center rounded-full border " + (callIsSpeaking ? "border-cyan-300/70 bg-cyan-400/10" : callIsListening ? "border-emerald-300/70 bg-emerald-400/10" : "border-zinc-600 bg-zinc-900")}>
-                    <span className={"text-lg " + (callIsSpeaking ? "animate-pulse" : "")}>👑</span>
-                    {callIsSpeaking && <span className="absolute inset-0 rounded-full border border-cyan-300/30 animate-ping" />}
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-semibold tracking-[0.18em] text-white">KING ZARRY AI</p>
-                    <p className="mt-0.5 text-[9px] tracking-[0.14em] text-zinc-400">
-                      {callIsMuted ? "MIC MUTED" : callIsSpeaking ? "SPEAKING" : callIsListening ? "LISTENING" : sending ? "THINKING" : "READY"}
-                    </p>
-                  </div>
+            <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center overflow-hidden bg-[#02070d]/96 backdrop-blur-xl">
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,220,255,0.14),transparent_48%)]" />
+              <div className="pointer-events-none absolute inset-0 kz-call-stars opacity-40" />
+
+              <div className="relative z-10 flex min-h-0 flex-1 w-full flex-col items-center justify-center px-5 pb-28 pt-10">
+                <div className={"kz-call-core-wrap " + (callIsSpeaking ? "kz-call-speaking" : callIsListening ? "kz-call-listening" : sending ? "kz-call-thinking" : "")}>
+                  <AICore
+                    state={callIsSpeaking ? "speaking" : callIsListening ? "listening" : sending ? "thinking" : "idle"}
+                    size={Math.min(330, typeof window !== "undefined" ? Math.max(210, window.innerWidth * 0.68) : 300)}
+                  />
                 </div>
-                <div className="flex items-center gap-2">
-                  <button type="button" onClick={toggleCallMute} className={"flex h-9 items-center justify-center rounded-full border px-3 text-[10px] tracking-wider transition " + (callIsMuted ? "border-red-400/60 bg-red-500/15 text-red-200" : "border-zinc-600 bg-zinc-900 text-zinc-200 hover:border-cyan-400/50")}>
-                    {callIsMuted ? "🔇 UNMUTE" : "🎙 MUTE"}
-                  </button>
-                  <button type="button" onClick={endVoiceCall} className="flex h-9 items-center justify-center rounded-full border border-red-400/50 bg-red-500/10 px-3 text-[10px] tracking-wider text-red-200 hover:bg-red-500/20">
-                    END
-                  </button>
+
+                <div className="mt-10 text-center">
+                  <p className="font-display text-xs font-semibold tracking-[0.3em] text-white">KING ZARRY AI</p>
+                  <p className="mt-2 font-mono-tech text-[10px] tracking-[0.28em] text-cyan-300/60">
+                    {callIsMuted ? "MIC MUTED" : callIsSpeaking ? "SPEAKING" : callIsListening ? "LISTENING" : sending ? "THINKING" : "READY"}
+                  </p>
                 </div>
               </div>
-              <div className="mt-3 flex h-5 items-end justify-center gap-1">
-                {[0,1,2,3,4,5,6,7,8,9,10,11].map((i) => (
-                  <span key={i} className={"w-1 rounded-full bg-cyan-300/70 transition-all " + (callIsSpeaking || callIsListening ? "animate-pulse" : "")} style={{ height: (8 + ((i * 7) % 13)) + "px", animationDelay: (i * 45) + "ms" }} />
-                ))}
+
+              <div className="absolute bottom-0 left-0 right-0 z-20 flex items-center justify-center gap-4 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+                <button type="button" onClick={toggleCallMute} aria-label={callIsMuted ? "Unmute microphone" : "Mute microphone"} className={"flex h-14 w-14 items-center justify-center rounded-full border text-lg shadow-lg transition " + (callIsMuted ? "border-red-400/70 bg-red-500/20 text-red-100" : "border-white/20 bg-white/10 text-white hover:border-cyan-300/60 hover:bg-cyan-400/10")}>
+                  {callIsMuted ? "🔇" : "🎙"}
+                </button>
+                <button type="button" onClick={endVoiceCall} aria-label="End AI voice call" className="flex h-16 w-16 items-center justify-center rounded-full border border-red-300/60 bg-red-500/20 text-xl text-red-100 shadow-lg shadow-red-950/30 transition hover:bg-red-500/30">
+                  <span className="rotate-[135deg]">⌕</span>
+                </button>
               </div>
             </div>
           )}
