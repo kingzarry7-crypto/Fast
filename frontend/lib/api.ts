@@ -373,6 +373,24 @@ export async function streamChatMessage(
   return { reply, conversation_id: conversationId };
 }
 
+export async function generateChatSuggestions(
+  userMessage: string,
+  assistantResponse: string,
+  signal?: AbortSignal,
+): Promise<{ status?: string; suggestions: string[] }> {
+  return request<{ status?: string; suggestions: string[] }>(
+    "/api/chat/suggestions",
+    {
+      method: "POST",
+      body: {
+        user_message: userMessage,
+        assistant_response: assistantResponse,
+      },
+      signal,
+    },
+  );
+}
+
 export async function healthCheck() {
   return request<{ status?: string }>("/health", { method: "GET" });
 }
@@ -656,7 +674,7 @@ export async function createMemoryLinkCode(signal?: AbortSignal) {
 
 export const api = {
   getBaseUrl, getMe, getCurrentUser, login, register, verifyEmail, resendVerification, forgotPassword, resetPassword, logout,
-  listConversations, createConversation, getConversation, getConversationMessages, chat, sendChatMessage, streamChatMessage, healthCheck,
+  listConversations, createConversation, getConversation, getConversationMessages, chat, sendChatMessage, streamChatMessage, generateChatSuggestions, healthCheck,
   getRealtimeStatus, startRealtimeCall, saveRealtimeTranscript, getPlatformStatus, getChatBehaviorPreferences, saveChatBehaviorPreferences, createMemoryLinkCode, createCheckoutSession, getBillingConfig,
   getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, adminEmailBroadcast, ttsSpeak, synthesizeSpeech,
   getMarkets, getMarketDetail, getSignals, getNews,
