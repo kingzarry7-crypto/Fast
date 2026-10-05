@@ -190,6 +190,10 @@ export default function KingZarryHistoryPage() {
   const [restoring, setRestoring] =
     useState(false);
 
+  const [linkCode, setLinkCode] = useState("");
+  const [linking, setLinking] = useState(false);
+  const [linkError, setLinkError] = useState("");
+
   // ============================================================
   // LOAD REAL HISTORY
   // ============================================================
@@ -642,6 +646,44 @@ export default function KingZarryHistoryPage() {
           </div>
 
           <div className="p-3 rounded-lg border border-cyan-500/20 bg-cyan-950/20 backdrop-blur-md max-w-md">
+            <div className="flex items-center justify-between text-[10px] font-mono text-cyan-400/80 mb-1">
+              <span className="font-bold tracking-wider">CROSS-PLATFORM MEMORY</span>
+              <span className="text-cyan-400">WEB • TG • DISCORD</span>
+            </div>
+            <p className="text-xs text-cyan-200 mb-3">
+              Link your Telegram or Discord identity so KING ZARRY can carry durable memory between platforms.
+            </p>
+            <button
+              onClick={async () => {
+                setLinking(true);
+                setLinkError("");
+                try {
+                  const result = await api.createMemoryLinkCode();
+                  setLinkCode(result.code);
+                } catch (err) {
+                  setLinkError(err instanceof Error ? err.message : "Unable to create link code.");
+                } finally {
+                  setLinking(false);
+                }
+              }}
+              disabled={linking}
+              className="w-full px-3 py-2 rounded-lg bg-cyan-400 text-black text-[10px] font-mono font-bold hover:bg-cyan-300 disabled:opacity-50"
+            >
+              {linking ? "GENERATING..." : "GENERATE 10-MINUTE LINK CODE"}
+            </button>
+            {linkCode && (
+              <div className="mt-3 rounded-lg border border-cyan-400/40 bg-black/30 p-3 text-center">
+                <div className="text-[9px] font-mono text-cyan-400/70">ONE-TIME CODE</div>
+                <div className="text-2xl font-mono font-bold tracking-[0.25em] text-white mt-1">{linkCode}</div>
+                <div className="text-[9px] font-mono text-cyan-300/60 mt-2">
+                  Telegram: <b>/link {linkCode}</b> • Discord: <b>/link</b> → enter code
+                </div>
+              </div>
+            )}
+            {linkError && <div className="mt-2 text-[9px] font-mono text-red-300">{linkError}</div>}
+          </div>
+
+
 
             <div className="flex items-center justify-between text-[10px] font-mono text-cyan-400/80 mb-1">
               <span className="font-bold tracking-wider">
