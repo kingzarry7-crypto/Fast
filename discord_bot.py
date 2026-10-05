@@ -208,8 +208,30 @@ _MEDIA_VERB_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+_MEDIA_CAPABILITY_QUESTION_PATTERN = re.compile(
+    r"^\\s*(?:"
+    r"can|could|does|do|is|are|will|would|"
+    r"what|which|how|why|"
+    r"tell\\s+me|explain|check|research|deep\\s+search|look\\s+up"
+    r")\\b"
+    r".*\\b(?:"
+    r"generate|create|make|edit|animate|render|draw|"
+    r"image|picture|photo|video|clip|animation|"
+    r"api|model|models|chutes|free|price|pricing|cost|"
+    r"support|capabilit"
+    r")\\b"
+    r".*\\??\\s*$",
+    re.IGNORECASE,
+)
+
 def _looks_like_media_request(text: str) -> bool:
     if not text:
+        return False
+    # Capability/pricing/research questions such as
+    # "Can this API generate video?" must stay in the normal AI
+    # conversation path. Only actual generation/edit commands should
+    # invoke the media pipeline.
+    if _MEDIA_CAPABILITY_QUESTION_PATTERN.search(text.strip()):
         return False
     return bool(_MEDIA_VERB_PATTERN.search(text))
 
