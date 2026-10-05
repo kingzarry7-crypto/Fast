@@ -417,7 +417,6 @@ export default function ChatWorkspace({
   useEffect(() => {
     return () => {
       stopRealtime();
-      stopRealtime();
       stopListening();
       stopSpeaking();
     };
