@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import AICore from "@/components/AICore";
 
 export interface ChatMessageProps {
   id?: string;
@@ -103,7 +104,7 @@ export function ChatMessage({
         className={
           "relative max-w-[min(100%,36rem)] rounded-2xl px-4 py-3 text-sm leading-relaxed " +
           (isUser
-            ? "bg-zinc-100 text-zinc-900 rounded-br-md"
+            ? "bg-[#07111d] border border-cyan-500/25 text-zinc-100 rounded-br-md shadow-[0_0_24px_rgba(0,240,255,0.06)]"
             : isError
               ? "bg-red-950/40 border border-red-500/30 text-red-100 rounded-bl-md"
               : "bg-zinc-900 border border-zinc-800 text-zinc-100 rounded-bl-md")
@@ -162,13 +163,18 @@ export function ThinkingIndicator({
   const phaseLabel = labels[phase] || "Thinking";
 
   return (
-    <div className="flex items-center gap-2 py-2 px-1 text-sm text-zinc-400">
-      <span className="inline-flex gap-1">
-        <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 animate-bounce" />
-        <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 animate-bounce [animation-delay:150ms]" />
-        <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 animate-bounce [animation-delay:300ms]" />
-      </span>
-      <span className="font-medium text-zinc-300">{phaseLabel}</span>
+    <div className="flex items-center gap-3 py-2 px-1">
+      <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-cyan-500/20 bg-[#030a12]/90 shadow-[0_0_24px_rgba(0,240,255,0.08)]">
+        <AICore state={phase === "responding" ? "speaking" : phase === "searching" ? "listening" : "thinking"} size={42} />
+      </div>
+      <div className="flex min-w-0 items-center gap-2 rounded-full border border-cyan-500/15 bg-[#050d17]/90 px-4 py-2 shadow-[0_0_20px_rgba(0,240,255,0.06)]">
+        <span className="font-medium text-cyan-200">{phaseLabel}</span>
+        <span className="inline-flex gap-1" aria-hidden="true">
+          <span className="kz-typing-dot h-1.5 w-1.5 rounded-full bg-cyan-300" />
+          <span className="kz-typing-dot h-1.5 w-1.5 rounded-full bg-cyan-300" />
+          <span className="kz-typing-dot h-1.5 w-1.5 rounded-full bg-cyan-300" />
+        </span>
+      </div>
     </div>
   );
 }
