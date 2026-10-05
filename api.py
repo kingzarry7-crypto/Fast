@@ -102,3 +102,21 @@ try:
     install_slack_integration(globals().get("app"))
 except Exception as e:
     print("SLACK_INTEGRATION_INSTALL_FAILED", type(e).__name__, str(e)[:160], flush=True)
+
+# Optional WebRTC realtime voice is additive. Existing voice/chat remains the fallback.
+try:
+    from realtime_voice import install_realtime_voice
+
+    def _save_realtime_transcript(user_id, conversation_id, role, content):
+        adapter = WebMemoryAdapter(user_id, conversation_id=conversation_id)
+        adapter.add_message(user_id, role, content)
+        return {"conversation_id": adapter.conversation_id, "message_id": None}
+
+    install_realtime_voice(
+        globals().get("app"),
+        require_current_user=globals().get("_require_current_user"),
+        save_transcript=_save_realtime_transcript,
+    )
+    print("REALTIME_VOICE_PATCH_INSTALLED", flush=True)
+except Exception as e:
+    print("REALTIME_VOICE_PATCH_FAILED", type(e).__name__, str(e)[:160], flush=True)

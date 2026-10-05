@@ -289,6 +289,58 @@ export async function healthCheck() {
   return request<{ status?: string }>("/health", { method: "GET" });
 }
 
+export async function getRealtimeStatus(signal?: AbortSignal) {
+  return request<{ status?: string; enabled?: boolean; model?: string | null }>(
+    "/api/realtime/status",
+    { method: "GET", signal }
+  );
+}
+
+export async function startRealtimeCall(
+  sdpOffer: string,
+  conversationId?: string | null,
+  signal?: AbortSignal
+): Promise<string> {
+  const path = conversationId
+    ? `/api/realtime/call?conversation_id=${encodeURIComponent(conversationId)}`
+    : "/api/realtime/call";
+  const response = await fetch(buildUrl(path), {
+    method: "POST",
+    headers: {
+      Accept: "application/sdp",
+      "Content-Type": "application/sdp",
+    },
+    credentials: "include",
+    body: sdpOffer,
+    signal,
+  });
+  if (!response.ok) {
+    let message = response.statusText || `HTTP ${response.status}`;
+    try {
+      const data = await response.json();
+      if (data && typeof data.detail === "string") message = data.detail;
+    } catch { /* non-JSON error */ }
+    throw new ApiError({ status: response.status, message });
+  }
+  return response.text();
+}
+
+export async function saveRealtimeTranscript(
+  conversationId: string | null | undefined,
+  role: "user" | "assistant",
+  content: string,
+  signal?: AbortSignal
+) {
+  return request<{ status?: string; conversation_id?: string | null; message_id?: string | null }>(
+    "/api/realtime/transcript",
+    {
+      method: "POST",
+      body: { conversation_id: conversationId || null, role, content },
+      signal,
+    }
+  );
+}
+
 export async function createCheckoutSession(
   plan: string,
   signal?: AbortSignal,
@@ -460,7 +512,8 @@ export async function approveAgentAction(actionId: string, signal?: AbortSignal)
 
 export const api = {
   getBaseUrl, getMe, getCurrentUser, login, register, verifyEmail, resendVerification, forgotPassword, resetPassword, logout,
-  listConversations, createConversation, getConversation, getConversationMessages, chat, sendChatMessage, healthCheck, createCheckoutSession, getBillingConfig,
+  listConversations, createConversation, getConversation, getConversationMessages, chat, sendChatMessage, healthCheck,
+  getRealtimeStatus, startRealtimeCall, saveRealtimeTranscript, createCheckoutSession, getBillingConfig,
   getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, adminEmailBroadcast, ttsSpeak, synthesizeSpeech,
   getMarkets, getMarketDetail, getSignals, getNews,
   getAgentStatus, runAgentGoal, generateMorningBrief, getLatestMorningBrief, listAgentJobs, approveAgentJob,
