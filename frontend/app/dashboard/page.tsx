@@ -8,6 +8,7 @@ import RobotHead from "@/components/RobotHead";
 import WorkPanel from "@/components/dashboard/WorkPanel";
 import RevenuePanel from "@/components/dashboard/RevenuePanel";
 import OpportunityPanel from "@/components/dashboard/OpportunityPanel";
+import DeliveryPanel from "@/components/dashboard/DeliveryPanel";
 import { useAuth } from "@/hooks/useAuth";
 import { api, type ConversationItem, type MarketSnapshot } from "@/lib/api";
 
@@ -77,6 +78,7 @@ export default function DashboardPage() {
             <WorkPanel />
             <RevenuePanel />
             <OpportunityPanel />
+            <DeliveryPanel />
 
             <div className="relative shrink-0">
               <button type="button" onClick={() => setChatsOpen((v) => !v)} className="rounded-md border border-cyan-500/20 px-2.5 py-1.5 font-mono-tech text-[10px] tracking-widest text-cyan-300/80 hover:bg-cyan-500/10">
