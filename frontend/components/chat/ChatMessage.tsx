@@ -103,7 +103,7 @@ export function ChatMessage({
         className={
           "relative max-w-[min(100%,36rem)] rounded-2xl px-4 py-3 text-sm leading-relaxed " +
           (isUser
-            ? "bg-[#07111d] border border-cyan-500/25 text-zinc-100 rounded-br-md shadow-[0_0_24px_rgba(0,240,255,0.06)]"
+            ? "bg-zinc-900 border border-zinc-800 text-zinc-100 rounded-br-md shadow-[0_0_24px_rgba(0,0,0,0.18)]"
             : isError
               ? "bg-red-950/40 border border-red-500/30 text-red-100 rounded-bl-md"
               : "bg-zinc-900 border border-zinc-800 text-zinc-100 rounded-bl-md")
