@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import AICore from "@/components/AICore";
-import ChatMessage, { ThinkingIndicator } from "@/components/chat/ChatMessage";
+import ChatMessage from "@/components/chat/ChatMessage";
 import { useChat } from "@/hooks/useChat";
 import { useVoice, type VoiceStyle } from "@/hooks/useVoice";
 import { useRealtimeVoice } from "@/hooks/useRealtimeVoice";
@@ -60,9 +60,6 @@ export default function ChatWorkspace({
   const [input, setInput] = useState("");
   const [capability] = useState("AI");
   const [coreState, setCoreState] = useState<CoreState>("idle");
-  const [thinkingPhase, setThinkingPhase] = useState<
-    "reading" | "thinking" | "responding"
-  >("thinking");
   const [attached, setAttached] = useState<AttachedImage | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [autoSpeak, setAutoSpeak] = useState(false);
@@ -130,21 +127,6 @@ export default function ChatWorkspace({
   useEffect(() => {
     if (user?.id) refreshConversations();
   }, [user?.id]);
-
-  useEffect(() => {
-    if (!sending) {
-      setCoreState("idle");
-      return;
-    }
-    setCoreState("thinking");
-    setThinkingPhase("reading");
-    const t1 = setTimeout(() => setThinkingPhase("thinking"), 700);
-    const t2 = setTimeout(() => setThinkingPhase("responding"), 2200);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, [sending]);
 
   useEffect(() => {
     if (!callMode || realtimeActive || sending || !messages.length) return;
@@ -559,7 +541,6 @@ export default function ChatWorkspace({
           ))}
 
           {historyLoading && <p className="text-xs text-zinc-500">Loading…</p>}
-          {sending && <ThinkingIndicator phase={thinkingPhase} />}
           {error && (
             <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>
           )}
