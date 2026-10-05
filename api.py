@@ -120,3 +120,15 @@ try:
     print("REALTIME_VOICE_PATCH_INSTALLED", flush=True)
 except Exception as e:
     print("REALTIME_VOICE_PATCH_FAILED", type(e).__name__, str(e)[:160], flush=True)
+
+
+# Optional cross-platform shared-memory bridge. Existing web memory remains the fallback.
+try:
+    from unified_memory_patch import install_web_memory_bridge
+    install_web_memory_bridge(
+        globals().get("app"),
+        globals().get("WebMemoryAdapter"),
+        globals().get("_require_current_user"),
+    )
+except Exception as e:
+    print("UNIFIED_MEMORY_BRIDGE_PATCH_FAILED", type(e).__name__, str(e)[:160], flush=True)

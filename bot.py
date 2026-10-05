@@ -4040,6 +4040,35 @@ def start_discord_if_configured():
         logger.warning(f"Discord import failed: {e}")
         return None
 
+
+async def memory_link_command(update, context):
+    """Link this Telegram identity to the user's KING ZARRY shared memory."""
+    user = update.effective_user
+    if not user or not update.message:
+        return
+    code = (context.args[0] if context.args else "").strip()
+    if not code:
+        await update.message.reply_text("🧠 Usage: /link YOUR_CODE\\n\\nGenerate the code from KING ZARRY AI web Memory settings.")
+        return
+    try:
+        from memory_link_bridge import redeem_link_code
+        result = await asyncio.to_thread(
+            redeem_link_code,
+            "telegram",
+            str(user.id),
+            code,
+            user.username,
+        )
+        if not result:
+            await update.message.reply_text("❌ Invalid, expired, or already-used memory link code.")
+            return
+        await update.message.reply_text(
+            "✅ 🧠 Memory linked successfully. Your KING ZARRY AI Web + Telegram memory can now stay connected."
+        )
+    except Exception as exc:
+        logger.warning("Telegram memory link failed: %s", type(exc).__name__)
+        await update.message.reply_text("⚠️ Shared memory linking is temporarily unavailable.")
+
 def main():
     print("🔵 MAIN: entered main()", flush=True)
 
@@ -4068,6 +4097,7 @@ def main():
     print("🔵 MAIN: Application built OK", flush=True)
 
     application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("link", memory_link_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("buy", buy_command))
     application.add_handler(CommandHandler("monthly", monthly_command))

@@ -34,7 +34,19 @@ class SharedMemory:
             logger.warning("⚠️ Shared Neon memory unavailable for %s; SQLite fallback active: %s", self.platform, type(exc).__name__)
 
     def _key(self, user_id) -> str:
-        return f"{self.platform}:{user_id}"
+        raw = str(user_id)
+        local = f"{self.platform}:{raw}"
+        # Once a user links Web/Telegram/Discord identities, use the canonical
+        # identity for all shared-memory reads/writes. Before linking, behavior
+        # is exactly the existing platform namespace.
+        try:
+            if self.shared:
+                resolved = self.shared.resolve_identity(self.platform, raw)
+                if resolved:
+                    return str(resolved)
+        except Exception:
+            pass
+        return local
 
     def _migrate_user(self, user_id):
         if not self.shared:
