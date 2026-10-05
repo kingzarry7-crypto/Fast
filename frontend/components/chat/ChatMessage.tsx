@@ -131,10 +131,12 @@ export function ChatMessage({
     >
       <div
         className={
-          "relative w-[min(100%,780px)] px-1 py-3 text-sm leading-relaxed " +
-          (isUser ? "ml-auto" : "mr-auto") +
+          "relative w-fit max-w-[min(85%,780px)] px-4 py-3 text-sm leading-relaxed " +
+          (isUser
+            ? "ml-auto rounded-2xl rounded-br-md bg-cyan-500/15 border border-cyan-400/20 text-white shadow-sm"
+            : "mr-auto bg-transparent text-[#c8e6f5]") +
           " " +
-          (isError ? "text-red-100" : "text-[#c8e6f5]")
+          (isError ? "text-red-100" : "")
         }
       >
         <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200/45">
