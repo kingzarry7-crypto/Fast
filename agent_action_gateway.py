@@ -551,6 +551,8 @@ def connector_status() -> Dict[str, Any]:
         "trading": trading_status(),
         "whatsapp": whatsapp_status(),
         "action_types": sorted(ACTION_TYPES),
+        "risk_levels": dict(RISK_LEVELS),
+        "approval_required": {action: requires_approval(action) for action in ACTION_TYPES},
         "approved_markets": list(APPROVED_SYMBOLS),
     }
 
