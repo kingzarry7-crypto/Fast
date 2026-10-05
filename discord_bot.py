@@ -209,18 +209,14 @@ _MEDIA_VERB_PATTERN = re.compile(
 )
 
 _MEDIA_CAPABILITY_QUESTION_PATTERN = re.compile(
-    r"^\\s*(?:"
+    r"^\s*(?:"
     r"can|could|does|do|is|are|will|would|"
     r"what|which|how|why|"
-    r"tell\\s+me|explain|check|research|deep\\s+search|look\\s+up"
-    r")\\b"
-    r".*\\b(?:"
-    r"generate|create|make|edit|animate|render|draw|"
-    r"image|picture|photo|video|clip|animation|"
-    r"api|model|models|chutes|free|price|pricing|cost|"
-    r"support|capabilit"
-    r")\\b"
-    r".*\\??\\s*$",
+    r"tell\s+me|explain|check|research|deep\s+search|look\s+up"
+    r")\b"
+    r".*\b(?:api|model|models|chutes|free|price|pricing|cost|"
+    r"support|capabilit)\b"
+    r".*\??\s*$",
     re.IGNORECASE,
 )
 
