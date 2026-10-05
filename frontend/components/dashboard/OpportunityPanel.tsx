@@ -27,7 +27,16 @@ export default function OpportunityPanel() {
     finally { setLoading(false); }
   }
 
-  async function prepare(o: Opportunity) {\n    setPreparing(true); setError("");\n    try {\n      const r = await fetch("/api/acquisition/prepare", { method:"POST", headers:{"Content-Type":"application/json"}, credentials:"include", body:JSON.stringify({opportunity:o}) });\n      const data = await r.json(); if (!r.ok) throw new Error(data?.detail || "Preparation failed");\n      setProspect(data.acquisition);\n    } catch (e) { setError(e instanceof Error ? e.message : "Preparation failed"); } finally { setPreparing(false); }\n  }\n\n  return <div className="relative shrink-0">
+  async function prepare(o: Opportunity) {
+    setPreparing(true); setError("");
+    try {
+      const r = await fetch("/api/acquisition/prepare", { method:"POST", headers:{"Content-Type":"application/json"}, credentials:"include", body:JSON.stringify({opportunity:o}) });
+      const data = await r.json(); if (!r.ok) throw new Error(data?.detail || "Preparation failed");
+      setProspect(data.acquisition);
+    } catch (e) { setError(e instanceof Error ? e.message : "Preparation failed"); } finally { setPreparing(false); }
+  }
+
+  return <div className="relative shrink-0">
     <button type="button" onClick={() => setOpen(v => !v)} className="rounded-md border border-emerald-400/30 bg-emerald-400/5 px-2.5 py-1.5 font-mono-tech text-[10px] tracking-widest text-emerald-300 hover:bg-emerald-400/10">HUNT</button>
     {open && <>
       <button className="fixed inset-0 z-40 cursor-default" aria-label="Close opportunities" onClick={() => setOpen(false)} />
@@ -41,7 +50,7 @@ export default function OpportunityPanel() {
         {!items.length && !loading && <div className="py-8 text-center font-mono-tech text-[10px] text-zinc-600">Run HUNT to find public opportunities.</div>}
         <div className="space-y-2">{items.map(o => <div key={o.id} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
           <div className="flex items-start justify-between gap-2"><div className="text-xs font-medium text-zinc-200">{o.title}</div><span className="shrink-0 font-mono-tech text-[10px] text-emerald-300">{o.score}/100</span></div>
-          <div className="mt-1 text-[10px] text-zinc-500">{o.confidence.toUpperCase()} · potential $${o.estimated_value.toFixed(0)}</div>
+          <div className="mt-1 text-[10px] text-zinc-500">{o.confidence.toUpperCase()} · potential ${o.estimated_value.toFixed(0)}</div>
           <p className="mt-2 line-clamp-3 text-[10px] leading-relaxed text-zinc-500">{o.summary || "No summary available."}</p>
           <div className="mt-2 flex gap-2"><button onClick={()=>prepare(o)} disabled={preparing} className="rounded border border-emerald-400/20 px-2 py-1 font-mono-tech text-[9px] text-emerald-300 disabled:opacity-50">{preparing ? "PREPARING" : "PREPARE"}</button><a href={o.url} target="_blank" rel="noreferrer" className="rounded border border-cyan-400/20 px-2 py-1 font-mono-tech text-[9px] text-cyan-300">SOURCE</a></div>
         </div>)}</div>
