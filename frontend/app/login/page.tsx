@@ -12,6 +12,7 @@ export default function LoginPage() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [booted, setBooted] = useState(false);
@@ -47,6 +48,8 @@ export default function LoginPage() {
     }
   };
 
+  const verificationRequired = error?.toLowerCase().includes("not verified") ?? false;
+
   return (
     <div className="relative min-h-screen overflow-hidden flex items-center justify-center p-6">
       <HeroRings size={720} />
@@ -65,16 +68,28 @@ export default function LoginPage() {
         <div className="kz-glass p-6 mt-8">
           {error && (
             <div className="mb-4 bg-red-500/10 border border-red-500/30 rounded-md px-4 py-2 text-xs text-red-300 font-mono-tech">
-              {error}
+              <span>{error}</span>
+              {verificationRequired && (
+                <Link
+                  href={`/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`}
+                  className="ml-2 underline text-cyan-300 hover:text-cyan-200"
+                >
+                  VERIFY EMAIL
+                </Link>
+              )}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/60 mb-2">
+              <label
+                htmlFor="login-email"
+                className="block font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/60 mb-2"
+              >
                 EMAIL
               </label>
               <input
+                id="login-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -83,9 +98,13 @@ export default function LoginPage() {
                 className="w-full bg-black/40 border border-cyan-500/25 focus:border-cyan-400 rounded-md px-4 py-3 text-sm text-white outline-none font-mono-tech tracking-wider"
               />
             </div>
+
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="block font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/60">
+                <label
+                  htmlFor="login-password"
+                  className="block font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/60"
+                >
                   PASSWORD
                 </label>
                 <Link
@@ -95,15 +114,29 @@ export default function LoginPage() {
                   FORGOT PASSWORD?
                 </Link>
               </div>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                autoComplete="current-password"
-                className="w-full bg-black/40 border border-cyan-500/25 focus:border-cyan-400 rounded-md px-4 py-3 text-sm text-white outline-none font-mono-tech tracking-wider"
-              />
+
+              <div className="relative">
+                <input
+                  id="login-password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                  className="w-full bg-black/40 border border-cyan-500/25 focus:border-cyan-400 rounded-md pl-4 pr-14 py-3 text-sm text-white outline-none font-mono-tech tracking-wider"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((value) => !value)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1.5 rounded text-[10px] font-mono-tech tracking-widest text-cyan-400/70 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
+                >
+                  {showPassword ? "HIDE" : "SHOW"}
+                </button>
+              </div>
             </div>
+
             <button
               type="submit"
               disabled={loading}

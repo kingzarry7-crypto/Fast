@@ -188,7 +188,7 @@ export function useChat(
         };
         setMessages((prev) => [...prev, aiMsg]);
         return res;
-      }      } catch (err) {
+      } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
 
         let message =
