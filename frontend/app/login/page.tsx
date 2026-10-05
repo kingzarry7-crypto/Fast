@@ -130,9 +130,18 @@ export default function LoginPage() {
                   onClick={() => setShowPassword((value) => !value)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
                   aria-pressed={showPassword}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1.5 rounded text-[10px] font-mono-tech tracking-widest text-cyan-400/70 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1.5 rounded text-[10px] font-mono-tech text-cyan-400/80 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
                 >
-                  {showPassword ? "HIDE" : "SHOW"}
+                  {showPassword ? (
+                    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M10.58 10.58a3 3 0 004.24 4.24M9.88 4.24A10.94 10.94 0 0112 4c5 0 9.27 3.11 11 8a11.02 11.02 0 01-3.18 4.75M6.1 6.1A11.02 11.02 0 003 12c1.73 4.89 6 8 11 8 1.1 0 2.17-.16 3.17-.46" />
+                    </svg>
+                  ) : (
+                    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.46 12S5.5 5 12 5s9.54 7 9.54 7-3.04 7-9.54 7-9.54-7-9.54-7z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
                 </button>
               </div>
             </div>
