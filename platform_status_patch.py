@@ -2,6 +2,7 @@
 import os
 import urllib.request
 import json
+from fastapi import Request
 
 
 def _clean(value):
