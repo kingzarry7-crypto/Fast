@@ -104,6 +104,17 @@ def install_workflow_api(app, require_current_user, row_value=None):
         from opportunity_hunter import create_work_for_opportunity
         return {'status':'ok','workflow':create_work_for_opportunity(user_id, opportunity)}
 
+    @app.post('/api/acquisition/prepare')
+    async def acquisition_prepare_route(request: Request):
+        row=require_current_user(request); user_id=uid(row)
+        if not user_id: raise HTTPException(status_code=401, detail='Authenticated user required')
+        body=await request.json()
+        opportunity=dict((body or {}).get('opportunity') or {})
+        if not opportunity.get('url') or not opportunity.get('title'):
+            raise HTTPException(status_code=400, detail='opportunity title and url are required')
+        from client_acquisition import prepare
+        return {'status':'ok','acquisition':prepare(user_id,opportunity)}
+
     @app.get('/api/workflows')
     def list_workflows_route(request: Request):
         row=require_current_user(request)
