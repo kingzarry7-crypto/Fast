@@ -417,11 +417,11 @@ export default function ChatWorkspace({
   return (
     <div
       className={
-        "relative w-full overflow-hidden text-zinc-100 bg-transparent " +
+        "relative flex w-full flex-col overflow-hidden text-zinc-100 bg-transparent " +
         (fullScreen ? "h-[100dvh] max-h-[100dvh]" : "h-full min-h-0")
       }
     >
-      <div className="absolute inset-x-0 top-0 z-10">
+      <div className="relative inset-x-0 z-10 shrink-0">
         {!isVip && membership && (
           <div className="border-b border-white/5 bg-[#05080f]/90 px-3 py-1.5 flex items-center justify-between gap-2">
             <p className="text-[11px] tracking-wider text-cyan-200/70">
@@ -491,11 +491,7 @@ export default function ChatWorkspace({
 
       <div
         ref={listRef}
-        className={
-          "absolute inset-x-0 top-0 bottom-[88px] overflow-y-auto overscroll-y-contain kz-scroll px-3 sm:px-4 " +
-          ((!isVip && membership) || showSideHistory || embedMode ? "top-10" : "top-0") +
-          ""
-        }
+        className="relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain kz-scroll px-3 sm:px-4"
       >
         <div className="mx-auto w-full max-w-2xl space-y-2.5 py-4 pb-28">
           {showSideHistory && historyOpen && (
@@ -603,7 +599,7 @@ export default function ChatWorkspace({
 
       <form
         onSubmit={handleSubmit}
-        className="absolute inset-x-0 bottom-0 z-30 border-t border-white/10 bg-[#05080f]/95 backdrop-blur-md px-3 sm:px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+        className="relative inset-x-0 z-30 shrink-0 border-t border-white/10 bg-[#05080f]/95 backdrop-blur-md px-3 sm:px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
       >
         <div className="mx-auto w-full max-w-2xl">
           {attached && (
