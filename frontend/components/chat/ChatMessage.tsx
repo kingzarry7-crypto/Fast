@@ -123,7 +123,7 @@ export function ChatMessage({
   return (
     <div
       className={
-        "group flex w-full my-1 " +
+        "group flex w-full my-2 " +
         (isUser ? "justify-end" : "justify-start") +
         " " +
         className
@@ -131,12 +131,15 @@ export function ChatMessage({
     >
       <div
         className={
-          "relative w-full px-1 py-3 text-sm leading-relaxed " +
-          (isError
-            ? "text-red-100"
-            : "text-[#c8e6f5]")
+          "relative w-[min(100%,780px)] px-1 py-3 text-sm leading-relaxed " +
+          (isUser ? "ml-auto" : "mr-auto") +
+          " " +
+          (isError ? "text-red-100" : "text-[#c8e6f5]")
         }
       >
+        <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200/45">
+          {isUser ? "You" : "King Zarry AI"}
+        </div>
         {imagePreviewUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
