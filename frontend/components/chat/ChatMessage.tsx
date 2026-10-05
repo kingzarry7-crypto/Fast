@@ -37,6 +37,8 @@ export function ChatMessage({
   const [liked, setLiked] = useState<"up" | "down" | null>(null);
   const [saved, setSaved] = useState(false);
   const [shared, setShared] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(true);
 
   const normalizedRole = role.toLowerCase();
   const isUser = normalizedRole === "user";
@@ -80,6 +82,28 @@ export function ChatMessage({
     } catch {
       /* ignore */
     }
+  };
+
+  const handleDownload = () => {
+    try {
+      const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "king-zarry-ai-response.txt";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setMoreOpen(false);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleMoreSuggestions = () => {
+    setSuggestionsOpen(true);
+    setMoreOpen(false);
   };
 
   if (isSystem) {
@@ -140,9 +164,31 @@ export function ChatMessage({
               <button type="button" onClick={() => setLiked((v) => (v === "down" ? null : "down"))} className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Dislike" aria-label="Dislike">♧</button>
               <button type="button" onClick={handleSave} className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Save" aria-label="Save">▣</button>
               {onSpeak ? <button type="button" onClick={onSpeak} className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Speak" aria-label="Speak">◉</button> : null}
-              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="More" aria-label="More">•••</button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setMoreOpen((v) => !v)}
+                  className={"flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 " + (moreOpen ? "bg-zinc-800 text-zinc-200" : "")}
+                  title="More actions"
+                  aria-label="More actions"
+                  aria-expanded={moreOpen}
+                >
+                  •••
+                </button>
+                {moreOpen ? (
+                  <div className="absolute bottom-10 right-0 z-50 w-52 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950/98 p-1.5 shadow-2xl backdrop-blur-xl">
+                    <button type="button" onClick={() => { void handleCopy(); setMoreOpen(false); }} className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white">⧉ <span className="ml-2">Copy response</span></button>
+                    <button type="button" onClick={() => { void handleShare(); setMoreOpen(false); }} className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white">↗ <span className="ml-2">Share response</span></button>
+                    {onRegenerate ? <button type="button" onClick={() => { setMoreOpen(false); onRegenerate(); }} className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white">↻ <span className="ml-2">Regenerate response</span></button> : null}
+                    <button type="button" onClick={() => { handleSave(); setMoreOpen(false); }} className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white">▣ <span className="ml-2">{saved ? "Remove from saved" : "Save response"}</span></button>
+                    {onSpeak ? <button type="button" onClick={() => { setMoreOpen(false); onSpeak(); }} className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white">◉ <span className="ml-2">Speak response</span></button> : null}
+                    <button type="button" onClick={handleDownload} className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white">↓ <span className="ml-2">Download as TXT</span></button>
+                    {onSuggestion ? <button type="button" onClick={handleMoreSuggestions} className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white">✦ <span className="ml-2">Show follow-up options</span></button> : null}
+                  </div>
+                ) : null}
+              </div>
             </div>
-            {onSuggestion ? (
+            {onSuggestion && suggestionsOpen ? (
               <div className="mt-2 flex flex-wrap gap-2">
                 {["Tell me more", "Give me an example", "What should I do next?"].map((suggestion) => (
                   <button key={suggestion} type="button" onClick={() => onSuggestion(suggestion)} className="rounded-full border border-cyan-500/20 bg-[#07111d] px-3 py-1.5 text-[11px] text-cyan-100/80 transition hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-100">
