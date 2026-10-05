@@ -127,6 +127,18 @@ try:
 except Exception as e:
     print("WEB_SETTINGS_PATCH_FAILED", type(e).__name__, str(e)[:160], flush=True)
 
+# AI-generated contextual follow-up suggestions. Additive only.
+try:
+    from ai_suggestions_patch import install_ai_suggestions
+
+    install_ai_suggestions(
+        globals().get("app"),
+        require_current_user=globals().get("_require_current_user"),
+    )
+    print("AI_SUGGESTIONS_PATCH_INSTALLED", flush=True)
+except Exception as e:
+    print("AI_SUGGESTIONS_PATCH_FAILED", type(e).__name__, str(e)[:160], flush=True)
+
 # Optional WebRTC realtime voice is additive. Existing voice/chat remains the fallback.
 try:
     from realtime_voice import install_realtime_voice
