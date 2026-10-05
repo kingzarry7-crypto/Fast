@@ -120,3 +120,15 @@ try:
     print("REALTIME_VOICE_PATCH_INSTALLED", flush=True)
 except Exception as e:
     print("REALTIME_VOICE_PATCH_FAILED", type(e).__name__, str(e)[:160], flush=True)
+
+
+# Optional V5.3 Agent Task Engine. Additive: existing agent endpoints remain unchanged.
+try:
+    from agent_task_patch import install_agent_task_api
+    install_agent_task_api(
+        globals().get("app"),
+        require_current_user=globals().get("_require_current_user"),
+        require_vip=globals().get("_require_web_vip"),
+    )
+except Exception as e:
+    print("AGENT_TASK_ENGINE_PATCH_FAILED", type(e).__name__, str(e)[:160], flush=True)
