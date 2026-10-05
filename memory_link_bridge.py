@@ -73,6 +73,33 @@ def redeem_link_code(platform: str, external_id: str, code: str, username: Optio
             conn.commit()
         finally:
             conn.close()
+    # Preserve any memory already created on this platform before linking.
+    try:
+        legacy_id = f"{platform}:{external_id}"
+        if legacy_id != canonical:
+            legacy_history = mem.get_history(legacy_id, limit=200)
+            existing = {(x.get("role"), x.get("content")) for x in mem.get_history(canonical, limit=200)}
+            for item in legacy_history:
+                key = (item.get("role"), item.get("content"))
+                if key not in existing:
+                    mem.add_message(
+                        canonical,
+                        item.get("role", "user"),
+                        item.get("content", ""),
+                        source_platform=platform,
+                    )
+                    existing.add(key)
+            for fact in mem.get_facts(legacy_id, limit=100):
+                mem.add_fact(
+                    canonical,
+                    fact.get("fact", ""),
+                    category=fact.get("category", "general"),
+                    source=fact.get("source", platform),
+                )
+    except Exception:
+        # Linking must never fail because an old memory record is malformed.
+        pass
+
     mem.add_identity(canonical, platform, external_id, username=username)
     return {"canonical_user_id": canonical, "platform": platform}
 
