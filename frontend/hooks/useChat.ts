@@ -156,6 +156,17 @@ export function useChat(
                   : item
               )
             );
+            void api
+              .generateChatSuggestions(effectiveText, streamed.reply, abortRef.current?.signal)
+              .then((result) => {
+                if (!result.suggestions?.length) return;
+                setMessages((prev) =>
+                  prev.map((item) =>
+                    item.id === aiId ? { ...item, suggestions: result.suggestions } : item
+                  )
+                );
+              })
+              .catch(() => {});
             return streamed;
           } catch (streamErr) {
             if (streamErr instanceof DOMException && streamErr.name === "AbortError") return;
@@ -187,6 +198,17 @@ export function useChat(
           capability,
         };
         setMessages((prev) => [...prev, aiMsg]);
+        void api
+          .generateChatSuggestions(effectiveText, res.reply, abortRef.current?.signal)
+          .then((result) => {
+            if (!result.suggestions?.length) return;
+            setMessages((prev) =>
+              prev.map((item) =>
+                item.id === aiMsg.id ? { ...item, suggestions: result.suggestions } : item
+              )
+            );
+          })
+          .catch(() => {});
         return res;
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
