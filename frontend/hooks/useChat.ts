@@ -105,6 +105,64 @@ export function useChat(
       abortRef.current = new AbortController();
 
       try {
+        const shouldStream = intent === "normal" && !hasImage;
+
+        if (shouldStream) {
+          const aiId = "ai-" + Date.now();
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: aiId,
+              role: "assistant",
+              text: "",
+              timestamp: now(),
+              status: "AI CORE • STREAMING",
+              capability,
+            },
+          ]);
+
+          try {
+            const streamed = await api.streamChatMessage(effectiveText, {
+              conversationId: conversationIdRef.current || undefined,
+              signal: abortRef.current.signal,
+              onDelta: (delta) => {
+                setMessages((prev) =>
+                  prev.map((item) =>
+                    item.id === aiId
+                      ? { ...item, text: (item.text || "") + delta, status: "AI CORE • STREAMING" }
+                      : item
+                  )
+                );
+              },
+              onStart: (provider) => {
+                setMessages((prev) =>
+                  prev.map((item) =>
+                    item.id === aiId
+                      ? { ...item, status: provider ? "AI CORE • STREAMING • " + provider.toUpperCase() : "AI CORE • STREAMING" }
+                      : item
+                  )
+                );
+              },
+            });
+
+            if (!isVip) incrementFreeMessageCount(userId);
+            if (streamed.conversation_id && !conversationIdRef.current) {
+              conversationIdRef.current = streamed.conversation_id;
+            }
+            setMessages((prev) =>
+              prev.map((item) =>
+                item.id === aiId
+                  ? { ...item, text: streamed.reply, status: "AI CORE • RESPONSE RECEIVED" }
+                  : item
+              )
+            );
+            return streamed;
+          } catch (streamErr) {
+            if (streamErr instanceof DOMException && streamErr.name === "AbortError") return;
+            setMessages((prev) => prev.filter((item) => item.id !== aiId));
+          }
+        }
+
         const res = await api.sendChatMessage(
           effectiveText,
           image ? { base64: image.base64, mime: image.mime } : undefined,
@@ -121,7 +179,7 @@ export function useChat(
         }
 
         const aiMsg: ChatMessage = {
-          id: `ai-${Date.now()}`,
+          id: "ai-" + Date.now(),
           role: "assistant",
           text: res.reply,
           timestamp: now(),
@@ -130,7 +188,7 @@ export function useChat(
         };
         setMessages((prev) => [...prev, aiMsg]);
         return res;
-      } catch (err) {
+      }      } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
 
         let message =

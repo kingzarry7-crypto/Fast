@@ -120,3 +120,20 @@ try:
     print("REALTIME_VOICE_PATCH_INSTALLED", flush=True)
 except Exception as e:
     print("REALTIME_VOICE_PATCH_FAILED", type(e).__name__, str(e)[:160], flush=True)
+
+
+# Optional additive SSE text streaming. Existing /api/chat remains unchanged.
+try:
+    from streaming_chat import install_streaming_chat
+
+    install_streaming_chat(
+        globals().get("app"),
+        require_current_user=globals().get("_require_current_user"),
+        get_or_create_conversation=globals().get("_get_or_create_conversation"),
+        maybe_set_conversation_title=globals().get("_maybe_set_conversation_title"),
+        memory_factory=lambda user_id, conversation_id: WebMemoryAdapter(
+            user_id, conversation_id=conversation_id
+        ),
+    )
+except Exception as e:
+    print("TEXT_STREAMING_PATCH_FAILED", type(e).__name__, str(e)[:160], flush=True)
