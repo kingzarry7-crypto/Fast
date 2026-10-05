@@ -500,6 +500,44 @@ export async function getAgentPreferences(signal?: AbortSignal) {
 export async function updateAgentPreferences(preferences: Record<string, unknown>, signal?: AbortSignal) {
   return request<{ status?: string }>("/api/agent/preferences", { method: "POST", body: preferences, signal });
 }
+export type AgentTask = {
+  id?: string;
+  goal?: string;
+  status?: string;
+  current_step?: number;
+  total_steps?: number;
+  steps?: Array<Record<string, unknown>>;
+  result?: Record<string, unknown> | null;
+  error?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: unknown;
+};
+
+export async function getAgentTaskStatus(signal?: AbortSignal) {
+  return request<Record<string, unknown>>("/api/agent/tasks/status", { method: "GET", signal });
+}
+export async function listAgentTasks(signal?: AbortSignal) {
+  return request<{ tasks?: AgentTask[] }>("/api/agent/tasks", { method: "GET", signal });
+}
+export async function createAgentTask(goal: string, maxSteps = 6, signal?: AbortSignal) {
+  return request<{ status?: string; task?: AgentTask }>("/api/agent/tasks", {
+    method: "POST",
+    body: { goal, max_steps: maxSteps },
+    signal,
+  });
+}
+export async function getAgentTask(taskId: string, signal?: AbortSignal) {
+  return request<{ status?: string; task?: AgentTask }>(`/api/agent/tasks/${encodeURIComponent(taskId)}`, {
+    method: "GET", signal,
+  });
+}
+export async function cancelAgentTask(taskId: string, signal?: AbortSignal) {
+  return request<{ status?: string; task?: AgentTask }>(`/api/agent/tasks/${encodeURIComponent(taskId)}/cancel`, {
+    method: "POST", signal,
+  });
+}
+
 export async function getAgentActionStatus(signal?: AbortSignal) {
   return request<Record<string, unknown>>("/api/agent/actions/status", { method: "GET", signal });
 }
