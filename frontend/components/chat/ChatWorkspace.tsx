@@ -677,7 +677,7 @@ export default function ChatWorkspace({
             <button
               type="submit"
               disabled={sending || (!input.trim() && !attached)}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-900 hover:bg-white disabled:opacity-30 disabled:bg-zinc-700 disabled:text-zinc-500"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-cyan-400/25 bg-[#07111d] text-cyan-200 shadow-[0_0_14px_rgba(0,240,255,0.08)] hover:bg-cyan-500/10 hover:border-cyan-300/50 disabled:opacity-30 disabled:bg-zinc-800 disabled:text-zinc-500"
               title="Send"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
