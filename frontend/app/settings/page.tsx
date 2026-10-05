@@ -11,7 +11,7 @@ import {
   setVipLocal,
   type MembershipSnapshot,
 } from "@/lib/membership";
-import { api, type PlatformStatus } from "@/lib/api";
+import { api, type ChatBehaviorPreferences, type PlatformStatus } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 
 type Preferences = {
@@ -38,6 +38,8 @@ export default function SettingsPage() {
   const [platformLoading, setPlatformLoading] = useState(true);
   const [platformError, setPlatformError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
+  const [settingsError, setSettingsError] = useState("");
   const [preferences, setPreferences] = useState<Preferences>(DEFAULT_PREFERENCES);
 
   const refreshMembership = () =>
@@ -50,12 +52,26 @@ export default function SettingsPage() {
   }, [user?.id, user?.is_subscribed]);
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem("kz-settings-preferences");
-      if (raw) setPreferences({ ...DEFAULT_PREFERENCES, ...JSON.parse(raw) });
-    } catch {
-      setPreferences(DEFAULT_PREFERENCES);
-    }
+    let cancelled = false;
+    void api
+      .getChatBehaviorPreferences()
+      .then((result) => {
+        if (!cancelled && result?.preferences) {
+          setPreferences({ ...DEFAULT_PREFERENCES, ...result.preferences });
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setSettingsError(
+            error instanceof Error
+              ? error.message
+              : "Could not load saved settings."
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const loadPlatforms = async () => {
@@ -110,17 +126,31 @@ export default function SettingsPage() {
     return "OPEN DISCORD";
   }, [platformLoading, platforms]);
 
-  const savePreferences = () => {
+  const savePreferences = async (next: Preferences = preferences) => {
+    setSavingPreferences(true);
+    setSettingsError("");
     try {
-      window.localStorage.setItem(
-        "kz-settings-preferences",
-        JSON.stringify(preferences)
+      const result = await api.saveChatBehaviorPreferences(
+        next as ChatBehaviorPreferences
       );
-    } catch {
-      // Settings still remain active for the current session.
+      setPreferences({ ...DEFAULT_PREFERENCES, ...result.preferences });
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 1800);
+    } catch (error) {
+      setSettingsError(
+        error instanceof Error
+          ? error.message
+          : "Could not save settings."
+      );
+    } finally {
+      setSavingPreferences(false);
     }
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 1800);
+  };
+
+  const changePreference = (key: keyof Preferences, checked: boolean) => {
+    const next = { ...preferences, [key]: checked };
+    setPreferences(next);
+    void savePreferences(next);
   };
 
   return (
@@ -200,38 +230,35 @@ export default function SettingsPage() {
                   title="CHAT BEHAVIOR"
                   subtitle="PERSONAL PREFERENCES"
                 />
+                {settingsError && (
+                  <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-amber-200/80">
+                    {settingsError}
+                  </div>
+                )}
                 <div className="mt-4 divide-y divide-cyan-500/10">
                   <SettingToggle
                     title="Signals only when I ask"
                     description="Normal chat stays normal. No surprise trade ideas."
                     checked={preferences.signalsOnly}
-                    onChange={(checked) =>
-                      setPreferences((p) => ({ ...p, signalsOnly: checked }))
-                    }
+                    onChange={(checked) => changePreference("signalsOnly", checked)}
                   />
                   <SettingToggle
                     title="Human-style replies"
                     description="Natural, relaxed tone instead of robotic answers."
                     checked={preferences.humanReplies}
-                    onChange={(checked) =>
-                      setPreferences((p) => ({ ...p, humanReplies: checked }))
-                    }
+                    onChange={(checked) => changePreference("humanReplies", checked)}
                   />
                   <SettingToggle
                     title="Remember my preferences"
                     description="Keep this device's chat preferences available between visits."
                     checked={preferences.rememberPreferences}
-                    onChange={(checked) =>
-                      setPreferences((p) => ({ ...p, rememberPreferences: checked }))
-                    }
+                    onChange={(checked) => changePreference("rememberPreferences", checked)}
                   />
                   <SettingToggle
                     title="Add risk reminder to signals"
                     description="Show a short not-financial-advice reminder under signals."
                     checked={preferences.riskReminder}
-                    onChange={(checked) =>
-                      setPreferences((p) => ({ ...p, riskReminder: checked }))
-                    }
+                    onChange={(checked) => changePreference("riskReminder", checked)}
                   />
                 </div>
                 <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -240,15 +267,13 @@ export default function SettingsPage() {
                     onClick={savePreferences}
                     className="rounded-lg bg-cyan-400 px-4 py-2 font-mono-tech text-[10px] font-bold tracking-widest text-[#001018] transition hover:bg-cyan-300"
                   >
-                    {saved ? "SAVED" : "SAVE CHANGES"}
+                    {savingPreferences ? "SAVING..." : saved ? "SAVED" : "SAVE CHANGES"}
                   </button>
                   <button
                     type="button"
                     onClick={() => {
                       setPreferences(DEFAULT_PREFERENCES);
-                      try {
-                        window.localStorage.removeItem("kz-settings-preferences");
-                      } catch {}
+                      void savePreferences(DEFAULT_PREFERENCES);
                     }}
                     className="rounded-lg border border-cyan-500/20 px-4 py-2 font-mono-tech text-[10px] tracking-widest text-cyan-300/70 transition hover:bg-cyan-500/10"
                   >
