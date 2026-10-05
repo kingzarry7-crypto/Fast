@@ -537,6 +537,14 @@ export default function ChatWorkspace({
                   ? () => (isSpeaking ? stopSpeaking() : speak(m.text || ""))
                   : undefined
               }
+              onSuggestion={
+                m.role === "assistant"
+                  ? (suggestion) => {
+                      setInput(suggestion);
+                      void send(suggestion);
+                    }
+                  : undefined
+              }
             />
           ))}
 
