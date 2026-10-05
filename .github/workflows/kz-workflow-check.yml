@@ -9,6 +9,11 @@ on:
       - "revenue_engine.py"
       - "api.py"
       - "test_workflow_engine.py"
+      - "work_intent.py"
+      - "test_work_intent.py"
+      - "channel_work.py"
+      - "bot.py"
+      - "discord_bot.py"
       - ".github/workflows/kz-workflow-check.yml"
   pull_request:
     paths:
@@ -18,6 +23,11 @@ on:
       - "revenue_engine.py"
       - "api.py"
       - "test_workflow_engine.py"
+      - "work_intent.py"
+      - "test_work_intent.py"
+      - "channel_work.py"
+      - "bot.py"
+      - "discord_bot.py"
 
 jobs:
   compile:
