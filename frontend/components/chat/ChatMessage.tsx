@@ -106,6 +106,29 @@ export function ChatMessage({
     setMoreOpen(false);
   };
 
+  const getSuggestions = () => {
+    const text = content.toLowerCase();
+    if (/code|coding|program|javascript|typescript|python|react|next\.js|api|error|bug|github/.test(text)) {
+      return ["Show me the code", "Explain this", "Fix it for me"];
+    }
+    if (/search|research|source|study|according|evidence|compare/.test(text)) {
+      return ["Go deeper", "Compare the sources", "Summarize this"];
+    }
+    if (/step|how to|setup|install|configure|build|deploy/.test(text)) {
+      return ["Show me the steps", "Do it for me", "What comes next?"];
+    }
+    if (/image|picture|photo|design|logo|visual/.test(text)) {
+      return ["Create another version", "Improve the design", "Give me more ideas"];
+    }
+    if (/video|voice|audio|music/.test(text)) {
+      return ["Make another version", "Explain how it works", "What can I do next?"];
+    }
+    if (/price|cost|money|package|fiverr|business/.test(text)) {
+      return ["Give me more options", "Compare them", "What do you recommend?"];
+    }
+    return ["Tell me more", "Give me an example", "What should I do next?"];
+  };
+
   if (isSystem) {
     return (
       <div className={"flex justify-center w-full my-2 " + className}>
@@ -190,7 +213,7 @@ export function ChatMessage({
             </div>
             {onSuggestion && suggestionsOpen ? (
               <div className="mt-2 flex flex-wrap gap-2">
-                {["Tell me more", "Give me an example", "What should I do next?"].map((suggestion) => (
+                {getSuggestions().map((suggestion) => (
                   <button key={suggestion} type="button" onClick={() => onSuggestion(suggestion)} className="rounded-full border border-cyan-500/20 bg-[#07111d] px-3 py-1.5 text-[11px] text-cyan-100/80 transition hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-100">
                     {suggestion}
                   </button>
