@@ -137,3 +137,15 @@ try:
     )
 except Exception as e:
     print("TEXT_STREAMING_PATCH_FAILED", type(e).__name__, str(e)[:160], flush=True)
+
+# Optional V5.2 unified cross-platform memory. Additive: existing memory remains fallback.
+try:
+    from unified_memory_patch import install_web_memory_bridge
+
+    install_web_memory_bridge(
+        globals().get("app"),
+        WebMemoryAdapter,
+        globals().get("_require_current_user"),
+    )
+except Exception as e:
+    print("UNIFIED_MEMORY_BRIDGE_PATCH_FAILED", type(e).__name__, str(e)[:160], flush=True)
