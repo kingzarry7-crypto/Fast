@@ -32,6 +32,7 @@ def _env(name: str) -> str:
 KNOWN_PROVIDERS = {
     "groq": ("Groq", ["GROQ_API_KEY"], ["text_ai", "vision_ai"], "native", "Already wired into AIEngine."),
     "openrouter": ("OpenRouter", ["OPENROUTER_API_KEY"], ["text_ai", "model_routing"], "native", "Already wired into AIEngine."),
+    "chutes": ("Chutes", ["CHUTES_API_KEY"], ["text_ai", "model_routing"], "native", "OpenAI-compatible text fallback is wired into AIEngine; model is controlled by CHUTES_MODEL."),
     "gemini": ("Google Gemini", ["GEMINI_API_KEY"], ["text_ai", "vision_ai"], "native", "Already wired into AIEngine."),
     "xai": ("xAI", ["XAI_API_KEY"], ["text_ai"], "adapter_pending", "Needs a native xAI adapter/provider mapping before direct use."),
     "openai": ("OpenAI", ["OPENAI_API_KEY"], ["text_ai", "vision_ai"], "adapter_pending", "Needs a native OpenAI adapter/provider mapping before direct use."),
