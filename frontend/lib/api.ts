@@ -598,6 +598,29 @@ export async function approveAgentAction(actionId: string, signal?: AbortSignal)
   return request<{ status?: string }>("/api/agent/actions/approve", { method: "POST", body: { action_id: actionId }, signal });
 }
 
+export type PlatformStatus = {
+  status?: string;
+  telegram?: {
+    configured?: boolean;
+    reachable?: boolean;
+    username?: string | null;
+    url?: string | null;
+  };
+  discord?: {
+    configured?: boolean;
+    reachable?: boolean;
+    username?: string | null;
+    invite_url?: string | null;
+  };
+};
+
+export async function getPlatformStatus(signal?: AbortSignal): Promise<PlatformStatus> {
+  return request<PlatformStatus>("/api/platforms/status", {
+    method: "GET",
+    signal,
+  });
+}
+
 export async function createMemoryLinkCode(signal?: AbortSignal) {
   return request<{ status?: string; code: string; expires_in_minutes: number; instructions?: string }>(
     "/api/memory/link-code",
@@ -608,7 +631,7 @@ export async function createMemoryLinkCode(signal?: AbortSignal) {
 export const api = {
   getBaseUrl, getMe, getCurrentUser, login, register, verifyEmail, resendVerification, forgotPassword, resetPassword, logout,
   listConversations, createConversation, getConversation, getConversationMessages, chat, sendChatMessage, streamChatMessage, healthCheck,
-  getRealtimeStatus, startRealtimeCall, saveRealtimeTranscript, createMemoryLinkCode, createCheckoutSession, getBillingConfig,
+  getRealtimeStatus, startRealtimeCall, saveRealtimeTranscript, getPlatformStatus, createMemoryLinkCode, createCheckoutSession, getBillingConfig,
   getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, adminEmailBroadcast, ttsSpeak, synthesizeSpeech,
   getMarkets, getMarketDetail, getSignals, getNews,
   getAgentStatus, runAgentGoal, generateMorningBrief, getLatestMorningBrief, listAgentJobs, approveAgentJob,

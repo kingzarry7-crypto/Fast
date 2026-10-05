@@ -103,6 +103,16 @@ try:
 except Exception as e:
     print("SLACK_INTEGRATION_INSTALL_FAILED", type(e).__name__, str(e)[:160], flush=True)
 
+# Optional live platform status for the Settings control center. Additive only.
+try:
+    from platform_status_patch import install_platform_status
+    install_platform_status(
+        globals().get("app"),
+        require_current_user=globals().get("_require_current_user"),
+    )
+except Exception as e:
+    print("PLATFORM_STATUS_PATCH_FAILED", type(e).__name__, str(e)[:160], flush=True)
+
 # Optional WebRTC realtime voice is additive. Existing voice/chat remains the fallback.
 try:
     from realtime_voice import install_realtime_voice
