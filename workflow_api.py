@@ -123,7 +123,71 @@ def install_workflow_api(app, require_current_user, row_value=None):
         if not opportunity.get('url') or not opportunity.get('title'):
             raise HTTPException(status_code=400, detail='opportunity title and url are required')
         from client_acquisition import prepare
-        return {'status':'ok','acquisition':prepare(user_id,opportunity)}
+        from owner_profile import get_profile
+        from client_acquisition import save_draft
+        acquisition = prepare(user_id, opportunity, get_profile(user_id))
+        save_draft(user_id, acquisition)
+        return {'status':'ok','acquisition':acquisition}
+
+    @app.get('/api/acquisition/profile')
+    def acquisition_profile_route(request: Request):
+        row = require_current_user(request); user_id = uid(row)
+        if not user_id: raise HTTPException(status_code=401, detail='Authenticated user required')
+        from owner_profile import get_profile, profile_ready
+        profile = get_profile(user_id)
+        return {'status':'ok','profile':profile,'readiness':profile_ready(profile)}
+
+    @app.post('/api/acquisition/profile')
+    async def acquisition_profile_save_route(request: Request):
+        row = require_current_user(request); user_id = uid(row)
+        if not user_id: raise HTTPException(status_code=401, detail='Authenticated user required')
+        body = await request.json()
+        if not isinstance(body, dict): raise HTTPException(status_code=400, detail='Profile object required')
+        from owner_profile import save_profile, profile_ready
+        try:
+            profile = save_profile(user_id, body)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        return {'status':'ok','profile':profile,'readiness':profile_ready(profile)}
+
+    @app.post('/api/acquisition/approve')
+    async def acquisition_approve_route(request: Request):
+        row = require_current_user(request); user_id = uid(row)
+        if not user_id: raise HTTPException(status_code=401, detail='Authenticated user required')
+        body = await request.json()
+        acquisition = dict((body or {}).get('acquisition') or {})
+        channel = str((body or {}).get('channel') or '').strip().lower()
+        destination = str((body or {}).get('destination') or '').strip()
+        from owner_profile import get_profile, profile_ready
+        profile = get_profile(user_id)
+        readiness = profile_ready(profile)
+        if not readiness['ready']:
+            return {'status':'blocked','error':'Complete your professional profile first.','missing_profile':readiness['missing']}
+        outreach = dict(acquisition.get('outreach') or {})
+        message = str(outreach.get('message') or '').strip()
+        subject = str(outreach.get('subject') or '').strip()
+        if not message:
+            raise HTTPException(status_code=400, detail='No outreach message to approve')
+        if channel == 'whatsapp':
+            if not destination:
+                raise HTTPException(status_code=400, detail='WhatsApp destination is required')
+            from agent_action_gateway import create_action, approve_action
+            action = create_action(str(user_id), 'whatsapp.send', {'to':destination,'text':message}, title='Approved client outreach')
+            result = approve_action(action['id'], str(user_id))
+            return {'status':'sent' if result.get('status') == 'completed' else 'failed','channel':'whatsapp','action':result}
+        if channel == 'email':
+            if not destination or '@' not in destination:
+                raise HTTPException(status_code=400, detail='Valid client email is required')
+            try:
+                import api as api_module
+                sender = getattr(api_module, '_send_email_resend', None)
+                if not callable(sender):
+                    raise RuntimeError('Email provider is not available')
+                result = sender(destination, subject or 'Project inquiry', message, message.replace('\n','<br>'))
+                return {'status':'sent' if result else 'failed','channel':'email','destination':destination,'provider_result':result}
+            except Exception as exc:
+                return {'status':'failed','channel':'email','destination':destination,'error':f'{type(exc).__name__}: {str(exc)[:300]}'}
+        raise HTTPException(status_code=400, detail='Choose email or whatsapp')
 
     @app.post('/api/delivery/package')
     async def delivery_package_route(request: Request):
