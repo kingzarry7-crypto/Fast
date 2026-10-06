@@ -8,6 +8,10 @@ echo "════════════════════════�
 # Railway assigns PORT; fall back to 8000 for local runs
 export PORT="${PORT:-8000}"
 
+# Railway may inject PLAYWRIGHT_BROWSERS_PATH=0. Pin runtime to the same writable path used at build time.
+export PLAYWRIGHT_BROWSERS_PATH="/app/.playwright"
+echo "   → Runtime PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH}"
+
 # ------------------------------------------------------------------
 # 0) Browser runtime check.
 #    Prefer an explicitly configured/system browser, otherwise verify
