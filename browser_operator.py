@@ -1,6 +1,7 @@
 """KING ZARRY AI browser/computer operator."""
 from __future__ import annotations
 import json, os, re, threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -12,6 +13,14 @@ except Exception:
 _LOCK = threading.RLock()
 _SESSIONS: Dict[str, Dict[str, Any]] = {}
 _PLAYWRIGHT = None
+# All Playwright Sync API objects for the persistent browser session stay on
+# one dedicated thread. This prevents asyncio/FastAPI and worker threads from
+# accidentally using the same Playwright objects concurrently.
+_BROWSER_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="kz-playwright")
+
+def run_in_browser_thread(fn, *args, **kwargs):
+    future = _BROWSER_EXECUTOR.submit(lambda: fn(*args, **kwargs))
+    return future.result()
 
 def status() -> Dict[str, Any]:
     profile = _profile_root()
