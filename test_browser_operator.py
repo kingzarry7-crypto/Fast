@@ -238,10 +238,6 @@ class BrowserOperatorTests(unittest.TestCase):
             browser_operator.execute_plan("test-user", [{"type": "publish", "text": "Publish"}], allow_external=False)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
     def test_connection_status_never_keeps_connected_after_auth_evidence_disappears(self):
         class Body:
             def inner_text(self, timeout=0):
@@ -272,3 +268,7 @@ if __name__ == "__main__":
             browser_operator._page = original_page
             browser_operator._set_human_verification_state = original_detect
             browser_operator._SESSIONS = original_sessions
+
+
+if __name__ == "__main__":
+    unittest.main()
