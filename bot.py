@@ -290,9 +290,28 @@ _MEDIA_IMAGE_RE = re.compile(r"!\[[^\]]*\]\((https?://[^\s)]+)\)")
 _MEDIA_VIDEO_LINK_RE = re.compile(r"\[▶ Watch Video\]\((https?://[^\s)]+)\)")
 _MEDIA_DIRECT_LINK_RE = re.compile(r"\*\*Direct link:\*\*\s*(https?://[^\s\n]+)")
 
+def _repair_mojibake(text: str) -> str:
+    """Repair UTF-8 emoji/text that was accidentally decoded as Latin-1."""
+    if not text:
+        return ""
+    value = str(text)
+    # Only attempt repair when classic UTF-8 mojibake markers are present.
+    markers = ("Ã", "Â", "â", "ð", "�")
+    if not any(marker in value for marker in markers):
+        return value
+    try:
+        repaired = value.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return value
+    # Keep the repair only when it clearly reduces mojibake.
+    before = sum(value.count(m) for m in markers)
+    after = sum(repaired.count(m) for m in markers)
+    return repaired if after < before else value
+
 def clean_ai_response(text):
     if not text:
         return ""
+    text = _repair_mojibake(text)
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<think>.*$", "", text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<\|.*?\|>", "", text)
