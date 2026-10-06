@@ -278,7 +278,7 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
         verification = browser_result.get("verification") or {}
         verified = verification.get("verification_status") == "verified_sent"
         return {
-            "success": True,
+            "success": verified,
             "page": page,
             "verified": verified,
             "verification_status": verification.get("verification_status", "not_verified"),
