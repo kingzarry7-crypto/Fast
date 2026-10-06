@@ -331,7 +331,7 @@ export async function streamChatMessage(
   let streamError = "";
 
   const consumeEvent = (raw: string) => {
-    const line = raw.split(/\\r?\\n/).find((value) => value.startsWith("data:"));
+    const line = raw.split(/\r?\n/).find((value) => value.startsWith("data:"));
     if (!line) return;
     try {
       const event = JSON.parse(line.slice(5).trim()) as Record<string, unknown>;
@@ -356,7 +356,7 @@ export async function streamChatMessage(
       const { value, done } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
-      const frames = buffer.split(/\\r?\\n\\r?\\n/);
+      const frames = buffer.split(/\r?\n\r?\n/);
       buffer = frames.pop() || "";
       for (const frame of frames) consumeEvent(frame);
     }
