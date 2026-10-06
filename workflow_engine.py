@@ -238,11 +238,11 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
             "potential_revenue": item.get("potential_revenue", 0),
         }
         try:
-            from shared_memory import remember
-            remember(str(item["user_id"]), f"Workflow completed: {goal}", metadata={"workflow_id": item["id"], "summary": summary})
+            from learning_loop import learn_from_workflow
+            learning = learn_from_workflow(item)
         except Exception:
-            pass
-        return {"success": True, "memory_recorded": True, "summary": summary}
+            learning = {"learned": 0, "stored": 0, "lesson_types": []}
+        return {"success": True, "memory_recorded": learning.get("stored", 0) > 0, "learning": learning, "summary": summary}
 
     return {"success": True, "note": f"No executor registered for {action}; safely prepared."}
 
