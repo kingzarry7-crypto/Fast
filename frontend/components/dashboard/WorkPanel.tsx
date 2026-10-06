@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 type WorkflowStepOutput = {
   message?: string;
   browser_plan?: { summary?: string };
-  action?: { payload?: Record<string, unknown> };
+  action?: { payload?: Record<string, unknown>; type?: string; text?: string; selector?: string };
 };
 
 type Workflow = {
@@ -21,6 +21,7 @@ export default function WorkPanel() {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [error, setError] = useState("");
   const [browserReady, setBrowserReady] = useState<boolean | null>(null);
+  const waitingCount = workflows.filter((item) => item.status === "waiting_for_approval").length;
 
   const load = useCallback(async () => {
     try {
@@ -85,6 +86,7 @@ export default function WorkPanel() {
                 <div className="font-mono-tech text-xs tracking-[0.22em] text-violet-200">AUTONOMOUS WORK</div>
                 <div className="mt-1 font-mono-tech text-[8px] tracking-widest text-zinc-600">BROWSER {browserReady === null ? "CHECKING" : browserReady ? "READY" : "OFFLINE"}</div>
                 <div className="mt-1 text-[10px] text-zinc-500">Give the goal. KZ researches, prepares and waits for approval when needed.</div>
+                {waitingCount > 0 && <div className="mt-2 inline-flex rounded border border-amber-400/25 bg-amber-400/5 px-2 py-1 font-mono-tech text-[9px] tracking-widest text-amber-300">{waitingCount} APPROVAL{waitingCount === 1 ? "" : "S"} WAITING</div>}
               </div>
               <button type="button" onClick={() => setOpen(false)} className="rounded-md px-2 py-1 text-zinc-500 hover:bg-white/5">×</button>
             </div>
@@ -120,13 +122,23 @@ export default function WorkPanel() {
                     </div>
                     {waiting && (
                       <div className="mt-3 rounded-lg border border-amber-400/20 bg-amber-400/5 p-3">
-                        <div className="font-mono-tech text-[9px] tracking-widest text-amber-300">APPROVAL REQUIRED</div>
-                        <p className="mt-1 text-xs text-zinc-400">{step?.output?.message || step?.output?.browser_plan?.summary || step?.title || "A consequential action is ready."}</p>
+                        <div className="font-mono-tech text-[9px] tracking-widest text-amber-300">APPROVAL REQUIRED · CONSEQUENT ACTION</div>
+                        <div className="mt-2 rounded border border-white/10 bg-black/20 p-2">
+                          <div className="text-[9px] uppercase tracking-widest text-zinc-600">WHAT KZ WANTS TO DO</div>
+                          <p className="mt-1 text-xs leading-relaxed text-zinc-300">\${step?.output?.message || step?.output?.browser_plan?.summary || step?.title || "A consequential action is ready."}</p>
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-[9px] font-mono-tech uppercase tracking-wider">
+                          <div className="rounded border border-white/5 bg-white/[0.02] p-2"><span className="text-zinc-600">RISK</span><div className="mt-1 text-amber-300">\${step?.risk || workflow.risk}</div></div>
+                          <div className="rounded border border-white/5 bg-white/[0.02] p-2"><span className="text-zinc-600">POTENTIAL</span><div className="mt-1 text-zinc-300">$\${Number(workflow.potential_revenue || 0).toFixed(0)}</div></div>
+                        </div>
+                        <div className="mt-2 rounded border border-cyan-400/10 bg-cyan-400/5 p-2">
+                          <div className="text-[9px] uppercase tracking-widest text-cyan-300">APPROVAL SCOPE</div>
+                          <div className="mt-1 text-[10px] leading-relaxed text-zinc-400">Approve only the exact prepared action plan. If the plan changes, it must be prepared and approved again.</div>
+                        </div>
+                        <div className="mt-2 text-[9px] leading-relaxed text-zinc-600">Approval is bound to this workflow/action plan. Rejecting stops this workflow; KZ will not silently approve or change the action behind your approval.</div>
                         <div className="mt-3 flex gap-2">
-                          <button type="button" onClick={() => approve(workflow.id, true)}
-                            className="flex-1 rounded-lg border border-emerald-400/25 bg-emerald-400/10 py-2 font-mono-tech text-[9px] tracking-widest text-emerald-200">APPROVE</button>
-                          <button type="button" onClick={() => approve(workflow.id, false)}
-                            className="flex-1 rounded-lg border border-red-400/20 bg-red-400/5 py-2 font-mono-tech text-[9px] tracking-widest text-red-300">REJECT</button>
+                          <button type="button" onClick={() => approve(workflow.id, true)} className="flex-1 rounded-lg border border-emerald-400/25 bg-emerald-400/10 py-2 font-mono-tech text-[9px] tracking-widest text-emerald-200">APPROVE EXACT PLAN</button>
+                          <button type="button" onClick={() => approve(workflow.id, false)} className="flex-1 rounded-lg border border-red-400/20 bg-red-400/5 py-2 font-mono-tech text-[9px] tracking-widest text-red-300">REJECT</button>
                         </div>
                       </div>
                     )}
