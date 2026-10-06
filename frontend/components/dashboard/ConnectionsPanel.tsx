@@ -343,7 +343,6 @@ export default function ConnectionsPanel() {
                             event.preventDefault();
                             void sendHumanPointer("human_up", event);
                           }}
-                          onClick={interactWithChallenge}
                           draggable={false}
                           className={"block h-auto w-full cursor-crosshair select-none " + (challengeBusy ? "opacity-60" : "")}
                         />
