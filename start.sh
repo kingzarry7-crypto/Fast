@@ -22,9 +22,11 @@ echo "🌐 Checking browser runtime..."
 if [ -n "${BROWSER_EXECUTABLE_PATH:-}" ] && [ -x "${BROWSER_EXECUTABLE_PATH}" ]; then
   echo "✅ Configured Chromium ready: ${BROWSER_EXECUTABLE_PATH}"
 elif [ -x "/usr/bin/chromium" ]; then
+  export BROWSER_EXECUTABLE_PATH="/usr/bin/chromium"
   echo "✅ System Chromium ready: /usr/bin/chromium"
 elif command -v chromium >/dev/null 2>&1; then
-  echo "✅ System Chromium ready: $(command -v chromium)"
+  export BROWSER_EXECUTABLE_PATH="$(command -v chromium)"
+  echo "✅ System Chromium ready: ${BROWSER_EXECUTABLE_PATH}"
 else
   echo "ℹ️ System Chromium not present; checking Playwright-managed Chromium..."
   python - <<'PY'
