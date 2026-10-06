@@ -76,6 +76,43 @@ def _session(user_id: str) -> Dict[str, Any]:
         _SESSIONS[str(user_id)] = item
         return item
 
+
+def _detect_human_verification(page: Page) -> Dict[str, Any]:
+    """Detect provider anti-bot/human-verification pages without bypassing them."""
+    try:
+        text = page.locator("body").inner_text(timeout=5000)[:16000]
+    except Exception:
+        text = ""
+    try:
+        title = page.title()
+    except Exception:
+        title = ""
+    combined = " ".join((title, str(page.url or ""), text)).lower()
+    indicators = (
+        "loading challenge", "it needs a human touch", "complete the challenge",
+        "complete this challenge", "verify you are human", "verify that you are human",
+        "human verification", "captcha", "recaptcha", "hcaptcha", "security check",
+        "checking your browser", "are you a robot", "unusual traffic", "anti-bot",
+    )
+    matched = [x for x in indicators if x in combined]
+    if not matched:
+        return {"required": False, "reason": None, "indicators": []}
+    return {
+        "required": True,
+        "reason": "human_verification_required",
+        "indicators": matched[:6],
+        "message": "The website requires human verification. KZ paused automation and will not bypass the challenge.",
+    }
+
+
+def _set_human_verification_state(user_id: str, page: Page) -> Dict[str, Any]:
+    state = _detect_human_verification(page)
+    with _LOCK:
+        item = _SESSIONS.get(str(user_id))
+        if item is not None:
+            item["human_verification"] = state
+    return state
+
 def _page(user_id: str) -> Page: return _session(user_id)["page"]
 def close(user_id: str) -> None:
     with _LOCK:
@@ -91,13 +128,16 @@ def _target(page: Page, selector: Optional[str] = None, text: Optional[str] = No
 
 def inspect(user_id: str) -> Dict[str, Any]:
     page = _page(user_id)
-    return {"url": page.url, "title": page.title(), "text": page.locator("body").inner_text(timeout=10000)[:12000], "links": [{"text": (x.inner_text() or "")[:160], "href": x.get_attribute("href")} for x in page.locator("a").all()[:40]], "inputs": [{"selector": "#"+x.get_attribute("id") if x.get_attribute("id") else "input[name=\""+str(x.get_attribute("name") or "")+"\"]", "type": x.get_attribute("type") or "text", "name": x.get_attribute("name"), "placeholder": x.get_attribute("placeholder")} for x in page.locator("input,textarea,select").all()[:40]]}
+    text = page.locator("body").inner_text(timeout=10000)[:12000]
+    verification = _set_human_verification_state(user_id, page)
+    return {"url": page.url, "title": page.title(), "text": text, "human_verification": verification, "links": [{"text": (x.inner_text() or "")[:160], "href": x.get_attribute("href")} for x in page.locator("a").all()[:40]], "inputs": [{"selector": "#"+x.get_attribute("id") if x.get_attribute("id") else "input[name=\""+str(x.get_attribute("name") or "")+"\"]", "type": x.get_attribute("type") or "text", "name": x.get_attribute("name"), "placeholder": x.get_attribute("placeholder")} for x in page.locator("input,textarea,select").all()[:40]]}
 
 def navigate(user_id: str, url: str) -> Dict[str, Any]:
     url = str(url or "").strip()
     if not re.match(r"^https?://", url, re.I): raise ValueError("Only http(s) URLs are allowed")
     page = _page(user_id); page.goto(url, wait_until="domcontentloaded", timeout=45000)
-    return {"success": True, "url": page.url, "title": page.title()}
+    verification = _set_human_verification_state(user_id, page)
+    return {"success": True, "url": page.url, "title": page.title(), "human_verification": verification}
 
 def click(user_id: str, selector: Optional[str] = None, text: Optional[str] = None) -> Dict[str, Any]:
     page = _page(user_id); _target(page, selector, text).click(timeout=15000); page.wait_for_timeout(300)
@@ -219,6 +259,22 @@ def execute_plan(user_id: str, actions: list[dict[str, Any]], *, allow_external:
         raise PermissionError("external browser action requires approval")
 
     before = inspect(user_id) if external else None
+    if external and before and (before.get("human_verification") or {}).get("required"):
+        return {
+            "success": True,
+            "paused": True,
+            "requires_human_verification": True,
+            "results": [],
+            "final": before,
+            "verification": {
+                "verification_status": "human_verification_required",
+                "verified": False,
+                "method": "human_verification_gate",
+                "evidence": [],
+                "human_verification": before.get("human_verification"),
+                "note": "Automation paused. Complete the website's human verification yourself, then resume the approved workflow. KZ does not bypass CAPTCHA or anti-bot controls.",
+            },
+        }
 
     for action in actions:
         kind = str(action.get("type") or "").lower()
@@ -233,6 +289,24 @@ def execute_plan(user_id: str, actions: list[dict[str, Any]], *, allow_external:
         elif kind in {"submit","post","publish","send"}: result = click(user_id, action.get("selector"), action.get("text"))
         else: raise ValueError(f"unsupported browser action: {kind}")
         results.append({"type": kind, "result": result})
+        if external:
+            current = inspect(user_id)
+            if (current.get("human_verification") or {}).get("required"):
+                return {
+                    "success": True,
+                    "paused": True,
+                    "requires_human_verification": True,
+                    "results": results,
+                    "final": current,
+                    "verification": {
+                        "verification_status": "human_verification_required",
+                        "verified": False,
+                        "method": "human_verification_gate",
+                        "evidence": [],
+                        "human_verification": current.get("human_verification"),
+                        "note": "Automation paused when a human-verification challenge appeared. No bypass was attempted.",
+                    },
+                }
 
     final = inspect(user_id)
     verification = _verification_evidence(before or final, final, actions) if external else {
