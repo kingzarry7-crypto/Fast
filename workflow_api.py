@@ -159,6 +159,14 @@ def install_workflow_api(app, require_current_user, row_value=None):
         checks = dict((body or {}).get('checks') or {})
         return {'status': 'ok', 'delivery': verify(fresh, checks)}
 
+    @app.get('/api/workflows/worker/status')
+    def worker_status_route(request: Request):
+        row = require_current_user(request)
+        if not uid(row):
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        from workflow_scheduler import status
+        return {'status': 'ok', 'worker': status()}
+
     @app.get('/api/workflows')
     def list_workflows_route(request: Request):
         row=require_current_user(request)
