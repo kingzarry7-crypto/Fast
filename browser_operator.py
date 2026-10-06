@@ -69,7 +69,12 @@ def _session(user_id: str) -> Dict[str, Any]:
                     executable = str(managed)
             except Exception:
                 executable = None
-        kwargs = {"headless": True, "viewport": {"width": 1440, "height": 900}, "accept_downloads": True}
+        kwargs = {
+            "headless": not bool(os.getenv("DISPLAY")),
+            "viewport": {"width": 1440, "height": 900},
+            "accept_downloads": True,
+            "args": ["--disable-dev-shm-usage"],
+        }
         if executable: kwargs["executable_path"] = executable
         context = _PLAYWRIGHT.chromium.launch_persistent_context(str(root), **kwargs)
         item = {"context": context, "page": context.pages[0] if context.pages else context.new_page()}
