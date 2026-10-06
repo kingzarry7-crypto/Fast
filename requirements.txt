@@ -1,5 +1,5 @@
 python-telegram-bot[job-queue]==20.8
-requests==2.33.0
+requests==2.34.2
 python-dotenv==1.2.2
 matplotlib==3.9.2
 elevenlabs==1.9.0
