@@ -225,8 +225,8 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
         return {"success": True, "page": page, "message": "Website opened and inspected before any external change."}
 
     if action == "browser_plan":
-        from browser_operator import plan_goal
-        result = plan_goal(str(item["user_id"]), goal)
+        from browser_operator import plan_goal, run_in_browser_thread
+        result = run_in_browser_thread(plan_goal, str(item["user_id"]), goal)
         plan = result.get("plan") or {}
         item["result"]["browser_plan"] = plan
         external = any(
@@ -263,15 +263,17 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
         if current_fingerprint != fingerprint:
             return {"success": False, "error": "Approved browser action plan no longer matches the execution plan."}
 
-        from browser_operator import execute_plan
-        result = execute_plan(str(item["user_id"]), actions, allow_external=True)
+        from browser_operator import execute_plan, run_in_browser_thread
+        result = run_in_browser_thread(
+            execute_plan, str(item["user_id"]), actions, allow_external=True
+        )
         result["approval_id"] = approval_id
         result["action_fingerprint"] = current_fingerprint
         return result
 
     if action == "browser_verify":
-        from browser_operator import inspect
-        page = inspect(str(item["user_id"]))
+        from browser_operator import inspect, run_in_browser_thread
+        page = run_in_browser_thread(inspect, str(item["user_id"]))
         browser_result = item.get("result", {}).get("browser_execute") or {}
         verification = browser_result.get("verification") or {}
         verified = verification.get("verification_status") == "verified_sent"
