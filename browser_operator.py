@@ -317,6 +317,26 @@ def viewport(user_id: str) -> Dict[str, Any]:
     }
 
 
+def manual_click(user_id: str, x: float, y: float) -> Dict[str, Any]:
+    """Forward one click explicitly chosen by the logged-in KZ user.
+
+    This is not autonomous browser control: the coordinate comes directly
+    from the user's live-browser click. It is primarily for login UI controls
+    that are not represented reliably as accessible buttons.
+    """
+    page = _page(user_id)
+    challenge = _set_human_verification_state(user_id, page)
+    if challenge.get("required"):
+        raise PermissionError("Use the manual human-verification control while a challenge is active.")
+    size = viewport(user_id)
+    px, py = float(x), float(y)
+    if px < 0 or py < 0 or px > size["width"] or py > size["height"]:
+        raise ValueError("Click coordinates are outside the browser viewport.")
+    page.mouse.click(px, py)
+    page.wait_for_timeout(350)
+    return {"success": True, "x": px, "y": py, "url": page.url, "title": page.title()}
+
+
 def human_click(user_id: str, x: float, y: float) -> Dict[str, Any]:
     """Allow the authenticated user to interact with an active human challenge.
 
