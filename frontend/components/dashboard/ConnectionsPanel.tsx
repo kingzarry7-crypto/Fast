@@ -159,18 +159,59 @@ export default function ConnectionsPanel() {
     };
   }
 
-  async function checkHumanVerification() {
-    setChallengeBusy(true);
-    setMessage("Checking the same Fiverr browser session for completed verification...");
+  async function clickLiveBrowser(event: PointerEvent<HTMLImageElement>) {
+    if (!page?.screenshot || page.human_verification?.required || challengeBusy || busy) return;
+    const { x, y } = challengeCoordinates(event as unknown as MouseEvent<HTMLImageElement>);
     try {
-      const r = await fetch("/api/browser/connect/action", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "human_verify" }) });
+      const r = await fetch("/api/browser/connect/action", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "manual_click", x, y }),
+      });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || "Could not check verification");
+      if (!r.ok) throw new Error(d.detail || "Browser click failed");
       setPage(d.page);
       setConnection(d.page?.connection || null);
-      setMessage(d.result?.verified ? "Human verification completed. Your Fiverr session can now continue." : "Fiverr is still asking for human verification. Complete the challenge, then press CHECK VERIFICATION again.");
-    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not check verification"); }
-    finally { setChallengeBusy(false); }
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Browser click failed");
+    }
+  }
+
+  async function checkHumanVerification() {
+    setChallengeBusy(true);
+    setMessage("CHECKING: waiting for Fiverr to report the result...");
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
+    try {
+      const r = await fetch("/api/browser/connect/action", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "human_verify" }),
+        signal: controller.signal,
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.detail || "Verification check failed");
+      setPage(d.page);
+      setConnection(d.page?.connection || null);
+      if (d.result?.verified) {
+        setMessage("✓ VERIFIED — Fiverr's human-verification challenge has cleared. KZ is now checking your actual login session.");
+      } else {
+        setMessage("NOT VERIFIED — Fiverr is still reporting the human-verification challenge. Complete it, wait for it to finish, then press CHECK VERIFICATION again.");
+      }
+    } catch (e) {
+      setMessage(
+        e instanceof DOMException && e.name === "AbortError"
+          ? "CHECK FAILED — Fiverr did not respond to the verification check within 15 seconds. Press REFRESH VIEW and try CHECK VERIFICATION again."
+          : e instanceof Error
+            ? "CHECK FAILED — " + e.message
+            : "CHECK FAILED — Could not check verification."
+      );
+    } finally {
+      window.clearTimeout(timeout);
+      setChallengeBusy(false);
+    }
   }
 
   function beginHumanPress(event: PointerEvent<HTMLImageElement>) {
@@ -275,9 +316,9 @@ export default function ConnectionsPanel() {
           <aside className="fixed right-0 top-0 z-[80] flex h-[100dvh] w-full max-w-md flex-col border-l border-cyan-400/20 bg-[#060811] shadow-2xl">
             <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
               <div>
-                <div className="font-mono-tech text-xs tracking-[0.2em] text-cyan-200">CONNECTED ACCOUNTS</div>
+                <div className="font-mono-tech text-xs tracking-[0.2em] text-cyan-200">CONNECTED ACCOUNTS · LOGIN DASHBOARD</div>
                 <div className="mt-1 text-[10px] text-zinc-500">
-                  Connect any website by logging in yourself. KZ does not save passwords or OTPs as memory.
+                  Log in yourself inside the browser below. KZ only marks the account connected after the live session shows authenticated evidence; it will not guess from an open page.
                 </div>
               </div>
               <button onClick={() => setOpen(false)} className="px-2 py-1 text-zinc-500">×</button>
@@ -313,6 +354,29 @@ export default function ConnectionsPanel() {
 
             {page && (
               <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                {!page.human_verification?.required && page.screenshot && (
+                  <div className="mb-3 rounded-lg border border-cyan-400/20 bg-black p-2">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="font-mono-tech text-[9px] tracking-widest text-cyan-200">LIVE LOGIN BROWSER</span>
+                      <span className="text-[9px] text-zinc-600">Click the browser yourself</span>
+                    </div>
+                    <img
+                      src={page.screenshot}
+                      alt="Live KZ browser login view"
+                      onPointerUp={(event) => {
+                        event.preventDefault();
+                        void clickLiveBrowser(event);
+                      }}
+                      draggable={false}
+                      style={{ touchAction: "none", userSelect: "none" }}
+                      className="block h-auto w-full cursor-pointer select-none"
+                    />
+                    <p className="mt-2 text-[10px] leading-relaxed text-zinc-600">
+                      Use this live browser to choose login controls yourself. Enter email/password in the fields below; KZ does not solve verification challenges.
+                    </p>
+                  </div>
+                )}
+
                 {page.human_verification?.required && (
                   <div className="mb-3 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3">
                     <div className="font-mono-tech text-[10px] tracking-widest text-amber-200">HUMAN VERIFICATION REQUIRED</div>
@@ -320,7 +384,7 @@ export default function ConnectionsPanel() {
                       {page.human_verification.message || "Complete the challenge yourself. KZ will not bypass it."}
                     </p>
                     <p className="mt-2 text-[10px] leading-relaxed text-amber-100/60">
-                      The server browser is shown below. Move your pointer over the challenge, then click exactly where Fiverr asks you to click. KZ forwards only your manual pointer/click input; it does not solve or bypass the challenge.
+                      The server browser is shown below. Complete the challenge yourself exactly as Fiverr asks. KZ forwards only your manual press/hold input; it does not solve or bypass the challenge.
                     </p>
                     {page.screenshot && (
                       <div className="mt-3 overflow-hidden rounded-lg border border-amber-400/20 bg-black">
@@ -349,13 +413,29 @@ export default function ConnectionsPanel() {
                 )}
 
                 {status !== "connected" && !page.human_verification?.required && (
-                  <button
-                    onClick={confirmConnection}
-                    disabled={busy || status === "login_required"}
-                    className="w-full rounded-lg border border-cyan-400/30 bg-cyan-400/10 py-3 font-mono-tech text-[10px] tracking-widest text-cyan-100 disabled:opacity-40"
-                  >
-                    {status === "login_required" ? "LOGIN FIRST" : "I'M LOGGED IN — CONNECT ACCOUNT"}
-                  </button>
+                  <div className="space-y-2">
+                    <button
+                      onClick={refresh}
+                      disabled={busy}
+                      className="w-full rounded-lg border border-cyan-400/20 py-2 font-mono-tech text-[9px] tracking-widest text-cyan-200 disabled:opacity-40"
+                    >
+                      {busy ? "CHECKING LIVE SESSION..." : "VERIFY LOGIN"}
+                    </button>
+                    <button
+                      onClick={confirmConnection}
+                      disabled={busy || status !== "ready_to_confirm"}
+                      className="w-full rounded-lg border border-cyan-400/30 bg-cyan-400/10 py-3 font-mono-tech text-[10px] tracking-widest text-cyan-100 disabled:opacity-40"
+                    >
+                      {status === "login_required"
+                        ? "LOGIN REQUIRED"
+                        : status === "ready_to_confirm"
+                          ? "LOGIN VERIFIED — CONNECT ACCOUNT"
+                          : "CHECKING LOGIN..."}
+                    </button>
+                    <p className="text-[10px] leading-relaxed text-zinc-600">
+                      KZ will never display CONNECTED merely because this website opened. The live browser must first show authenticated evidence.
+                    </p>
+                  </div>
                 )}
 
                 {status === "connected" && (

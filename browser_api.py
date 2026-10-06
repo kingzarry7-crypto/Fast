@@ -145,6 +145,11 @@ def install_browser_api(app, require_current_user, row_value=None):
                 result = await _browser_call(
                     human_click, user_id, float(body.get("x")), float(body.get("y"))
                 )
+            elif kind == "manual_click":
+                from browser_operator import manual_click
+                result = await _browser_call(
+                    manual_click, user_id, float(body.get("x")), float(body.get("y"))
+                )
             elif kind == "human_down":
                 from browser_operator import human_down
                 result = await _browser_call(

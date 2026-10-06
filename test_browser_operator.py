@@ -99,6 +99,42 @@ class BrowserOperatorTests(unittest.TestCase):
             browser_operator._set_human_verification_state = original_detect
             browser_operator._SESSIONS = original_sessions
 
+    def test_connection_status_detects_fiverr_authenticated_shell_without_logout_text(self):
+        class Body:
+            def inner_text(self, timeout=0):
+                return "Switch to Selling Inbox My Gigs"
+        class Passwords:
+            def count(self):
+                return 0
+        class Links:
+            def count(self):
+                return 1
+        class FakePage:
+            url = "https://www.fiverr.com/users/test"
+            def title(self):
+                return "Fiverr"
+            def locator(self, selector):
+                if selector == 'input[type="password"]':
+                    return Passwords()
+                if 'a[href*="/users/"]' in selector:
+                    return Links()
+                return Body()
+        original_page = browser_operator._page
+        original_detect = browser_operator._set_human_verification_state
+        original_sessions = browser_operator._SESSIONS
+        try:
+            browser_operator._SESSIONS = {"test-user": {}}
+            browser_operator._page = lambda user_id: FakePage()
+            browser_operator._set_human_verification_state = lambda user_id, page: {"required": False}
+            state = browser_operator.connection_status("test-user")
+            self.assertEqual(state["status"], "ready_to_confirm")
+            self.assertTrue(state["authenticated"])
+            self.assertIn("switch to selling", state["login_evidence"]["provider_markers"])
+        finally:
+            browser_operator._page = original_page
+            browser_operator._set_human_verification_state = original_detect
+            browser_operator._SESSIONS = original_sessions
+
     def test_connection_status_allows_explicit_confirmation_state(self):
         class Body:
             def inner_text(self, timeout=0):
@@ -122,8 +158,9 @@ class BrowserOperatorTests(unittest.TestCase):
             browser_operator._page = lambda user_id: FakePage()
             browser_operator._set_human_verification_state = lambda user_id, page: {"required": False}
             state = browser_operator.connection_status("test-user")
-            self.assertEqual(state["status"], "connected")
-            self.assertTrue(state["connected"])
+            self.assertEqual(state["status"], "login_required")
+            self.assertFalse(state["connected"])
+            self.assertFalse(browser_operator._SESSIONS["test-user"]["account_connected"])
         finally:
             browser_operator._page = original_page
             browser_operator._set_human_verification_state = original_detect
@@ -235,6 +272,38 @@ class BrowserOperatorTests(unittest.TestCase):
     def test_external_action_requires_approval(self):
         with self.assertRaises(PermissionError):
             browser_operator.execute_plan("test-user", [{"type": "publish", "text": "Publish"}], allow_external=False)
+
+
+    def test_connection_status_never_keeps_connected_after_auth_evidence_disappears(self):
+        class Body:
+            def inner_text(self, timeout=0):
+                return "Welcome back"
+        class Passwords:
+            def count(self):
+                return 0
+        class FakePage:
+            url = "https://example.test/"
+            def title(self):
+                return "Example"
+            def locator(self, selector):
+                if selector == 'input[type="password"]':
+                    return Passwords()
+                return Body()
+        original_page = browser_operator._page
+        original_detect = browser_operator._set_human_verification_state
+        original_sessions = browser_operator._SESSIONS
+        try:
+            browser_operator._SESSIONS = {"test-user": {"account_connected": True}}
+            browser_operator._page = lambda user_id: FakePage()
+            browser_operator._set_human_verification_state = lambda user_id, page: {"required": False}
+            state = browser_operator.connection_status("test-user")
+            self.assertEqual(state["status"], "login_required")
+            self.assertFalse(state["connected"])
+            self.assertFalse(browser_operator._SESSIONS["test-user"]["account_connected"])
+        finally:
+            browser_operator._page = original_page
+            browser_operator._set_human_verification_state = original_detect
+            browser_operator._SESSIONS = original_sessions
 
 
 if __name__ == "__main__":

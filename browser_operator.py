@@ -132,23 +132,15 @@ def _target(page: Page, selector: Optional[str] = None, text: Optional[str] = No
     raise ValueError("selector or text is required")
 
 def connection_status(user_id: str) -> Dict[str, Any]:
-    """Return a conservative login/session state for the current browser page.
-
-    This is intentionally a heuristic. The user explicitly confirms the
-    session after completing login; KZ never receives or stores a password as
-    account state.
-    """
+    """Return a conservative, freshly-verified login/session state."""
     page = _page(user_id)
     verification = _set_human_verification_state(user_id, page)
     try:
-        text = page.locator("body").inner_text(timeout=5000)[:12000].lower()
+        text = page.locator("body").inner_text(timeout=5000)[:16000].lower()
     except Exception:
         text = ""
-    password_fields = page.locator('input[type="password"]').count()
 
-    # Never infer "logged in" merely because a page has no password field.
-    # Public home pages often have no password input while the visitor is
-    # still anonymous. Require explicit login signals or strong auth evidence.
+    password_fields = page.locator('input[type="password"]').count()
     login_words = (
         "sign in", "sign in to", "log in", "log in to", "forgot password",
         "enter your password", "create your account", "join now", "join here",
@@ -157,44 +149,110 @@ def connection_status(user_id: str) -> Dict[str, Any]:
     account_words = (
         "account settings", "my profile", "dashboard", "my orders", "my gigs",
         "inbox", "messages", "seller dashboard", "profile picture",
+        "my account", "account menu",
     )
     login_signal = password_fields > 0 or any(word in text for word in login_words)
     logout_signal = any(word in text for word in logout_words)
     account_matches = {word for word in account_words if word in text}
-    positive_auth = logout_signal or len(account_matches) >= 2
-    # A strong authenticated marker such as "Log out" wins over generic
-    # navigation text such as a footer "Sign in" link.
-    login_required = login_signal and not positive_auth
+
+    # Provider-specific authenticated UI markers. These are deliberately
+    # positive/account-only signals; a public homepage or login form cannot
+    # satisfy them.
+    provider = (page.url or "").lower()
+    provider_markers: list[str] = []
+    if "fiverr.com" in provider:
+        fiverr_markers = (
+            "switch to selling", "switch to buying", "seller dashboard",
+            "my gigs", "my orders", "my profile", "manage orders",
+            "earnings", "inbox", "profile settings",
+        )
+        provider_markers = [x for x in fiverr_markers if x in text]
+        # Fiverr's authenticated shell can expose account/profile links without
+        # printing the word "logout".
+        try:
+            account_links = page.locator(
+                'a[href*="/users/"], a[href*="/profile"], '
+                'a[href*="/dashboard"], a[href*="/gigs"], '
+                'button[aria-label*="profile" i], button[aria-label*="account" i]'
+            ).count()
+        except Exception:
+            account_links = 0
+    else:
+        account_links = 0
+
+    positive_auth = (
+        logout_signal
+        or len(account_matches) >= 2
+        or len(provider_markers) >= 2
+        or (bool(provider_markers) and account_links >= 1)
+    )
+
+    # Cookie values are never returned, logged, or stored. Cookie names are
+    # only a secondary signal because anonymous sessions also have cookies.
+    auth_cookie_names = {
+        "session_id", "session", "sid", "auth", "authenticated",
+        "access_token", "refresh_token", "user_session", "login_session",
+    }
+    try:
+        context = getattr(page, "context", None)
+        cookies = context.cookies() if context is not None else []
+        cookie_names = {
+            str(c.get("name") or "").lower()
+            for c in cookies
+            if c.get("name")
+        }
+    except Exception:
+        cookie_names = set()
+    auth_cookie_matches = sorted(cookie_names.intersection(auth_cookie_names))
+    auth_cookie_signal = bool(auth_cookie_matches)
+
+    authenticated = bool(
+        positive_auth
+        or (auth_cookie_signal and (len(account_matches) >= 1 or len(provider_markers) >= 1))
+    )
 
     with _LOCK:
         session = _SESSIONS.get(str(user_id)) or {}
-        confirmed = bool(session.get("account_connected"))
+        previously_confirmed = bool(session.get("account_connected"))
+        # Never let a previous confirmation override current live evidence.
+        if previously_confirmed and not authenticated:
+            session["account_connected"] = False
+            session["disconnected_at"] = datetime.now(timezone.utc).isoformat()
 
     if verification.get("required"):
         status = "human_verification"
-    elif confirmed:
-        status = "connected"
-    elif login_required or not positive_auth:
-        status = "login_required"
+    elif authenticated:
+        status = "connected" if previously_confirmed else "ready_to_confirm"
     else:
-        status = "ready_to_confirm"
+        status = "login_required"
 
     return {
         "status": status,
         "connected": status == "connected",
         "login_required": status == "login_required",
+        "authenticated": authenticated,
         "login_evidence": {
             "password_field": bool(password_fields),
             "login_signal": bool(login_signal),
             "logout_signal": bool(logout_signal),
             "account_markers": sorted(account_matches),
+            "provider_markers": provider_markers,
+            "account_link_count": account_links,
             "positive_auth_signal": bool(positive_auth),
+            "auth_cookie_names": auth_cookie_matches,
+            "auth_cookie_signal": auth_cookie_signal,
+            "method": (
+                "authenticated_dom"
+                if positive_auth
+                else "authenticated_dom_plus_session_cookie"
+                if authenticated
+                else "none"
+            ),
         },
         "human_verification_required": verification.get("required", False),
         "url": page.url,
         "title": page.title(),
     }
-
 
 def confirm_connection(user_id: str) -> Dict[str, Any]:
     """Mark the current authenticated browser session as connected after user confirmation."""
@@ -203,8 +261,10 @@ def confirm_connection(user_id: str) -> Dict[str, Any]:
     if verification.get("required"):
         raise PermissionError("Human verification is still required. Complete it yourself first.")
     state = connection_status(user_id)
-    if state.get("login_required"):
-        raise PermissionError("The current page still appears to require login.")
+    if state.get("status") != "ready_to_confirm":
+        raise PermissionError(
+            "KZ cannot connect this account yet. The live browser session does not contain enough evidence of a completed login."
+        )
     with _LOCK:
         item = _SESSIONS.get(str(user_id))
         if item is not None:
@@ -255,6 +315,26 @@ def viewport(user_id: str) -> Dict[str, Any]:
         "width": int(size.get("width") or 0),
         "height": int(size.get("height") or 0),
     }
+
+
+def manual_click(user_id: str, x: float, y: float) -> Dict[str, Any]:
+    """Forward one click explicitly chosen by the logged-in KZ user.
+
+    This is not autonomous browser control: the coordinate comes directly
+    from the user's live-browser click. It is primarily for login UI controls
+    that are not represented reliably as accessible buttons.
+    """
+    page = _page(user_id)
+    challenge = _set_human_verification_state(user_id, page)
+    if challenge.get("required"):
+        raise PermissionError("Use the manual human-verification control while a challenge is active.")
+    size = viewport(user_id)
+    px, py = float(x), float(y)
+    if px < 0 or py < 0 or px > size["width"] or py > size["height"]:
+        raise ValueError("Click coordinates are outside the browser viewport.")
+    page.mouse.click(px, py)
+    page.wait_for_timeout(350)
+    return {"success": True, "x": px, "y": py, "url": page.url, "title": page.title()}
 
 
 def human_click(user_id: str, x: float, y: float) -> Dict[str, Any]:
@@ -337,11 +417,32 @@ def human_move(user_id: str, x: float, y: float) -> Dict[str, Any]:
     return {"success": True, "x": px, "y": py}
 
 def check_human_verification(user_id: str) -> Dict[str, Any]:
+    """Wait briefly for the provider to finish updating the manual challenge."""
     page = _page(user_id)
-    page.wait_for_timeout(500)
-    verification = _set_human_verification_state(user_id, page)
+    last = {"required": True, "reason": "human_verification_required", "indicators": []}
+    deadline = time.monotonic() + 6.0
+
+    while time.monotonic() < deadline:
+        last = _set_human_verification_state(user_id, page)
+        if not last.get("required"):
+            break
+        page.wait_for_timeout(500)
+
+    verified = not last.get("required", False)
     state = connection_status(user_id)
-    return {"verified": not verification.get("required", False), "human_verification": verification, "connection": state, "url": page.url, "title": page.title()}
+    return {
+        "verified": verified,
+        "status": "verified" if verified else "still_required",
+        "message": (
+            "Human verification completed in the live browser session."
+            if verified
+            else "The live browser still reports a human-verification challenge."
+        ),
+        "human_verification": last,
+        "connection": state,
+        "url": page.url,
+        "title": page.title(),
+    }
 
 def plan_goal(user_id: str, goal: str) -> Dict[str, Any]:
     page = inspect(user_id)
