@@ -155,6 +155,15 @@ def install_browser_api(app, require_current_user, row_value=None):
                 result = await _browser_call(
                     human_up, user_id, float(body.get("x")), float(body.get("y"))
                 )
+            elif kind == "human_press":
+                from browser_operator import human_press
+                result = await _browser_call(
+                    human_press,
+                    user_id,
+                    float(body.get("x")),
+                    float(body.get("y")),
+                    int(body.get("duration_ms") or 1000),
+                )
             elif kind == "human_move":
                 from browser_operator import human_move
                 result = await _browser_call(
