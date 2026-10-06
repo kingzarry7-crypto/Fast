@@ -211,6 +211,13 @@ def _is_external_action(action: Dict[str, Any]) -> bool:
 def execute_plan(user_id: str, actions: list[dict[str, Any]], *, allow_external: bool = False) -> Dict[str, Any]:
     results = []
     external = any(_is_external_action(a) for a in actions)
+
+    # Reject consequential actions before touching the browser runtime. This
+    # keeps the approval boundary deterministic even when Playwright/Chromium
+    # is unavailable and avoids opening a session for a request we will reject.
+    if external and not allow_external:
+        raise PermissionError("external browser action requires approval")
+
     before = inspect(user_id) if external else None
 
     for action in actions:
