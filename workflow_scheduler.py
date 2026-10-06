@@ -37,10 +37,15 @@ def run_once(limit: int = 25) -> Dict[str, Any]:
         rows = list_workflows_for_worker(limit)
         for row in rows:
             try:
-                run_workflow(str(row["id"]), str(row["user_id"]))
+                workflow_id = str(row.get("id") or "")
+                user_id = str(row.get("user_id") or "")
+                if not workflow_id or not user_id:
+                    raise ValueError("workflow row missing id or user_id")
+                run_workflow(workflow_id, user_id)
                 resumed += 1
-            except Exception:
+            except Exception as exc:
                 errors += 1
+                _LAST_ERROR = f"{type(exc).__name__}: {str(exc)[:240]}"
 
         try:
             from reliability_guardian import record_success, record_failure
@@ -62,7 +67,7 @@ def run_once(limit: int = 25) -> Dict[str, Any]:
         )
     except Exception as exc:
         errors += 1
-        _LAST_ERROR = type(exc).__name__
+        _LAST_ERROR = f"{type(exc).__name__}: {str(exc)[:240]}"
 
     _RUN_COUNT += 1
     return {
