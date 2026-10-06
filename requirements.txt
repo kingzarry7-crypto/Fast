@@ -10,7 +10,7 @@ discord.py==2.4.0
 edge-tts==6.1.18
 apscheduler==3.10.4
 tavily-python==0.5.0
-fal-client==0.5.5
+fal-client==1.0.3
 PyNaCl==1.6.2
 psycopg2-binary==2.9.10
 fastapi==0.142.2
