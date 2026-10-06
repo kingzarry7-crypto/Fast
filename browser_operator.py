@@ -145,23 +145,51 @@ def connection_status(user_id: str) -> Dict[str, Any]:
     except Exception:
         text = ""
     password_fields = page.locator('input[type="password"]').count()
-    login_words = ("sign in to", "log in to", "forgot password", "enter your password", "create your account")
-    login_required = password_fields > 0 or any(word in text for word in login_words)
+
+    # Never infer "logged in" merely because a page has no password field.
+    # Public home pages often have no password input while the visitor is
+    # still anonymous. Require explicit login signals or strong auth evidence.
+    login_words = (
+        "sign in", "sign in to", "log in", "log in to", "forgot password",
+        "enter your password", "create your account", "join now", "join here",
+    )
+    logout_words = ("log out", "logout", "sign out", "signout")
+    account_words = (
+        "account settings", "my profile", "dashboard", "my orders", "my gigs",
+        "inbox", "messages", "seller dashboard", "profile picture",
+    )
+    login_signal = password_fields > 0 or any(word in text for word in login_words)
+    logout_signal = any(word in text for word in logout_words)
+    account_matches = {word for word in account_words if word in text}
+    positive_auth = logout_signal or len(account_matches) >= 2
+    # A strong authenticated marker such as "Log out" wins over generic
+    # navigation text such as a footer "Sign in" link.
+    login_required = login_signal and not positive_auth
+
     with _LOCK:
         session = _SESSIONS.get(str(user_id)) or {}
         confirmed = bool(session.get("account_connected"))
+
     if verification.get("required"):
         status = "human_verification"
     elif confirmed:
         status = "connected"
-    elif login_required:
+    elif login_required or not positive_auth:
         status = "login_required"
     else:
         status = "ready_to_confirm"
+
     return {
         "status": status,
         "connected": status == "connected",
         "login_required": status == "login_required",
+        "login_evidence": {
+            "password_field": bool(password_fields),
+            "login_signal": bool(login_signal),
+            "logout_signal": bool(logout_signal),
+            "account_markers": sorted(account_matches),
+            "positive_auth_signal": bool(positive_auth),
+        },
         "human_verification_required": verification.get("required", False),
         "url": page.url,
         "title": page.title(),
@@ -248,6 +276,53 @@ def human_click(user_id: str, x: float, y: float) -> Dict[str, Any]:
     return {"success": True, "x": px, "y": py, "human_verification": _set_human_verification_state(user_id, page)}
 
 
+def _human_pointer_position(user_id: str, x: float, y: float):
+    page = _page(user_id)
+    challenge = _set_human_verification_state(user_id, page)
+    if not challenge.get("required"):
+        raise PermissionError("Manual challenge interaction is only available while human verification is active.")
+    size = viewport(user_id)
+    px, py = float(x), float(y)
+    if px < 0 or py < 0 or px > size["width"] or py > size["height"]:
+        raise ValueError("Pointer coordinates are outside the browser viewport.")
+    return page, px, py
+
+
+def human_down(user_id: str, x: float, y: float) -> Dict[str, Any]:
+    page, px, py = _human_pointer_position(user_id, x, y)
+    page.mouse.move(px, py)
+    page.mouse.down()
+    return {"success": True, "x": px, "y": py}
+
+
+def human_up(user_id: str, x: float, y: float) -> Dict[str, Any]:
+    page, px, py = _human_pointer_position(user_id, x, y)
+    page.mouse.move(px, py)
+    page.mouse.up()
+    page.wait_for_timeout(500)
+    return {"success": True, "x": px, "y": py, "human_verification": _set_human_verification_state(user_id, page)}
+
+
+def human_press(user_id: str, x: float, y: float, duration_ms: int) -> Dict[str, Any]:
+    """Replay one user-initiated press-and-hold without choosing or solving the challenge."""
+    page, px, py = _human_pointer_position(user_id, x, y)
+    duration = max(100, min(int(duration_ms), 15000))
+    page.mouse.move(px, py)
+    page.mouse.down()
+    try:
+        page.wait_for_timeout(duration)
+    finally:
+        page.mouse.up()
+    page.wait_for_timeout(500)
+    return {
+        "success": True,
+        "x": px,
+        "y": py,
+        "duration_ms": duration,
+        "human_verification": _set_human_verification_state(user_id, page),
+    }
+
+
 def human_move(user_id: str, x: float, y: float) -> Dict[str, Any]:
     """Move the user's pointer inside an active human challenge."""
     page = _page(user_id)
@@ -260,6 +335,13 @@ def human_move(user_id: str, x: float, y: float) -> Dict[str, Any]:
         raise ValueError("Pointer coordinates are outside the browser viewport.")
     page.mouse.move(px, py)
     return {"success": True, "x": px, "y": py}
+
+def check_human_verification(user_id: str) -> Dict[str, Any]:
+    page = _page(user_id)
+    page.wait_for_timeout(500)
+    verification = _set_human_verification_state(user_id, page)
+    state = connection_status(user_id)
+    return {"verified": not verification.get("required", False), "human_verification": verification, "connection": state, "url": page.url, "title": page.title()}
 
 def plan_goal(user_id: str, goal: str) -> Dict[str, Any]:
     page = inspect(user_id)

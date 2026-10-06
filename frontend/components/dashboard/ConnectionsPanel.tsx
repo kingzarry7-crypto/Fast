@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 
 type Connection = {
   status?: "login_required" | "human_verification" | "ready_to_confirm" | "connected" | string;
@@ -35,11 +35,12 @@ export default function ConnectionsPanel() {
   const [workflow, setWorkflow] = useState<any>(null);
   const [message, setMessage] = useState("");
   const [challengeBusy, setChallengeBusy] = useState(false);
-  const lastMoveAt = useRef(0);
+  const challengePress = useRef<{ x: number; y: number; startedAt: number; pointerId: number } | null>(null);
 
   useEffect(() => {
     if (!open || !page?.human_verification?.required) return;
     const timer = window.setInterval(async () => {
+      if (challengePress.current) return;
       try {
         const r = await fetch("/api/browser/inspect", { credentials: "include" });
         const d = await r.json();
@@ -158,33 +159,44 @@ export default function ConnectionsPanel() {
     };
   }
 
-  async function moveOnChallenge(event: MouseEvent<HTMLImageElement>) {
-    if (!page?.human_verification?.required || challengeBusy) return;
-    const now = Date.now();
-    if (now - lastMoveAt.current < 120) return;
-    lastMoveAt.current = now;
-    const { x, y } = challengeCoordinates(event);
+  async function checkHumanVerification() {
+    setChallengeBusy(true);
+    setMessage("Checking the same Fiverr browser session for completed verification...");
     try {
-      await fetch("/api/browser/connect/action", {
-        method: "POST", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "human_move", x, y }),
-      });
-    } catch {}
+      const r = await fetch("/api/browser/connect/action", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "human_verify" }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || "Could not check verification");
+      setPage(d.page);
+      setConnection(d.page?.connection || null);
+      setMessage(d.result?.verified ? "Human verification completed. Your Fiverr session can now continue." : "Fiverr is still asking for human verification. Complete the challenge, then press CHECK VERIFICATION again.");
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not check verification"); }
+    finally { setChallengeBusy(false); }
   }
 
-  async function interactWithChallenge(event: MouseEvent<HTMLImageElement>) {
-    if (!page?.human_verification?.required || !page.screenshot) return;
-    const { x, y } = challengeCoordinates(event);
+  function beginHumanPress(event: PointerEvent<HTMLImageElement>) {
+    if (!page?.human_verification?.required || !page.screenshot || challengePress.current) return;
+    const { x, y } = challengeCoordinates(event as unknown as MouseEvent<HTMLImageElement>);
+    challengePress.current = { x, y, startedAt: performance.now(), pointerId: event.pointerId };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+    setMessage("Holding the challenge control… release when Fiverr accepts the press.");
+  }
 
+  async function finishHumanPress(event: PointerEvent<HTMLImageElement>) {
+    const press = challengePress.current;
+    if (!press || press.pointerId !== event.pointerId) return;
+    challengePress.current = null;
+    event.preventDefault();
+    try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch {}
+
+    const durationMs = Math.max(100, Math.min(Math.round(performance.now() - press.startedAt), 15000));
     setChallengeBusy(true);
-    setMessage("Sending your manual click to the KZ browser…");
     try {
       const r = await fetch("/api/browser/connect/action", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "human_click", x, y }),
+        body: JSON.stringify({ type: "human_press", x: press.x, y: press.y, duration_ms: durationMs }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.detail || "Manual browser interaction failed");
@@ -192,7 +204,7 @@ export default function ConnectionsPanel() {
       setConnection(d.page?.connection || null);
       setMessage(
         d.page?.human_verification?.required
-          ? "The challenge is still active. If needed, click the challenge again or use REFRESH."
+          ? "The challenge is still active. Try the press-and-hold again exactly as Fiverr requests."
           : "Human verification appears complete. KZ is waiting for you to confirm the account."
       );
     } catch (e) {
@@ -200,6 +212,13 @@ export default function ConnectionsPanel() {
     } finally {
       setChallengeBusy(false);
     }
+  }
+
+  function cancelHumanPress(event: PointerEvent<HTMLImageElement>) {
+    if (!challengePress.current || challengePress.current.pointerId !== event.pointerId) return;
+    challengePress.current = null;
+    try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch {}
+    setMessage("Challenge press cancelled. Press and hold the control again.");
   }
 
   async function createTask() {
@@ -308,20 +327,22 @@ export default function ConnectionsPanel() {
                         <img
                           src={page.screenshot}
                           alt="Live KZ browser view for manual human verification"
-                          onMouseMove={moveOnChallenge}
-                          onClick={interactWithChallenge}
+                          onPointerDown={beginHumanPress}
+                          onPointerUp={finishHumanPress}
+                          onPointerCancel={cancelHumanPress}
+                          onLostPointerCapture={cancelHumanPress}
                           draggable={false}
-                          className={"block h-auto w-full cursor-crosshair select-none " + (challengeBusy ? "opacity-60" : "")}
+                          style={{ touchAction: "none", userSelect: "none" }}
+                          className={"block h-auto w-full cursor-crosshair " + (challengeBusy ? "opacity-60" : "")}
                         />
                       </div>
                     )}
-                    <div className="mt-2 flex gap-2">
-                      <button
-                        onClick={refresh}
-                        disabled={busy || challengeBusy}
-                        className="flex-1 rounded-lg border border-amber-400/20 py-2 font-mono-tech text-[9px] tracking-widest text-amber-200 disabled:opacity-40"
-                      >
-                        {challengeBusy ? "INTERACTING..." : "REFRESH VIEW"}
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <button onClick={checkHumanVerification} disabled={busy || challengeBusy} className="rounded-lg border border-amber-400/30 bg-amber-400/10 py-2 font-mono-tech text-[9px] tracking-widest text-amber-100 disabled:opacity-40">
+                        {challengeBusy ? "CHECKING..." : "CHECK VERIFICATION"}
+                      </button>
+                      <button onClick={refresh} disabled={busy || challengeBusy} className="rounded-lg border border-amber-400/20 py-2 font-mono-tech text-[9px] tracking-widest text-amber-200 disabled:opacity-40">
+                        REFRESH VIEW
                       </button>
                     </div>
                   </div>
