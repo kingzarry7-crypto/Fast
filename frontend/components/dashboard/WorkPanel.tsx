@@ -125,11 +125,11 @@ export default function WorkPanel() {
                         <div className="font-mono-tech text-[9px] tracking-widest text-amber-300">APPROVAL REQUIRED · CONSEQUENT ACTION</div>
                         <div className="mt-2 rounded border border-white/10 bg-black/20 p-2">
                           <div className="text-[9px] uppercase tracking-widest text-zinc-600">WHAT KZ WANTS TO DO</div>
-                          <p className="mt-1 text-xs leading-relaxed text-zinc-300">\${step?.output?.message || step?.output?.browser_plan?.summary || step?.title || "A consequential action is ready."}</p>
+                          <p className="mt-1 text-xs leading-relaxed text-zinc-300">${step?.output?.message || step?.output?.browser_plan?.summary || step?.title || "A consequential action is ready."}</p>
                         </div>
                         <div className="mt-2 grid grid-cols-2 gap-2 text-[9px] font-mono-tech uppercase tracking-wider">
-                          <div className="rounded border border-white/5 bg-white/[0.02] p-2"><span className="text-zinc-600">RISK</span><div className="mt-1 text-amber-300">\${step?.risk || workflow.risk}</div></div>
-                          <div className="rounded border border-white/5 bg-white/[0.02] p-2"><span className="text-zinc-600">POTENTIAL</span><div className="mt-1 text-zinc-300">$\${Number(workflow.potential_revenue || 0).toFixed(0)}</div></div>
+                          <div className="rounded border border-white/5 bg-white/[0.02] p-2"><span className="text-zinc-600">RISK</span><div className="mt-1 text-amber-300">${step?.risk || workflow.risk}</div></div>
+                          <div className="rounded border border-white/5 bg-white/[0.02] p-2"><span className="text-zinc-600">POTENTIAL</span><div className="mt-1 text-zinc-300">$${Number(workflow.potential_revenue || 0).toFixed(0)}</div></div>
                         </div>
                         <div className="mt-2 rounded border border-cyan-400/10 bg-cyan-400/5 p-2">
                           <div className="text-[9px] uppercase tracking-widest text-cyan-300">APPROVAL SCOPE</div>
