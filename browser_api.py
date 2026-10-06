@@ -27,6 +27,19 @@ def _snapshot(user_id: str):
     return page
 
 
+def _external_browser_action(action: Any) -> bool:
+    if not isinstance(action, dict):
+        return False
+    kind = str(action.get("type") or "").lower()
+    if kind in {"submit", "post", "publish", "send"}:
+        return True
+    if kind == "click":
+        target = (str(action.get("text") or "") + " " + str(action.get("selector") or "")).lower()
+        return any(word in target for word in (
+            "send", "submit", "apply", "place bid", "send proposal", "publish"
+        ))
+    return False
+
 def install_browser_api(app, require_current_user, row_value=None):
     def uid(row):
         try:
@@ -71,6 +84,9 @@ def install_browser_api(app, require_current_user, row_value=None):
         from browser_operator import click, fill, select, inspect
         try:
             if kind == "click":
+                target = (str(body.get("text") or "") + " " + str(body.get("selector") or "")).lower()
+                if any(word in target for word in ("send", "submit", "apply", "place bid", "send proposal", "publish")):
+                    raise PermissionError("Consequential marketplace/browser clicks require an approved workflow.")
                 result = await _browser_call(click, user_id, body.get("selector"), body.get("text"))
             elif kind == "fill":
                 result = await _browser_call(fill, user_id, str(body.get("selector") or ""), str(body.get("value") or ""))
@@ -124,10 +140,7 @@ def install_browser_api(app, require_current_user, row_value=None):
         workflow_id = str(body.get("workflow_id") or "").strip()
         if not isinstance(actions, list) or not actions:
             raise HTTPException(status_code=400, detail="actions are required")
-        external = any(
-            str(a.get("type") or "").lower() in {"submit", "post", "publish", "send"}
-            for a in actions if isinstance(a, dict)
-        )
+        external = any(_external_browser_action(a) for a in actions)
 
         # Never trust a client-supplied approved=true for consequential browser actions.
         if external:
