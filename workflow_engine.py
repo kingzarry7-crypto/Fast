@@ -245,9 +245,13 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
 
     if action == "browser_execute":
         plan = item["result"].get("browser_plan") or {}
-        actions = plan.get("actions") or []
-        if not actions:
+        all_actions = plan.get("actions") or []
+        resume_index = int(step.get("browser_resume_index") or 0)
+        actions = all_actions[resume_index:]
+        if not all_actions:
             return {"success": False, "error": "No browser actions were prepared."}
+        if not actions:
+            return {"success": True, "resumed_after_human_verification": True, "results": [], "verification": {"verification_status": "not_verified", "verified": False, "evidence": [], "note": "All approved browser actions were already executed before the human-verification pause. Proceed to verification."}}
 
         # The exact browser plan must be the one that was shown for approval.
         # This prevents a modified plan from being executed under an older approval.
@@ -257,7 +261,7 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
             return {"success": False, "error": "Browser execution is not bound to an approved action plan."}
 
         canonical = json.dumps(
-            actions, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+            all_actions, sort_keys=True, separators=(",", ":"), ensure_ascii=True
         )
         current_fingerprint = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         if current_fingerprint != fingerprint:
@@ -360,6 +364,9 @@ def run_workflow(workflow_id: str, user_id: str) -> Dict[str, Any]:
         for step in item.get("plan", []):
             if step.get("status") in {StepStatus.COMPLETED.value, StepStatus.SKIPPED.value}:
                 continue
+            if step.get("status") == StepStatus.WAITING_FOR_HUMAN.value:
+                _update(item, WorkflowStatus.WAITING_FOR_HUMAN.value)
+                return item
 
             if step.get("requires_approval") and step.get("status") != StepStatus.COMPLETED.value:
                 preview = step.get("output") or {
@@ -393,6 +400,17 @@ def run_workflow(workflow_id: str, user_id: str) -> Dict[str, Any]:
                     _update(item, WorkflowStatus.FAILED.value)
                     add_event(item["id"], item["user_id"], "step_failed", {"step_id": step["id"], "error": step["error"]})
                     return item
+                if output.get("requires_human_verification") or output.get("paused"):
+                    executed_count = len(output.get("results") or [])
+                    prior_index = int(step.get("browser_resume_index") or 0)
+                    step["browser_resume_index"] = prior_index + executed_count if step.get("action") == "browser_execute" else 0
+                    step["status"] = StepStatus.WAITING_FOR_HUMAN.value
+                    item["status"] = WorkflowStatus.WAITING_FOR_HUMAN.value
+                    item["result"]["human_verification"] = output.get("verification") or output.get("final", {}).get("human_verification") or {}
+                    add_event(item["id"], item["user_id"], "human_verification_required", {"step_id": step["id"], "verification": item["result"]["human_verification"]})
+                    save_workflow(item)
+                    return item
+
                 step["status"] = StepStatus.COMPLETED.value
 
                 if step["action"] == "research_goal":
@@ -439,6 +457,33 @@ def approve_workflow(workflow_id: str, user_id: str, approved: bool) -> Dict[str
     save_workflow(item)
     add_event(item["id"], item["user_id"], "approval_decided", {"approved": approved})
     return run_workflow(item["id"], item["user_id"]) if approved else item
+
+
+
+def resume_human_verification(workflow_id: str, user_id: str) -> Dict[str, Any]:
+    """Resume an approved workflow only after the human-verification challenge is gone."""
+    item = get_workflow(workflow_id, user_id)
+    if not item:
+        raise ValueError("workflow not found")
+
+    target = next((s for s in item.get("plan", []) if s.get("status") == StepStatus.WAITING_FOR_HUMAN.value), None)
+    if not target:
+        return item
+
+    from browser_operator import inspect, run_in_browser_thread
+    page = run_in_browser_thread(inspect, str(user_id))
+    challenge = page.get("human_verification") or {}
+    if challenge.get("required"):
+        item["result"]["human_verification"] = challenge
+        save_workflow(item)
+        return item
+
+    target["status"] = StepStatus.PENDING.value
+    item["status"] = WorkflowStatus.APPROVED.value
+    item["result"]["human_verification_resolved_at"] = _now()
+    add_event(item["id"], item["user_id"], "human_verification_resolved", {"step_id": target["id"]})
+    save_workflow(item)
+    return run_workflow(item["id"], item["user_id"])
 
 
 def workflow_snapshot(user_id: str) -> Dict[str, Any]:

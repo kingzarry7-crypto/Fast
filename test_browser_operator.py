@@ -49,6 +49,36 @@ class BrowserOperatorTests(unittest.TestCase):
         self.assertFalse(result["verified"])
         self.assertEqual(result["method"], "none")
 
+
+
+    def test_human_verification_detector_flags_fiverr_challenge(self):
+        class Body:
+            def inner_text(self, timeout=0):
+                return "It needs a human touch Loading challenge"
+        class FakePage:
+            url = "https://www.fiverr.com/"
+            def title(self):
+                return "Fiverr"
+            def locator(self, selector):
+                return Body()
+        result = browser_operator._detect_human_verification(FakePage())
+        self.assertTrue(result["required"])
+        self.assertIn("loading challenge", result["indicators"])
+        self.assertIn("it needs a human touch", result["indicators"])
+
+    def test_human_verification_detector_allows_normal_page(self):
+        class Body:
+            def inner_text(self, timeout=0):
+                return "Fiverr login page"
+        class FakePage:
+            url = "https://www.fiverr.com/login"
+            def title(self):
+                return "Fiverr Login"
+            def locator(self, selector):
+                return Body()
+        result = browser_operator._detect_human_verification(FakePage())
+        self.assertFalse(result["required"])
+
     def test_real_chromium_safe_smoke_when_available(self):
         """Exercise real Playwright Chromium without touching an external site."""
         if browser_operator.sync_playwright is None:

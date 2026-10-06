@@ -22,6 +22,7 @@ export default function WorkPanel() {
   const [error, setError] = useState("");
   const [browserReady, setBrowserReady] = useState<boolean | null>(null);
   const waitingCount = workflows.filter((item) => item.status === "waiting_for_approval").length;
+  const humanWaitingCount = workflows.filter((item) => item.status === "waiting_for_human").length;
 
   const load = useCallback(async () => {
     try {
@@ -87,6 +88,7 @@ export default function WorkPanel() {
                 <div className="mt-1 font-mono-tech text-[8px] tracking-widest text-zinc-600">BROWSER {browserReady === null ? "CHECKING" : browserReady ? "READY" : "OFFLINE"}</div>
                 <div className="mt-1 text-[10px] text-zinc-500">Give the goal. KZ researches, prepares and waits for approval when needed.</div>
                 {waitingCount > 0 && <div className="mt-2 inline-flex rounded border border-amber-400/25 bg-amber-400/5 px-2 py-1 font-mono-tech text-[9px] tracking-widest text-amber-300">{waitingCount} APPROVAL{waitingCount === 1 ? "" : "S"} WAITING</div>}
+                {humanWaitingCount > 0 && <div className="mt-2 inline-flex rounded border border-orange-400/25 bg-orange-400/5 px-2 py-1 font-mono-tech text-[9px] tracking-widest text-orange-300">{humanWaitingCount} HUMAN VERIFICATION{humanWaitingCount === 1 ? "" : "S"} WAITING</div>}
               </div>
               <button type="button" onClick={() => setOpen(false)} className="rounded-md px-2 py-1 text-zinc-500 hover:bg-white/5">×</button>
             </div>
@@ -107,7 +109,8 @@ export default function WorkPanel() {
               {!workflows.length && <p className="px-2 py-8 text-center text-xs text-zinc-600">No work started yet.</p>}
               {workflows.map((workflow) => {
                 const waiting = workflow.status === "waiting_for_approval";
-                const step = workflow.plan?.find((item) => item.status === "waiting_for_approval");
+                const humanWaiting = workflow.status === "waiting_for_human";
+                const step = workflow.plan?.find((item) => item.status === "waiting_for_approval" || item.status === "waiting_for_human");
                 return (
                   <div key={workflow.id} className="mb-3 rounded-xl border border-white/5 bg-white/[0.025] p-3">
                     <div className="flex items-start justify-between gap-3">
@@ -120,6 +123,14 @@ export default function WorkPanel() {
                       <span>risk:{workflow.risk}</span>
                       <span>potential:{Number(workflow.potential_revenue || 0).toFixed(0)}</span>
                     </div>
+                    {humanWaiting && (
+                      <div className="mt-3 rounded-lg border border-orange-400/25 bg-orange-400/5 p-3">
+                        <div className="font-mono-tech text-[9px] tracking-widest text-orange-300">HUMAN VERIFICATION REQUIRED</div>
+                        <p className="mt-2 text-xs leading-relaxed text-zinc-300">The website presented a human-verification challenge. KZ has paused the approved workflow and will not bypass CAPTCHA or anti-bot controls.</p>
+                        <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">Complete the challenge yourself in the connected browser session, then press the button below. KZ will re-check the same session before resuming.</p>
+                        <button type="button" onClick={async()=>{await fetch("/api/workflows/"+workflow.id+"/resume-human-verification",{method:"POST",credentials:"include"}); await load();}} className="mt-3 w-full rounded-lg border border-orange-400/25 bg-orange-400/10 py-2 font-mono-tech text-[9px] tracking-widest text-orange-200">CHECK & RESUME</button>
+                      </div>
+                    )}
                     {waiting && (
                       <div className="mt-3 rounded-lg border border-amber-400/20 bg-amber-400/5 p-3">
                         <div className="font-mono-tech text-[9px] tracking-widest text-amber-300">APPROVAL REQUIRED · CONSEQUENT ACTION</div>
