@@ -23,15 +23,16 @@ def scan(
     """Research current public opportunities and rank them for the user."""
     result = opportunity_hunter.hunt(
         str(user_id),
-        category=category if category in {"clients", "jobs", "saas"} else "jobs",
+        category=category if category in {"clients", "jobs", "saas", "news"} else "jobs",
         query=str(query or "").strip(),
         max_results=max(3, min(int(max_results), 30)),
     )
     opportunities = result.get("opportunities") or []
     for item in opportunities:
-        item["application_ready"] = True
-        item["approval_required"] = True
-        item["execution_status"] = "draft_only"
+        is_news = str(item.get("category") or "").lower() == "news"
+        item["application_ready"] = not is_news
+        item["approval_required"] = False if is_news else True
+        item["execution_status"] = "report_only" if is_news else "draft_only"
     return {
         "success": bool(result.get("success")),
         "opportunities": opportunities,
@@ -40,6 +41,7 @@ def scan(
         "sources": result.get("sources") or [],
         "report": _report(opportunities),
         "disclaimer": result.get("disclaimer"),
+        "mode": "news_report" if str(category).lower() == "news" else "opportunity_scan",
     }
 
 
