@@ -245,7 +245,9 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
 
     if action == "browser_execute":
         plan = item["result"].get("browser_plan") or {}
-        actions = plan.get("actions") or []
+        all_actions = plan.get("actions") or []
+        resume_index = int(step.get("browser_resume_index") or 0)
+        actions = all_actions[resume_index:]
         if not actions:
             return {"success": False, "error": "No browser actions were prepared."}
 
@@ -257,7 +259,7 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
             return {"success": False, "error": "Browser execution is not bound to an approved action plan."}
 
         canonical = json.dumps(
-            actions, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+            all_actions, sort_keys=True, separators=(",", ":"), ensure_ascii=True
         )
         current_fingerprint = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         if current_fingerprint != fingerprint:
@@ -397,6 +399,9 @@ def run_workflow(workflow_id: str, user_id: str) -> Dict[str, Any]:
                     add_event(item["id"], item["user_id"], "step_failed", {"step_id": step["id"], "error": step["error"]})
                     return item
                 if output.get("requires_human_verification") or output.get("paused"):
+                    executed_count = len(output.get("results") or [])
+                    prior_index = int(step.get("browser_resume_index") or 0)
+                    step["browser_resume_index"] = prior_index + executed_count if step.get("action") == "browser_execute" else 0
                     step["status"] = StepStatus.WAITING_FOR_HUMAN.value
                     item["status"] = WorkflowStatus.WAITING_FOR_HUMAN.value
                     item["result"]["human_verification"] = output.get("verification") or output.get("final", {}).get("human_verification") or {}
