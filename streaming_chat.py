@@ -114,7 +114,48 @@ def _stream_openai_compatible(
                 yield delta
 
 
+def _automatic_provider_stream(messages: list):
+    """Use the same Railway key/model selection as normal AI chat."""
+    from llm_client import get_client
+
+    client, model = get_client()
+    response = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        max_tokens=2000,
+        stream=True,
+    )
+    for chunk in response:
+        try:
+            delta = chunk.choices[0].delta.content
+            if isinstance(delta, str) and delta:
+                yield delta
+        except Exception:
+            continue
+
+
 def _provider_streams(messages: list):
+    # Primary path: the centralized provider selector (Groq -> Gemini ->
+    # DeepSeek -> OpenRouter -> OpenAI). Existing direct streams remain as
+    # compatibility fallbacks if the selected provider cannot stream.
+    try:
+        from llm_client import get_client
+        client, _ = get_client()
+        provider_name = "automatic"
+        for env_name, name in (
+            ("GROQ_API_KEY", "groq"),
+            ("GEMINI_API_KEY", "gemini"),
+            ("DEEPSEEK_API_KEY", "deepseek"),
+            ("OPENROUTER_API_KEY", "openrouter"),
+            ("OPENAI_API_KEY", "openai"),
+        ):
+            if os.getenv(env_name):
+                provider_name = name
+                break
+        yield provider_name, _automatic_provider_stream(messages)
+    except Exception:
+        pass
+
     if _GROQ_KEY:
         yield "groq", _stream_openai_compatible(
             url=_GROQ_URL,
