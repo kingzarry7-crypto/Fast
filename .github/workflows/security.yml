@@ -28,7 +28,7 @@ jobs:
       - name: Audit frontend dependencies
         working-directory: frontend
         run: npm audit --omit=dev --audit-level=high
-      # The remaining braces advisory is in eslint-config-next development tooling and has no upstream patched release yet.\n      # Keep production/runtime dependency auditing blocking; Dependabot will track the dev-only advisory.\n      - uses: actions/setup-python@v5
+      # The remaining braces advisory is in eslint-config-next development tooling.\n      # There is no upstream patched release yet; Dependabot will track it.\n      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Audit Python dependencies
