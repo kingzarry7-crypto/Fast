@@ -85,6 +85,13 @@ try:
 except Exception as e: print("UNIFIED_MEMORY_BRIDGE_PATCH_FAILED", type(e).__name__, str(e)[:160], flush=True)
 
 try:
+    from browser_api import install_browser_api
+    install_browser_api(globals().get("app"), require_current_user=globals().get("_require_current_user"), row_value=globals().get("_row_value"))
+    print("KZ_BROWSER_OPERATOR_INSTALLED", flush=True)
+except Exception as e:
+    print("KZ_BROWSER_OPERATOR_FAILED", type(e).__name__, str(e)[:160], flush=True)
+
+try:
     from workflow_api import install_workflow_api
     install_workflow_api(globals().get("app"), require_current_user=globals().get("_require_current_user"), row_value=globals().get("_row_value"))
     print("KZ_WORKFLOW_ENGINE_INSTALLED", flush=True)
