@@ -1,25 +1,5 @@
-[packages]
-apt = [
-  "ffmpeg",
-  "chromium",
-  "libnss3",
-  "libnspr4",
-  "libgbm1",
-  "libatk1.0-0",
-  "libatk-bridge2.0-0",
-  "libcups2",
-  "libasound2",
-  "libpangocairo-1.0-0",
-  "libxss1",
-  "libgtk-3-0",
-  "libxshmfence1",
-  "libglu1"
-]
-
-[variables]
-PLAYWRIGHT_BROWSERS_PATH = "/app/.playwright"
-
 [phases.setup]
+aptPkgs = ["ffmpeg", "chromium", "libnss3", "libnspr4", "libgbm1", "libatk1.0-0", "libatk-bridge2.0-0", "libcups2", "libasound2", "libpangocairo-1.0-0", "libxss1", "libgtk-3-0", "libxshmfence1", "libglu1", "/app/.playwright"]
 nixPkgs = ["python312"]
 
 [phases.install]
