@@ -16,6 +16,8 @@ on:
       - "channel_work.py"
       - "bot.py"
       - "discord_bot.py"
+      - "browser_*.py"
+      - "test_browser_operator.py"
       - ".github/workflows/kz-workflow-check.yml"
   pull_request:
     paths:
@@ -42,6 +44,6 @@ jobs:
         with:
           python-version: "3.12"
       - name: Compile workflow modules
-        run: python -m py_compile workflow_models.py workflow_store.py workflow_engine.py workflow_api.py workflow_scheduler.py reliability_guardian.py learning_loop.py revenue_engine.py channel_work.py work_intent.py api.py test_workflow_engine.py bot.py discord_bot.py
+        run: python -m py_compile workflow_models.py workflow_store.py workflow_engine.py workflow_api.py workflow_scheduler.py reliability_guardian.py learning_loop.py revenue_engine.py channel_work.py work_intent.py api.py browser_operator.py browser_api.py test_browser_operator.py test_workflow_engine.py bot.py discord_bot.py
       - name: Run workflow planner tests
-        run: python -m unittest test_workflow_engine.py test_work_intent.py test_delivery_agent.py test_business_dashboard.py test_workflow_scheduler.py test_learning_loop.py test_reliability_guardian.py
+        run: python -m unittest test_workflow_engine.py test_work_intent.py test_delivery_agent.py test_business_dashboard.py test_workflow_scheduler.py test_learning_loop.py test_reliability_guardian.py test_browser_operator.py
