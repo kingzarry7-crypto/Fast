@@ -229,7 +229,21 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
 
     if action == "browser_verify":
         from browser_operator import inspect
-        return {"success": True, "page": inspect(str(item["user_id"])), "verified": True}
+        page = inspect(str(item["user_id"]))
+        browser_result = item.get("result", {}).get("browser_execute") or {}
+        verification = browser_result.get("verification") or {}
+        verified = verification.get("verification_status") == "verified_sent"
+        return {
+            "success": True,
+            "page": page,
+            "verified": verified,
+            "verification_status": verification.get("verification_status", "not_verified"),
+            "evidence": verification.get("evidence") or [],
+            "note": verification.get(
+                "note",
+                "No provider/destination evidence was available to verify the external action.",
+            ),
+        }
 
     if action in {"prepare_offers", "prepare_revenue_plan", "prepare_general"}:
         return {
