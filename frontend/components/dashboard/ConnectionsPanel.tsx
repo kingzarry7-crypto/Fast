@@ -16,6 +16,7 @@ type Page = {
   title?: string;
   text?: string;
   screenshot?: string;
+  viewport?: { width?: number; height?: number };
   human_verification?: { required?: boolean; message?: string; indicators?: string[] };
   connection?: Connection;
   buttons?: { selector?: string | null; text?: string }[];
@@ -33,6 +34,7 @@ export default function ConnectionsPanel() {
   const [task, setTask] = useState("");
   const [workflow, setWorkflow] = useState<any>(null);
   const [message, setMessage] = useState("");
+  const [challengeBusy, setChallengeBusy] = useState(false);
 
   useEffect(() => {
     if (!open || !page?.human_verification?.required) return;
@@ -144,6 +146,40 @@ export default function ConnectionsPanel() {
     }
   }
 
+  async function interactWithChallenge(event: React.MouseEvent<HTMLImageElement>) {
+    if (!page?.human_verification?.required || !page.screenshot) return;
+    const image = event.currentTarget;
+    const rect = image.getBoundingClientRect();
+    const viewportWidth = Number(page.viewport?.width || 1440);
+    const viewportHeight = Number(page.viewport?.height || 900);
+    const x = Math.max(0, Math.min(viewportWidth, ((event.clientX - rect.left) / rect.width) * viewportWidth));
+    const y = Math.max(0, Math.min(viewportHeight, ((event.clientY - rect.top) / rect.height) * viewportHeight));
+
+    setChallengeBusy(true);
+    setMessage("Sending your manual click to the KZ browser…");
+    try {
+      const r = await fetch("/api/browser/connect/action", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "human_click", x, y }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || "Manual browser interaction failed");
+      setPage(d.page);
+      setConnection(d.page?.connection || null);
+      setMessage(
+        d.page?.human_verification?.required
+          ? "The challenge is still active. If needed, click the challenge again or use REFRESH."
+          : "Human verification appears complete. KZ is waiting for you to confirm the account."
+      );
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Manual browser interaction failed");
+    } finally {
+      setChallengeBusy(false);
+    }
+  }
+
   async function createTask() {
     if (!task.trim()) return;
     setBusy(true);
@@ -242,6 +278,28 @@ export default function ConnectionsPanel() {
                     <p className="mt-1 text-xs leading-relaxed text-amber-100/80">
                       {page.human_verification.message || "Complete the challenge yourself. KZ will not bypass it."}
                     </p>
+                    <p className="mt-2 text-[10px] leading-relaxed text-amber-100/60">
+                      The server browser is now shown below. Click the challenge directly in the browser image. KZ only forwards the coordinates you choose; it does not solve or bypass the challenge.
+                    </p>
+                    {page.screenshot && (
+                      <div className="mt-3 overflow-hidden rounded-lg border border-amber-400/20 bg-black">
+                        <img
+                          src={page.screenshot}
+                          alt="Live KZ browser view for manual human verification"
+                          onClick={interactWithChallenge}
+                          className={"block h-auto w-full cursor-crosshair " + (challengeBusy ? "opacity-60" : "")}
+                        />
+                      </div>
+                    )}
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        onClick={refresh}
+                        disabled={busy || challengeBusy}
+                        className="flex-1 rounded-lg border border-amber-400/20 py-2 font-mono-tech text-[9px] tracking-widest text-amber-200 disabled:opacity-40"
+                      >
+                        {challengeBusy ? "INTERACTING..." : "REFRESH VIEW"}
+                      </button>
+                    </div>
                   </div>
                 )}
 
