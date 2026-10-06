@@ -1179,7 +1179,7 @@ export default function KingZarryHistoryPage() {
                     </span>
 
                     <div className="p-3 rounded-lg border border-cyan-500/20 bg-cyan-950/30 text-xs font-mono text-cyan-100 leading-relaxed">
-                      "{selectedRecord.contextPreview}"
+                      &quot;{selectedRecord.contextPreview}&quot;
                     </div>
 
                   </div>

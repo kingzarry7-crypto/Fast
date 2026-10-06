@@ -1,6 +1,6 @@
 python-telegram-bot[job-queue]==20.8
-requests==2.32.3
-python-dotenv==1.0.1
+requests==2.33.0
+python-dotenv==1.2.2
 matplotlib==3.9.2
 elevenlabs==1.9.0
 openai==1.54.4
@@ -11,11 +11,11 @@ edge-tts==6.1.18
 apscheduler==3.10.4
 tavily-python==0.5.0
 fal-client==0.5.5
-PyNaCl==1.5.0
+PyNaCl==1.6.2
 psycopg2-binary==2.9.10
-fastapi==0.115.5
+fastapi==0.142.2
 uvicorn[standard]==0.32.1
-python-multipart==0.0.17
+python-multipart==0.0.31
 email-validator==2.2.0
 stripe==11.4.1
 playwright==1.49.1

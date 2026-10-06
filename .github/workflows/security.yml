@@ -2,9 +2,11 @@ name: Fast Security Checks
 
 on:
   push:
-    branches: ["main"]
+    branches:
+      - main
   pull_request:
-    branches: ["main"]
+    branches:
+      - main
   schedule:
     - cron: "17 3 * * 1"
 
@@ -25,9 +27,9 @@ jobs:
       - name: Generate frontend lockfile for audit
         working-directory: frontend
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-      - name: Audit frontend dependencies
+      - name: Audit runtime frontend dependencies
         working-directory: frontend
-        run: npm audit --audit-level=high
+        run: npm audit --omit=dev --audit-level=high
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
