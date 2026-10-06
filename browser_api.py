@@ -14,6 +14,57 @@ def install_browser_api(app, require_current_user, row_value=None):
         except Exception:
             return ""
 
+    @app.post("/api/browser/connect/start")
+    async def browser_connect_start(request: Request):
+        row = require_current_user(request)
+        user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Authenticated user required")
+        body = await request.json()
+        url = str(body.get("url") or "").strip()
+        if not url:
+            raise HTTPException(status_code=400, detail="url is required")
+        from browser_operator import navigate, inspect
+        try:
+            page = navigate(user_id, url)
+            return {"status": "ok", "connection": {"url": page["url"], "title": page["title"], "message": "Log in yourself in this browser session. Credentials are not stored by KZ."}, "page": inspect(user_id)}
+        except Exception as exc:
+            raise HTTPException(status_code=409, detail=f"{type(exc).__name__}: {str(exc)[:300]}")
+
+    @app.post("/api/browser/connect/action")
+    async def browser_connect_action(request: Request):
+        row = require_current_user(request)
+        user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Authenticated user required")
+        body = await request.json()
+        kind = str(body.get("type") or "").lower()
+        from browser_operator import click, fill, select, inspect
+        try:
+            if kind == "click":
+                result = click(user_id, body.get("selector"), body.get("text"))
+            elif kind == "fill":
+                result = fill(user_id, str(body.get("selector") or ""), str(body.get("value") or ""))
+            elif kind == "select":
+                result = select(user_id, str(body.get("selector") or ""), str(body.get("value") or ""))
+            elif kind == "refresh":
+                result = inspect(user_id)
+            else:
+                raise ValueError("unsupported connection action")
+            return {"status": "ok", "result": result, "page": inspect(user_id)}
+        except Exception as exc:
+            raise HTTPException(status_code=409, detail=f"{type(exc).__name__}: {str(exc)[:400]}")
+
+    @app.post("/api/browser/connect/close")
+    async def browser_connect_close(request: Request):
+        row = require_current_user(request)
+        user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Authenticated user required")
+        from browser_operator import close
+        close(user_id)
+        return {"status": "ok", "message": "Browser session closed. Persistent session data remains on the configured browser profile volume."}
+
     @app.get("/api/browser/status")
     def browser_status(request: Request):
         row = require_current_user(request)
