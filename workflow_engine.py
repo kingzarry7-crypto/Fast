@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import logging
 import re
+import hashlib
+import json
 import threading
 import time
 import uuid
@@ -309,6 +311,12 @@ def run_workflow(workflow_id: str, user_id: str) -> Dict[str, Any]:
                     "potential_revenue": item.get("potential_revenue", 0),
                     "estimated_cost": item.get("estimated_cost", 0),
                 }
+                if step.get("action") == "browser_execute":
+                    browser_actions = ((preview.get("browser_plan") or {}).get("actions") or [])
+                    if isinstance(browser_actions, list) and browser_actions:
+                        canonical = json.dumps(browser_actions, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+                        step["browser_action_fingerprint"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
                 step["status"] = StepStatus.WAITING_FOR_APPROVAL.value
                 approval_id = step.get("approval_id") or create_approval(item["id"], step["id"], item["user_id"], preview)
                 step["approval_id"] = approval_id
