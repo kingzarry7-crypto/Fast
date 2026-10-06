@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 
 type Connection = {
   status?: "login_required" | "human_verification" | "ready_to_confirm" | "connected" | string;
@@ -146,7 +146,7 @@ export default function ConnectionsPanel() {
     }
   }
 
-  async function interactWithChallenge(event: React.MouseEvent<HTMLImageElement>) {
+  async function interactWithChallenge(event: MouseEvent<HTMLImageElement>) {
     if (!page?.human_verification?.required || !page.screenshot) return;
     const image = event.currentTarget;
     const rect = image.getBoundingClientRect();
