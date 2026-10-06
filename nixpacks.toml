@@ -1,6 +1,9 @@
 [packages]
 apt = ["ffmpeg", "chromium"]
 
+[variables]
+PLAYWRIGHT_BROWSERS_PATH = "0"
+
 [phases.setup]
 nixPkgs = ["python312", "chromium"]
 
@@ -9,3 +12,6 @@ cmds = ["pip install -r requirements.txt", "python -m playwright install chromiu
 
 [phases.build]
 cmds = ["python -m compileall -q ."]
+
+[start]
+cmd = "bash start.sh"
