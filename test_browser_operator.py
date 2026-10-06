@@ -99,6 +99,42 @@ class BrowserOperatorTests(unittest.TestCase):
             browser_operator._set_human_verification_state = original_detect
             browser_operator._SESSIONS = original_sessions
 
+    def test_connection_status_detects_fiverr_authenticated_shell_without_logout_text(self):
+        class Body:
+            def inner_text(self, timeout=0):
+                return "Switch to Selling Inbox My Gigs"
+        class Passwords:
+            def count(self):
+                return 0
+        class Links:
+            def count(self):
+                return 1
+        class FakePage:
+            url = "https://www.fiverr.com/users/test"
+            def title(self):
+                return "Fiverr"
+            def locator(self, selector):
+                if selector == 'input[type="password"]':
+                    return Passwords()
+                if 'a[href*="/users/"]' in selector:
+                    return Links()
+                return Body()
+        original_page = browser_operator._page
+        original_detect = browser_operator._set_human_verification_state
+        original_sessions = browser_operator._SESSIONS
+        try:
+            browser_operator._SESSIONS = {"test-user": {}}
+            browser_operator._page = lambda user_id: FakePage()
+            browser_operator._set_human_verification_state = lambda user_id, page: {"required": False}
+            state = browser_operator.connection_status("test-user")
+            self.assertEqual(state["status"], "ready_to_confirm")
+            self.assertTrue(state["authenticated"])
+            self.assertIn("switch to selling", state["login_evidence"]["provider_markers"])
+        finally:
+            browser_operator._page = original_page
+            browser_operator._set_human_verification_state = original_detect
+            browser_operator._SESSIONS = original_sessions
+
     def test_connection_status_allows_explicit_confirmation_state(self):
         class Body:
             def inner_text(self, timeout=0):
