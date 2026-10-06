@@ -158,14 +158,27 @@ def _verification_evidence(before: Dict[str, Any], after: Dict[str, Any], action
     }
 
 
+def _is_external_action(action: Dict[str, Any]) -> bool:
+    kind = str(action.get("type") or "").lower()
+    if kind in {"submit", "post", "publish", "send"}:
+        return True
+    # Some planners represent the final Fiverr/marketplace action as a click.
+    if kind == "click":
+        text = str(action.get("text") or "").strip().lower()
+        selector = str(action.get("selector") or "").strip().lower()
+        external_words = ("send", "submit", "apply", "place bid", "send proposal", "publish")
+        return any(word in text or word in selector for word in external_words)
+    return False
+
+
 def execute_plan(user_id: str, actions: list[dict[str, Any]], *, allow_external: bool = False) -> Dict[str, Any]:
     results = []
-    external = any(str(a.get("type") or "").lower() in {"submit","post","publish","send"} for a in actions)
+    external = any(_is_external_action(a) for a in actions)
     before = inspect(user_id) if external else None
 
     for action in actions:
         kind = str(action.get("type") or "").lower()
-        if kind in {"submit","post","publish","send"} and not allow_external:
+        if _is_external_action(action) and not allow_external:
             raise PermissionError("external browser action requires approval")
         if kind == "navigate": result = navigate(user_id, action.get("url", ""))
         elif kind == "inspect": result = inspect(user_id)
