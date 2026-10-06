@@ -65,4 +65,4 @@ def build_business_dashboard(workflows: List[Dict[str, Any]], opportunities: Lis
             ["Prepare completed work for delivery"] if completed else []
         ),
         "warning": "Potential revenue is a forecast. Confirmed revenue remains zero until a supported payment record confirms receipt.",
-    )
+    }
