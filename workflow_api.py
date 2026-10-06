@@ -316,6 +316,18 @@ def install_workflow_api(app, require_current_user, row_value=None):
         if not item: raise HTTPException(status_code=404, detail='Workflow not found')
         return {'status':'ok','workflow':item}
 
+    @app.post('/api/workflows/{workflow_id}/resume-human-verification')
+    async def resume_human_verification_route(workflow_id: str, request: Request):
+        row = require_current_user(request)
+        user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        try:
+            result = engine.resume_human_verification(workflow_id, user_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail='Workflow not found')
+        return {'status': 'ok', 'workflow': result}
+
     @app.post('/api/workflows/{workflow_id}/approve')
     async def approve_route(workflow_id: str, request: Request):
         row=require_current_user(request); body=await request.json()
