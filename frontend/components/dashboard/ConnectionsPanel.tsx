@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 
 type Connection = {
   status?: "login_required" | "human_verification" | "ready_to_confirm" | "connected" | string;
@@ -35,7 +35,6 @@ export default function ConnectionsPanel() {
   const [workflow, setWorkflow] = useState<any>(null);
   const [message, setMessage] = useState("");
   const [challengeBusy, setChallengeBusy] = useState(false);
-  const lastMoveAt = useRef(0);
 
   useEffect(() => {
     if (!open || !page?.human_verification?.required) return;
