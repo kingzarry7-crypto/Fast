@@ -97,6 +97,13 @@ def _stream_openai_compatible(
         if response.status_code >= 400:
             body = response.text[:400]
             raise RuntimeError(f"provider_http_{response.status_code}: {body}")
+
+        # Providers occasionally omit/advertise an incorrect charset on SSE.
+        # Requests can then decode UTF-8 emoji as Latin-1/Windows-1252 before
+        # JSON parsing, producing text such as "Ã°ÂÂÂ" in the web chat.
+        # SSE/JSON from our providers is UTF-8; force that decoding here.
+        response.encoding = "utf-8"
+
         for raw in response.iter_lines(chunk_size=1, decode_unicode=True):
             line = (raw or "").strip()
             if not line or line.startswith(":"):
