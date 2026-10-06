@@ -57,6 +57,8 @@ def _classify_goal(goal: str) -> Dict[str, Any]:
         return {"kind": "revenue_research", "revenue": 200.0}
     if any(x in low for x in ("market", "trade", "btc", "eth", "sol", "gold", "xau")):
         return {"kind": "market", "revenue": 0.0}
+    if any(x in low for x in ("open website", "open the website", "edit my website", "edit website", "update my website", "update website", "post on", "publish on", "upload to", "fill the form", "fill out the form", "click on", "browser", "website")):
+        return {"kind": "browser", "revenue": 0.0}
     if any(x in low for x in ("deploy", "github", "code", "fix my app", "build")):
         return {"kind": "engineering", "revenue": 0.0}
     return {"kind": "general", "revenue": 0.0}
@@ -99,6 +101,14 @@ def plan_goal(workflow_id: str, user_id: str, goal: str) -> Dict[str, Any]:
                   RiskLevel.RED, True),
             _step(workflow_id, 6, "Verify execution/result", "verify"),
             _step(workflow_id, 7, "Learn from the result", "learn"),
+        ]
+    elif kind == "browser":
+        steps += [
+            _step(workflow_id, 3, "Open the requested website and inspect the current page", "browser_prepare"),
+            _step(workflow_id, 4, "Prepare the exact browser actions", "browser_plan", RiskLevel.YELLOW, True),
+            _step(workflow_id, 5, "Execute the approved browser actions", "browser_execute", RiskLevel.YELLOW, True),
+            _step(workflow_id, 6, "Verify the browser result", "browser_verify"),
+            _step(workflow_id, 7, "Record the result for future work", "learn"),
         ]
     elif kind == "engineering":
         steps += [
@@ -189,6 +199,35 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
             {"title": r.get("title"), "url": r.get("url"), "reason": r.get("content") or r.get("page_text","")}
             for r in rows
         ], "note": "Opportunities are leads, not guaranteed income."}
+
+    if action == "browser_prepare":
+        from browser_operator import navigate, inspect
+        urls = re.findall(r"https?://[^\\s)\\]}>,]+", goal)
+        if not urls:
+            return {"success": True, "needs_url": True, "message": "I need the website URL before I can operate it."}
+        page = navigate(str(item["user_id"]), urls[0])
+        return {"success": True, "page": page, "message": "Website opened and inspected before any external change."}
+
+    if action == "browser_plan":
+        from browser_operator import plan_goal
+        result = plan_goal(str(item["user_id"]), goal)
+        plan = result.get("plan") or {}
+        item["result"]["browser_plan"] = plan
+        external = any(str(a.get("type") or "").lower() in {"submit","post","publish","send"} for a in plan.get("actions") or [])
+        return {"success": True, "browser_plan": plan, "external_action": external,
+                "message": plan.get("summary") or "Browser action plan prepared for approval."}
+
+    if action == "browser_execute":
+        plan = item["result"].get("browser_plan") or {}
+        actions = plan.get("actions") or []
+        if not actions:
+            return {"success": False, "error": "No browser actions were prepared."}
+        from browser_operator import execute_plan
+        return execute_plan(str(item["user_id"]), actions, allow_external=True)
+
+    if action == "browser_verify":
+        from browser_operator import inspect
+        return {"success": True, "page": inspect(str(item["user_id"])), "verified": True}
 
     if action in {"prepare_offers", "prepare_revenue_plan", "prepare_general"}:
         return {
