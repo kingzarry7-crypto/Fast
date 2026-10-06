@@ -223,8 +223,10 @@ def confirm_connection(user_id: str) -> Dict[str, Any]:
     if verification.get("required"):
         raise PermissionError("Human verification is still required. Complete it yourself first.")
     state = connection_status(user_id)
-    if state.get("login_required"):
-        raise PermissionError("The current page still appears to require login.")
+    if state.get("status") != "ready_to_confirm":
+        raise PermissionError(
+            "KZ cannot connect this account yet. The live browser session does not contain enough evidence of a completed login."
+        )
     with _LOCK:
         item = _SESSIONS.get(str(user_id))
         if item is not None:
