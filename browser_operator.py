@@ -10,6 +10,7 @@ import os
 import re
 import threading
 import uuid
+import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -136,6 +137,69 @@ def upload(user_id: str, selector: str, path: str) -> Dict[str, Any]:
 def screenshot(user_id: str) -> bytes:
     return _page(user_id).screenshot(full_page=True)
 
+
+def plan_goal(user_id: str, goal: str) -> Dict[str, Any]:
+    """Use the configured KZ LLM to turn the current page into explicit browser actions."""
+    page = inspect(user_id)
+    from llm_client import ask
+    prompt = '''You are the KZ browser planner. Create ONLY explicit browser actions.
+User goal: {goal}
+Current page URL: {url}
+TITLE: {title}
+TEXT:
+{text}
+
+Return JSON only: {"actions":[{"type":"navigate|inspect|click|fill|select|upload|submit|post|publish|send","selector":"optional CSS selector","text":"optional exact visible text","value":"optional value","url":"optional URL"}],"summary":"short summary"}
+
+- Never invent passwords, OTPs, payment data, identity, or secret values.
+- Do not create actions outside the user's stated goal.
+- Use visible text or stable CSS selectors.
+- Public submission/post/send/publish must use its explicit action type and requires approval.
+- For editing content, include exact fill/click actions but stop before publishing unless the user explicitly asked to publish.
+- If required information is missing, return an empty actions list and explain it in summary.
+''' .format(goal=goal, url=page.get('url'), title=page.get('title'), text=page.get('text','')[:9000])
+    raw = str(ask([{"role":"system","content":"Return valid JSON and nothing else."},{"role":"user","content":prompt}], max_tokens=900) or "").strip()
+    if raw.startswith('```'):
+        raw = re.sub(r'^```(?:json)?\s*|\s*```
+    """Execute a previously approved browser plan.
+
+    Each action is explicit. The browser never invents a click target or
+    submits a form unless that action is present in the approved plan.
+    """
+    results = []
+    for action in actions:
+        kind = str(action.get("type") or "").lower()
+        if kind in {"submit", "post", "publish", "send"} and not allow_external:
+            raise PermissionError("external browser action requires approval")
+        if kind == "navigate":
+            result = navigate(user_id, action.get("url", ""))
+        elif kind == "inspect":
+            result = inspect(user_id)
+        elif kind == "click":
+            result = click(user_id, action.get("selector"), action.get("text"))
+        elif kind == "fill":
+            result = fill(user_id, action.get("selector", ""), action.get("value", ""))
+        elif kind == "select":
+            result = select(user_id, action.get("selector", ""), action.get("value", ""))
+        elif kind == "upload":
+            result = upload(user_id, action.get("selector", ""), action.get("path", ""))
+        elif kind in {"submit", "post", "publish", "send"}:
+            result = click(user_id, action.get("selector"), action.get("text"))
+        else:
+            raise ValueError(f"unsupported browser action: {kind}")
+        results.append({"type": kind, "result": result})
+    return {"success": True, "results": results, "final": inspect(user_id)}
+, '', raw, flags=re.I)
+    data = json.loads(raw)
+    actions = data.get('actions') if isinstance(data, dict) else []
+    if not isinstance(actions, list): raise ValueError('browser planner returned invalid actions')
+    allowed = {'navigate','inspect','click','fill','select','upload','submit','post','publish','send'}
+    clean = []
+    for action in actions[:30]:
+        if not isinstance(action, dict) or str(action.get('type') or '').lower() not in allowed: continue
+        clean.append({k: action[k] for k in ('type','selector','text','value','url') if k in action})
+    data['actions'] = clean
+    return {'success': True, 'plan': data, 'page': page}
 
 def execute_plan(user_id: str, actions: list[dict[str, Any]], *, allow_external: bool = False) -> Dict[str, Any]:
     """Execute a previously approved browser plan.
