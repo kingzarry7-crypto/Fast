@@ -39,7 +39,8 @@ export default function ConnectionsPanel() {
     setBusy(true);
     try {
       const button = type==="click" ? (page?.buttons||[]).find(x=>x.selector===selector || (!x.selector && selector==="__text__:"+x.text)) : null;
-      const r=await fetch("/api/browser/connect/action",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({type,selector,value,text:button?.text||undefined})});
+      const payload = {type, selector: button?.selector || (type==="click" && button ? undefined : selector), value, text: button?.text || undefined};
+      const r=await fetch("/api/browser/connect/action",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
       const d=await r.json(); if(!r.ok) throw new Error(d.detail||"Action failed");
       setPage(d.page);
     } catch(e){setMessage(e instanceof Error?e.message:"Action failed");} finally{setBusy(false);}
