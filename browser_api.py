@@ -1,9 +1,18 @@
 """Authenticated API endpoints for the KZ browser operator."""
 from __future__ import annotations
 
+import base64
 from typing import Any, Dict
 
 from fastapi import HTTPException, Request
+
+
+def _snapshot(user_id: str):
+    from browser_operator import inspect, screenshot
+    page = inspect(user_id)
+    image = base64.b64encode(screenshot(user_id)).decode("ascii")
+    page["screenshot"] = "data:image/png;base64," + image
+    return page
 
 
 def install_browser_api(app, require_current_user, row_value=None):
@@ -24,10 +33,18 @@ def install_browser_api(app, require_current_user, row_value=None):
         url = str(body.get("url") or "").strip()
         if not url:
             raise HTTPException(status_code=400, detail="url is required")
-        from browser_operator import navigate, inspect
+        from browser_operator import navigate
         try:
             page = navigate(user_id, url)
-            return {"status": "ok", "connection": {"url": page["url"], "title": page["title"], "message": "Log in yourself in this browser session. Credentials are not stored by KZ."}, "page": inspect(user_id)}
+            return {
+                "status": "ok",
+                "connection": {
+                    "url": page["url"],
+                    "title": page["title"],
+                    "message": "Login yourself in the KZ browser session. Credentials are not stored by KZ.",
+                },
+                "page": _snapshot(user_id),
+            }
         except Exception as exc:
             raise HTTPException(status_code=409, detail=f"{type(exc).__name__}: {str(exc)[:300]}")
 
@@ -51,7 +68,7 @@ def install_browser_api(app, require_current_user, row_value=None):
                 result = inspect(user_id)
             else:
                 raise ValueError("unsupported connection action")
-            return {"status": "ok", "result": result, "page": inspect(user_id)}
+            return {"status": "ok", "result": result, "page": _snapshot(user_id)}
         except Exception as exc:
             raise HTTPException(status_code=409, detail=f"{type(exc).__name__}: {str(exc)[:400]}")
 
@@ -79,9 +96,8 @@ def install_browser_api(app, require_current_user, row_value=None):
         user_id = uid(row)
         if not user_id:
             raise HTTPException(status_code=401, detail="Authenticated user required")
-        from browser_operator import inspect
         try:
-            return {"status": "ok", "page": inspect(user_id)}
+            return {"status": "ok", "page": _snapshot(user_id)}
         except Exception as exc:
             raise HTTPException(status_code=409, detail=f"{type(exc).__name__}: {str(exc)[:300]}")
 
@@ -96,7 +112,7 @@ def install_browser_api(app, require_current_user, row_value=None):
         approved = bool(body.get("approved"))
         if not isinstance(actions, list) or not actions:
             raise HTTPException(status_code=400, detail="actions are required")
-        external = any(str(a.get("type") or "").lower() in {"submit","post","publish","send"} for a in actions if isinstance(a, dict))
+        external = any(str(a.get("type") or "").lower() in {"submit", "post", "publish", "send"} for a in actions if isinstance(a, dict))
         if external and not approved:
             return {"status": "awaiting_approval", "approval_required": True, "actions": actions}
         from browser_operator import execute_plan
