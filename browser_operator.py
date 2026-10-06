@@ -105,11 +105,67 @@ def plan_goal(user_id: str, goal: str) -> Dict[str, Any]:
     data["actions"] = clean
     return {"success": True, "plan": data, "page": page}
 
+def _verification_evidence(before: Dict[str, Any], after: Dict[str, Any], actions: list[dict[str, Any]]) -> Dict[str, Any]:
+    """Require destination-page evidence before calling an external action verified."""
+    before_text = str(before.get("text") or "")
+    after_text = str(after.get("text") or "")
+    low = after_text.lower()
+
+    # Generic provider success language. This is evidence from the destination
+    # page, not proof that a recipient actually read the message.
+    success_phrases = (
+        "message sent", "sent successfully", "successfully sent",
+        "application submitted", "application was submitted",
+        "proposal submitted", "proposal was submitted",
+        "submission successful", "successfully submitted",
+        "your message has been sent", "your application has been submitted",
+    )
+    matched_phrase = next((p for p in success_phrases if p in low), None)
+
+    submitted_values = [
+        str(a.get("value") or "").strip()
+        for a in actions
+        if str(a.get("type") or "").lower() == "fill" and str(a.get("value") or "").strip()
+    ]
+    visible_message = None
+    for value in submitted_values:
+        normalized = " ".join(value.split()).lower()
+        if len(normalized) >= 4 and normalized in " ".join(after_text.split()).lower():
+            visible_message = value
+            break
+
+    url_changed = str(before.get("url") or "") != str(after.get("url") or "")
+    evidence = []
+    if matched_phrase:
+        evidence.append({"type": "provider_confirmation", "text": matched_phrase})
+    if visible_message:
+        evidence.append({"type": "submitted_text_visible", "text": visible_message[:500]})
+    if url_changed:
+        evidence.append({"type": "destination_changed", "from": before.get("url"), "to": after.get("url")})
+
+    verified = bool(matched_phrase or visible_message)
+    return {
+        "verification_status": "verified_sent" if verified else "not_verified",
+        "verified": verified,
+        "method": "provider_confirmation" if matched_phrase else ("submitted_text_visible" if visible_message else "none"),
+        "evidence": evidence,
+        "url": after.get("url"),
+        "title": after.get("title"),
+        "verified_at": datetime.now(timezone.utc).isoformat() if verified else None,
+        "recipient_read": False,
+        "note": "Verified means destination-page/provider evidence was observed; it does not confirm that the recipient read the message.",
+    }
+
+
 def execute_plan(user_id: str, actions: list[dict[str, Any]], *, allow_external: bool = False) -> Dict[str, Any]:
     results = []
+    external = any(str(a.get("type") or "").lower() in {"submit","post","publish","send"} for a in actions)
+    before = inspect(user_id) if external else None
+
     for action in actions:
         kind = str(action.get("type") or "").lower()
-        if kind in {"submit","post","publish","send"} and not allow_external: raise PermissionError("external browser action requires approval")
+        if kind in {"submit","post","publish","send"} and not allow_external:
+            raise PermissionError("external browser action requires approval")
         if kind == "navigate": result = navigate(user_id, action.get("url", ""))
         elif kind == "inspect": result = inspect(user_id)
         elif kind == "click": result = click(user_id, action.get("selector"), action.get("text"))
@@ -119,4 +175,21 @@ def execute_plan(user_id: str, actions: list[dict[str, Any]], *, allow_external:
         elif kind in {"submit","post","publish","send"}: result = click(user_id, action.get("selector"), action.get("text"))
         else: raise ValueError(f"unsupported browser action: {kind}")
         results.append({"type": kind, "result": result})
-    return {"success": True, "results": results, "final": inspect(user_id)}
+
+    final = inspect(user_id)
+    verification = _verification_evidence(before or final, final, actions) if external else {
+        "verification_status": "not_applicable",
+        "verified": False,
+        "method": "none",
+        "evidence": [],
+        "verified_at": None,
+        "recipient_read": False,
+        "note": "No external send/submit action was executed.",
+    }
+    return {
+        "success": True,
+        "external_executed": external,
+        "results": results,
+        "final": final,
+        "verification": verification,
+    }
