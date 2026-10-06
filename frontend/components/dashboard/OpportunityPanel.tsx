@@ -40,7 +40,7 @@ export default function OpportunityPanel() {
     <button type="button" onClick={() => setOpen(v => !v)} className="rounded-md border border-emerald-400/30 bg-emerald-400/5 px-2.5 py-1.5 font-mono-tech text-[10px] tracking-widest text-emerald-300 hover:bg-emerald-400/10">HUNT</button>
     {open && <>
       <button className="fixed inset-0 z-40 cursor-default" aria-label="Close opportunities" onClick={() => setOpen(false)} />
-      <div className="absolute right-0 top-full z-50 mt-2 w-[min(92vw,430px)] max-h-[75vh] overflow-y-auto rounded-xl border border-emerald-400/20 bg-[#05080f] p-3 shadow-2xl">
+      <div className="fixed right-3 top-[62px] z-50 w-[min(calc(100vw-24px),430px)] max-h-[calc(100dvh-78px)] overflow-y-auto rounded-xl border border-emerald-400/20 bg-[#05080f] p-3 shadow-2xl">
         <div className="mb-3 flex items-center gap-2">
           <div className="flex-1"><div className="font-mono-tech text-[10px] tracking-widest text-emerald-300">OPPORTUNITY HUNTER</div><div className="text-[10px] text-zinc-600">Public signals → score → review → approve</div></div>
           <select value={category} onChange={e => setCategory(e.target.value)} className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-zinc-300"><option value="clients">Clients</option><option value="jobs">Jobs</option><option value="saas">SaaS</option></select>
