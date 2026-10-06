@@ -417,11 +417,32 @@ def human_move(user_id: str, x: float, y: float) -> Dict[str, Any]:
     return {"success": True, "x": px, "y": py}
 
 def check_human_verification(user_id: str) -> Dict[str, Any]:
+    """Wait briefly for the provider to finish updating the manual challenge."""
     page = _page(user_id)
-    page.wait_for_timeout(500)
-    verification = _set_human_verification_state(user_id, page)
+    last = {"required": True, "reason": "human_verification_required", "indicators": []}
+    deadline = time.monotonic() + 6.0
+
+    while time.monotonic() < deadline:
+        last = _set_human_verification_state(user_id, page)
+        if not last.get("required"):
+            break
+        page.wait_for_timeout(500)
+
+    verified = not last.get("required", False)
     state = connection_status(user_id)
-    return {"verified": not verification.get("required", False), "human_verification": verification, "connection": state, "url": page.url, "title": page.title()}
+    return {
+        "verified": verified,
+        "status": "verified" if verified else "still_required",
+        "message": (
+            "Human verification completed in the live browser session."
+            if verified
+            else "The live browser still reports a human-verification challenge."
+        ),
+        "human_verification": last,
+        "connection": state,
+        "url": page.url,
+        "title": page.title(),
+    }
 
 def plan_goal(user_id: str, goal: str) -> Dict[str, Any]:
     page = inspect(user_id)
