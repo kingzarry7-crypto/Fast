@@ -101,7 +101,7 @@ def install_browser_api(app, require_current_user, row_value=None):
         return {"status": "ok", "browser": status()}
 
     @app.get("/api/browser/inspect")
-    def browser_inspect(request: Request):
+    async def browser_inspect(request: Request):
         row = require_current_user(request)
         user_id = uid(row)
         if not user_id:
