@@ -32,6 +32,35 @@ class BrowserOperatorTests(unittest.TestCase):
         self.assertEqual(result["verification_status"], "not_verified")
         self.assertFalse(result["verified"])
 
+
+    def test_real_chromium_safe_smoke_when_available(self):
+        """Exercise real Playwright Chromium without touching an external site."""
+        if browser_operator.sync_playwright is None:
+            self.skipTest("Playwright is not installed")
+        executable = os.getenv("BROWSER_EXECUTABLE_PATH") or "/usr/bin/chromium"
+        if not Path(executable).exists():
+            try:
+                with browser_operator.sync_playwright() as p:
+                    executable = p.chromium.executable_path
+            except Exception:
+                self.skipTest("No Chromium executable available")
+        if not Path(executable).exists():
+            self.skipTest("Chromium executable is unavailable")
+        original = os.environ.get("BROWSER_EXECUTABLE_PATH")
+        os.environ["BROWSER_EXECUTABLE_PATH"] = str(executable)
+        user_id = "browser-smoke-test"
+        try:
+            page = browser_operator.navigate(user_id, "data:text/html,<html><head><title>KZ Browser Smoke</title></head><body><h1>Browser runtime OK</h1><p>safe local test</p></body></html>")
+            self.assertEqual(page["title"], "KZ Browser Smoke")
+            inspected = browser_operator.inspect(user_id)
+            self.assertIn("Browser runtime OK", inspected["text"])
+        finally:
+            browser_operator.close(user_id)
+            if original is None:
+                os.environ.pop("BROWSER_EXECUTABLE_PATH", None)
+            else:
+                os.environ["BROWSER_EXECUTABLE_PATH"] = original
+
     def test_marketplace_send_click_requires_approval(self):
         with self.assertRaises(PermissionError):
             browser_operator.execute_plan(
