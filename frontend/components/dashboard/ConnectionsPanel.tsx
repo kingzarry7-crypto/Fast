@@ -38,7 +38,7 @@ export default function ConnectionsPanel() {
   async function action(type:string) {
     setBusy(true);
     try {
-      const button = type==="click" ? (page?.buttons||[]).find(x=>x.selector===selector) : null;
+      const button = type==="click" ? (page?.buttons||[]).find(x=>x.selector===selector || (!x.selector && selector==="__text__:"+x.text)) : null;
       const r=await fetch("/api/browser/connect/action",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({type,selector,value,text:button?.text||undefined})});
       const d=await r.json(); if(!r.ok) throw new Error(d.detail||"Action failed");
       setPage(d.page);
@@ -70,7 +70,7 @@ export default function ConnectionsPanel() {
             <p className="mt-2 text-[10px] text-zinc-500">Complete the challenge yourself. KZ will keep the session and check again automatically.</p>
           </div>}
           <div className="mt-3 space-y-2">
-            {(page.buttons||[]).filter(x=>x.text).map((x,i)=><button key={"b"+i} onClick={()=>{setSelector(x.selector||""); if(!x.selector) setMessage("This button has no stable selector. Use the visible page text and refresh the inspection.");}} className={"block w-full rounded-lg border p-2 text-left text-xs "+(selector===x.selector?"border-amber-400/40 bg-amber-400/10 text-amber-100":"border-white/5 text-zinc-500")}>BUTTON · {x.text}</button>)}
+            {(page.buttons||[]).filter(x=>x.text).map((x,i)=><button key={"b"+i} onClick={()=>setSelector(x.selector||"__text__:"+x.text)} className={"block w-full rounded-lg border p-2 text-left text-xs "+(selector===x.selector?"border-amber-400/40 bg-amber-400/10 text-amber-100":"border-white/5 text-zinc-500")}>BUTTON · {x.text}</button>)}
           {(page.inputs||[]).map((x,i)=><button key={i} onClick={()=>setSelector(x.selector)} className={"block w-full rounded-lg border p-2 text-left text-xs "+(selector===x.selector?"border-cyan-400/40 bg-cyan-400/10 text-cyan-100":"border-white/5 text-zinc-500")}>{x.type} · {x.name||x.placeholder||x.selector}</button>)}
           </div>
           {selector && <div className="mt-3 rounded-lg border border-cyan-400/15 p-3">
