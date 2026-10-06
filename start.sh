@@ -18,6 +18,19 @@ echo "   → Runtime PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH}"
 #    the Chromium executable managed by Playwright during the image build.
 #    This is diagnostic only; it never downloads browsers at runtime.
 # ------------------------------------------------------------------
+echo "🖥️ Starting virtual display for the interactive browser..."
+if command -v Xvfb >/dev/null 2>&1; then
+  export DISPLAY="${DISPLAY:-:99}"
+  if ! pgrep -f "Xvfb ${DISPLAY}" >/dev/null 2>&1; then
+    Xvfb "${DISPLAY}" -screen 0 1440x900x24 -nolisten tcp >/tmp/kz-xvfb.log 2>&1 &
+    XVFB_PID=$!
+    echo "   → Xvfb PID: ${XVFB_PID}, DISPLAY=${DISPLAY}"
+    sleep 1
+  fi
+else
+  echo "⚠️ Xvfb is unavailable; browser will remain headless."
+fi
+
 echo "🌐 Checking browser runtime..."
 if [ -n "${BROWSER_EXECUTABLE_PATH:-}" ] && [ -x "${BROWSER_EXECUTABLE_PATH}" ]; then
   echo "✅ Configured Chromium ready: ${BROWSER_EXECUTABLE_PATH}"

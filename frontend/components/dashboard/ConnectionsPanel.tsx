@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 
 type Connection = {
   status?: "login_required" | "human_verification" | "ready_to_confirm" | "connected" | string;
@@ -35,6 +35,7 @@ export default function ConnectionsPanel() {
   const [workflow, setWorkflow] = useState<any>(null);
   const [message, setMessage] = useState("");
   const [challengeBusy, setChallengeBusy] = useState(false);
+  const lastMoveAt = useRef(0);
 
   useEffect(() => {
     if (!open || !page?.human_verification?.required) return;
@@ -146,14 +147,35 @@ export default function ConnectionsPanel() {
     }
   }
 
-  async function interactWithChallenge(event: MouseEvent<HTMLImageElement>) {
-    if (!page?.human_verification?.required || !page.screenshot) return;
+  function challengeCoordinates(event: MouseEvent<HTMLImageElement>) {
     const image = event.currentTarget;
     const rect = image.getBoundingClientRect();
-    const viewportWidth = Number(page.viewport?.width || 1440);
-    const viewportHeight = Number(page.viewport?.height || 900);
-    const x = Math.max(0, Math.min(viewportWidth, ((event.clientX - rect.left) / rect.width) * viewportWidth));
-    const y = Math.max(0, Math.min(viewportHeight, ((event.clientY - rect.top) / rect.height) * viewportHeight));
+    const viewportWidth = Number(page?.viewport?.width || 1440);
+    const viewportHeight = Number(page?.viewport?.height || 900);
+    return {
+      x: Math.max(0, Math.min(viewportWidth, ((event.clientX - rect.left) / rect.width) * viewportWidth)),
+      y: Math.max(0, Math.min(viewportHeight, ((event.clientY - rect.top) / rect.height) * viewportHeight)),
+    };
+  }
+
+  async function moveOnChallenge(event: MouseEvent<HTMLImageElement>) {
+    if (!page?.human_verification?.required || challengeBusy) return;
+    const now = Date.now();
+    if (now - lastMoveAt.current < 120) return;
+    lastMoveAt.current = now;
+    const { x, y } = challengeCoordinates(event);
+    try {
+      await fetch("/api/browser/connect/action", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "human_move", x, y }),
+      });
+    } catch {}
+  }
+
+  async function interactWithChallenge(event: MouseEvent<HTMLImageElement>) {
+    if (!page?.human_verification?.required || !page.screenshot) return;
+    const { x, y } = challengeCoordinates(event);
 
     setChallengeBusy(true);
     setMessage("Sending your manual click to the KZ browser…");
@@ -279,15 +301,17 @@ export default function ConnectionsPanel() {
                       {page.human_verification.message || "Complete the challenge yourself. KZ will not bypass it."}
                     </p>
                     <p className="mt-2 text-[10px] leading-relaxed text-amber-100/60">
-                      The server browser is now shown below. Click the challenge directly in the browser image. KZ only forwards the coordinates you choose; it does not solve or bypass the challenge.
+                      The server browser is shown below. Move your pointer over the challenge, then click exactly where Fiverr asks you to click. KZ forwards only your manual pointer/click input; it does not solve or bypass the challenge.
                     </p>
                     {page.screenshot && (
                       <div className="mt-3 overflow-hidden rounded-lg border border-amber-400/20 bg-black">
                         <img
                           src={page.screenshot}
                           alt="Live KZ browser view for manual human verification"
+                          onMouseMove={moveOnChallenge}
                           onClick={interactWithChallenge}
-                          className={"block h-auto w-full cursor-crosshair " + (challengeBusy ? "opacity-60" : "")}
+                          draggable={false}
+                          className={"block h-auto w-full cursor-crosshair select-none " + (challengeBusy ? "opacity-60" : "")}
                         />
                       </div>
                     )}
