@@ -276,6 +276,33 @@ def human_click(user_id: str, x: float, y: float) -> Dict[str, Any]:
     return {"success": True, "x": px, "y": py, "human_verification": _set_human_verification_state(user_id, page)}
 
 
+def _human_pointer_position(user_id: str, x: float, y: float):
+    page = _page(user_id)
+    challenge = _set_human_verification_state(user_id, page)
+    if not challenge.get("required"):
+        raise PermissionError("Manual challenge interaction is only available while human verification is active.")
+    size = viewport(user_id)
+    px, py = float(x), float(y)
+    if px < 0 or py < 0 or px > size["width"] or py > size["height"]:
+        raise ValueError("Pointer coordinates are outside the browser viewport.")
+    return page, px, py
+
+
+def human_down(user_id: str, x: float, y: float) -> Dict[str, Any]:
+    page, px, py = _human_pointer_position(user_id, x, y)
+    page.mouse.move(px, py)
+    page.mouse.down()
+    return {"success": True, "x": px, "y": py}
+
+
+def human_up(user_id: str, x: float, y: float) -> Dict[str, Any]:
+    page, px, py = _human_pointer_position(user_id, x, y)
+    page.mouse.move(px, py)
+    page.mouse.up()
+    page.wait_for_timeout(500)
+    return {"success": True, "x": px, "y": py, "human_verification": _set_human_verification_state(user_id, page)}
+
+
 def human_move(user_id: str, x: float, y: float) -> Dict[str, Any]:
     """Move the user's pointer inside an active human challenge."""
     page = _page(user_id)
