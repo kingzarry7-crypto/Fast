@@ -9,17 +9,20 @@ echo "════════════════════════�
 export PORT="${PORT:-8000}"
 
 # ------------------------------------------------------------------
-# 0) Ensure Playwright's Chromium exists in the runtime image.
-#    Nixpacks installs it during build, but Railway/runtime images can
-#    have a different Playwright cache path. Installing here makes the
-#    browser operator self-healing across fresh deployments/restarts.
+# 0) Browser runtime check.
+#    Railway installs system Chromium from nixpacks.toml.
+#    browser_operator.py uses /usr/bin/chromium automatically, so
+#    never try to write Playwright browsers into protected
+#    /usr/local/lib/python3.12/site-packages at runtime.
 # ------------------------------------------------------------------
-echo "🌐 Checking Playwright Chromium..."
-if ! python -m playwright install chromium; then
-  echo "❌ Playwright Chromium installation failed. Exiting."
-  exit 1
+echo "🌐 Checking system Chromium..."
+if [ -x "/usr/bin/chromium" ]; then
+  echo "✅ System Chromium ready: /usr/bin/chromium"
+elif command -v chromium >/dev/null 2>&1; then
+  echo "✅ System Chromium ready: $(command -v chromium)"
+else
+  echo "⚠️ System Chromium was not found. Browser operator will be unavailable."
 fi
-echo "✅ Playwright Chromium ready."
 
 # ------------------------------------------------------------------
 # 1) FastAPI HTTP server (for Vercel frontend)
@@ -29,32 +32,25 @@ uvicorn api:app --host 0.0.0.0 --port "${PORT}" --workers 1 &
 API_PID=$!
 echo "   → FastAPI PID: ${API_PID}"
 
-# Give FastAPI a moment to bind so Vercel health checks don't race
 sleep 3
 
-# Sanity check — is the API actually alive?
 if ! kill -0 "${API_PID}" 2>/dev/null; then
   echo "❌ FastAPI failed to start. Exiting."
   exit 1
 fi
 
 # ------------------------------------------------------------------
-# 2) Telegram bot (also spawns Discord inside bot.py as a thread)
+# 2) Telegram + Discord bot
 # ------------------------------------------------------------------
 echo "🤖 Starting Telegram + Discord bot (bot.py)..."
 python bot.py &
 BOT_PID=$!
 echo "   → Bot PID: ${BOT_PID}"
 
-# ------------------------------------------------------------------
-# 3) Keep container alive — if either process dies, exit so Railway
-#    restarts the whole container (avoids half-dead states)
-# ------------------------------------------------------------------
 echo "═══════════════════════════════════════════════════════════════"
 echo "✅ All services launched. Monitoring..."
 echo "═══════════════════════════════════════════════════════════════"
 
-# Wait for whichever dies first
 wait -n "${API_PID}" "${BOT_PID}"
 EXIT_CODE=$?
 
