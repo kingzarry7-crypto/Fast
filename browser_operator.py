@@ -154,7 +154,38 @@ def connection_status(user_id: str) -> Dict[str, Any]:
     login_signal = password_fields > 0 or any(word in text for word in login_words)
     logout_signal = any(word in text for word in logout_words)
     account_matches = {word for word in account_words if word in text}
-    positive_auth = logout_signal or len(account_matches) >= 2
+
+    # Provider-specific authenticated UI markers. These are deliberately
+    # positive/account-only signals; a public homepage or login form cannot
+    # satisfy them.
+    provider = (page.url or "").lower()
+    provider_markers: list[str] = []
+    if "fiverr.com" in provider:
+        fiverr_markers = (
+            "switch to selling", "switch to buying", "seller dashboard",
+            "my gigs", "my orders", "my profile", "manage orders",
+            "earnings", "inbox", "profile settings",
+        )
+        provider_markers = [x for x in fiverr_markers if x in text]
+        # Fiverr's authenticated shell can expose account/profile links without
+        # printing the word "logout".
+        try:
+            account_links = page.locator(
+                'a[href*="/users/"], a[href*="/profile"], '
+                'a[href*="/dashboard"], a[href*="/gigs"], '
+                'button[aria-label*="profile" i], button[aria-label*="account" i]'
+            ).count()
+        except Exception:
+            account_links = 0
+    else:
+        account_links = 0
+
+    positive_auth = (
+        logout_signal
+        or len(account_matches) >= 2
+        or len(provider_markers) >= 2
+        or (bool(provider_markers) and account_links >= 1)
+    )
 
     # Cookie values are never returned, logged, or stored. Cookie names are
     # only a secondary signal because anonymous sessions also have cookies.
@@ -175,7 +206,10 @@ def connection_status(user_id: str) -> Dict[str, Any]:
     auth_cookie_matches = sorted(cookie_names.intersection(auth_cookie_names))
     auth_cookie_signal = bool(auth_cookie_matches)
 
-    authenticated = bool(positive_auth or (auth_cookie_signal and len(account_matches) >= 1))
+    authenticated = bool(
+        positive_auth
+        or (auth_cookie_signal and (len(account_matches) >= 1 or len(provider_markers) >= 1))
+    )
 
     with _LOCK:
         session = _SESSIONS.get(str(user_id)) or {}
@@ -202,6 +236,8 @@ def connection_status(user_id: str) -> Dict[str, Any]:
             "login_signal": bool(login_signal),
             "logout_signal": bool(logout_signal),
             "account_markers": sorted(account_matches),
+            "provider_markers": provider_markers,
+            "account_link_count": account_links,
             "positive_auth_signal": bool(positive_auth),
             "auth_cookie_names": auth_cookie_matches,
             "auth_cookie_signal": auth_cookie_signal,
