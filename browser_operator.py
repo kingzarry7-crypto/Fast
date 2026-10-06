@@ -126,11 +126,66 @@ def _target(page: Page, selector: Optional[str] = None, text: Optional[str] = No
     if text: return page.get_by_text(text, exact=True).first
     raise ValueError("selector or text is required")
 
+def connection_status(user_id: str) -> Dict[str, Any]:
+    """Return a conservative login/session state for the current browser page.
+
+    This is intentionally a heuristic. The user explicitly confirms the
+    session after completing login; KZ never receives or stores a password as
+    account state.
+    """
+    page = _page(user_id)
+    verification = _set_human_verification_state(user_id, page)
+    try:
+        text = page.locator("body").inner_text(timeout=5000)[:12000].lower()
+    except Exception:
+        text = ""
+    password_fields = page.locator('input[type="password"]').count()
+    login_words = ("sign in", "log in", "login", "password", "forgot password", "create account")
+    login_required = password_fields > 0 or any(word in text for word in login_words)
+    with _LOCK:
+        session = _SESSIONS.get(str(user_id)) or {}
+        confirmed = bool(session.get("account_connected"))
+    if verification.get("required"):
+        status = "human_verification"
+    elif confirmed:
+        status = "connected"
+    elif login_required:
+        status = "login_required"
+    else:
+        status = "ready_to_confirm"
+    return {
+        "status": status,
+        "connected": status == "connected",
+        "login_required": status == "login_required",
+        "human_verification_required": verification.get("required", False),
+        "url": page.url,
+        "title": page.title(),
+    }
+
+
+def confirm_connection(user_id: str) -> Dict[str, Any]:
+    """Mark the current authenticated browser session as connected after user confirmation."""
+    page = _page(user_id)
+    verification = _set_human_verification_state(user_id, page)
+    if verification.get("required"):
+        raise PermissionError("Human verification is still required. Complete it yourself first.")
+    state = connection_status(user_id)
+    if state.get("login_required"):
+        raise PermissionError("The current page still appears to require login.")
+    with _LOCK:
+        item = _SESSIONS.get(str(user_id))
+        if item is not None:
+            item["account_connected"] = True
+            item["connected_at"] = datetime.now(timezone.utc).isoformat()
+    return connection_status(user_id)
+
+
 def inspect(user_id: str) -> Dict[str, Any]:
     page = _page(user_id)
     text = page.locator("body").inner_text(timeout=10000)[:12000]
     verification = _set_human_verification_state(user_id, page)
-    return {"url": page.url, "title": page.title(), "text": text, "human_verification": verification, "buttons": [{"text": (x.inner_text() or "")[:160], "selector": "#" + x.get_attribute("id") if x.get_attribute("id") else None} for x in page.locator("button, [role=\"button\"]").all()[:40]], "links": [{"text": (x.inner_text() or "")[:160], "href": x.get_attribute("href")} for x in page.locator("a").all()[:40]], "inputs": [{"selector": "#"+x.get_attribute("id") if x.get_attribute("id") else "input[name=\""+str(x.get_attribute("name") or "")+"\"]", "type": x.get_attribute("type") or "text", "name": x.get_attribute("name"), "placeholder": x.get_attribute("placeholder")} for x in page.locator("input,textarea,select").all()[:40]]}
+    state = connection_status(user_id)
+    return {"url": page.url, "title": page.title(), "text": text, "human_verification": verification, "connection": state, "buttons": [{"text": (x.inner_text() or "")[:160], "selector": "#" + x.get_attribute("id") if x.get_attribute("id") else None} for x in page.locator("button, [role=\"button\"]").all()[:40]], "links": [{"text": (x.inner_text() or "")[:160], "href": x.get_attribute("href")} for x in page.locator("a").all()[:40]], "inputs": [{"selector": "#"+x.get_attribute("id") if x.get_attribute("id") else "input[name=\""+str(x.get_attribute("name") or "")+"\"]", "type": x.get_attribute("type") or "text", "name": x.get_attribute("name"), "placeholder": x.get_attribute("placeholder")} for x in page.locator("input,textarea,select").all()[:40]]}
 
 def navigate(user_id: str, url: str) -> Dict[str, Any]:
     url = str(url or "").strip()
