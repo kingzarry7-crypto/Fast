@@ -24,7 +24,27 @@ def run_in_browser_thread(fn, *args, **kwargs):
 
 def status() -> Dict[str, Any]:
     profile = _profile_root()
-    return {"available": sync_playwright is not None, "sessions": len(_SESSIONS), "profile_dir": str(profile), "persistent_storage_configured": str(profile).startswith("/data/") or bool(os.getenv("BROWSER_PROFILE_DIR")), "policy": "explicit browser actions; consequential external actions require approval"}
+    configured = os.getenv("BROWSER_EXECUTABLE_PATH")
+    candidates = [configured, "/usr/bin/chromium", "/usr/bin/chromium-browser"]
+    executable = next((str(x) for x in candidates if x and Path(str(x)).is_file()), None)
+    if executable is None and sync_playwright is not None:
+        try:
+            with sync_playwright() as p:
+                managed = str(p.chromium.executable_path or "")
+                if managed and Path(managed).is_file():
+                    executable = managed
+        except Exception:
+            executable = None
+
+    return {
+        "available": bool(sync_playwright is not None and executable),
+        "playwright_installed": sync_playwright is not None,
+        "executable": executable,
+        "sessions": len(_SESSIONS),
+        "profile_dir": str(profile),
+        "persistent_storage_configured": str(profile).startswith("/data/") or bool(os.getenv("BROWSER_PROFILE_DIR")),
+        "policy": "explicit browser actions; consequential external actions require approval",
+    }
 
 def _profile_root() -> Path:
     return Path(os.getenv("BROWSER_PROFILE_DIR", "./data/browser_profiles")).resolve()
@@ -109,9 +129,15 @@ def plan_goal(user_id: str, goal: str) -> Dict[str, Any]:
     allowed = {"navigate","inspect","click","fill","select","upload","submit","post","publish","send"}
     clean = []
     for action in actions[:30]:
-        if not isinstance(action, dict): continue
+        if not isinstance(action, dict):
+            continue
         kind = str(action.get("type") or "").lower()
-        if kind in allowed: clean.append({k: action[k] for k in ("type","selector","text","value","url") if k in action})
+        if kind in allowed:
+            clean.append({
+                k: action[k]
+                for k in ("type", "selector", "text", "value", "url", "path")
+                if k in action
+            })
     data["actions"] = clean
     return {"success": True, "plan": data, "page": page}
 
