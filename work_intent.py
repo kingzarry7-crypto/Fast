@@ -41,6 +41,13 @@ _WORK_PHRASES = (
     "research this for me",
     "prepare this for me",
     "automate this for me",
+    "keep working on this",
+    "continue this for me",
+    "finish this for me",
+    "take over this task",
+    "handle the whole thing",
+    "manage this for me",
+    "keep going on this",
 )
 
 def parse(text: str) -> dict[str, Any] | None:
