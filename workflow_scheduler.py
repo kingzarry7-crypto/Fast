@@ -38,7 +38,15 @@ def run_once(limit: int = 25) -> Dict[str, Any]:
                 resumed += 1
             except Exception:
                 errors += 1
-        _LAST_ERROR = None if errors == 0 else f"{errors} workflow(s) failed to resume"
+        try:
+        from reliability_guardian import snapshot, record_success, record_failure
+        if errors == 0:
+            record_success()
+        else:
+            record_failure(RuntimeError("workflow resume failures"), risk="green", attempts=1)
+    except Exception:
+        pass
+    _LAST_ERROR = None if errors == 0 else f"{errors} workflow(s) failed to resume"
     except Exception as exc:
         errors += 1
         _LAST_ERROR = type(exc).__name__
