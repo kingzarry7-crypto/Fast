@@ -2,9 +2,11 @@ name: Fast Security Checks
 
 on:
   push:
-    branches: ["main"]
+    branches:
+      - main
   pull_request:
-    branches: ["main"]
+    branches:
+      - main
   schedule:
     - cron: "17 3 * * 1"
 
@@ -25,10 +27,10 @@ jobs:
       - name: Generate frontend lockfile for audit
         working-directory: frontend
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-      - name: Audit frontend dependencies
+      - name: Audit runtime frontend dependencies
         working-directory: frontend
         run: npm audit --omit=dev --audit-level=high
-      # The remaining braces advisory is in eslint-config-next development tooling.\n      # There is no upstream patched release yet; Dependabot will track it.\n      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Audit Python dependencies
