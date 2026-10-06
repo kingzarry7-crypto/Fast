@@ -140,7 +140,7 @@ def connection_status(user_id: str) -> Dict[str, Any]:
     except Exception:
         text = ""
     password_fields = page.locator('input[type="password"]').count()
-    login_words = ("sign in", "log in", "login", "password", "forgot password", "create account")
+    login_words = ("sign in to", "log in to", "forgot password", "enter your password", "create your account")
     login_required = password_fields > 0 or any(word in text for word in login_words)
     with _LOCK:
         session = _SESSIONS.get(str(user_id)) or {}
