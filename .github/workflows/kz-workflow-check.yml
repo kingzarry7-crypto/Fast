@@ -21,6 +21,7 @@ on:
       - "test_job_outreach_agent.py"
       - "test_browser_operator.py"
       - ".github/workflows/kz-workflow-check.yml"
+      - "frontend/**"
   pull_request:
     paths:
       - "workflow_*.py"
@@ -38,6 +39,25 @@ on:
       - "discord_bot.py"
 
 jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package.json
+      - name: Install frontend dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck frontend
+        run: npm run typecheck
+      - name: Build frontend
+        run: npm run build
+
   compile:
     runs-on: ubuntu-latest
     steps:
