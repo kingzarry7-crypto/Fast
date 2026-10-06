@@ -1,2 +1,11 @@
 [packages]
 apt = ["ffmpeg", "chromium"]
+
+[phases.setup]
+nixPkgs = ["python312", "chromium"]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt", "python -m playwright install chromium"]
+
+[phases.build]
+cmds = ["python -m compileall -q ."]
