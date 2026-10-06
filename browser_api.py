@@ -18,10 +18,11 @@ async def _browser_call(fn, *args, **kwargs):
     return await loop.run_in_executor(None, lambda: run_in_browser_thread(fn, *args, **kwargs))
 
 def _snapshot(user_id: str):
-    from browser_operator import inspect, screenshot
+    from browser_operator import inspect, screenshot, viewport
     page = inspect(user_id)
     image = base64.b64encode(screenshot(user_id)).decode("ascii")
     page["screenshot"] = "data:image/png;base64," + image
+    page["viewport"] = viewport(user_id)
     return page
 
 
@@ -139,6 +140,16 @@ def install_browser_api(app, require_current_user, row_value=None):
                 result = await _browser_call(select, user_id, str(body.get("selector") or ""), str(body.get("value") or ""))
             elif kind == "refresh":
                 result = await _browser_call(inspect, user_id)
+            elif kind == "human_click":
+                from browser_operator import human_click
+                result = await _browser_call(
+                    human_click, user_id, float(body.get("x")), float(body.get("y"))
+                )
+            elif kind == "human_move":
+                from browser_operator import human_move
+                result = await _browser_call(
+                    human_move, user_id, float(body.get("x")), float(body.get("y"))
+                )
             else:
                 raise ValueError("unsupported connection action")
             return {"status": "ok", "result": result, "page": await _browser_call(_snapshot, user_id)}
