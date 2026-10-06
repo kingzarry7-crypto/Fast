@@ -10,20 +10,40 @@ export PORT="${PORT:-8000}"
 
 # ------------------------------------------------------------------
 # 0) Browser runtime check.
-#    Railway installs system Chromium from nixpacks.toml.
-#    browser_operator.py uses /usr/bin/chromium automatically, so
-#    never try to write Playwright browsers into protected
-#    /usr/local/lib/python3.12/site-packages at runtime.
+#    Prefer an explicitly configured/system browser, otherwise verify
+#    the Chromium executable managed by Playwright during the image build.
+#    This is diagnostic only; it never downloads browsers at runtime.
 # ------------------------------------------------------------------
-echo "🌐 Checking system Chromium..."
-if [ -x "/usr/bin/chromium" ]; then
+echo "🌐 Checking browser runtime..."
+if [ -n "${BROWSER_EXECUTABLE_PATH:-}" ] && [ -x "${BROWSER_EXECUTABLE_PATH}" ]; then
+  echo "✅ Configured Chromium ready: ${BROWSER_EXECUTABLE_PATH}"
+elif [ -x "/usr/bin/chromium" ]; then
   echo "✅ System Chromium ready: /usr/bin/chromium"
 elif command -v chromium >/dev/null 2>&1; then
   echo "✅ System Chromium ready: $(command -v chromium)"
 else
-  echo "⚠️ System Chromium was not found. Browser operator will be unavailable."
-fi
+  echo "ℹ️ System Chromium not present; checking Playwright-managed Chromium..."
+  python - <<'PY'
+import os
+from pathlib import Path
 
+try:
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        exe = Path(p.chromium.executable_path)
+        print(f"   → PLAYWRIGHT_BROWSERS_PATH={os.getenv('PLAYWRIGHT_BROWSERS_PATH', '(unset)')}")
+        print(f"   → Playwright Chromium: {exe}")
+        print(f"   → Exists: {exe.exists()}")
+
+        if exe.exists():
+            print("✅ Playwright-managed Chromium ready.")
+        else:
+            print("⚠️ Playwright-managed Chromium is missing. Browser operator will be unavailable.")
+except Exception as e:
+    print(f"⚠️ Browser runtime check failed: {type(e).__name__}: {e}")
+PY
+fi
 # ------------------------------------------------------------------
 # 1) FastAPI HTTP server (for Vercel frontend)
 # ------------------------------------------------------------------
