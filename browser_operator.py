@@ -27,9 +27,20 @@ def _session(user_id: str) -> Dict[str, Any]:
         root = _profile_root() / re.sub(r"[^A-Za-z0-9_.-]", "_", str(user_id))
         root.mkdir(parents=True, exist_ok=True)
         if _PLAYWRIGHT is None: _PLAYWRIGHT = sync_playwright().start()
-        executable = os.getenv("BROWSER_EXECUTABLE_PATH") or "/usr/bin/chromium"
+        # Prefer an explicitly configured/system browser, then the Chromium
+        # installed by Playwright during the image build.
+        configured = os.getenv("BROWSER_EXECUTABLE_PATH")
+        candidates = [configured, "/usr/bin/chromium", "/usr/bin/chromium-browser"]
+        executable = next((str(x) for x in candidates if x and Path(str(x)).exists()), None)
+        if executable is None:
+            try:
+                managed = _PLAYWRIGHT.chromium.executable_path
+                if managed and Path(managed).exists():
+                    executable = str(managed)
+            except Exception:
+                executable = None
         kwargs = {"headless": True, "viewport": {"width": 1440, "height": 900}, "accept_downloads": True}
-        if Path(executable).exists(): kwargs["executable_path"] = executable
+        if executable: kwargs["executable_path"] = executable
         context = _PLAYWRIGHT.chromium.launch_persistent_context(str(root), **kwargs)
         item = {"context": context, "page": context.pages[0] if context.pages else context.new_page()}
         _SESSIONS[str(user_id)] = item
