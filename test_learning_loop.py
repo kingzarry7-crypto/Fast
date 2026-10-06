@@ -23,6 +23,35 @@ class LearningLoopTests(unittest.TestCase):
         })
         self.assertEqual(lessons[0]["type"], "workflow_failure")
 
+
+    def test_completed_external_workflow_without_verification_does_not_learn_success(self):
+        lessons = extract_lessons({
+            "user_id": "u1",
+            "goal": "submit approved proposal",
+            "status": "completed",
+            "plan": [{"action": "browser_execute", "requires_approval": True, "status": "completed"}],
+            "result": {},
+        })
+        self.assertFalse(any(x["type"] == "workflow_success" for x in lessons))
+
+    def test_completed_external_workflow_with_verification_learns_success(self):
+        lessons = extract_lessons({
+            "user_id": "u1",
+            "goal": "submit approved proposal",
+            "status": "completed",
+            "plan": [{"action": "browser_execute", "requires_approval": True, "status": "completed"}],
+            "result": {
+                "browser_execute": {
+                    "verification": {
+                        "verification_status": "verified_sent",
+                        "verified": True,
+                        "evidence": [{"type": "provider_confirmation", "text": "proposal submitted"}],
+                    }
+                }
+            },
+        })
+        self.assertTrue(any(x["type"] == "workflow_success" for x in lessons))
+
     def test_empty_goal_does_not_learn(self):
         self.assertEqual(extract_lessons({"status": "completed"}), [])
 
