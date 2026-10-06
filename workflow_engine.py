@@ -53,7 +53,13 @@ def _step(workflow_id: str, position: int, title: str, action: str,
 
 def _classify_goal(goal: str) -> Dict[str, Any]:
     low = goal.lower()
-    if any(x in low for x in ("fiverr", "freelance", "client", "website client", "gig")):
+    if any(x in low for x in (
+        "fiverr", "upwork", "freelancer.com", "peopleperhour", "guru.com",
+        "submit proposal", "send proposal", "apply to this job", "apply for this job",
+        "job application", "marketplace application",
+    )):
+        return {"kind": "marketplace_application", "revenue": 180.0}
+    if any(x in low for x in ("freelance", "client", "website client", "gig")):
         return {"kind": "revenue_freelance", "revenue": 180.0}
     if any(x in low for x in ("make money", "make $", "earn", "revenue", "income", "money this week")):
         return {"kind": "revenue_research", "revenue": 200.0}
@@ -75,7 +81,15 @@ def plan_goal(workflow_id: str, user_id: str, goal: str) -> Dict[str, Any]:
     steps.append(_step(workflow_id, 1, "Understand the goal and constraints", "analyze_goal"))
     steps.append(_step(workflow_id, 2, "Research current information and opportunities", "research_goal"))
 
-    if kind == "revenue_freelance":
+    if kind == "marketplace_application":
+        steps += [
+            _step(workflow_id, 3, "Open the marketplace opportunity and inspect requirements", "browser_prepare"),
+            _step(workflow_id, 4, "Prepare the exact application actions", "browser_plan"),
+            _step(workflow_id, 5, "Submit only the exact approved application", "browser_execute", RiskLevel.YELLOW, True),
+            _step(workflow_id, 6, "Verify the marketplace submission evidence", "browser_verify"),
+            _step(workflow_id, 7, "Record the result for future applications", "learn"),
+        ]
+    elif kind == "revenue_freelance":
         steps += [
             _step(workflow_id, 3, "Build qualified client opportunities", "build_leads"),
             _step(workflow_id, 4, "Prepare personalized offers and delivery plans",
@@ -215,7 +229,17 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
         result = plan_goal(str(item["user_id"]), goal)
         plan = result.get("plan") or {}
         item["result"]["browser_plan"] = plan
-        external = any(str(a.get("type") or "").lower() in {"submit","post","publish","send"} for a in plan.get("actions") or [])
+        external = any(
+            str(a.get("type") or "").lower() in {"submit","post","publish","send"}
+            or (
+                str(a.get("type") or "").lower() == "click"
+                and any(
+                    word in (str(a.get("text") or "") + " " + str(a.get("selector") or "")).lower()
+                    for word in ("send", "submit", "apply", "place bid", "send proposal", "publish")
+                )
+            )
+            for a in plan.get("actions") or []
+        )
         return {"success": True, "browser_plan": plan, "external_action": external,
                 "message": plan.get("summary") or "Browser action plan prepared for approval."}
 
