@@ -60,12 +60,12 @@ export default function OpportunityPanel() {
           <div className="flex items-center justify-between"><div className="font-mono-tech text-[9px] tracking-widest text-emerald-300">CLIENT ACQUISITION · {prospect.qualification?.fit_score}/100</div><span className="text-[9px] text-zinc-500">{prospect.status}</span></div>
           <div className="mt-2 grid grid-cols-2 gap-2 text-[9px] text-zinc-500"><div>FROM <b className="text-zinc-200">{prospect.profile?.display_name||"Profile incomplete"}</b></div><div>ROLE <b className="text-zinc-200">{prospect.profile?.professional_title||"—"}</b></div></div>
           <div className="mt-2 rounded border border-white/10 bg-black/20 p-2"><div className="text-[10px] font-medium text-zinc-200">{prospect.outreach?.subject}</div><p className="mt-2 whitespace-pre-wrap text-[10px] leading-relaxed text-zinc-400">{prospect.outreach?.message}</p></div>
-          {!prospect.profile_ready&&<div className="mt-2 text-[9px] text-amber-300">PROFILE INCOMPLETE — {prospect.missing_profile?.join(", ")}.</div>}
+          {!prospect.profile_ready&&<div className="mt-2 text-[9px] text-amber-300">PROFILE INCOMPLETE — {prospect.missing_profile?.join(", ")}. <button onClick={()=>setProfileOpen(true)} className="underline">OPEN PROFILE</button></div>}
           {prospect.profile_ready&&prospect.status!=="sent"&&<div className="mt-3 rounded border border-amber-400/20 bg-amber-400/5 p-2">
             <div className="text-[9px] uppercase tracking-widest text-amber-300">EXACT DESTINATION — REVIEW BEFORE APPROVAL</div>
             <div className="mt-2 flex gap-2"><select value={channel} onChange={e=>setChannel(e.target.value)} className="rounded border border-white/10 bg-black/30 px-2 py-1.5 text-[10px] text-zinc-300"><option value="email">Email</option><option value="whatsapp">WhatsApp</option></select><input value={destination} onChange={e=>setDestination(e.target.value)} placeholder={channel==="email"?"client@example.com":"+234..."} className="min-w-0 flex-1 rounded border border-white/10 bg-black/30 px-2 py-1.5 text-[10px] text-zinc-200"/></div>
             <button onClick={approveAndSend} disabled={sending||!destination} className="mt-2 w-full rounded border border-emerald-400/40 bg-emerald-400/10 px-3 py-2 font-mono-tech text-[10px] tracking-widest text-emerald-300 disabled:opacity-40">{sending?"SENDING…":"APPROVE & SEND"}</button>
-            <div className="mt-1 text-center text-[8px] text-zinc-600">This button is the explicit approval. KZ will not send before you press it.</div>
+            <div className="mt-1 text-center text-[8px] text-zinc-600">APPROVAL REQUIRED — nothing is sent before you press APPROVE &amp; SEND.</div>
           </div>}
           {prospect.status==="sent"&&<div className="mt-2 rounded border border-emerald-400/20 bg-emerald-400/5 p-2 text-center font-mono-tech text-[9px] text-emerald-300">SENT — provider confirmed the action.</div>}
         </div>}
