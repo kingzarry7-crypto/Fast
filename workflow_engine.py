@@ -224,8 +224,26 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
         actions = plan.get("actions") or []
         if not actions:
             return {"success": False, "error": "No browser actions were prepared."}
+
+        # The exact browser plan must be the one that was shown for approval.
+        # This prevents a modified plan from being executed under an older approval.
+        approval_id = str(step.get("approval_id") or "")
+        fingerprint = str(step.get("browser_action_fingerprint") or "")
+        if not approval_id or not fingerprint:
+            return {"success": False, "error": "Browser execution is not bound to an approved action plan."}
+
+        canonical = json.dumps(
+            actions, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        )
+        current_fingerprint = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        if current_fingerprint != fingerprint:
+            return {"success": False, "error": "Approved browser action plan no longer matches the execution plan."}
+
         from browser_operator import execute_plan
-        return execute_plan(str(item["user_id"]), actions, allow_external=True)
+        result = execute_plan(str(item["user_id"]), actions, allow_external=True)
+        result["approval_id"] = approval_id
+        result["action_fingerprint"] = current_fingerprint
+        return result
 
     if action == "browser_verify":
         from browser_operator import inspect
