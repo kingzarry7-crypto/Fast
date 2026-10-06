@@ -25,12 +25,15 @@ def status() -> Dict[str, Any]:
 def run_once(limit: int = 25) -> Dict[str, Any]:
     global _LAST_RUN, _LAST_ERROR, _RUN_COUNT
     from datetime import datetime, timezone
+
     _LAST_RUN = datetime.now(timezone.utc).isoformat()
     resumed = 0
     errors = 0
+
     try:
         from workflow_store import list_workflows_for_worker
         from workflow_engine import run_workflow
+
         rows = list_workflows_for_worker(limit)
         for row in rows:
             try:
@@ -38,30 +41,46 @@ def run_once(limit: int = 25) -> Dict[str, Any]:
                 resumed += 1
             except Exception:
                 errors += 1
+
         try:
-        from reliability_guardian import snapshot, record_success, record_failure
-        if errors == 0:
-            record_success()
-        else:
-            record_failure(RuntimeError("workflow resume failures"), risk="green", attempts=1)
-    except Exception:
-        pass
-    _LAST_ERROR = None if errors == 0 else f"{errors} workflow(s) failed to resume"
+            from reliability_guardian import record_success, record_failure
+            if errors == 0:
+                record_success()
+            else:
+                record_failure(
+                    RuntimeError("workflow resume failures"),
+                    risk="green",
+                    attempts=1,
+                )
+        except Exception:
+            # Reliability telemetry must never stop the scheduler.
+            pass
+
+        _LAST_ERROR = (
+            None if errors == 0
+            else f"{errors} workflow(s) failed to resume"
+        )
     except Exception as exc:
         errors += 1
         _LAST_ERROR = type(exc).__name__
+
     _RUN_COUNT += 1
-    return {"resumed": resumed, "errors": errors, "checked": resumed + errors}
+    return {
+        "resumed": resumed,
+        "errors": errors,
+        "checked": resumed + errors,
+    }
 
 
 def start(interval_seconds: int = 30) -> None:
     global _STARTED
+
     with _LOCK:
         if _STARTED:
             return
         _STARTED = True
 
-    def loop():
+    def loop() -> None:
         while True:
             try:
                 run_once()
@@ -69,4 +88,8 @@ def start(interval_seconds: int = 30) -> None:
                 pass
             time.sleep(max(10, int(interval_seconds)))
 
-    threading.Thread(target=loop, name="kz-workflow-scheduler", daemon=True).start()
+    threading.Thread(
+        target=loop,
+        name="kz-workflow-scheduler",
+        daemon=True,
+    ).start()
