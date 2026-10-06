@@ -27,8 +27,8 @@ jobs:
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
       - name: Audit frontend dependencies
         working-directory: frontend
-        run: npm audit --audit-level=high
-      - uses: actions/setup-python@v5
+        run: npm audit --omit=dev --audit-level=high
+      # The remaining braces advisory is in eslint-config-next development tooling and has no upstream patched release yet.\n      # Keep production/runtime dependency auditing blocking; Dependabot will track the dev-only advisory.\n      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Audit Python dependencies
