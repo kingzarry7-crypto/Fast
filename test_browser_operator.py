@@ -32,6 +32,14 @@ class BrowserOperatorTests(unittest.TestCase):
         self.assertEqual(result["verification_status"], "not_verified")
         self.assertFalse(result["verified"])
 
+    def test_marketplace_send_click_requires_approval(self):
+        with self.assertRaises(PermissionError):
+            browser_operator.execute_plan(
+                "test-user",
+                [{"type": "click", "text": "Send proposal"}],
+                allow_external=False,
+            )
+
     def test_external_action_requires_approval(self):
         with self.assertRaises(PermissionError):
             browser_operator.execute_plan("test-user", [{"type": "publish", "text": "Publish"}], allow_external=False)
