@@ -180,16 +180,38 @@ export default function ConnectionsPanel() {
 
   async function checkHumanVerification() {
     setChallengeBusy(true);
-    setMessage("Checking the same Fiverr browser session for completed verification...");
+    setMessage("CHECKING: waiting for Fiverr to report the result...");
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
     try {
-      const r = await fetch("/api/browser/connect/action", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "human_verify" }) });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || "Could not check verification");
+      const r = await fetch("/api/browser/connect/action", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "human_verify" }),
+        signal: controller.signal,
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.detail || "Verification check failed");
       setPage(d.page);
       setConnection(d.page?.connection || null);
-      setMessage(d.result?.verified ? "Human verification completed. Your Fiverr session can now continue." : "Fiverr is still asking for human verification. Complete the challenge, then press CHECK VERIFICATION again.");
-    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not check verification"); }
-    finally { setChallengeBusy(false); }
+      if (d.result?.verified) {
+        setMessage("✓ VERIFIED — Fiverr's human-verification challenge has cleared. KZ is now checking your actual login session.");
+      } else {
+        setMessage("NOT VERIFIED — Fiverr is still reporting the human-verification challenge. Complete it, wait for it to finish, then press CHECK VERIFICATION again.");
+      }
+    } catch (e) {
+      setMessage(
+        e instanceof DOMException && e.name === "AbortError"
+          ? "CHECK FAILED — Fiverr did not respond to the verification check within 15 seconds. Press REFRESH VIEW and try CHECK VERIFICATION again."
+          : e instanceof Error
+            ? "CHECK FAILED — " + e.message
+            : "CHECK FAILED — Could not check verification."
+      );
+    } finally {
+      window.clearTimeout(timeout);
+      setChallengeBusy(false);
+    }
   }
 
   function beginHumanPress(event: PointerEvent<HTMLImageElement>) {
