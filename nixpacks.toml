@@ -1,5 +1,20 @@
 [packages]
-apt = ["ffmpeg"]
+apt = [
+  "ffmpeg",
+  "chromium",
+  "libnss3",
+  "libnspr4",
+  "libgbm1",
+  "libatk1.0-0",
+  "libatk-bridge2.0-0",
+  "libcups2",
+  "libasound2",
+  "libpangocairo-1.0-0",
+  "libxss1",
+  "libgtk-3-0",
+  "libxshmfence1",
+  "libglu1"
+]
 
 [variables]
 PLAYWRIGHT_BROWSERS_PATH = "/app/.playwright"
@@ -12,7 +27,7 @@ cmds = [
   "pip install -r requirements.txt",
   "mkdir -p /app/.playwright",
   "PLAYWRIGHT_BROWSERS_PATH=/app/.playwright python -m playwright install chromium",
-  "PLAYWRIGHT_BROWSERS_PATH=/app/.playwright python -c \"from playwright.sync_api import sync_playwright; from pathlib import Path; p=sync_playwright().start(); exe=Path(p.chromium.executable_path); print('PLAYWRIGHT_BUILD_CHROMIUM='+str(exe)); print('PLAYWRIGHT_BUILD_CHROMIUM_EXISTS='+str(exe.exists())); assert exe.exists(), 'Playwright Chromium was not installed'; p.stop()\""
+  "python -c \"import shutil; print('SYSTEM_CHROMIUM='+str(shutil.which('chromium') or shutil.which('chromium-browser') or 'NOT_FOUND')); assert shutil.which('chromium') or shutil.which('chromium-browser'), 'System Chromium was not installed'\""
 ]
 
 [phases.build]
