@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import base64
 import asyncio
+import hashlib
+import json
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict
 
@@ -119,16 +121,50 @@ def install_browser_api(app, require_current_user, row_value=None):
             raise HTTPException(status_code=401, detail="Authenticated user required")
         body: Dict[str, Any] = await request.json()
         actions = body.get("actions") or []
-        approved = bool(body.get("approved"))
+        workflow_id = str(body.get("workflow_id") or "").strip()
         if not isinstance(actions, list) or not actions:
             raise HTTPException(status_code=400, detail="actions are required")
-        external = any(str(a.get("type") or "").lower() in {"submit", "post", "publish", "send"} for a in actions if isinstance(a, dict))
-        if external and not approved:
-            return {"status": "awaiting_approval", "approval_required": True, "actions": actions}
+        external = any(
+            str(a.get("type") or "").lower() in {"submit", "post", "publish", "send"}
+            for a in actions if isinstance(a, dict)
+        )
+
+        # Never trust a client-supplied approved=true for consequential browser actions.
+        if external:
+            if not workflow_id:
+                raise HTTPException(status_code=403, detail="External browser actions require an approved workflow_id.")
+            try:
+                from workflow_engine import get_workflow
+                workflow = get_workflow(workflow_id, user_id)
+            except Exception:
+                workflow = None
+            if not workflow:
+                raise HTTPException(status_code=404, detail="Approved workflow not found")
+
+            canonical = json.dumps(actions, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+            fingerprint = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+            matched = None
+            for step in workflow.get("plan") or []:
+                if step.get("action") == "browser_execute" and step.get("approval_id") and step.get("browser_action_fingerprint") == fingerprint:
+                    matched = step
+                    break
+            if not matched:
+                raise HTTPException(status_code=409, detail="Browser actions do not match the exact approved workflow plan.")
+
+            if matched.get("status") == "waiting_for_approval" or workflow.get("status") in {"waiting_for_approval", "paused"}:
+                return {"status": "awaiting_approval", "approval_required": True, "workflow_id": workflow_id}
+            if workflow.get("status") not in {"approved", "executing", "verifying", "completed"}:
+                raise HTTPException(status_code=409, detail=f"Workflow is not in an approved execution state: {workflow.get('status')}")
+
         from browser_operator import execute_plan
         try:
-            result = await _browser_call(execute_plan, user_id, actions, allow_external=approved)
-            return {"status": "ok", "result": result}
+            result = await _browser_call(execute_plan, user_id, actions, allow_external=external)
+            return {
+                "status": "ok",
+                "workflow_id": workflow_id or None,
+                "approval_source": "workflow" if external else "none",
+                "result": result,
+            }
         except Exception as exc:
             return {"status": "failed", "error": f"{type(exc).__name__}: {str(exc)[:500]}"}
 
