@@ -132,23 +132,15 @@ def _target(page: Page, selector: Optional[str] = None, text: Optional[str] = No
     raise ValueError("selector or text is required")
 
 def connection_status(user_id: str) -> Dict[str, Any]:
-    """Return a conservative login/session state for the current browser page.
-
-    This is intentionally a heuristic. The user explicitly confirms the
-    session after completing login; KZ never receives or stores a password as
-    account state.
-    """
+    """Return a conservative, freshly-verified login/session state."""
     page = _page(user_id)
     verification = _set_human_verification_state(user_id, page)
     try:
-        text = page.locator("body").inner_text(timeout=5000)[:12000].lower()
+        text = page.locator("body").inner_text(timeout=5000)[:16000].lower()
     except Exception:
         text = ""
-    password_fields = page.locator('input[type="password"]').count()
 
-    # Never infer "logged in" merely because a page has no password field.
-    # Public home pages often have no password input while the visitor is
-    # still anonymous. Require explicit login signals or strong auth evidence.
+    password_fields = page.locator('input[type="password"]').count()
     login_words = (
         "sign in", "sign in to", "log in", "log in to", "forgot password",
         "enter your password", "create your account", "join now", "join here",
@@ -157,44 +149,72 @@ def connection_status(user_id: str) -> Dict[str, Any]:
     account_words = (
         "account settings", "my profile", "dashboard", "my orders", "my gigs",
         "inbox", "messages", "seller dashboard", "profile picture",
+        "my account", "account menu",
     )
     login_signal = password_fields > 0 or any(word in text for word in login_words)
     logout_signal = any(word in text for word in logout_words)
     account_matches = {word for word in account_words if word in text}
     positive_auth = logout_signal or len(account_matches) >= 2
-    # A strong authenticated marker such as "Log out" wins over generic
-    # navigation text such as a footer "Sign in" link.
-    login_required = login_signal and not positive_auth
+
+    # Cookie values are never returned, logged, or stored. Cookie names are
+    # only a secondary signal because anonymous sessions also have cookies.
+    auth_cookie_names = {
+        "session_id", "session", "sid", "auth", "authenticated",
+        "access_token", "refresh_token", "user_session", "login_session",
+    }
+    try:
+        cookie_names = {
+            str(c.get("name") or "").lower()
+            for c in page.context.cookies()
+            if c.get("name")
+        }
+    except Exception:
+        cookie_names = set()
+    auth_cookie_matches = sorted(cookie_names.intersection(auth_cookie_names))
+    auth_cookie_signal = bool(auth_cookie_matches)
+
+    authenticated = bool(positive_auth or (auth_cookie_signal and len(account_matches) >= 1))
 
     with _LOCK:
         session = _SESSIONS.get(str(user_id)) or {}
-        confirmed = bool(session.get("account_connected"))
+        previously_confirmed = bool(session.get("account_connected"))
+        # Never let a previous confirmation override current live evidence.
+        if previously_confirmed and not authenticated:
+            session["account_connected"] = False
+            session["disconnected_at"] = datetime.now(timezone.utc).isoformat()
 
     if verification.get("required"):
         status = "human_verification"
-    elif confirmed:
-        status = "connected"
-    elif login_required or not positive_auth:
-        status = "login_required"
+    elif authenticated:
+        status = "connected" if previously_confirmed else "ready_to_confirm"
     else:
-        status = "ready_to_confirm"
+        status = "login_required"
 
     return {
         "status": status,
         "connected": status == "connected",
         "login_required": status == "login_required",
+        "authenticated": authenticated,
         "login_evidence": {
             "password_field": bool(password_fields),
             "login_signal": bool(login_signal),
             "logout_signal": bool(logout_signal),
             "account_markers": sorted(account_matches),
             "positive_auth_signal": bool(positive_auth),
+            "auth_cookie_names": auth_cookie_matches,
+            "auth_cookie_signal": auth_cookie_signal,
+            "method": (
+                "authenticated_dom"
+                if positive_auth
+                else "authenticated_dom_plus_session_cookie"
+                if authenticated
+                else "none"
+            ),
         },
         "human_verification_required": verification.get("required", False),
         "url": page.url,
         "title": page.title(),
     }
-
 
 def confirm_connection(user_id: str) -> Dict[str, Any]:
     """Mark the current authenticated browser session as connected after user confirmation."""
