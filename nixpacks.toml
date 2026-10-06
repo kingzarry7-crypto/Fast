@@ -1,2 +1,2 @@
 [packages]
-apt = ["ffmpeg"]
+apt = ["ffmpeg", "chromium"]
