@@ -51,6 +51,7 @@ def _session(user_id: str) -> Dict[str, Any]:
             _PLAYWRIGHT = sync_playwright().start()
         context = _PLAYWRIGHT.chromium.launch_persistent_context(
             str(root),
+            executable_path=os.getenv("BROWSER_EXECUTABLE_PATH") or "/usr/bin/chromium",
             headless=True,
             viewport={"width": 1440, "height": 900},
             accept_downloads=True,
