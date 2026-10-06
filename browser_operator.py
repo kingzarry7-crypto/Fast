@@ -13,7 +13,8 @@ _SESSIONS: Dict[str, Dict[str, Any]] = {}
 _PLAYWRIGHT = None
 
 def status() -> Dict[str, Any]:
-    return {"available": sync_playwright is not None, "sessions": len(_SESSIONS), "policy": "explicit browser actions; consequential external actions require approval"}
+    profile = _profile_root()
+    return {"available": sync_playwright is not None, "sessions": len(_SESSIONS), "profile_dir": str(profile), "persistent_storage_configured": str(profile).startswith("/data/") or bool(os.getenv("BROWSER_PROFILE_DIR")), "policy": "explicit browser actions; consequential external actions require approval"}
 
 def _profile_root() -> Path:
     return Path(os.getenv("BROWSER_PROFILE_DIR", "./data/browser_profiles")).resolve()
