@@ -30,3 +30,10 @@ class WorkIntentTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NaturalWorkContinuationTests(unittest.TestCase):
+    def test_continuation_intent(self):
+        item = parse('continue this for me and finish the client research')
+        self.assertEqual(item['kind'], 'create')
+        self.assertIn('client research', item['goal'])
