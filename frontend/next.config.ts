@@ -14,7 +14,10 @@ const API_UPSTREAM = (
   process.env.API_UPSTREAM ||
   process.env.BACKEND_URL ||
   process.env.NEXT_PUBLIC_API_BASE_URL ||
-  ""
+  // Safe production fallback so Connected Accounts does not break when the
+  // Vercel environment variable is missing. Override with API_UPSTREAM when
+  // deploying a different backend.
+  "https://fast-production-0eba.up.railway.app"
 )
   .trim()
   .replace(/\/+$/, "");
