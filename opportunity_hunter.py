@@ -28,6 +28,12 @@ DEFAULT_QUERIES = {
         "small business software problem opportunity SaaS",
         "business automation software opportunity",
     ],
+    "news": [
+        "AI technology news useful for web developers and AI automation",
+        "latest freelance web development market news opportunities",
+        "small business technology funding hiring product launch news",
+        "web development cybersecurity cloud AI tools news",
+    ],
 }
 
 PLATFORM_DOMAINS = {
@@ -53,7 +59,9 @@ def classify_source(url: str, title: str = "", summary: str = "", category: str 
     platform = any(domain == d or domain.endswith("." + d) for d in PLATFORM_DOMAINS)
     recruiter = any(word in text for word in RECRUITER_WORDS)
     job_signal = any(word in text for word in JOB_WORDS)
-    if platform and domain == "fiverr.com":
+    if category == "news":
+        kind = "news_source"
+    elif platform and domain == "fiverr.com":
         kind = "marketplace"
     elif platform and domain == "toptal.com":
         kind = "recruiter_platform"
@@ -64,7 +72,9 @@ def classify_source(url: str, title: str = "", summary: str = "", category: str 
     else:
         kind = "direct_client"
     direct = kind == "direct_client"
-    if direct:
+    if category == "news":
+        instruction = "Research/news signal only. Summarize why it matters and any safe follow-up; do not treat it as a client or job."
+    elif direct:
         instruction = "Treat as a possible direct client; verify the person/company and active project before outreach."
     elif kind == "marketplace":
         instruction = "Treat as a marketplace listing; apply through the marketplace workflow, not as direct-client outreach."
@@ -85,6 +95,13 @@ def _score(item: Dict[str, Any], category: str) -> Dict[str, Any]:
         score += 20; reasons.append("commercial/project signal")
     if category == "saas" and any(x in text for x in ("automation", "workflow", "software", "saas")):
         score += 15; reasons.append("software/automation signal")
+    if category == "news":
+        if any(x in text for x in ("ai", "artificial intelligence", "automation", "developer", "software", "cloud", "cybersecurity", "funding", "startup")):
+            score += 30; reasons.append("relevant technology signal")
+        if any(x in text for x in ("launch", "released", "release", "update", "acquisition", "funding", "hiring", "trend")):
+            score += 20; reasons.append("actionable news signal")
+        if any(x in text for x in ("web", "website", "api", "saas", "freelance", "business")):
+            score += 15; reasons.append("relevant to King Zarry services")
     if any(x in text for x in ("urgent", "asap", "deadline", "this week")):
         score += 10; reasons.append("time-sensitive signal")
     return {"score": min(score, 100), "confidence": "high" if score >= 70 else "medium" if score >= 45 else "low", "reasons": reasons[:5]}
@@ -164,6 +181,7 @@ def hunt(user_id: str, category: str = "clients", query: str = "", max_results: 
     }
 
 def _estimate_value(category: str, score: int) -> float:
+    if category == "news": return 0.0
     if category == "clients": return 80.0 if score < 60 else 180.0 if score < 80 else 350.0
     if category == "jobs": return 150.0 if score < 60 else 300.0 if score < 80 else 750.0
     return 100.0 if score < 60 else 250.0 if score < 80 else 500.0
