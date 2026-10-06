@@ -9,6 +9,19 @@ echo "════════════════════════�
 export PORT="${PORT:-8000}"
 
 # ------------------------------------------------------------------
+# 0) Ensure Playwright's Chromium exists in the runtime image.
+#    Nixpacks installs it during build, but Railway/runtime images can
+#    have a different Playwright cache path. Installing here makes the
+#    browser operator self-healing across fresh deployments/restarts.
+# ------------------------------------------------------------------
+echo "🌐 Checking Playwright Chromium..."
+if ! python -m playwright install chromium; then
+  echo "❌ Playwright Chromium installation failed. Exiting."
+  exit 1
+fi
+echo "✅ Playwright Chromium ready."
+
+# ------------------------------------------------------------------
 # 1) FastAPI HTTP server (for Vercel frontend)
 # ------------------------------------------------------------------
 echo "🚀 Starting FastAPI on 0.0.0.0:${PORT}..."
