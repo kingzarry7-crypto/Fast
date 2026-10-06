@@ -98,6 +98,50 @@ def install_workflow_api(app, require_current_user, row_value=None):
         workflows=engine.list_workflows(user_id,50)
         return {'status':'ok','revenue':revenue_dashboard(workflows)}
 
+    @app.get('/api/jobs/scan')
+    def jobs_scan_route(
+        request: Request,
+        query: str = '',
+        category: str = 'jobs',
+        max_results: int = 12,
+    ):
+        row = require_current_user(request)
+        user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        from job_outreach_agent import scan
+        return {'status': 'ok', 'job_report': scan(
+            user_id,
+            query=query,
+            category=category,
+            max_results=max_results,
+        )}
+
+    @app.post('/api/jobs/prepare')
+    async def jobs_prepare_route(request: Request):
+        row = require_current_user(request)
+        user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        body = await request.json()
+        opportunity = dict((body or {}).get('opportunity') or {})
+        if not opportunity.get('url') or not opportunity.get('title'):
+            raise HTTPException(status_code=400, detail='opportunity title and url are required')
+        from job_outreach_agent import prepare_application
+        return {'status': 'ok', 'application': prepare_application(user_id, opportunity)}
+
+    @app.get('/api/jobs/workflow/{workflow_id}/report')
+    def jobs_workflow_report_route(workflow_id: str, request: Request):
+        row = require_current_user(request)
+        user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        item = engine.get_workflow(workflow_id, user_id)
+        if not item:
+            raise HTTPException(status_code=404, detail='Workflow not found')
+        from job_outreach_agent import approval_report
+        return {'status': 'ok', 'report': approval_report(item)}
+
     @app.get('/api/opportunities/hunt')
     def opportunities_hunt_route(request: Request, category: str = 'clients', query: str = '', max_results: int = 12):
         row = require_current_user(request); user_id = uid(row)
