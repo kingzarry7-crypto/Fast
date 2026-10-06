@@ -221,35 +221,6 @@ export default function ConnectionsPanel() {
     setMessage("Challenge press cancelled. Press and hold the control again.");
   }
 
-  async function interactWithChallenge(event: MouseEvent<HTMLImageElement>) {
-    if (!page?.human_verification?.required || !page.screenshot) return;
-    const { x, y } = challengeCoordinates(event);
-
-    setChallengeBusy(true);
-    setMessage("Sending your manual click to the KZ browser…");
-    try {
-      const r = await fetch("/api/browser/connect/action", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "human_click", x, y }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || "Manual browser interaction failed");
-      setPage(d.page);
-      setConnection(d.page?.connection || null);
-      setMessage(
-        d.page?.human_verification?.required
-          ? "The challenge is still active. If needed, click the challenge again or use REFRESH."
-          : "Human verification appears complete. KZ is waiting for you to confirm the account."
-      );
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Manual browser interaction failed");
-    } finally {
-      setChallengeBusy(false);
-    }
-  }
-
   async function createTask() {
     if (!task.trim()) return;
     setBusy(true);
