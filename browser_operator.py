@@ -153,11 +153,13 @@ def _verification_evidence(before: Dict[str, Any], after: Dict[str, Any], action
     if url_changed:
         evidence.append({"type": "destination_changed", "from": before.get("url"), "to": after.get("url")})
 
-    verified = bool(matched_phrase or visible_message)
+    # A filled value can remain visible after a failed submit, so it is not
+    # sufficient evidence by itself. Require provider/destination confirmation.
+    verified = bool(matched_phrase)
     return {
         "verification_status": "verified_sent" if verified else "not_verified",
         "verified": verified,
-        "method": "provider_confirmation" if matched_phrase else ("submitted_text_visible" if visible_message else "none"),
+        "method": "provider_confirmation" if matched_phrase else "none",
         "evidence": evidence,
         "url": after.get("url"),
         "title": after.get("title"),
