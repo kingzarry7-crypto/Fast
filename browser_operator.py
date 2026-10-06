@@ -303,6 +303,26 @@ def human_up(user_id: str, x: float, y: float) -> Dict[str, Any]:
     return {"success": True, "x": px, "y": py, "human_verification": _set_human_verification_state(user_id, page)}
 
 
+def human_press(user_id: str, x: float, y: float, duration_ms: int) -> Dict[str, Any]:
+    """Replay one user-initiated press-and-hold without choosing or solving the challenge."""
+    page, px, py = _human_pointer_position(user_id, x, y)
+    duration = max(100, min(int(duration_ms), 15000))
+    page.mouse.move(px, py)
+    page.mouse.down()
+    try:
+        page.wait_for_timeout(duration)
+    finally:
+        page.mouse.up()
+    page.wait_for_timeout(500)
+    return {
+        "success": True,
+        "x": px,
+        "y": py,
+        "duration_ms": duration,
+        "human_verification": _set_human_verification_state(user_id, page),
+    }
+
+
 def human_move(user_id: str, x: float, y: float) -> Dict[str, Any]:
     """Move the user's pointer inside an active human challenge."""
     page = _page(user_id)
