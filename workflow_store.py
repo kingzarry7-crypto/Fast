@@ -267,3 +267,38 @@ def decide_approval(approval_id: str, user_id: str, approved: bool) -> bool:
         return False
     finally:
         conn.close()
+
+
+def list_workflows_for_worker(limit: int = 25) -> List[Dict[str, Any]]:
+    """Return resumable workflows across users for the background worker.
+
+    Only statuses that are already safe to resume are returned. Approval-pending
+    workflows are deliberately excluded so the worker can never auto-approve them.
+    """
+    allowed = ("approved", "executing", "researching", "verifying")
+    with _LOCK:
+        conn = _conn()
+        if conn is not None and init_workflow_store():
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT * FROM kz_workflows WHERE status = ANY(%s) ORDER BY updated_at ASC LIMIT %s",
+                        (list(allowed), max(1, min(int(limit), 100))),
+                    )
+                    rows = cur.fetchall()
+                    cols = [d.name if hasattr(d, "name") else d[0] for d in cur.description]
+                    out=[]
+                    for row in rows:
+                        data=dict(zip(cols,row))
+                        for key in ("plan_json","context_json","result_json"):
+                            value=data.pop(key,None)
+                            if isinstance(value,str): value=json.loads(value or ("[]" if key=="plan_json" else "{}"))
+                            data[key.replace("_json","")]=value or ([] if key=="plan_json" else {})
+                        out.append(data)
+                    return out
+            except Exception:
+                pass
+            finally:
+                conn.close()
+        return [dict(x) for x in sorted(_MEMORY.values(), key=lambda v: v.get("updated_at",""))
+                if str(x.get("status")) in allowed][:max(1, min(int(limit),100))]
