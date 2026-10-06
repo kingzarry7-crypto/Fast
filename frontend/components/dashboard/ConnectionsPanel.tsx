@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-type Page = { url?: string; title?: string; text?: string; inputs?: {selector:string;type:string;name?:string|null;placeholder?:string|null}[] };
+type Page = { url?: string; title?: string; text?: string; screenshot?: string; human_verification?: {required?:boolean;message?:string;indicators?:string[]}; buttons?: {selector?:string|null;text?:string}[]; inputs?: {selector:string;type:string;name?:string|null;placeholder?:string|null}[] };
 
 export default function ConnectionsPanel() {
   const [open,setOpen]=useState(false);
@@ -13,20 +13,33 @@ export default function ConnectionsPanel() {
   const [value,setValue]=useState("");
   const [message,setMessage]=useState("");
 
+  useEffect(()=>{
+    if(!open || !page?.human_verification?.required) return;
+    const timer=window.setInterval(async()=>{
+      try{
+        const r=await fetch("/api/browser/inspect",{credentials:"include"});
+        const d=await r.json();
+        if(r.ok && d.page) setPage(d.page);
+      }catch{}
+    },3000);
+    return ()=>window.clearInterval(timer);
+  },[open,page?.human_verification?.required]);
+
   async function start() {
     if(!url.trim()) return;
     setBusy(true); setMessage("");
     try {
       const r=await fetch("/api/browser/connect/start",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:url.trim()})});
       const d=await r.json(); if(!r.ok) throw new Error(d.detail||"Could not open account");
-      setPage(d.page); setMessage("Login yourself in the KZ browser session. KZ does not save your password.");
+      setPage(d.page); setMessage(d.page?.human_verification?.required ? "Fiverr is asking for human verification. KZ has paused automation; complete the challenge yourself and do not refresh repeatedly." : "Login yourself in the KZ browser session. KZ does not save your password.");
     } catch(e){setMessage(e instanceof Error?e.message:"Could not connect");} finally{setBusy(false);}
   }
 
   async function action(type:string) {
     setBusy(true);
     try {
-      const r=await fetch("/api/browser/connect/action",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({type,selector,value})});
+      const button = type==="click" ? (page?.buttons||[]).find(x=>x.selector===selector) : null;
+      const r=await fetch("/api/browser/connect/action",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({type,selector,value,text:button?.text||undefined})});
       const d=await r.json(); if(!r.ok) throw new Error(d.detail||"Action failed");
       setPage(d.page);
     } catch(e){setMessage(e instanceof Error?e.message:"Action failed");} finally{setBusy(false);}
@@ -51,8 +64,14 @@ export default function ConnectionsPanel() {
             <div className="truncate text-xs text-cyan-200">{page.title||"Connected page"}</div>
             <div className="mt-1 break-all text-[9px] text-zinc-600">{page.url}</div>
           </div>
+          {page.human_verification?.required && <div className="mt-3 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3">
+            <div className="font-mono-tech text-[10px] tracking-widest text-amber-200">HUMAN VERIFICATION REQUIRED</div>
+            <p className="mt-1 text-xs leading-relaxed text-amber-100/80">{page.human_verification.message||"The site is asking for a human challenge. KZ will not bypass it."}</p>
+            <p className="mt-2 text-[10px] text-zinc-500">Complete the challenge yourself. KZ will keep the session and check again automatically.</p>
+          </div>}
           <div className="mt-3 space-y-2">
-            {(page.inputs||[]).map((x,i)=><button key={i} onClick={()=>setSelector(x.selector)} className={"block w-full rounded-lg border p-2 text-left text-xs "+(selector===x.selector?"border-cyan-400/40 bg-cyan-400/10 text-cyan-100":"border-white/5 text-zinc-500")}>{x.type} · {x.name||x.placeholder||x.selector}</button>)}
+            {(page.buttons||[]).filter(x=>x.text).map((x,i)=><button key={"b"+i} onClick={()=>{setSelector(x.selector||""); if(!x.selector) setMessage("This button has no stable selector. Use the visible page text and refresh the inspection.");}} className={"block w-full rounded-lg border p-2 text-left text-xs "+(selector===x.selector?"border-amber-400/40 bg-amber-400/10 text-amber-100":"border-white/5 text-zinc-500")}>BUTTON · {x.text}</button>)}
+          {(page.inputs||[]).map((x,i)=><button key={i} onClick={()=>setSelector(x.selector)} className={"block w-full rounded-lg border p-2 text-left text-xs "+(selector===x.selector?"border-cyan-400/40 bg-cyan-400/10 text-cyan-100":"border-white/5 text-zinc-500")}>{x.type} · {x.name||x.placeholder||x.selector}</button>)}
           </div>
           {selector && <div className="mt-3 rounded-lg border border-cyan-400/15 p-3">
             <div className="text-[9px] font-mono-tech tracking-widest text-cyan-300">SELECTED FIELD</div>
