@@ -94,3 +94,16 @@ def prepare(user_id: str, opportunity: Dict[str, Any], profile: Dict[str, Any] |
             else "Complete your professional profile before external outreach."
         ),
     }
+
+
+def save_draft(user_id: str, acquisition: Dict[str, Any]) -> Dict[str, Any]:
+    """Compatibility hook: keep the prepared acquisition available to the caller.
+
+    The canonical draft is returned to the authenticated UI; external delivery
+    is still controlled by the explicit approval endpoint.
+    """
+    return {
+        "acquisition_id": str(acquisition.get("acquisition_id") or ""),
+        "status": str(acquisition.get("status") or "draft_ready"),
+        "user_id": str(user_id),
+    }
