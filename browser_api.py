@@ -5,7 +5,6 @@ import base64
 import asyncio
 import hashlib
 import json
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict
 
 from fastapi import HTTPException, Request
@@ -13,11 +12,10 @@ from fastapi import HTTPException, Request
 
 # Playwright Sync API must never run on FastAPI's asyncio event-loop thread.
 # Keep one dedicated browser thread so persistent Playwright objects retain thread affinity.
-_BROWSER_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="kz-playwright")
-
 async def _browser_call(fn, *args, **kwargs):
+    from browser_operator import run_in_browser_thread
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(_BROWSER_EXECUTOR, lambda: fn(*args, **kwargs))
+    return await loop.run_in_executor(None, lambda: run_in_browser_thread(fn, *args, **kwargs))
 
 def _snapshot(user_id: str):
     from browser_operator import inspect, screenshot
