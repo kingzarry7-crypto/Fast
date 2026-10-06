@@ -163,9 +163,11 @@ def connection_status(user_id: str) -> Dict[str, Any]:
         "access_token", "refresh_token", "user_session", "login_session",
     }
     try:
+        context = getattr(page, "context", None)
+        cookies = context.cookies() if context is not None else []
         cookie_names = {
             str(c.get("name") or "").lower()
-            for c in page.context.cookies()
+            for c in cookies
             if c.get("name")
         }
     except Exception:
