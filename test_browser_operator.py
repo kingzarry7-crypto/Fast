@@ -35,6 +35,20 @@ class BrowserOperatorTests(unittest.TestCase):
         self.assertFalse(result["verified"])
 
 
+
+    def test_verification_does_not_treat_filled_text_as_submission_proof(self):
+        before = {"url": "https://example.test/form", "title": "Form", "text": "Form"}
+        after = {"url": "https://example.test/form", "title": "Form", "text": "Form\nMy proposal text"}
+        result = browser_operator._verification_evidence(
+            before,
+            after,
+            [{"type": "fill", "selector": "#message", "value": "My proposal text"},
+             {"type": "submit", "text": "Submit"}],
+        )
+        self.assertEqual(result["verification_status"], "not_verified")
+        self.assertFalse(result["verified"])
+        self.assertEqual(result["method"], "none")
+
     def test_real_chromium_safe_smoke_when_available(self):
         """Exercise real Playwright Chromium without touching an external site."""
         if browser_operator.sync_playwright is None:
