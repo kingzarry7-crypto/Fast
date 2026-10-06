@@ -158,19 +158,18 @@ export default function ConnectionsPanel() {
     };
   }
 
-  async function moveOnChallenge(event: MouseEvent<HTMLImageElement>) {
-    if (!page?.human_verification?.required || challengeBusy) return;
-    const now = Date.now();
-    if (now - lastMoveAt.current < 120) return;
-    lastMoveAt.current = now;
-    const { x, y } = challengeCoordinates(event);
+  async function checkHumanVerification() {
+    setChallengeBusy(true);
+    setMessage("Checking the same Fiverr browser session for completed verification...");
     try {
-      await fetch("/api/browser/connect/action", {
-        method: "POST", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "human_move", x, y }),
-      });
-    } catch {}
+      const r = await fetch("/api/browser/connect/action", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "human_verify" }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || "Could not check verification");
+      setPage(d.page);
+      setConnection(d.page?.connection || null);
+      setMessage(d.result?.verified ? "Human verification completed. Your Fiverr session can now continue." : "Fiverr is still asking for human verification. Complete the challenge, then press CHECK VERIFICATION again.");
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not check verification"); }
+    finally { setChallengeBusy(false); }
   }
 
   async function interactWithChallenge(event: MouseEvent<HTMLImageElement>) {
@@ -308,20 +307,18 @@ export default function ConnectionsPanel() {
                         <img
                           src={page.screenshot}
                           alt="Live KZ browser view for manual human verification"
-                          onMouseMove={moveOnChallenge}
                           onClick={interactWithChallenge}
                           draggable={false}
                           className={"block h-auto w-full cursor-crosshair select-none " + (challengeBusy ? "opacity-60" : "")}
                         />
                       </div>
                     )}
-                    <div className="mt-2 flex gap-2">
-                      <button
-                        onClick={refresh}
-                        disabled={busy || challengeBusy}
-                        className="flex-1 rounded-lg border border-amber-400/20 py-2 font-mono-tech text-[9px] tracking-widest text-amber-200 disabled:opacity-40"
-                      >
-                        {challengeBusy ? "INTERACTING..." : "REFRESH VIEW"}
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <button onClick={checkHumanVerification} disabled={busy || challengeBusy} className="rounded-lg border border-amber-400/30 bg-amber-400/10 py-2 font-mono-tech text-[9px] tracking-widest text-amber-100 disabled:opacity-40">
+                        {challengeBusy ? "CHECKING..." : "CHECK VERIFICATION"}
+                      </button>
+                      <button onClick={refresh} disabled={busy || challengeBusy} className="rounded-lg border border-amber-400/20 py-2 font-mono-tech text-[9px] tracking-widest text-amber-200 disabled:opacity-40">
+                        REFRESH VIEW
                       </button>
                     </div>
                   </div>
