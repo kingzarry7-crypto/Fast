@@ -14,6 +14,7 @@ export default function WorkPanel() {
   const [loading, setLoading] = useState(false);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [error, setError] = useState("");
+  const [browserReady, setBrowserReady] = useState<boolean | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -27,6 +28,7 @@ export default function WorkPanel() {
   useEffect(() => {
     if (!open) return;
     load();
+    fetch("/api/browser/status", { credentials: "include" }).then((r) => r.ok ? r.json() : null).then((d) => setBrowserReady(d?.browser?.available === true)).catch(() => setBrowserReady(false));
     const timer = window.setInterval(load, 5000);
     return () => window.clearInterval(timer);
   }, [open, load]);
@@ -75,6 +77,7 @@ export default function WorkPanel() {
             <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
               <div>
                 <div className="font-mono-tech text-xs tracking-[0.22em] text-violet-200">AUTONOMOUS WORK</div>
+                <div className="mt-1 font-mono-tech text-[8px] tracking-widest text-zinc-600">BROWSER {browserReady === null ? "CHECKING" : browserReady ? "READY" : "OFFLINE"}</div>
                 <div className="mt-1 text-[10px] text-zinc-500">Give the goal. KZ researches, prepares and waits for approval when needed.</div>
               </div>
               <button type="button" onClick={() => setOpen(false)} className="rounded-md px-2 py-1 text-zinc-500 hover:bg-white/5">×</button>
@@ -112,7 +115,7 @@ export default function WorkPanel() {
                     {waiting && (
                       <div className="mt-3 rounded-lg border border-amber-400/20 bg-amber-400/5 p-3">
                         <div className="font-mono-tech text-[9px] tracking-widest text-amber-300">APPROVAL REQUIRED</div>
-                        <p className="mt-1 text-xs text-zinc-400">{step?.output?.message || step?.title || "A consequential action is ready."}</p>
+                        <p className="mt-1 text-xs text-zinc-400">{step?.output?.message || step?.output?.browser_plan?.summary || step?.title || "A consequential action is ready."}</p>
                         <div className="mt-3 flex gap-2">
                           <button type="button" onClick={() => approve(workflow.id, true)}
                             className="flex-1 rounded-lg border border-emerald-400/25 bg-emerald-400/10 py-2 font-mono-tech text-[9px] tracking-widest text-emerald-200">APPROVE</button>
