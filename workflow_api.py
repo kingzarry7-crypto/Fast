@@ -166,8 +166,15 @@ def install_workflow_api(app, require_current_user, row_value=None):
         outreach = dict(acquisition.get('outreach') or {})
         message = str(outreach.get('message') or '').strip()
         subject = str(outreach.get('subject') or '').strip()
+        source_kind = str(outreach.get('source_kind') or (acquisition.get('qualification') or {}).get('source_kind') or (acquisition.get('opportunity') or {}).get('source_kind') or 'direct_client').strip().lower()
         if not message:
             raise HTTPException(status_code=400, detail='No outreach message to approve')
+        if source_kind != 'direct_client' and channel in {'email', 'whatsapp'}:
+            return {
+                'status': 'blocked',
+                'error': f'This source is classified as {source_kind.replace("_", " ")}. Do not send direct-client outreach to it. Use the source/platform application workflow instead.',
+                'source_kind': source_kind,
+            }
         if channel == 'whatsapp':
             if not destination:
                 raise HTTPException(status_code=400, detail='WhatsApp destination is required')
