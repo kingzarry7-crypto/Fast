@@ -39,6 +39,66 @@ class BrowserOperatorTests(unittest.TestCase):
             browser_operator._page = original_page
             browser_operator._set_human_verification_state = original_detect
 
+    def test_connection_status_does_not_assume_login_from_neutral_page(self):
+        class Body:
+            def inner_text(self, timeout=0):
+                return "Welcome to Example Marketplace"
+        class Passwords:
+            def count(self):
+                return 0
+        class FakePage:
+            url = "https://example.test/"
+            def title(self):
+                return "Example Marketplace"
+            def locator(self, selector):
+                if selector == 'input[type="password"]':
+                    return Passwords()
+                return Body()
+        original_page = browser_operator._page
+        original_detect = browser_operator._set_human_verification_state
+        try:
+            browser_operator._page = lambda user_id: FakePage()
+            browser_operator._set_human_verification_state = lambda user_id, page: {"required": False}
+            state = browser_operator.connection_status("test-user")
+            self.assertEqual(state["status"], "login_required")
+            self.assertTrue(state["login_required"])
+            self.assertFalse(state["connected"])
+        finally:
+            browser_operator._page = original_page
+            browser_operator._set_human_verification_state = original_detect
+
+    def test_connection_status_accepts_strong_authenticated_page_evidence(self):
+        class Body:
+            def inner_text(self, timeout=0):
+                return "Dashboard Account Settings Log out"
+        class Passwords:
+            def count(self):
+                return 0
+        class FakePage:
+            url = "https://example.test/dashboard"
+            def title(self):
+                return "Dashboard"
+            def locator(self, selector):
+                if selector == 'input[type="password"]':
+                    return Passwords()
+                return Body()
+        original_page = browser_operator._page
+        original_detect = browser_operator._set_human_verification_state
+        original_sessions = browser_operator._SESSIONS
+        try:
+            browser_operator._page = lambda user_id: FakePage()
+            browser_operator._set_human_verification_state = lambda user_id, page: {"required": False}
+            browser_operator._SESSIONS = {"test-user": {}}
+            state = browser_operator.connection_status("test-user")
+            self.assertEqual(state["status"], "ready_to_confirm")
+            self.assertFalse(state["connected"])
+            self.assertFalse(state["login_required"])
+            self.assertTrue(state["login_evidence"]["positive_auth_signal"])
+        finally:
+            browser_operator._page = original_page
+            browser_operator._set_human_verification_state = original_detect
+            browser_operator._SESSIONS = original_sessions
+
     def test_connection_status_allows_explicit_confirmation_state(self):
         class Body:
             def inner_text(self, timeout=0):
