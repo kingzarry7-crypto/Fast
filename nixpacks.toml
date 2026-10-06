@@ -1,14 +1,14 @@
 [packages]
-apt = ["ffmpeg", "chromium"]
+apt = ["ffmpeg"]
 
 [variables]
-PLAYWRIGHT_BROWSERS_PATH = "0"
+PLAYWRIGHT_BROWSERS_PATH = "/app/.playwright"
 
 [phases.setup]
-nixPkgs = ["python312", "chromium"]
+nixPkgs = ["python312"]
 
 [phases.install]
-cmds = ["pip install -r requirements.txt", "python -m playwright install chromium"]
+cmds = ["pip install -r requirements.txt", "mkdir -p /app/.playwright", "python -m playwright install chromium"]
 
 [phases.build]
 cmds = ["python -m compileall -q ."]
