@@ -1,10 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#020914"/>
-  <rect x="42" y="42" width="428" height="428" rx="92" fill="none" stroke="#00f0ff" stroke-width="12"/>
-  <path d="M128 190c0-38 31-69 69-69h118c38 0 69 31 69 69v106c0 38-31 69-69 69H197c-38 0-69-31-69-69z" fill="#031322" stroke="#00f0ff" stroke-width="10"/>
-  <circle cx="205" cy="242" r="25" fill="#00f0ff"/>
-  <circle cx="307" cy="242" r="25" fill="#00f0ff"/>
-  <path d="M192 309c30 22 98 22 128 0" fill="none" stroke="#00f0ff" stroke-width="12" stroke-linecap="round"/>
-  <path d="M256 121V82" stroke="#00f0ff" stroke-width="12" stroke-linecap="round"/>
-  <circle cx="256" cy="68" r="14" fill="#00f0ff"/>
+<defs>
+  <radialGradient id="bg"><stop stop-color="#0a1b2b"/><stop offset="1" stop-color="#020914"/></radialGradient>
+  <linearGradient id="face" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e9ffff"/><stop offset=".42" stop-color="#00f0ff"/><stop offset="1" stop-color="#063442"/></linearGradient>
+  <filter id="glow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<rect width="512" height="512" rx="112" fill="url(#bg)"/>
+<circle cx="256" cy="256" r="218" fill="none" stroke="#00f0ff" stroke-opacity=".28" stroke-width="3"/>
+<circle cx="256" cy="256" r="188" fill="none" stroke="#00f0ff" stroke-opacity=".18" stroke-width="2" stroke-dasharray="8 14"/>
+<g filter="url(#glow)">
+<path d="M166 170 Q256 110 346 170 L394 226 L382 358 Q256 432 130 358 L118 226 Z" fill="url(#face)" fill-opacity=".15" stroke="#00f0ff" stroke-width="8"/>
+<path d="M154 218 Q256 164 358 218 L346 336 Q256 382 166 336 Z" fill="#020b12" stroke="#00f0ff" stroke-width="6"/>
+<rect x="184" y="250" width="58" height="32" rx="16" fill="#fff"/>
+<rect x="270" y="250" width="58" height="32" rx="16" fill="#fff"/>
+<path d="M205 302 Q256 334 307 302" fill="none" stroke="#00f0ff" stroke-width="8" stroke-linecap="round"/>
+<path d="M256 122 V168" stroke="#00f0ff" stroke-width="8" stroke-linecap="round"/>
+<circle cx="256" cy="100" r="18" fill="#00f0ff"/>
+<path d="M120 250 H78 M392 250 H434" stroke="#00f0ff" stroke-width="8" stroke-linecap="round"/>
+<circle cx="64" cy="250" r="12" fill="#00f0ff"/>
+<circle cx="448" cy="250" r="12" fill="#00f0ff"/>
+</g>
+<text x="256" y="456" text-anchor="middle" fill="#00f0ff" font-family="Arial,sans-serif" font-size="28" font-weight="700" letter-spacing="6">KZ AI</text>
 </svg>
