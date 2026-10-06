@@ -2,10 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+type WorkflowStepOutput = {
+  message?: string;
+  browser_plan?: { summary?: string };
+  action?: { payload?: Record<string, unknown> };
+};
+
 type Workflow = {
   id: string; goal: string; status: string; risk: string; potential_revenue?: number;
   plan?: Array<{ id: string; title: string; status: string; risk: string; requires_approval?: boolean;
-    approval_id?: string; output?: { message?: string; action?: { payload?: Record<string, unknown> } }; }>;
+    approval_id?: string; output?: WorkflowStepOutput; }>;
 };
 
 export default function WorkPanel() {
