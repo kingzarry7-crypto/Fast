@@ -40,4 +40,4 @@ jobs:
       - name: Compile workflow modules
         run: python -m py_compile workflow_models.py workflow_store.py workflow_engine.py workflow_api.py workflow_scheduler.py revenue_engine.py channel_work.py work_intent.py api.py test_workflow_engine.py bot.py discord_bot.py
       - name: Run workflow planner tests
-        run: python -m unittest test_workflow_engine.py test_work_intent.py test_delivery_agent.py test_business_dashboard.py test_workflow_scheduler.py
+        run: python -m unittest test_workflow_engine.py test_work_intent.py test_delivery_agent.py test_business_dashboard.py test_workflow_scheduler.py test_learning_loop.py
