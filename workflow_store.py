@@ -13,9 +13,9 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 try:
-    from database import get_db_connection
+    from database import get_connection
 except Exception:
-    get_db_connection = None
+    get_connection = None
 
 _LOCK = threading.RLock()
 _READY = False
@@ -27,10 +27,11 @@ def _now() -> str:
 
 
 def _conn():
-    if get_db_connection is None:
+    """Return a raw psycopg2 connection, never a context-manager wrapper."""
+    if get_connection is None:
         return None
     try:
-        return get_db_connection()
+        return get_connection()
     except Exception:
         return None
 
