@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type MouseEvent, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 
 type Connection = {
   status?: "login_required" | "human_verification" | "ready_to_confirm" | "connected" | string;
@@ -35,10 +35,12 @@ export default function ConnectionsPanel() {
   const [workflow, setWorkflow] = useState<any>(null);
   const [message, setMessage] = useState("");
   const [challengeBusy, setChallengeBusy] = useState(false);
+  const challengePress = useRef<{ x: number; y: number; startedAt: number; pointerId: number } | null>(null);
 
   useEffect(() => {
     if (!open || !page?.human_verification?.required) return;
     const timer = window.setInterval(async () => {
+      if (challengePress.current) return;
       try {
         const r = await fetch("/api/browser/inspect", { credentials: "include" });
         const d = await r.json();
@@ -171,33 +173,52 @@ export default function ConnectionsPanel() {
     finally { setChallengeBusy(false); }
   }
 
-  async function sendHumanPointer(type: "human_down" | "human_up", event: PointerEvent<HTMLImageElement>) {
-    if (!page?.human_verification?.required || !page.screenshot) return;
+  function beginHumanPress(event: PointerEvent<HTMLImageElement>) {
+    if (!page?.human_verification?.required || !page.screenshot || challengePress.current) return;
     const { x, y } = challengeCoordinates(event as unknown as MouseEvent<HTMLImageElement>);
+    challengePress.current = { x, y, startedAt: performance.now(), pointerId: event.pointerId };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+    setMessage("Holding the challenge control… release when Fiverr accepts the press.");
+  }
+
+  async function finishHumanPress(event: PointerEvent<HTMLImageElement>) {
+    const press = challengePress.current;
+    if (!press || press.pointerId !== event.pointerId) return;
+    challengePress.current = null;
+    event.preventDefault();
+    try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch {}
+
+    const durationMs = Math.max(100, Math.min(Math.round(performance.now() - press.startedAt), 15000));
     setChallengeBusy(true);
     try {
       const r = await fetch("/api/browser/connect/action", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, x, y }),
+        body: JSON.stringify({ type: "human_press", x: press.x, y: press.y, duration_ms: durationMs }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.detail || "Manual browser interaction failed");
       setPage(d.page);
       setConnection(d.page?.connection || null);
-      if (type === "human_up") {
-        setMessage(
-          d.page?.human_verification?.required
-            ? "The challenge is still active. Press and hold exactly as Fiverr requests, then release."
-            : "Human verification appears complete. KZ is waiting for you to confirm the account."
-        );
-      }
+      setMessage(
+        d.page?.human_verification?.required
+          ? "The challenge is still active. Try the press-and-hold again exactly as Fiverr requests."
+          : "Human verification appears complete. KZ is waiting for you to confirm the account."
+      );
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Manual browser interaction failed");
     } finally {
       setChallengeBusy(false);
     }
+  }
+
+  function cancelHumanPress(event: PointerEvent<HTMLImageElement>) {
+    if (!challengePress.current || challengePress.current.pointerId !== event.pointerId) return;
+    challengePress.current = null;
+    try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch {}
+    setMessage("Challenge press cancelled. Press and hold the control again.");
   }
 
   async function interactWithChallenge(event: MouseEvent<HTMLImageElement>) {
@@ -335,16 +356,13 @@ export default function ConnectionsPanel() {
                         <img
                           src={page.screenshot}
                           alt="Live KZ browser view for manual human verification"
-                          onPointerDown={(event) => {
-                            event.preventDefault();
-                            void sendHumanPointer("human_down", event);
-                          }}
-                          onPointerUp={(event) => {
-                            event.preventDefault();
-                            void sendHumanPointer("human_up", event);
-                          }}
+                          onPointerDown={beginHumanPress}
+                          onPointerUp={finishHumanPress}
+                          onPointerCancel={cancelHumanPress}
+                          onLostPointerCapture={cancelHumanPress}
                           draggable={false}
-                          className={"block h-auto w-full cursor-crosshair select-none " + (challengeBusy ? "opacity-60" : "")}
+                          style={{ touchAction: "none", userSelect: "none" }}
+                          className={"block h-auto w-full cursor-crosshair " + (challengeBusy ? "opacity-60" : "")}
                         />
                       </div>
                     )}
