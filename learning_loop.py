@@ -12,6 +12,36 @@ def _clean(value: Any, limit: int = 500) -> str:
     return text[:limit]
 
 
+
+def _verified_outcome(workflow: Dict[str, Any]) -> bool:
+    """Return True only when the workflow contains explicit outcome evidence."""
+    result = workflow.get("result") or {}
+    verification = result.get("verification") or {}
+    if verification.get("verification_status") == "verified_sent" or verification.get("verified") is True:
+        return True
+
+    browser_result = result.get("browser_execute") or {}
+    verification = browser_result.get("verification") or {}
+    if verification.get("verification_status") == "verified_sent" or verification.get("verified") is True:
+        return True
+
+    for step in workflow.get("plan") or []:
+        output = step.get("output") or {}
+        verification = output.get("verification") or {}
+        if verification.get("verification_status") == "verified_sent" or verification.get("verified") is True:
+            return True
+        if step.get("action") == "browser_verify" and output.get("success") is True:
+            return True
+
+    # Non-external workflows can be learned from their completed/failed
+    # execution state; consequential outcomes require explicit evidence above.
+    has_external = any(
+        step.get("action") in {"browser_execute", "external_action"}
+        or step.get("requires_approval") is True
+        for step in (workflow.get("plan") or [])
+    )
+    return not has_external and workflow.get("status") == "completed"
+
 def extract_lessons(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
     goal = _clean(workflow.get("goal"), 240)
     status = _clean(workflow.get("status"))
@@ -21,7 +51,7 @@ def extract_lessons(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
     if not goal:
         return lessons
 
-    if status == "completed":
+    if status == "completed" and _verified_outcome(workflow):
         lessons.append({
             "type": "workflow_success",
             "lesson": f"Successful workflow pattern: {goal}",
@@ -42,7 +72,7 @@ def extract_lessons(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
             "confidence": 0.70,
         })
 
-    if result.get("research"):
+    if result.get("research") and (status != "completed" or _verified_outcome(workflow)):
         lessons.append({
             "type": "research_pattern",
             "lesson": f"Research-backed workflow: {goal}",
