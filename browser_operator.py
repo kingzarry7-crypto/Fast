@@ -261,6 +261,13 @@ def human_move(user_id: str, x: float, y: float) -> Dict[str, Any]:
     page.mouse.move(px, py)
     return {"success": True, "x": px, "y": py}
 
+def check_human_verification(user_id: str) -> Dict[str, Any]:
+    page = _page(user_id)
+    page.wait_for_timeout(500)
+    verification = _set_human_verification_state(user_id, page)
+    state = connection_status(user_id)
+    return {"verified": not verification.get("required", False), "human_verification": verification, "connection": state, "url": page.url, "title": page.title()}
+
 def plan_goal(user_id: str, goal: str) -> Dict[str, Any]:
     page = inspect(user_id)
     from llm_client import ask
