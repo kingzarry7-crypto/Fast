@@ -49,7 +49,7 @@ def _target(page: Page, selector: Optional[str] = None, text: Optional[str] = No
 
 def inspect(user_id: str) -> Dict[str, Any]:
     page = _page(user_id)
-    return {"url": page.url, "title": page.title(), "text": page.locator("body").inner_text(timeout=10000)[:12000], "links": [{"text": (x.inner_text() or "")[:160], "href": x.get_attribute("href")} for x in page.locator("a").all()[:40]]}
+    return {"url": page.url, "title": page.title(), "text": page.locator("body").inner_text(timeout=10000)[:12000], "links": [{"text": (x.inner_text() or "")[:160], "href": x.get_attribute("href")} for x in page.locator("a").all()[:40]], "inputs": [{"selector": "#"+x.get_attribute("id") if x.get_attribute("id") else "input[name=\""+str(x.get_attribute("name") or "")+"\"]", "type": x.get_attribute("type") or "text", "name": x.get_attribute("name"), "placeholder": x.get_attribute("placeholder")} for x in page.locator("input,textarea,select").all()[:40]]}
 
 def navigate(user_id: str, url: str) -> Dict[str, Any]:
     url = str(url or "").strip()
