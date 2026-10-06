@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Sidebar from "@/components/layout/Sidebar";
 import { AppProviders } from "@/components/providers/AppProviders";
+import InstallApp from "@/components/app/InstallApp";
 
 export const metadata: Metadata = {
   title: {
@@ -10,6 +11,12 @@ export const metadata: Metadata = {
   },
   description:
     "KING ZARRY AI — intelligent AI command centre. Your intelligence, amplified.",
+  applicationName: "KING ZARRY AI",
+  appleWebApp: {
+    capable: true,
+    title: "KING ZARRY AI",
+    statusBarStyle: "black-translucent",
+  },
 };
 
 export const viewport: Viewport = {
@@ -49,6 +56,7 @@ export default function RootLayout({
               {children}
             </main>
           </div>
+          <InstallApp />
         </AppProviders>
       </body>
     </html>
