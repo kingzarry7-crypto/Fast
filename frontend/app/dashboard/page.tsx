@@ -12,6 +12,7 @@ import DeliveryPanel from "@/components/dashboard/DeliveryPanel";
 import BusinessPanel from "@/components/dashboard/BusinessPanel";
 import WorkerPanel from "@/components/dashboard/WorkerPanel";
 import LearningPanel from "@/components/dashboard/LearningPanel";
+import ConnectionsPanel from "@/components/dashboard/ConnectionsPanel";
 import { useAuth } from "@/hooks/useAuth";
 import { api, type ConversationItem, type MarketSnapshot } from "@/lib/api";
 
@@ -79,6 +80,7 @@ export default function DashboardPage() {
 
             <button type="button" onClick={newChat} className="rounded-md border border-cyan-400/40 bg-cyan-400/10 px-2.5 py-1.5 font-mono-tech text-[10px] tracking-widest text-cyan-200 hover:bg-cyan-400/20 shrink-0">+ NEW</button>
             <WorkPanel />
+            <ConnectionsPanel />
             <RevenuePanel />
             <OpportunityPanel />
             <DeliveryPanel />
