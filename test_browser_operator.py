@@ -12,6 +12,63 @@ class BrowserOperatorTests(unittest.TestCase):
         self.assertIn("policy", result)
 
 
+    def test_connection_status_detects_login_required(self):
+        class Body:
+            def inner_text(self, timeout=0):
+                return "Please sign in to continue"
+        class Passwords:
+            def count(self):
+                return 1
+        class FakePage:
+            url = "https://example.test/login"
+            def title(self):
+                return "Example Login"
+            def locator(self, selector):
+                if selector == 'input[type="password"]':
+                    return Passwords()
+                return Body()
+        original_page = browser_operator._page
+        original_detect = browser_operator._set_human_verification_state
+        try:
+            browser_operator._page = lambda user_id: FakePage()
+            browser_operator._set_human_verification_state = lambda user_id, page: {"required": False}
+            state = browser_operator.connection_status("test-user")
+            self.assertEqual(state["status"], "login_required")
+            self.assertFalse(state["connected"])
+        finally:
+            browser_operator._page = original_page
+            browser_operator._set_human_verification_state = original_detect
+
+    def test_connection_status_allows_explicit_confirmation_state(self):
+        class Body:
+            def inner_text(self, timeout=0):
+                return "Dashboard"
+        class Passwords:
+            def count(self):
+                return 0
+        class FakePage:
+            url = "https://example.test/dashboard"
+            def title(self):
+                return "Dashboard"
+            def locator(self, selector):
+                if selector == 'input[type="password"]':
+                    return Passwords()
+                return Body()
+        original_page = browser_operator._page
+        original_detect = browser_operator._set_human_verification_state
+        original_sessions = browser_operator._SESSIONS
+        try:
+            browser_operator._SESSIONS = {"test-user": {"account_connected": True}}
+            browser_operator._page = lambda user_id: FakePage()
+            browser_operator._set_human_verification_state = lambda user_id, page: {"required": False}
+            state = browser_operator.connection_status("test-user")
+            self.assertEqual(state["status"], "connected")
+            self.assertTrue(state["connected"])
+        finally:
+            browser_operator._page = original_page
+            browser_operator._set_human_verification_state = original_detect
+            browser_operator._SESSIONS = original_sessions
+
     def test_verification_requires_destination_evidence(self):
         before = {"url": "https://example.test/form", "title": "Form", "text": "Form"}
         after = {"url": "https://example.test/done", "title": "Done", "text": "Application submitted successfully"}
