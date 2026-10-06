@@ -159,6 +159,25 @@ export default function ConnectionsPanel() {
     };
   }
 
+  async function clickLiveBrowser(event: PointerEvent<HTMLImageElement>) {
+    if (!page?.screenshot || page.human_verification?.required || challengeBusy || busy) return;
+    const { x, y } = challengeCoordinates(event as unknown as MouseEvent<HTMLImageElement>);
+    try {
+      const r = await fetch("/api/browser/connect/action", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "manual_click", x, y }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || "Browser click failed");
+      setPage(d.page);
+      setConnection(d.page?.connection || null);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Browser click failed");
+    }
+  }
+
   async function checkHumanVerification() {
     setChallengeBusy(true);
     setMessage("Checking the same Fiverr browser session for completed verification...");
@@ -313,6 +332,29 @@ export default function ConnectionsPanel() {
 
             {page && (
               <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                {!page.human_verification?.required && page.screenshot && (
+                  <div className="mb-3 rounded-lg border border-cyan-400/20 bg-black p-2">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="font-mono-tech text-[9px] tracking-widest text-cyan-200">LIVE LOGIN BROWSER</span>
+                      <span className="text-[9px] text-zinc-600">Click the browser yourself</span>
+                    </div>
+                    <img
+                      src={page.screenshot}
+                      alt="Live KZ browser login view"
+                      onPointerUp={(event) => {
+                        event.preventDefault();
+                        void clickLiveBrowser(event);
+                      }}
+                      draggable={false}
+                      style={{ touchAction: "none", userSelect: "none" }}
+                      className="block h-auto w-full cursor-pointer select-none"
+                    />
+                    <p className="mt-2 text-[10px] leading-relaxed text-zinc-600">
+                      Use this live browser to choose login controls yourself. Enter email/password in the fields below; KZ does not solve verification challenges.
+                    </p>
+                  </div>
+                )}
+
                 {page.human_verification?.required && (
                   <div className="mb-3 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3">
                     <div className="font-mono-tech text-[10px] tracking-widest text-amber-200">HUMAN VERIFICATION REQUIRED</div>
