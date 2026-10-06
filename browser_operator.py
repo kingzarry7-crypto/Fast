@@ -210,7 +210,51 @@ def upload(user_id: str, selector: str, path: str) -> Dict[str, Any]:
     if not file_path.is_file(): raise ValueError("upload file does not exist")
     _page(user_id).locator(selector).first.set_input_files(str(file_path)); return {"success": True, "filename": file_path.name}
 
-def screenshot(user_id: str) -> bytes: return _page(user_id).screenshot(full_page=True)
+def screenshot(user_id: str) -> bytes:
+    """Capture the current browser viewport for user-controlled remote interaction."""
+    return _page(user_id).screenshot(full_page=False)
+
+
+def viewport(user_id: str) -> Dict[str, Any]:
+    page = _page(user_id)
+    size = page.viewport_size or {}
+    return {
+        "width": int(size.get("width") or 0),
+        "height": int(size.get("height") or 0),
+    }
+
+
+def human_click(user_id: str, x: float, y: float) -> Dict[str, Any]:
+    """Allow the authenticated user to interact with an active human challenge.
+
+    This is deliberately limited to the period where the detector says a human
+    verification challenge is present. KZ never chooses the coordinates.
+    """
+    page = _page(user_id)
+    challenge = _set_human_verification_state(user_id, page)
+    if not challenge.get("required"):
+        raise PermissionError("Manual challenge interaction is only available while human verification is active.")
+    size = viewport(user_id)
+    px, py = float(x), float(y)
+    if px < 0 or py < 0 or px > size["width"] or py > size["height"]:
+        raise ValueError("Click coordinates are outside the browser viewport.")
+    page.mouse.click(px, py)
+    page.wait_for_timeout(350)
+    return {"success": True, "x": px, "y": py, "human_verification": _set_human_verification_state(user_id, page)}
+
+
+def human_move(user_id: str, x: float, y: float) -> Dict[str, Any]:
+    """Move the user's pointer inside an active human challenge."""
+    page = _page(user_id)
+    challenge = _set_human_verification_state(user_id, page)
+    if not challenge.get("required"):
+        raise PermissionError("Manual challenge interaction is only available while human verification is active.")
+    size = viewport(user_id)
+    px, py = float(x), float(y)
+    if px < 0 or py < 0 or px > size["width"] or py > size["height"]:
+        raise ValueError("Pointer coordinates are outside the browser viewport.")
+    page.mouse.move(px, py)
+    return {"success": True, "x": px, "y": py}
 
 def plan_goal(user_id: str, goal: str) -> Dict[str, Any]:
     page = inspect(user_id)
