@@ -71,6 +71,53 @@ def install_browser_api(app, require_current_user, row_value=None):
         except Exception as exc:
             raise HTTPException(status_code=409, detail=f"{type(exc).__name__}: {str(exc)[:300]}")
 
+    @app.get("/api/browser/connect/status")
+    async def browser_connect_status(request: Request):
+        row = require_current_user(request)
+        user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Authenticated user required")
+        from browser_operator import connection_status
+        try:
+            return {"status": "ok", "connection": await _browser_call(connection_status, user_id)}
+        except Exception as exc:
+            raise HTTPException(status_code=409, detail=f"{type(exc).__name__}: {str(exc)[:300]}")
+
+    @app.post("/api/browser/connect/confirm")
+    async def browser_connect_confirm(request: Request):
+        row = require_current_user(request)
+        user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Authenticated user required")
+        from browser_operator import confirm_connection
+        try:
+            connection = await _browser_call(confirm_connection, user_id)
+            return {"status": "ok", "connection": connection}
+        except PermissionError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        except Exception as exc:
+            raise HTTPException(status_code=409, detail=f"{type(exc).__name__}: {str(exc)[:300]}")
+
+    @app.post("/api/browser/connect/task")
+    async def browser_connect_task(request: Request):
+        row = require_current_user(request)
+        user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Authenticated user required")
+        body = await request.json()
+        goal = str((body or {}).get("goal") or "").strip()
+        if not goal:
+            raise HTTPException(status_code=400, detail="goal is required")
+        if len(goal) > 4000:
+            raise HTTPException(status_code=400, detail="goal is too long")
+        from browser_operator import connection_status
+        connection = await _browser_call(connection_status, user_id)
+        if connection.get("status") != "connected":
+            raise HTTPException(status_code=409, detail="Connect the account first. Complete login, then confirm the connected session.")
+        from workflow_engine import create_workflow
+        workflow = create_workflow(user_id, goal)
+        return {"status": "ok", "workflow": workflow}
+
     @app.post("/api/browser/connect/action")
     async def browser_connect_action(request: Request):
         row = require_current_user(request)
