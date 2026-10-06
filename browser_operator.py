@@ -145,23 +145,46 @@ def connection_status(user_id: str) -> Dict[str, Any]:
     except Exception:
         text = ""
     password_fields = page.locator('input[type="password"]').count()
-    login_words = ("sign in to", "log in to", "forgot password", "enter your password", "create your account")
+
+    # Never infer "logged in" merely because a page has no password field.
+    # Public home pages often have no password input while the visitor is
+    # still anonymous. Require explicit login signals or strong auth evidence.
+    login_words = (
+        "sign in", "sign in to", "log in", "log in to", "forgot password",
+        "enter your password", "create your account", "join now", "join here",
+    )
+    logout_words = ("log out", "logout", "sign out", "signout")
+    account_words = (
+        "account settings", "my profile", "dashboard", "my orders", "my gigs",
+        "inbox", "messages", "seller dashboard", "profile picture",
+    )
     login_required = password_fields > 0 or any(word in text for word in login_words)
+    positive_auth = any(word in text for word in logout_words)
+    if not positive_auth:
+        positive_auth = any(word in text for word in account_words) and not login_required
+
     with _LOCK:
         session = _SESSIONS.get(str(user_id)) or {}
         confirmed = bool(session.get("account_connected"))
+
     if verification.get("required"):
         status = "human_verification"
     elif confirmed:
         status = "connected"
-    elif login_required:
+    elif login_required or not positive_auth:
         status = "login_required"
     else:
         status = "ready_to_confirm"
+
     return {
         "status": status,
         "connected": status == "connected",
         "login_required": status == "login_required",
+        "login_evidence": {
+            "password_field": bool(password_fields),
+            "login_signal": bool(login_required),
+            "positive_auth_signal": bool(positive_auth),
+        },
         "human_verification_required": verification.get("required", False),
         "url": page.url,
         "title": page.title(),
