@@ -248,8 +248,10 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
         all_actions = plan.get("actions") or []
         resume_index = int(step.get("browser_resume_index") or 0)
         actions = all_actions[resume_index:]
-        if not actions:
+        if not all_actions:
             return {"success": False, "error": "No browser actions were prepared."}
+        if not actions:
+            return {"success": True, "resumed_after_human_verification": True, "results": [], "verification": {"verification_status": "not_verified", "verified": False, "evidence": [], "note": "All approved browser actions were already executed before the human-verification pause. Proceed to verification."}}
 
         # The exact browser plan must be the one that was shown for approval.
         # This prevents a modified plan from being executed under an older approval.
