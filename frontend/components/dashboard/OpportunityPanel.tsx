@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 type Opportunity = {
   id: string; title: string; url: string; summary: string; score: number;
   confidence: string; estimated_value: number; next_action: string; reasons: string[];
+  source_kind?: string; direct_client?: boolean; source_instruction?: string;
   contact_email?: string; contact_phone?: string;
 };
 type Profile = {
@@ -52,13 +53,13 @@ export default function OpportunityPanel() {
         {!items.length&&!loading&&<div className="py-8 text-center font-mono-tech text-[10px] text-zinc-600">Run HUNT to find public opportunities.</div>}
         <div className="space-y-2">{items.map(o=><div key={o.id} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
           <div className="flex items-start justify-between gap-2"><div className="text-xs font-medium text-zinc-200">{o.title}</div><span className="shrink-0 font-mono-tech text-[10px] text-emerald-300">{o.score}/100</span></div>
-          <div className="mt-1 text-[10px] text-zinc-500">{o.confidence.toUpperCase()} · potential ${o.estimated_value.toFixed(0)}</div>
+          <div className="mt-1 text-[10px] text-zinc-500">{o.confidence.toUpperCase()} · {String(o.source_kind || "unknown").replaceAll("_"," ").toUpperCase()} · potential ${o.estimated_value.toFixed(0)}</div>
           <p className="mt-2 line-clamp-3 text-[10px] leading-relaxed text-zinc-500">{o.summary||"No summary available."}</p>
-          <div className="mt-2 flex gap-2"><button onClick={()=>prepare(o)} disabled={preparing} className="rounded border border-emerald-400/20 px-2 py-1 font-mono-tech text-[9px] text-emerald-300 disabled:opacity-50">{preparing?"PREPARING":"PREPARE PROPOSAL"}</button><a href={o.url} target="_blank" rel="noreferrer" className="rounded border border-cyan-400/20 px-2 py-1 font-mono-tech text-[9px] text-cyan-300">SOURCE</a></div>
+          <div className="mt-2 text-[9px] leading-relaxed text-zinc-600">{o.source_instruction}</div><div className="mt-2 flex gap-2"><button onClick={()=>prepare(o)} disabled={preparing} className="rounded border border-emerald-400/20 px-2 py-1 font-mono-tech text-[9px] text-emerald-300 disabled:opacity-50">{preparing?"PREPARING":o.direct_client?"PREPARE PROPOSAL":"PREPARE APPLICATION"}</button><a href={o.url} target="_blank" rel="noreferrer" className="rounded border border-cyan-400/20 px-2 py-1 font-mono-tech text-[9px] text-cyan-300">SOURCE</a></div>
         </div>)}</div>
         {prospect&&<div className="mt-3 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-3">
           <div className="flex items-center justify-between"><div className="font-mono-tech text-[9px] tracking-widest text-emerald-300">CLIENT ACQUISITION · {prospect.qualification?.fit_score}/100</div><span className="text-[9px] text-zinc-500">{prospect.status}</span></div>
-          <div className="mt-2 grid grid-cols-2 gap-2 text-[9px] text-zinc-500"><div>FROM <b className="text-zinc-200">{prospect.profile?.display_name||"Profile incomplete"}</b></div><div>ROLE <b className="text-zinc-200">{prospect.profile?.professional_title||"—"}</b></div></div>
+          <div className="mt-2 grid grid-cols-2 gap-2 text-[9px] text-zinc-500"><div>FROM <b className="text-zinc-200">{prospect.profile?.display_name||"Profile incomplete"}</b></div><div>ROLE <b className="text-zinc-200">{prospect.profile?.professional_title||"—"}</b></div></div><div className="mt-2 rounded border border-cyan-400/10 bg-cyan-400/5 p-2 text-[9px] text-cyan-300">{String(prospect.qualification?.source_kind||"direct_client").replaceAll("_"," ").toUpperCase()} · {prospect.qualification?.direct_client?"POSSIBLE DIRECT CLIENT":"NOT A DIRECT CLIENT — USE THE SOURCE/PLATFORM APPLICATION FLOW"}</div>
           <div className="mt-2 rounded border border-white/10 bg-black/20 p-2"><div className="text-[10px] font-medium text-zinc-200">{prospect.outreach?.subject}</div><p className="mt-2 whitespace-pre-wrap text-[10px] leading-relaxed text-zinc-400">{prospect.outreach?.message}</p></div>
           {!prospect.profile_ready&&<div className="mt-2 text-[9px] text-amber-300">PROFILE INCOMPLETE — {prospect.missing_profile?.join(", ")}. <button onClick={()=>setProfileOpen(true)} className="underline">OPEN PROFILE</button></div>}
           {prospect.profile_ready&&prospect.status!=="sent"&&<div className="mt-3 rounded border border-amber-400/20 bg-amber-400/5 p-2">
