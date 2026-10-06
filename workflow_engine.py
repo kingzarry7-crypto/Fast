@@ -105,7 +105,7 @@ def plan_goal(workflow_id: str, user_id: str, goal: str) -> Dict[str, Any]:
     elif kind == "browser":
         steps += [
             _step(workflow_id, 3, "Open the requested website and inspect the current page", "browser_prepare"),
-            _step(workflow_id, 4, "Prepare the exact browser actions", "browser_plan", RiskLevel.YELLOW, True),
+            _step(workflow_id, 4, "Prepare the exact browser actions", "browser_plan"),
             _step(workflow_id, 5, "Execute the approved browser actions", "browser_execute", RiskLevel.YELLOW, True),
             _step(workflow_id, 6, "Verify the browser result", "browser_verify"),
             _step(workflow_id, 7, "Record the result for future work", "learn"),
@@ -204,7 +204,7 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
         from browser_operator import navigate, inspect
         urls = re.findall(r"https?://[^\\s)\\]}>,]+", goal)
         if not urls:
-            return {"success": True, "needs_url": True, "message": "I need the website URL before I can operate it."}
+            return {"success": False, "error": "Website URL is required before I can operate the site."}
         page = navigate(str(item["user_id"]), urls[0])
         return {"success": True, "page": page, "message": "Website opened and inspected before any external change."}
 
