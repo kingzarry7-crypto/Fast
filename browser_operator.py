@@ -158,10 +158,13 @@ def connection_status(user_id: str) -> Dict[str, Any]:
         "account settings", "my profile", "dashboard", "my orders", "my gigs",
         "inbox", "messages", "seller dashboard", "profile picture",
     )
-    login_required = password_fields > 0 or any(word in text for word in login_words)
-    positive_auth = any(word in text for word in logout_words)
-    if not positive_auth:
-        positive_auth = any(word in text for word in account_words) and not login_required
+    login_signal = password_fields > 0 or any(word in text for word in login_words)
+    logout_signal = any(word in text for word in logout_words)
+    account_matches = {word for word in account_words if word in text}
+    positive_auth = logout_signal or len(account_matches) >= 2
+    # A strong authenticated marker such as "Log out" wins over generic
+    # navigation text such as a footer "Sign in" link.
+    login_required = login_signal and not positive_auth
 
     with _LOCK:
         session = _SESSIONS.get(str(user_id)) or {}
@@ -182,7 +185,9 @@ def connection_status(user_id: str) -> Dict[str, Any]:
         "login_required": status == "login_required",
         "login_evidence": {
             "password_field": bool(password_fields),
-            "login_signal": bool(login_required),
+            "login_signal": bool(login_signal),
+            "logout_signal": bool(logout_signal),
+            "account_markers": sorted(account_matches),
             "positive_auth_signal": bool(positive_auth),
         },
         "human_verification_required": verification.get("required", False),
