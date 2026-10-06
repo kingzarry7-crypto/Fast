@@ -2,10 +2,20 @@
 from __future__ import annotations
 
 import base64
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict
 
 from fastapi import HTTPException, Request
 
+
+# Playwright Sync API must never run on FastAPI's asyncio event-loop thread.
+# Keep one dedicated browser thread so persistent Playwright objects retain thread affinity.
+_BROWSER_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="kz-playwright")
+
+async def _browser_call(fn, *args, **kwargs):
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(_BROWSER_EXECUTOR, lambda: fn(*args, **kwargs))
 
 def _snapshot(user_id: str):
     from browser_operator import inspect, screenshot
@@ -35,7 +45,7 @@ def install_browser_api(app, require_current_user, row_value=None):
             raise HTTPException(status_code=400, detail="url is required")
         from browser_operator import navigate
         try:
-            page = navigate(user_id, url)
+            page = await _browser_call(navigate, user_id, url)
             return {
                 "status": "ok",
                 "connection": {
@@ -43,7 +53,7 @@ def install_browser_api(app, require_current_user, row_value=None):
                     "title": page["title"],
                     "message": "Login yourself in the KZ browser session. Credentials are not stored by KZ.",
                 },
-                "page": _snapshot(user_id),
+                "page": await _browser_call(_snapshot, user_id),
             }
         except Exception as exc:
             raise HTTPException(status_code=409, detail=f"{type(exc).__name__}: {str(exc)[:300]}")
@@ -59,16 +69,16 @@ def install_browser_api(app, require_current_user, row_value=None):
         from browser_operator import click, fill, select, inspect
         try:
             if kind == "click":
-                result = click(user_id, body.get("selector"), body.get("text"))
+                result = await _browser_call(click, user_id, body.get("selector"), body.get("text"))
             elif kind == "fill":
-                result = fill(user_id, str(body.get("selector") or ""), str(body.get("value") or ""))
+                result = await _browser_call(fill, user_id, str(body.get("selector") or ""), str(body.get("value") or ""))
             elif kind == "select":
-                result = select(user_id, str(body.get("selector") or ""), str(body.get("value") or ""))
+                result = await _browser_call(select, user_id, str(body.get("selector") or ""), str(body.get("value") or ""))
             elif kind == "refresh":
-                result = inspect(user_id)
+                result = await _browser_call(inspect, user_id)
             else:
                 raise ValueError("unsupported connection action")
-            return {"status": "ok", "result": result, "page": _snapshot(user_id)}
+            return {"status": "ok", "result": result, "page": await _browser_call(_snapshot, user_id)}
         except Exception as exc:
             raise HTTPException(status_code=409, detail=f"{type(exc).__name__}: {str(exc)[:400]}")
 
@@ -79,7 +89,7 @@ def install_browser_api(app, require_current_user, row_value=None):
         if not user_id:
             raise HTTPException(status_code=401, detail="Authenticated user required")
         from browser_operator import close
-        close(user_id)
+        await _browser_call(close, user_id)
         return {"status": "ok", "message": "Browser session closed. Persistent session data remains on the configured browser profile volume."}
 
     @app.get("/api/browser/status")
@@ -97,7 +107,7 @@ def install_browser_api(app, require_current_user, row_value=None):
         if not user_id:
             raise HTTPException(status_code=401, detail="Authenticated user required")
         try:
-            return {"status": "ok", "page": _snapshot(user_id)}
+            return {"status": "ok", "page": await _browser_call(_snapshot, user_id)}
         except Exception as exc:
             raise HTTPException(status_code=409, detail=f"{type(exc).__name__}: {str(exc)[:300]}")
 
@@ -117,7 +127,7 @@ def install_browser_api(app, require_current_user, row_value=None):
             return {"status": "awaiting_approval", "approval_required": True, "actions": actions}
         from browser_operator import execute_plan
         try:
-            result = execute_plan(user_id, actions, allow_external=approved)
+            result = await _browser_call(execute_plan, user_id, actions, allow_external=approved)
             return {"status": "ok", "result": result}
         except Exception as exc:
             return {"status": "failed", "error": f"{type(exc).__name__}: {str(exc)[:500]}"}
