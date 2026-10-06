@@ -72,6 +72,11 @@ def prepare(user_id: str, opportunity: Dict[str, Any], profile: Dict[str, Any] |
             profile = {}
     q = qualify(opportunity)
     draft = draft_outreach(opportunity, q, profile)
+    try:
+        from owner_profile import profile_ready
+        readiness = profile_ready(profile)
+    except Exception:
+        readiness = {"ready": bool(profile.get("display_name")), "missing": []}
     oid = _clean(opportunity.get("id"), 100)
     key = hashlib.sha1((str(user_id) + oid + _clean(opportunity.get("url"))).encode()).hexdigest()[:16]
     return {
@@ -79,6 +84,13 @@ def prepare(user_id: str, opportunity: Dict[str, Any], profile: Dict[str, Any] |
         "status": "draft_ready",
         "opportunity": opportunity,
         "qualification": q,
+        "profile": profile,
+        "profile_ready": readiness["ready"],
+        "missing_profile": readiness["missing"],
         "outreach": draft,
-        "next_step": "Review the source and draft. Only an explicit approval may authorize external outreach.",
+        "next_step": (
+            "Review the exact message and destination, then approve to send."
+            if readiness["ready"]
+            else "Complete your professional profile before external outreach."
+        ),
     }
