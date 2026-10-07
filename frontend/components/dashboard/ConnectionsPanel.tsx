@@ -256,11 +256,14 @@ export default function ConnectionsPanel() {
       if (!r.ok) throw new Error(d.detail || "Manual browser interaction failed");
       setPage(d.page);
       setConnection(d.page?.connection || null);
-      setMessage(
-        d.page?.human_verification?.required
-          ? "The challenge is still active. Try the press-and-hold again exactly as Fiverr requests."
-          : "Human verification appears complete. KZ is waiting for you to confirm the account."
-      );
+      if (!d.page?.human_verification?.required) {
+        setMessage("✓ HUMAN VERIFIED — refreshing the live Fiverr session and checking your real login status...");
+        // Fiverr may finish rebuilding the authenticated shell just after the
+        // challenge disappears. Give it a moment, then re-read live state.
+        window.setTimeout(() => { void refresh(); }, 1200);
+      } else {
+        setMessage("The challenge is still active. Try the press-and-hold again exactly as Fiverr requests.");
+      }
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Manual browser interaction failed");
     } finally {
