@@ -710,34 +710,11 @@ export default function ConnectionsPanel() {
                 </select>
                 <div className="truncate rounded-lg border border-white/5 px-2 py-2 text-[9px] text-zinc-600">{accountId}</div>
               </div>
-              <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://your-site.com/login" className="w-full rounded-lg border border-cyan-400/15 bg-white/[0.03] p-3 text-sm text-white outline-none" />
+              <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/login" className="w-full rounded-lg border border-cyan-400/15 bg-white/[0.03] p-3 text-sm text-white outline-none" />
               <button disabled={busy || !url.trim()} onClick={start} className="mt-2 w-full rounded-lg border border-cyan-400/25 bg-cyan-400/10 py-2 font-mono-tech text-[9px] tracking-widest text-cyan-100 disabled:opacity-40">{busy ? "OPENING..." : "OPEN LOGIN"}</button>
 
               {connection && <div className="mt-3 rounded-lg border border-white/5 bg-white/[0.02] p-3"><div className="flex items-center justify-between"><span className="font-mono-tech text-[9px] tracking-widest text-zinc-500">ACCOUNT STATE</span><span className="font-mono-tech text-[9px] tracking-widest text-cyan-200">{statusLabel}</span></div><div className="mt-1 truncate text-[10px] text-zinc-600">{connection.url}</div></div>}
               {message && <p className="mt-2 text-xs leading-relaxed text-zinc-400">{message}</p>}
-            </div>
-
-            <div className="mb-4 rounded-lg border border-cyan-400/20 bg-cyan-400/[0.03] p-3">
-              <div className="font-mono-tech text-[10px] tracking-[0.18em] text-cyan-200">OFFICIAL CONNECTORS</div>
-              <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Use provider authorization instead of browser login when KZ has an official connector.</p>
-              <div className="mt-3 rounded-lg border border-white/5 bg-black/20 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div><div className="text-sm text-white">GitHub</div><div className="text-[9px] text-zinc-600">{github?.connected ? "CONNECTED" : github?.configured === false ? "BACKEND NOT CONFIGURED" : "READY TO CONNECT"}</div></div>
-                  {github?.connected ? <span className="rounded border border-cyan-400/20 px-2 py-1 text-[9px] text-cyan-200">AUTHORIZED</span> : <button onClick={connectGitHub} disabled={busy || github?.configured === false} className="rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 font-mono-tech text-[9px] tracking-widest text-cyan-100 disabled:opacity-40">CONNECT GITHUB</button>}
-                </div>
-                {github?.connected && <div className="mt-3 space-y-2">
-                  <button onClick={loadGitHubRepos} disabled={busy} className="w-full rounded-lg border border-white/10 py-2 font-mono-tech text-[9px] tracking-widest text-zinc-300 disabled:opacity-40">READ MY REPOSITORIES</button>
-                  {githubRepos.length > 0 && <div className="max-h-28 overflow-auto space-y-1">{githubRepos.map((repo: any) => <button key={repo.full_name} onClick={() => { const p=String(repo.full_name||"").split("/"); setGithubOwner(p[0]||""); setGithubRepo(p[1]||""); }} className="block w-full rounded border border-white/5 px-2 py-1 text-left text-[10px] text-zinc-400 hover:text-cyan-200">{repo.full_name}</button>)}</div>}
-                  <div className="border-t border-white/5 pt-3">
-                    <div className="font-mono-tech text-[9px] tracking-widest text-amber-200">WORK — APPROVAL REQUIRED</div>
-                    <div className="mt-2 grid grid-cols-2 gap-2"><input value={githubOwner} onChange={e=>setGithubOwner(e.target.value)} placeholder="owner" className="rounded border border-white/10 bg-black/20 p-2 text-xs text-white"/><input value={githubRepo} onChange={e=>setGithubRepo(e.target.value)} placeholder="repo" className="rounded border border-white/10 bg-black/20 p-2 text-xs text-white"/></div>
-                    <input value={githubIssueTitle} onChange={e=>setGithubIssueTitle(e.target.value)} placeholder="Issue title" className="mt-2 w-full rounded border border-white/10 bg-black/20 p-2 text-xs text-white"/>
-                    <textarea value={githubIssueBody} onChange={e=>setGithubIssueBody(e.target.value)} placeholder="What should KZ do?" className="mt-2 min-h-16 w-full rounded border border-white/10 bg-black/20 p-2 text-xs text-white"/>
-                    <button onClick={createGitHubIssue} disabled={busy || !githubOwner.trim() || !githubRepo.trim() || !githubIssueTitle.trim()} className="mt-2 w-full rounded-lg border border-amber-400/25 bg-amber-400/5 py-2 font-mono-tech text-[9px] tracking-widest text-amber-100 disabled:opacity-40">PREPARE — ASK BEFORE SEND</button>
-                  </div>
-                  {githubApproval && <div className="mt-3 rounded border border-amber-400/25 bg-amber-400/5 p-3"><div className="font-mono-tech text-[9px] tracking-widest text-amber-200">APPROVAL REQUIRED</div><div className="mt-1 text-xs text-zinc-400">{githubApproval.operation} → {githubApproval.target}</div><div className="mt-2 flex gap-2"><button onClick={()=>void decideGitHubApproval(false)} disabled={busy} className="flex-1 rounded border border-white/10 py-2 text-[9px] text-zinc-400">REJECT</button><button onClick={()=>void decideGitHubApproval(true)} disabled={busy} className="flex-1 rounded border border-cyan-400/25 bg-cyan-400/10 py-2 text-[9px] text-cyan-100">APPROVE & EXECUTE</button></div></div>}
-                </div>}
-              </div>
             </div>
 
             {page && (
