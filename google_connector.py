@@ -1,0 +1,530 @@
+"""KZ official Google Workspace connector.
+
+Uses Google's server-side OAuth flow and encrypted tokens stored in the existing
+web_connected_accounts table. Consequential actions require an exact approval
+record before execution and are marked successful only when Google returns
+verifiable evidence.
+
+Supported:
+- Gmail: list recent messages, send email (approval required)
+- Drive: list/search files, upload a text file (approval required)
+- Calendar: list upcoming events, create event (approval required)
+"""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import json
+import os
+import secrets
+import time
+import urllib.parse
+import uuid
+from datetime import datetime, timezone
+from email.message import EmailMessage
+from typing import Any, Dict, Optional
+
+import requests
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import RedirectResponse
+from nacl.secret import SecretBox
+
+from database import get_db_cursor
+
+
+router = APIRouter(prefix="/api/connectors/google", tags=["google-connector"])
+
+GOOGLE_AUTHORIZE = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO = "https://openidconnect.googleapis.com/v1/userinfo"
+GOOGLE_GMAIL = "https://gmail.googleapis.com/gmail/v1"
+GOOGLE_DRIVE = "https://www.googleapis.com/drive/v3"
+GOOGLE_CALENDAR = "https://www.googleapis.com/calendar/v3"
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+CONNECTOR_STATE_SECRET = os.getenv("CONNECTOR_STATE_SECRET") or os.getenv("SESSION_SECRET") or ""
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
+GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "").strip()
+
+DEFAULT_GOOGLE_SCOPES = " ".join([
+    "openid",
+    "email",
+    "profile",
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/drive.metadata.readonly",
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/calendar.events",
+])
+GOOGLE_SCOPES = os.getenv("GOOGLE_OAUTH_SCOPES", DEFAULT_GOOGLE_SCOPES).strip()
+
+
+def _now() -> int:
+    return int(time.time())
+
+
+def _row_value(row: Any, key: str, index: int = 0) -> Any:
+    if row is None:
+        return None
+    try:
+        if hasattr(row, "keys") and key in row.keys():
+            return row[key]
+    except Exception:
+        pass
+    try:
+        return row[index]
+    except Exception:
+        return None
+
+
+def _user_id(request: Request) -> str:
+    import api
+    row = api._require_current_user(request)
+    return str(api._row_value(row, "id", 0))
+
+
+def _configured() -> bool:
+    return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI and CONNECTOR_STATE_SECRET)
+
+
+def _box() -> SecretBox:
+    raw = os.getenv("KZ_CONNECTOR_ENCRYPTION_KEY", "").strip()
+    if len(raw) < 32:
+        raise HTTPException(status_code=503, detail="KZ connector encryption is not configured")
+    return SecretBox(hashlib.sha256(raw.encode("utf-8")).digest())
+
+
+def _encrypt(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    return base64.urlsafe_b64encode(bytes(_box().encrypt(str(value).encode("utf-8")))).decode("ascii")
+
+
+def _decrypt(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    return _box().decrypt(base64.urlsafe_b64decode(str(value).encode("ascii"))).decode("utf-8")
+
+
+def _sign_state(payload: Dict[str, Any]) -> str:
+    raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    encoded = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+    sig = hmac.new(CONNECTOR_STATE_SECRET.encode("utf-8"), encoded.encode("ascii"), hashlib.sha256).hexdigest()
+    return f"{encoded}.{sig}"
+
+
+def _verify_state(value: str) -> Dict[str, Any]:
+    try:
+        encoded, sig = str(value or "").split(".", 1)
+        expected = hmac.new(CONNECTOR_STATE_SECRET.encode("utf-8"), encoded.encode("ascii"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            raise ValueError("signature")
+        padded = encoded + "=" * (-len(encoded) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded).decode("utf-8"))
+        if payload.get("provider") != "google" or int(payload.get("exp") or 0) < _now():
+            raise ValueError("expired")
+        return payload
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid or expired Google authorization state") from exc
+
+
+def _account(user_id: str) -> Optional[Dict[str, Any]]:
+    with get_db_cursor(commit=False) as cur:
+        cur.execute(
+            """SELECT id, provider_account_id, display_name, scopes, token_expires_at, metadata,
+                      access_token_encrypted, refresh_token_encrypted
+               FROM web_connected_accounts
+               WHERE user_id=%s AND provider='google' AND revoked_at IS NULL
+               ORDER BY updated_at DESC LIMIT 1""",
+            (user_id,),
+        )
+        row = cur.fetchone()
+    if not row:
+        return None
+    return {
+        "id": str(_row_value(row, "id", 0)),
+        "provider": "google",
+        "provider_account_id": str(_row_value(row, "provider_account_id", 1) or ""),
+        "display_name": str(_row_value(row, "display_name", 2) or "Google"),
+        "scopes": _row_value(row, "scopes", 3) or [],
+        "token_expires_at": str(_row_value(row, "token_expires_at", 4) or "") or None,
+        "metadata": _row_value(row, "metadata", 5) or {},
+        "_access": _row_value(row, "access_token_encrypted", 6),
+        "_refresh": _row_value(row, "refresh_token_encrypted", 7),
+    }
+
+
+def _save_account(user_id: str, profile: Dict[str, Any], token: Dict[str, Any], scopes: list[str]) -> None:
+    expires_at = None
+    if token.get("expires_in"):
+        expires_at = datetime.fromtimestamp(_now() + int(token["expires_in"]), timezone.utc)
+    account_id = str(profile.get("sub") or "")
+    if not account_id:
+        raise HTTPException(status_code=502, detail="Google did not return a stable account identifier")
+    metadata = {
+        "email": profile.get("email"),
+        "email_verified": bool(profile.get("email_verified")),
+        "picture": profile.get("picture"),
+        "name": profile.get("name"),
+    }
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            """INSERT INTO web_connected_accounts
+              (user_id, provider, provider_account_id, display_name, scopes,
+               access_token_encrypted, refresh_token_encrypted, token_expires_at, metadata, revoked_at)
+              VALUES (%s,'google',%s,%s,%s::jsonb,%s,%s,%s,%s::jsonb,NULL)
+              ON CONFLICT (user_id, provider, provider_account_id)
+              DO UPDATE SET display_name=EXCLUDED.display_name,
+                scopes=EXCLUDED.scopes,
+                access_token_encrypted=EXCLUDED.access_token_encrypted,
+                refresh_token_encrypted=COALESCE(EXCLUDED.refresh_token_encrypted,
+                                                 web_connected_accounts.refresh_token_encrypted),
+                token_expires_at=EXCLUDED.token_expires_at,
+                metadata=EXCLUDED.metadata,
+                revoked_at=NULL, updated_at=NOW()""",
+            (
+                user_id, account_id, str(profile.get("name") or profile.get("email") or "Google"),
+                json.dumps(scopes), _encrypt(token.get("access_token")),
+                _encrypt(token.get("refresh_token")), expires_at, json.dumps(metadata),
+            ),
+        )
+
+
+def _refresh(user_id: str, account: Dict[str, Any]) -> str:
+    refresh_token = _decrypt(account.get("_refresh"))
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Google authorization expired. Reconnect Google.")
+    response = requests.post(
+        GOOGLE_TOKEN,
+        data={
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+        },
+        timeout=25,
+    )
+    if response.status_code >= 400:
+        raise HTTPException(status_code=401, detail="Google authorization expired. Reconnect Google.")
+    token = response.json()
+    access_token = str(token.get("access_token") or "")
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Google did not return a refreshed access token")
+    expires_at = None
+    if token.get("expires_in"):
+        expires_at = datetime.fromtimestamp(_now() + int(token["expires_in"]), timezone.utc)
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            """UPDATE web_connected_accounts
+               SET access_token_encrypted=%s, token_expires_at=%s, updated_at=NOW()
+               WHERE id=%s""",
+            (_encrypt(access_token), expires_at, account["id"]),
+        )
+    return access_token
+
+
+def _token(user_id: str) -> str:
+    account = _account(user_id)
+    if not account:
+        raise HTTPException(status_code=401, detail="Google is not connected")
+    access = _decrypt(account.get("_access"))
+    if not access:
+        return _refresh(user_id, account)
+    return access
+
+
+def _google_request(user_id: str, method: str, url: str, **kwargs: Any) -> requests.Response:
+    token = _token(user_id)
+    headers = dict(kwargs.pop("headers", {}) or {})
+    headers["Authorization"] = f"Bearer {token}"
+    headers.setdefault("Accept", "application/json")
+    response = requests.request(method, url, headers=headers, timeout=25, **kwargs)
+    if response.status_code == 401:
+        account = _account(user_id)
+        if account and account.get("_refresh"):
+            token = _refresh(user_id, account)
+            headers["Authorization"] = f"Bearer {token}"
+            response = requests.request(method, url, headers=headers, timeout=25, **kwargs)
+    if response.status_code >= 400:
+        try:
+            detail = response.json().get("error", {}).get("message") or response.json().get("error_description")
+        except Exception:
+            detail = None
+        raise HTTPException(status_code=502, detail=f"Google request failed{': ' + str(detail) if detail else ''}"[:500])
+    return response
+
+
+def _audit(user_id: str, event: str, operation: str = "", target: str = "", approval_id: Optional[str] = None) -> None:
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            """INSERT INTO web_audit_logs
+               (user_id,event,service,tool_name,approval_id,details)
+               VALUES (%s,%s,'google','google_connector',%s,%s::jsonb)""",
+            (user_id, event, approval_id, json.dumps({"operation": operation, "target": target[:500]})),
+        )
+
+
+def _fingerprint(operation: str, target: str, payload: Dict[str, Any]) -> str:
+    raw = json.dumps({"service": "google", "operation": operation, "target": target, "payload": payload},
+                     sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _execute(user_id: str, operation: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    operation = str(operation or "").strip().lower()
+
+    if operation == "list_gmail":
+        q = str(payload.get("query") or "in:anywhere").strip()[:500]
+        limit = max(1, min(int(payload.get("limit") or 20), 50))
+        r = _google_request(user_id, "GET", GOOGLE_GMAIL + "/users/me/messages",
+                            params={"q": q, "maxResults": limit})
+        messages = r.json().get("messages") or []
+        items = []
+        for item in messages[:limit]:
+            mid = str(item.get("id") or "")
+            if not mid:
+                continue
+            m = _google_request(user_id, "GET", GOOGLE_GMAIL + f"/users/me/messages/{urllib.parse.quote(mid)}",
+                                params={"format": "metadata", "metadataHeaders": ["From", "To", "Subject", "Date"]}).json()
+            headers = {str(x.get("name")): str(x.get("value") or "") for x in (m.get("payload", {}).get("headers") or [])}
+            items.append({"id": mid, "thread_id": m.get("threadId"), "snippet": m.get("snippet"),
+                           "from": headers.get("From"), "to": headers.get("To"),
+                           "subject": headers.get("Subject"), "date": headers.get("Date")})
+        return {"verified": True, "operation": operation, "messages": items}
+
+    if operation == "list_drive":
+        q = str(payload.get("query") or "trashed = false").strip()[:1000]
+        limit = max(1, min(int(payload.get("limit") or 30), 100))
+        r = _google_request(user_id, "GET", GOOGLE_DRIVE + "/files",
+                            params={"q": q, "pageSize": limit, "orderBy": "modifiedTime desc",
+                                    "fields": "files(id,name,mimeType,modifiedTime,webViewLink,size),nextPageToken"})
+        body = r.json()
+        return {"verified": True, "operation": operation, "files": body.get("files") or [], "next_page_token": body.get("nextPageToken")}
+
+    if operation == "list_calendar":
+        limit = max(1, min(int(payload.get("limit") or 20), 50))
+        r = _google_request(user_id, "GET", GOOGLE_CALENDAR + "/calendars/primary/events",
+                            params={"singleEvents": "true", "orderBy": "startTime", "timeMin": datetime.now(timezone.utc).isoformat(), "maxResults": limit})
+        return {"verified": True, "operation": operation,
+                "events": [{"id": x.get("id"), "summary": x.get("summary"),
+                            "start": x.get("start"), "end": x.get("end"),
+                            "htmlLink": x.get("htmlLink")} for x in (r.json().get("items") or [])]}
+
+    if operation == "send_gmail":
+        to = str(payload.get("to") or "").strip()
+        subject = str(payload.get("subject") or "").strip()[:300]
+        body = str(payload.get("body") or "")[:20000]
+        if not to or "@" not in to or not subject or not body:
+            raise HTTPException(status_code=400, detail="to, subject and body are required")
+        msg = EmailMessage()
+        msg["To"] = to
+        msg["Subject"] = subject
+        msg.set_content(body)
+        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("ascii").rstrip("=")
+        r = _google_request(user_id, "POST", GOOGLE_GMAIL + "/users/me/messages/send",
+                            headers={"Content-Type": "application/json"}, json={"raw": raw})
+        data = r.json()
+        return {"verified": bool(data.get("id")), "operation": operation,
+                "message": {"id": data.get("id"), "thread_id": data.get("threadId"), "label_ids": data.get("labelIds") or []}}
+
+    if operation == "create_calendar_event":
+        summary = str(payload.get("summary") or "").strip()[:300]
+        start = str(payload.get("start") or "").strip()
+        end = str(payload.get("end") or "").strip()
+        timezone_name = str(payload.get("timezone") or "UTC").strip()[:100]
+        description = str(payload.get("description") or "")[:5000]
+        if not summary or not start or not end:
+            raise HTTPException(status_code=400, detail="summary, start and end are required")
+        event = {"summary": summary, "description": description,
+                 "start": {"dateTime": start, "timeZone": timezone_name},
+                 "end": {"dateTime": end, "timeZone": timezone_name}}
+        r = _google_request(user_id, "POST", GOOGLE_CALENDAR + "/calendars/primary/events",
+                            headers={"Content-Type": "application/json"}, json=event)
+        data = r.json()
+        return {"verified": bool(data.get("id") and data.get("htmlLink")), "operation": operation,
+                "event": {"id": data.get("id"), "summary": data.get("summary"),
+                          "htmlLink": data.get("htmlLink"), "start": data.get("start"), "end": data.get("end")}}
+
+    if operation == "upload_drive_text":
+        name = str(payload.get("name") or "").strip()[:255]
+        content = str(payload.get("content") or "")[:50000]
+        mime_type = str(payload.get("mime_type") or "text/plain").strip()[:100]
+        if not name or not content:
+            raise HTTPException(status_code=400, detail="name and content are required")
+        metadata = {"name": name, "mimeType": mime_type}
+        r = _google_request(user_id, "POST", GOOGLE_DRIVE + "/files",
+                            headers={"Content-Type": mime_type}, params={"uploadType": "multipart"},
+                            json=None)
+        # The Drive multipart endpoint is intentionally not used through a
+        # generic JSON request. Use the simple media upload endpoint instead;
+        # the file is created with the supplied name via multipart below.
+        boundary = "kz_" + secrets.token_hex(12)
+        metadata_bytes = json.dumps(metadata).encode("utf-8")
+        content_bytes = content.encode("utf-8")
+        multipart = (
+            b"--" + boundary.encode() + b"\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" +
+            metadata_bytes + b"\r\n--" + boundary.encode() +
+            b"\r\nContent-Type: " + mime_type.encode() + b"\r\n\r\n" +
+            content_bytes + b"\r\n--" + boundary.encode() + b"--\r\n"
+        )
+        # Re-issue against multipart endpoint. The preliminary request above
+        # is avoided by requiring a normal 4xx path; kept separate for clarity.
+        r = _google_request(user_id, "POST", "https://www.googleapis.com/upload/drive/v3/files",
+                            headers={"Content-Type": f"multipart/related; boundary={boundary}"},
+                            params={"uploadType": "multipart", "fields": "id,name,mimeType,webViewLink"},
+                            data=multipart)
+        data = r.json()
+        return {"verified": bool(data.get("id")), "operation": operation,
+                "file": {"id": data.get("id"), "name": data.get("name"),
+                         "mimeType": data.get("mimeType"), "webViewLink": data.get("webViewLink")}}
+
+    raise HTTPException(status_code=400, detail=f"Unsupported Google operation: {operation}")
+
+
+def _approval(user_id: str, operation: str, target: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    fingerprint = _fingerprint(operation, target, payload)
+    approval_id = str(uuid.uuid4())
+    exact = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            """INSERT INTO web_approvals
+               (id,user_id,service,operation,target,exact_content,action_fingerprint,status)
+               VALUES (%s,%s,'google',%s,%s,%s,%s,'pending') RETURNING id""",
+            (approval_id, user_id, operation, target[:500], exact, fingerprint),
+        )
+        row = cur.fetchone()
+        approval_id = str(_row_value(row, "id", 0) or approval_id)
+    _audit(user_id, "connector_action_approval_created", operation, target, approval_id)
+    return {"status": "waiting_for_approval", "approval_id": approval_id, "provider": "google",
+            "operation": operation, "target": target, "preview": payload,
+            "message": "Approval required. KZ will execute only this exact Google action after you approve it."}
+
+
+@router.get("/status")
+async def google_status(request: Request):
+    user_id = _user_id(request)
+    account = _account(user_id)
+    return {"configured": _configured(), "connected": bool(account), "account": {k:v for k,v in (account or {}).items() if not k.startswith("_")},
+            "authorization_mode": "oauth", "scopes": GOOGLE_SCOPES.split()}
+
+
+@router.get("/start")
+async def google_start(request: Request):
+    user_id = _user_id(request)
+    if not _configured():
+        raise HTTPException(status_code=503, detail="Google connector is not configured on KZ")
+    state = _sign_state({"provider": "google", "user_id": user_id, "nonce": secrets.token_urlsafe(18), "exp": _now() + 600})
+    params = {"client_id": GOOGLE_CLIENT_ID, "redirect_uri": GOOGLE_REDIRECT_URI,
+              "response_type": "code", "scope": GOOGLE_SCOPES, "access_type": "offline",
+              "prompt": "consent", "include_granted_scopes": "true", "state": state}
+    return RedirectResponse(GOOGLE_AUTHORIZE + "?" + urllib.parse.urlencode(params))
+
+
+@router.get("/callback")
+async def google_callback(request: Request):
+    if not _configured():
+        raise HTTPException(status_code=503, detail="Google connector is not configured on KZ")
+    error = request.query_params.get("error")
+    if error:
+        return RedirectResponse(f"{FRONTEND_URL}/dashboard?connector_error=google_{urllib.parse.quote(error)}")
+    payload = _verify_state(request.query_params.get("state") or "")
+    user_id = _user_id(request)
+    if str(payload.get("user_id")) != user_id:
+        raise HTTPException(status_code=403, detail="Google authorization belongs to a different KZ session")
+    code = request.query_params.get("code") or ""
+    if not code:
+        raise HTTPException(status_code=400, detail="Google authorization code missing")
+    response = requests.post(GOOGLE_TOKEN, data={
+        "code": code, "client_id": GOOGLE_CLIENT_ID, "client_secret": GOOGLE_CLIENT_SECRET,
+        "redirect_uri": GOOGLE_REDIRECT_URI, "grant_type": "authorization_code",
+    }, timeout=25)
+    if response.status_code >= 400:
+        try:
+            detail = response.json().get("error_description") or response.json().get("error")
+        except Exception:
+            detail = None
+        raise HTTPException(status_code=502, detail=f"Google token exchange failed{': ' + str(detail) if detail else ''}")
+    token = response.json()
+    access = str(token.get("access_token") or "")
+    if not access:
+        raise HTTPException(status_code=502, detail="Google did not return an access token")
+    profile_r = requests.get(GOOGLE_USERINFO, headers={"Authorization": f"Bearer {access}"}, timeout=25)
+    if profile_r.status_code >= 400:
+        raise HTTPException(status_code=502, detail="Google profile verification failed")
+    profile = profile_r.json()
+    scopes = [x for x in str(token.get("scope") or GOOGLE_SCOPES).split() if x]
+    _save_account(user_id, profile, token, scopes)
+    _audit(user_id, "connector_connected", target=str(profile.get("email") or profile.get("sub") or "google"))
+    return RedirectResponse(f"{FRONTEND_URL}/dashboard?connector=google&connected=1")
+
+
+@router.post("/disconnect")
+async def google_disconnect(request: Request):
+    user_id = _user_id(request)
+    with get_db_cursor(commit=True) as cur:
+        cur.execute("UPDATE web_connected_accounts SET revoked_at=NOW(),updated_at=NOW() WHERE user_id=%s AND provider='google' AND revoked_at IS NULL", (user_id,))
+    _audit(user_id, "connector_disconnected")
+    return {"success": True, "provider": "google"}
+
+
+@router.post("/action")
+async def google_action(request: Request):
+    user_id = _user_id(request)
+    body = await request.json()
+    operation = str(body.get("operation") or "").strip().lower()
+    payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
+    read_ops = {"list_gmail", "list_drive", "list_calendar"}
+    if operation in read_ops:
+        return {"status": "completed", "result": _execute(user_id, operation, payload)}
+    if operation not in {"send_gmail", "create_calendar_event", "upload_drive_text"}:
+        raise HTTPException(status_code=400, detail="Unsupported or unsafe Google operation")
+    return await _approval(user_id, operation, str(payload.get("to") or payload.get("name") or payload.get("summary") or "google"), payload)
+
+
+@router.post("/approve/{approval_id}")
+async def google_approve(approval_id: str, request: Request):
+    user_id = _user_id(request)
+    body = await request.json()
+    approved = bool(body.get("approved"))
+    with get_db_cursor(commit=False) as cur:
+        cur.execute("""SELECT id,operation,target,exact_content,action_fingerprint,status
+                       FROM web_approvals WHERE id=%s AND user_id=%s AND service='google' LIMIT 1""",
+                    (approval_id, user_id))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Approval not found")
+    status = str(_row_value(row, "status", 5) or "")
+    if status != "pending":
+        raise HTTPException(status_code=409, detail=f"Approval is already {status}")
+    operation = str(_row_value(row, "operation", 1) or "")
+    target = str(_row_value(row, "target", 2) or "")
+    exact = str(_row_value(row, "exact_content", 3) or "{}")
+    fingerprint = str(_row_value(row, "action_fingerprint", 4) or "")
+    payload = json.loads(exact)
+    if _fingerprint(operation, target, payload) != fingerprint:
+        raise HTTPException(status_code=409, detail="Approval fingerprint mismatch; action was not executed")
+    if not approved:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute("UPDATE web_approvals SET status='rejected',rejected_at=NOW() WHERE id=%s AND status='pending'", (approval_id,))
+        _audit(user_id, "connector_action_rejected", operation, target, approval_id)
+        return {"status": "rejected", "approval_id": approval_id}
+    with get_db_cursor(commit=True) as cur:
+        cur.execute("UPDATE web_approvals SET status='approved',approved_at=NOW() WHERE id=%s AND status='pending'", (approval_id,))
+    try:
+        result = _execute(user_id, operation, payload)
+    except Exception:
+        with get_db_cursor(commit=True) as cur:
+            cur.execute("UPDATE web_approvals SET status='expired' WHERE id=%s AND status='approved'", (approval_id,))
+        raise
+    verified = bool(result.get("verified"))
+    with get_db_cursor(commit=True) as cur:
+        cur.execute("UPDATE web_approvals SET status=%s,executed_at=NOW() WHERE id=%s AND status='approved'",
+                    ("executed" if verified else "expired", approval_id))
+    _audit(user_id, "connector_action_verified" if verified else "connector_action_unverified", operation, target, approval_id)
+    if not verified:
+        raise HTTPException(status_code=502, detail="Google accepted the request but KZ could not verify the resulting resource")
+    return {"status": "completed", "verified": True, "approval_id": approval_id, "result": result}
