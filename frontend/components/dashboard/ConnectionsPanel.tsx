@@ -48,6 +48,15 @@ export default function ConnectionsPanel() {
   const [githubApproval, setGithubApproval] = useState<any>(null);
   const [tiktok, setTiktok] = useState<any>(null);
   const [tiktokQr, setTiktokQr] = useState<any>(null);
+  const [google, setGoogle] = useState<any>(null);
+  const [googleData, setGoogleData] = useState<any>(null);
+  const [googleApproval, setGoogleApproval] = useState<any>(null);
+  const [googleTo, setGoogleTo] = useState("");
+  const [googleSubject, setGoogleSubject] = useState("");
+  const [googleBody, setGoogleBody] = useState("");
+  const [googleEventSummary, setGoogleEventSummary] = useState("");
+  const [googleEventStart, setGoogleEventStart] = useState("");
+  const [googleEventEnd, setGoogleEventEnd] = useState("");
   const [page, setPage] = useState<Page | null>(null);
   const [connection, setConnection] = useState<Connection | null>(null);
   const [busy, setBusy] = useState(false);
@@ -121,9 +130,65 @@ export default function ConnectionsPanel() {
         setGithub(d.github || null);
         setTiktok(d.tiktok || null);
       }
+      try {
+        const gr = await fetch("/api/connectors/google/status", { credentials: "include", cache: "no-store" });
+        const gd = await readApiResponse(gr);
+        if (gr.ok) setGoogle(gd);
+      } catch {}
+      }
     } catch {}
   }
 
+
+  async function connectGoogle() {
+    window.location.href = "/api/connectors/google/start";
+  }
+
+  async function googleRead(operation: string) {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/connectors/google/action", {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operation, payload: {} }),
+      });
+      const d = await readApiResponse(r);
+      if (!r.ok) throw new Error(d.detail || "Could not read Google data");
+      setGoogleData(d.result || null);
+      setMessage("✓ Google data loaded through the official connector.");
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not read Google data"); }
+    finally { setBusy(false); }
+  }
+
+  async function prepareGoogleAction(operation: string, payload: any) {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/connectors/google/action", {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operation, payload }),
+      });
+      const d = await readApiResponse(r);
+      if (!r.ok) throw new Error(d.detail || "Could not prepare Google action");
+      setGoogleApproval(d);
+      setMessage("Google action prepared. Nothing has been sent or created yet — approval is required.");
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not prepare Google action"); }
+    finally { setBusy(false); }
+  }
+
+  async function decideGoogleApproval(approved: boolean) {
+    if (!googleApproval?.approval_id) return;
+    setBusy(true);
+    try {
+      const r = await fetch("/api/connectors/google/approve/" + encodeURIComponent(googleApproval.approval_id), {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approved }),
+      });
+      const d = await readApiResponse(r);
+      if (!r.ok) throw new Error(d.detail || "Could not process Google approval");
+      setGoogleApproval(null);
+      setMessage(d.status === "completed" && d.verified ? "✓ Google action completed and verified." : approved ? "Google action was not verified." : "Google action rejected.");
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not process Google approval"); }
+    finally { setBusy(false); }
+  }
 
   async function connectTikTok() {
     window.location.href = "/api/connectors/tiktok/start";
@@ -564,6 +629,36 @@ export default function ConnectionsPanel() {
                     </div>
                     {!github?.connected && <button onClick={connectGitHub} disabled={!github?.configured || busy} className="rounded-md border border-cyan-400/30 px-3 py-2 text-[9px] tracking-widest text-cyan-200 disabled:opacity-40">CONNECT</button>}
                   </div>
+                </div>
+                <div className="rounded-lg border border-blue-400/20 bg-blue-400/[0.03] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-medium text-white">Google Workspace</div>
+                      <div className="text-[10px] text-zinc-500">{google?.connected ? "AUTHORIZED ACCOUNT CONNECTED" : google?.configured ? "OAuth ready" : "SERVER SETUP REQUIRED"}</div>
+                    </div>
+                    {!google?.connected && <button onClick={connectGoogle} disabled={!google?.configured || busy} className="rounded-md border border-blue-400/30 px-3 py-2 text-[9px] tracking-widest text-blue-200 disabled:opacity-40">CONNECT</button>}
+                  </div>
+                  {google?.connected && <div className="mt-3 space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      <button onClick={() => void googleRead("list_gmail")} disabled={busy} className="rounded border border-white/10 py-2 text-[8px] tracking-widest text-zinc-300 disabled:opacity-40">GMAIL</button>
+                      <button onClick={() => void googleRead("list_drive")} disabled={busy} className="rounded border border-white/10 py-2 text-[8px] tracking-widest text-zinc-300 disabled:opacity-40">DRIVE</button>
+                      <button onClick={() => void googleRead("list_calendar")} disabled={busy} className="rounded border border-white/10 py-2 text-[8px] tracking-widest text-zinc-300 disabled:opacity-40">CALENDAR</button>
+                    </div>
+                    <div className="border-t border-white/5 pt-2">
+                      <div className="font-mono-tech text-[9px] tracking-widest text-amber-200">WORK — APPROVAL REQUIRED</div>
+                      <input value={googleTo} onChange={e=>setGoogleTo(e.target.value)} placeholder="Gmail recipient" className="mt-2 w-full rounded border border-white/10 bg-black/20 p-2 text-xs text-white"/>
+                      <input value={googleSubject} onChange={e=>setGoogleSubject(e.target.value)} placeholder="Email subject" className="mt-2 w-full rounded border border-white/10 bg-black/20 p-2 text-xs text-white"/>
+                      <textarea value={googleBody} onChange={e=>setGoogleBody(e.target.value)} placeholder="Email body" className="mt-2 min-h-16 w-full rounded border border-white/10 bg-black/20 p-2 text-xs text-white"/>
+                      <button onClick={() => void prepareGoogleAction("send_gmail", {to: googleTo.trim(), subject: googleSubject.trim(), body: googleBody})} disabled={busy || !googleTo.trim() || !googleSubject.trim() || !googleBody.trim()} className="mt-2 w-full rounded-lg border border-amber-400/25 bg-amber-400/5 py-2 font-mono-tech text-[9px] tracking-widest text-amber-100 disabled:opacity-40">PREPARE EMAIL — ASK BEFORE SEND</button>
+                    </div>
+                    <div className="border-t border-white/5 pt-2">
+                      <input value={googleEventSummary} onChange={e=>setGoogleEventSummary(e.target.value)} placeholder="Calendar event title" className="w-full rounded border border-white/10 bg-black/20 p-2 text-xs text-white"/>
+                      <div className="mt-2 grid grid-cols-2 gap-2"><input value={googleEventStart} onChange={e=>setGoogleEventStart(e.target.value)} placeholder="Start ISO time" className="rounded border border-white/10 bg-black/20 p-2 text-xs text-white"/><input value={googleEventEnd} onChange={e=>setGoogleEventEnd(e.target.value)} placeholder="End ISO time" className="rounded border border-white/10 bg-black/20 p-2 text-xs text-white"/></div>
+                      <button onClick={() => void prepareGoogleAction("create_calendar_event", {summary: googleEventSummary.trim(), start: googleEventStart.trim(), end: googleEventEnd.trim(), timezone: "Africa/Lagos"})} disabled={busy || !googleEventSummary.trim() || !googleEventStart.trim() || !googleEventEnd.trim()} className="mt-2 w-full rounded-lg border border-amber-400/25 bg-amber-400/5 py-2 font-mono-tech text-[9px] tracking-widest text-amber-100 disabled:opacity-40">PREPARE CALENDAR EVENT</button>
+                    </div>
+                    {googleApproval && <div className="rounded border border-amber-400/25 bg-amber-400/5 p-3"><div className="font-mono-tech text-[9px] tracking-widest text-amber-200">GOOGLE APPROVAL REQUIRED</div><div className="mt-1 text-xs text-zinc-400">{googleApproval.operation} → {googleApproval.target}</div><div className="mt-2 flex gap-2"><button onClick={()=>void decideGoogleApproval(false)} disabled={busy} className="flex-1 rounded border border-white/10 py-2 text-[9px] text-zinc-400">REJECT</button><button onClick={()=>void decideGoogleApproval(true)} disabled={busy} className="flex-1 rounded border border-cyan-400/25 bg-cyan-400/10 py-2 text-[9px] text-cyan-100">APPROVE & EXECUTE</button></div></div>}
+                    {googleData && <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded border border-white/5 bg-black/20 p-2 text-[9px] text-zinc-500">{JSON.stringify(googleData, null, 2)}</pre>}
+                  </div>}
                 </div>
                 <div className="rounded-lg border border-pink-400/20 bg-pink-400/[0.03] p-3">
                   <div className="flex items-center justify-between gap-2">
