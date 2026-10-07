@@ -76,7 +76,7 @@ def _session(user_id: str, account_id: str | None = None) -> Dict[str, Any]:
             except Exception:
                 executable = None
         kwargs = {
-            "headless": not bool(os.getenv("DISPLAY")),
+            "headless": os.getenv("BROWSER_HEADLESS", "true").strip().lower() not in {"0", "false", "no"},
             "viewport": {"width": 1440, "height": 900},
             "accept_downloads": True,
             "args": [
@@ -132,6 +132,11 @@ def _detect_human_verification(page: Page) -> Dict[str, Any]:
         "indicators": matched[:6],
         "message": "The website requires human verification. KZ paused automation and will not bypass the challenge.",
     }
+    try:
+        page._kz_hv_cache = {"at": now, "url": page.url, "state": state}
+    except Exception:
+        pass
+    return state
 
 
 def _set_human_verification_state(user_id: str, page: Page, account_id: str | None = None) -> Dict[str, Any]:
@@ -646,7 +651,7 @@ def execute_plan(user_id: str, actions: list[dict[str, Any]], *, allow_external:
         elif kind == "click": result = click(user_id, action.get("selector"), action.get("text"), account_id)
         elif kind == "fill": result = fill(user_id, action.get("selector", ""), action.get("value", ""), account_id)
         elif kind == "select": result = select(user_id, action.get("selector", ""), action.get("value", ""), account_id)
-        elif kind == "upload": result = upload(user_id, action.get("selector", ""), action.get("path", ""))
+        elif kind == "upload": result = upload(user_id, action.get("selector", ""), action.get("path", ""), account_id)
         elif kind in {"submit","post","publish","send"}: result = click(user_id, action.get("selector"), action.get("text"), account_id)
         else: raise ValueError(f"unsupported browser action: {kind}")
         results.append({"type": kind, "result": result})
