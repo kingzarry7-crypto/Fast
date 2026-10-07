@@ -480,6 +480,17 @@ async def handle_linked_account_message(message: discord.Message, content: str) 
                 mention_author=False,
             )
             return True
+        # Route the full connected-account language through the same Web account agent.
+        # This covers Gmail preparation/approval as well as account status and reads.
+        try:
+            from account_agent import handle_web_request
+            agent_result = await asyncio.to_thread(handle_web_request, web_id, raw)
+            if agent_result is not None:
+                await message.reply(str(agent_result.get("reply") or "KZ processed the connected-account request."), mention_author=False)
+                return True
+        except Exception as agent_exc:
+            logger.warning("Discord account-agent request failed: %s", type(agent_exc).__name__)
+
         snapshot = await asyncio.to_thread(account_snapshot, web_id)
         if low in account_intents:
             await message.reply(_format_accounts(snapshot), mention_author=False)
