@@ -46,6 +46,8 @@ export default function ConnectionsPanel() {
   const [githubIssueTitle, setGithubIssueTitle] = useState("");
   const [githubIssueBody, setGithubIssueBody] = useState("");
   const [githubApproval, setGithubApproval] = useState<any>(null);
+  const [tiktok, setTiktok] = useState<any>(null);
+  const [tiktokQr, setTiktokQr] = useState<any>(null);
   const [page, setPage] = useState<Page | null>(null);
   const [connection, setConnection] = useState<Connection | null>(null);
   const [busy, setBusy] = useState(false);
@@ -115,9 +117,55 @@ export default function ConnectionsPanel() {
     try {
       const r = await fetch("/api/connectors/status", { credentials: "include", cache: "no-store" });
       const d = await readApiResponse(r);
-      if (r.ok) setGithub(d.github || null);
+      if (r.ok) {
+        setGithub(d.github || null);
+        setTiktok(d.tiktok || null);
+      }
     } catch {}
   }
+
+
+  async function connectTikTok() {
+    window.location.href = "/api/connectors/tiktok/start";
+  }
+
+  async function startTikTokQr() {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/connectors/tiktok/qr/start", {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+      });
+      const d = await readApiResponse(r);
+      if (!r.ok) throw new Error(d.detail || "Could not start TikTok QR authorization");
+      setTiktokQr(d);
+      setMessage("Scan this official TikTok authorization QR with your phone. KZ is not receiving your TikTok password.");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Could not start TikTok QR authorization");
+    } finally { setBusy(false); }
+  }
+
+  useEffect(() => {
+    if (!tiktokQr?.session_id || !open) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const r = await fetch("/api/connectors/tiktok/qr/status", {
+          method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: tiktokQr.session_id }),
+        });
+        const d = await readApiResponse(r);
+        if (!r.ok) return;
+        if (d.status === "connected") {
+          setTiktokQr(null);
+          setMessage("✓ TikTok connected through the official TikTok authorization flow.");
+          await refreshOfficialConnectors();
+        } else if (d.status === "expired") {
+          setTiktokQr(null);
+          setMessage("TikTok QR expired. Start a new QR authorization.");
+        }
+      } catch {}
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [tiktokQr?.session_id, open]);
 
   async function connectGitHub() {
     window.location.href = "/api/connectors/github/start";
@@ -177,8 +225,8 @@ export default function ConnectionsPanel() {
     if (!open) return;
     void refreshOfficialConnectors();
     const q = new URLSearchParams(window.location.search);
-    if (q.get("connector") === "github" && q.get("connected") === "1") {
-      setMessage("✓ GitHub connected. KZ can use the authorized account without your GitHub password.");
+    if ((q.get("connector") === "github" || q.get("connector") === "tiktok") && q.get("connected") === "1") {
+      setMessage(q.get("connector") === "tiktok" ? "✓ TikTok connected through official authorization." : "✓ GitHub connected. KZ can use the authorized account without your GitHub password.");
       void refreshOfficialConnectors();
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -503,6 +551,44 @@ export default function ConnectionsPanel() {
                 <div className="mt-1 text-[10px] text-zinc-500">Log in yourself inside the browser below. KZ only marks the account connected after the live session shows authenticated evidence; it will not guess from an open page.</div>
               </div>
               <button onClick={() => setOpen(false)} className="px-2 py-1 text-zinc-500">×</button>
+            </div>
+
+            <div className="border-b border-white/5 p-4">
+              <div className="mb-3 font-mono-tech text-[10px] tracking-[0.18em] text-cyan-200">OFFICIAL CONNECTORS</div>
+              <div className="grid gap-2">
+                <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-medium text-white">GitHub</div>
+                      <div className="text-[10px] text-zinc-500">{github?.connected ? "AUTHORIZED ACCOUNT CONNECTED" : github?.configured ? "OAuth ready" : "SERVER SETUP REQUIRED"}</div>
+                    </div>
+                    {!github?.connected && <button onClick={connectGitHub} disabled={!github?.configured || busy} className="rounded-md border border-cyan-400/30 px-3 py-2 text-[9px] tracking-widest text-cyan-200 disabled:opacity-40">CONNECT</button>}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-pink-400/20 bg-pink-400/[0.03] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-medium text-white">TikTok</div>
+                      <div className="text-[10px] text-zinc-500">{tiktok?.connected ? "AUTHORIZED ACCOUNT CONNECTED" : tiktok?.configured ? "OAuth + QR ready" : "SERVER SETUP REQUIRED"}</div>
+                    </div>
+                    {!tiktok?.connected && <div className="flex gap-2">
+                      <button onClick={connectTikTok} disabled={!tiktok?.configured || busy} className="rounded-md border border-pink-400/30 px-3 py-2 text-[9px] tracking-widest text-pink-200 disabled:opacity-40">CONNECT</button>
+                      <button onClick={startTikTokQr} disabled={!tiktok?.configured || busy} className="rounded-md border border-white/10 px-3 py-2 text-[9px] tracking-widest text-zinc-300 disabled:opacity-40">QR</button>
+                    </div>}
+                  </div>
+                  {tiktokQr?.scan_qrcode_url && (
+                    <div className="mt-3 rounded-lg border border-white/10 bg-black/30 p-3 text-center">
+                      <img
+                        src={`https://quickchart.io/qr?size=240&text=${encodeURIComponent(tiktokQr.scan_qrcode_url)}`}
+                        alt="TikTok authorization QR"
+                        className="mx-auto h-48 w-48 rounded bg-white p-2"
+                      />
+                      <div className="mt-2 text-[10px] text-zinc-400">Scan with TikTok on your phone. Status checks automatically.</div>
+                      <a href={tiktokQr.scan_qrcode_url} target="_blank" rel="noreferrer" className="mt-2 block break-all text-[9px] text-cyan-300">OPEN AUTHORIZATION LINK</a>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="border-b border-white/5 p-4">
