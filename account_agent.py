@@ -487,6 +487,136 @@ async def handle_telegram_request(update: Any, text: str) -> Optional[dict[str, 
     return None
 
 
+def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
+    """Account-aware web-chat router shared with the normal AI chat path."""
+    uid = str(user_id)
+    raw = str(text or "").strip()
+    lower = raw.lower()
+    if not raw:
+        return None
+
+    snapshot = account_snapshot(uid)
+
+    if lower in {
+        "account status", "check connected accounts", "what accounts are connected",
+        "show connected accounts", "check my connections", "monitor account status",
+    }:
+        return {
+            "status": "completed",
+            "kind": "account_status",
+            "reply": "🧠 KZ checked your connected accounts.\n\n" + _format_accounts(snapshot),
+            "result": snapshot,
+        }
+
+    if lower.startswith("monitor my account") or lower.startswith("monitor my gmail") or lower.startswith("watch my gmail"):
+        account = None
+        try:
+            from google_connector import _account
+            account = _account(uid)
+        except Exception:
+            account = None
+        if not account:
+            return {
+                "status": "not_connected",
+                "kind": "monitor",
+                "reply": "🔌 KZ checked the connected-account registry, but no active Google account is available for this user. Connect Google first.",
+            }
+        _monitor_upsert(uid)
+        return {
+            "status": "monitoring",
+            "kind": "monitor",
+            "reply": (
+                "👁️ ACCOUNT MONITOR ENABLED\n\n"
+                "KZ verified the connected Google account and will monitor Gmail for new unread mail. "
+                f"Sleep window: {_SLEEP_START}–{_SLEEP_END} {_sleep_timezone_label()}. "
+                "During sleep, important events are buffered; KZ will report them in the morning and ask before taking consequential action."
+            ),
+            "result": {"provider": "google", "monitor_type": "gmail"},
+        }
+
+    if lower.startswith("stop monitoring"):
+        _monitor_disable(uid)
+        return {
+            "status": "stopped",
+            "kind": "monitor",
+            "reply": "🛑 Account monitoring stopped. KZ will no longer perform background Gmail checks for this account.",
+        }
+
+    if lower in {"check my email", "check my gmail", "check my inbox", "check email", "check gmail"}:
+        try:
+            from google_connector import _account, _execute
+            if not _account(uid):
+                return {"status": "not_connected", "kind": "gmail_read",
+                        "reply": "🔌 KZ checked the account registry: Gmail is not connected to this KZ account."}
+            result = _execute(uid, "list_gmail", {"query": "in:anywhere", "limit": 10})
+            return {"status": "completed", "kind": "gmail_read",
+                    "reply": _format_gmail_result(result), "result": result}
+        except Exception as exc:
+            logger.warning("Web Gmail read failed: %s", type(exc).__name__)
+            return {"status": "failed", "kind": "gmail_read",
+                    "reply": "❌ KZ could not complete the Gmail check. No success was claimed.", "error": type(exc).__name__}
+
+    if lower in {"check my drive", "check drive", "show my drive files"}:
+        try:
+            from google_connector import _account, _execute
+            if not _account(uid):
+                return {"status": "not_connected", "kind": "drive_read",
+                        "reply": "🔌 KZ checked the account registry: Google Drive is not connected."}
+            result = _execute(uid, "list_drive", {"query": "trashed = false", "limit": 10})
+            files = result.get("files") or []
+            lines = ["📁 DRIVE CHECK COMPLETE", ""]
+            lines.extend(f"• {x.get('name') or '(unnamed)'} — {x.get('mimeType') or ''}" for x in files[:10])
+            if not files:
+                lines.append("No files found.")
+            return {"status": "completed", "kind": "drive_read", "reply": "\n".join(lines), "result": result}
+        except Exception as exc:
+            return {"status": "failed", "kind": "drive_read",
+                    "reply": "❌ KZ could not complete the Drive check. No success was claimed.", "error": type(exc).__name__}
+
+    if lower in {"check my calendar", "check calendar", "what is on my calendar", "show my calendar"}:
+        try:
+            from google_connector import _account, _execute
+            if not _account(uid):
+                return {"status": "not_connected", "kind": "calendar_read",
+                        "reply": "🔌 KZ checked the account registry: Google Calendar is not connected."}
+            result = _execute(uid, "list_calendar", {"limit": 10})
+            events = result.get("events") or []
+            lines = ["🗓️ CALENDAR CHECK COMPLETE", ""]
+            lines.extend(f"• {x.get('summary') or '(untitled)'} — {x.get('start') or ''}" for x in events[:10])
+            if not events:
+                lines.append("No upcoming events found.")
+            return {"status": "completed", "kind": "calendar_read", "reply": "\n".join(lines), "result": result}
+        except Exception as exc:
+            return {"status": "failed", "kind": "calendar_read",
+                    "reply": "❌ KZ could not complete the Calendar check. No success was claimed.", "error": type(exc).__name__}
+
+    payload = _parse_email_request(raw)
+    if payload:
+        result = _send_gmail_preview(uid, payload)
+        if result.get("status") == "not_connected":
+            return {
+                "status": "not_connected", "kind": "send_gmail",
+                "reply": "🔌 KZ checked the account registry: Gmail is not connected to this KZ account."
+            }
+        return {
+            **result,
+            "kind": "send_gmail",
+            "reply": (
+                "✉️ EMAIL PREPARED\n\n"
+                f"To: {payload['to']}\n"
+                f"Subject: {payload['subject']}\n"
+                f"Message: {payload['body']}\n\n"
+                f"🛡️ Permission required before sending. Approval ID: {result['approval_id']}. "
+                "Approve this exact action; KZ will then send it through Google and report verified evidence."
+            ),
+        }
+
+    return None
+
+
+def _sleep_timezone_label() -> str:
+    return os.getenv("KZ_TIMEZONE", "Africa/Lagos")
+
 async def _run_sync(fn: Any, *args: Any) -> Any:
     import asyncio
     return await asyncio.to_thread(fn, *args)
