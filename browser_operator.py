@@ -281,6 +281,18 @@ def connection_status(user_id: str, account_id: str | None = None) -> Dict[str, 
     else:
         status = "login_required"
 
+    try:
+        from browser_account_registry import upsert_browser_account
+        upsert_browser_account(
+            user_id, account_id or "default",
+            display_name=str(session.get("account_name") or session.get("title") or ""),
+            url=str(page.get("url") or ""),
+            status=str(status),
+            verified=bool(status == "connected"),
+        )
+    except Exception as exc:
+        logger.warning("Browser account registry write failed: %s", type(exc).__name__)
+
     return {
         "status": status,
         "connected": status == "connected",

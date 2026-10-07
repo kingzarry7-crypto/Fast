@@ -67,6 +67,28 @@ def connected_accounts(user_id: str) -> list[dict[str, Any]]:
         rows = cur.fetchall() or []
     out = []
     for row in rows:
+    # Browser-connected accounts are stored in Neon metadata so Telegram/Discord
+    # can see the same web-connected session even though Playwright itself lives
+    # in the FastAPI process.
+    try:
+        from browser_account_registry import list_browser_accounts
+        for account in list_browser_accounts(str(user_id)):
+            out.append({
+                "id": f"browser:{account.get('account_id')}",
+                "provider": "browser",
+                "provider_account_id": str(account.get("account_id") or ""),
+                "display_name": str(account.get("display_name") or account.get("url") or "Browser account"),
+                "scopes": [],
+                "metadata": {
+                    "url": account.get("url"),
+                    "status": account.get("status"),
+                    "verified_at": account.get("verified_at"),
+                },
+                "revoked_at": None,
+                "updated_at": account.get("last_seen_at"),
+            })
+    except Exception as exc:
+        logger.warning("Browser account registry unavailable: %s", type(exc).__name__)
         if hasattr(row, "keys"):
             out.append(dict(row))
         else:
