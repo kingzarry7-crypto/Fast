@@ -129,13 +129,34 @@ export default function ConnectionsPanel() {
   async function refresh() {
     setBusy(true);
     try {
-      const r = await fetch(`/api/browser/inspect?account_id=${encodeURIComponent(accountId)}`, { credentials: "include" });
+      const r = await fetch(`/api/browser/inspect?account_id=${encodeURIComponent(accountId)}`, { credentials: "include", cache: "no-store" });
       const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Could not inspect session");
       setPage(d.page);
       setConnection(d.page?.connection || null);
     } catch (e) { setMessage(e instanceof Error ? e.message : "Could not inspect session"); }
     finally { setBusy(false); }
+  }
+
+  async function waitForVerificationTransition() {
+    // Fiverr may remove the challenge first and rebuild the login page a moment later.
+    // Poll the same isolated browser profile instead of taking one stale screenshot.
+    const deadline = Date.now() + 12000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => window.setTimeout(resolve, 800));
+      try {
+        const r = await fetch(`/api/browser/inspect?account_id=${encodeURIComponent(accountId)}`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const d = await readApiResponse(r);
+        if (!r.ok || !d.page) continue;
+        setPage(d.page);
+        setConnection(d.page.connection || null);
+        if (!d.page.human_verification?.required) return d.page;
+      } catch {}
+    }
+    return null;
   }
 
   async function confirmConnection() {
@@ -220,9 +241,19 @@ export default function ConnectionsPanel() {
       if (!r.ok) throw new Error(d.detail || "Verification check failed");
       setPage(d.page);
       setConnection(d.page?.connection || null);
-      setMessage(d.result?.verified
-        ? "✓ VERIFIED — Fiverr's human-verification challenge has cleared. KZ is now checking your actual login session."
-        : "NOT VERIFIED — Fiverr is still reporting the human-verification challenge. Complete it, wait for it to finish, then press CHECK VERIFICATION again.");
+      if (d.result?.verified) {
+        setMessage("✓ VERIFIED — waiting for Fiverr to restore the live login browser...");
+        const recovered = await waitForVerificationTransition();
+        if (recovered) {
+          setPage(recovered);
+          setConnection(recovered.connection || null);
+          setMessage("✓ VERIFIED — LIVE LOGIN BROWSER RESTORED. Continue your login yourself.");
+        } else {
+          setMessage("✓ HUMAN VERIFICATION CLEARED — Fiverr is still rebuilding the login page. Press REFRESH VIEW once.");
+        }
+      } else {
+        setMessage("NOT VERIFIED — Fiverr is still reporting the human-verification challenge. Complete it, wait for it to finish, then press CHECK VERIFICATION again.");
+      }
     } catch (e) {
       setMessage(e instanceof DOMException && e.name === "AbortError"
         ? "CHECK FAILED — Fiverr did not respond to the verification check within 15 seconds. Press REFRESH VIEW and try CHECK VERIFICATION again."
@@ -285,8 +316,16 @@ export default function ConnectionsPanel() {
       setPage(d.page);
       setConnection(d.page?.connection || null);
       if (!d.page?.human_verification?.required) {
-        setMessage("✓ HUMAN VERIFIED — refreshing the live Fiverr session and checking your real login status...");
-        window.setTimeout(() => { void refresh(); }, 1200);
+        setMessage("✓ HUMAN VERIFIED — waiting for Fiverr to restore the login page...");
+        const recovered = await waitForVerificationTransition();
+        if (recovered) {
+          setPage(recovered);
+          setConnection(recovered.connection || null);
+          setMessage("✓ HUMAN VERIFIED — LIVE LOGIN BROWSER RESTORED. Continue your login yourself.");
+        } else {
+          await refresh();
+          setMessage("✓ HUMAN VERIFICATION CLEARED — the login page is being restored. Press REFRESH VIEW once if Fiverr is still loading.");
+        }
       } else {
         setMessage("The challenge is still active. Try the press-and-hold again exactly as Fiverr requests.");
       }
