@@ -9,6 +9,7 @@ import html
 import json
 import sys
 import asyncio
+import time
 import base64
 import sqlite3
 import tempfile
@@ -4518,7 +4519,29 @@ def main():
         application.run_polling(drop_pending_updates=True, allowed_updates=["message", "pre_checkout_query"])
     except Conflict as e:
         print(f"❌ Telegram polling conflict: {type(e).__name__}: {e}", flush=True)
-        print("🛑 Exiting with conflict code 2 so launcher will NOT restart a duplicate Telegram poller.", flush=True)
+        print("⚠️ Another Telegram getUpdates session is active. This can happen briefly during a Railway deployment overlap.", flush=True)
+        retry_seconds = max(10, min(60, env_int("TELEGRAM_CONFLICT_RETRY_SECONDS", 20)))
+        max_retries = max(0, min(5, env_int("TELEGRAM_CONFLICT_RETRIES", 3)))
+        for attempt in range(1, max_retries + 1):
+            print(
+                f"🔁 Telegram conflict retry {attempt}/{max_retries} in {retry_seconds}s...",
+                flush=True,
+            )
+            time.sleep(retry_seconds)
+            try:
+                # Re-enter main() only after the old Application has exited.
+                # The PostgreSQL advisory lock is held by this process and is
+                # therefore not released during the retry.
+                return main()
+            except Conflict:
+                continue
+            except SystemExit as retry_exit:
+                if retry_exit.code == 2:
+                    continue
+                raise
+        print("🛑 Telegram polling remained conflicted after retries.", flush=True)
+        print("➡️ Check Railway for another service/deployment using the same TELEGRAM_BOT_TOKEN.", flush=True)
+        print("➡️ FastAPI remains healthy; Telegram will stay stopped until the duplicate poller is removed.", flush=True)
         raise SystemExit(2)
     except Exception as e:
         print(f"❌ run_polling() crashed: {type(e).__name__}: {e}", flush=True)
