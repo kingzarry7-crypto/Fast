@@ -294,6 +294,64 @@ async def handle_telegram_request(update: Any, text: str) -> Optional[dict[str, 
     raw = str(text or "").strip()
     lower = raw.lower()
 
+    if lower in {"approve", "reject"}:
+        from google_connector import _account, _execute, _fingerprint, _audit
+        with get_db_cursor(commit=False) as cur:
+            cur.execute(
+                """SELECT id,operation,target,exact_content,action_fingerprint,status
+                   FROM web_approvals
+                   WHERE id IN (SELECT id FROM web_approvals
+                                WHERE user_id=%s AND service='google' AND operation='send_gmail'
+                                  AND status='pending')
+                   ORDER BY created_at DESC LIMIT 1""",
+                (user_id,),
+            )
+            row = cur.fetchone()
+        if not row:
+            await update.message.reply_text("ℹ️ KZ has no pending Google action waiting for approval.")
+            return {"status": "no_pending_approval"}
+        approval_id = str(row[0])
+        operation = str(row[1] or "")
+        target = str(row[2] or "")
+        payload = json.loads(str(row[3] or "{}"))
+        fingerprint = str(row[4] or "")
+        if _fingerprint(operation, target, payload) != fingerprint:
+            await update.message.reply_text("🛑 KZ rejected the action because its approval fingerprint no longer matches.")
+            return {"status": "fingerprint_mismatch"}
+        if lower == "reject":
+            with get_db_cursor(commit=True) as cur:
+                cur.execute("UPDATE web_approvals SET status='rejected',rejected_at=NOW() WHERE id=%s AND status='pending'", (approval_id,))
+            _audit(user_id, "connector_action_rejected", operation, target, approval_id)
+            await update.message.reply_text("🛑 REJECTED — KZ did not send or modify anything.")
+            return {"status": "rejected", "approval_id": approval_id}
+        with get_db_cursor(commit=True) as cur:
+            cur.execute("UPDATE web_approvals SET status='approved',approved_at=NOW() WHERE id=%s AND status='pending'", (approval_id,))
+        await update.message.reply_text("⚙️ APPROVED — KZ is executing the exact approved action and checking the provider result...")
+        try:
+            result = await _run_sync(_execute, user_id, operation, payload)
+        except Exception as exc:
+            with get_db_cursor(commit=True) as cur:
+                cur.execute("UPDATE web_approvals SET status='expired' WHERE id=%s AND status='approved'", (approval_id,))
+            logger.warning("Approved Google action failed: %s", exc)
+            await update.message.reply_text("❌ EXECUTION FAILED — KZ did not claim success.")
+            return {"status": "failed", "approval_id": approval_id}
+        verified = bool(result.get("verified"))
+        with get_db_cursor(commit=True) as cur:
+            cur.execute("UPDATE web_approvals SET status=%s,executed_at=NOW() WHERE id=%s AND status='approved'",
+                        ("executed" if verified else "expired", approval_id))
+        _audit(user_id, "connector_action_verified" if verified else "connector_action_unverified", operation, target, approval_id)
+        if verified:
+            evidence = result.get("message") or result.get("event") or result.get("file") or {}
+            await update.message.reply_text(
+                "✅ <b>WORK COMPLETED & VERIFIED</b>\n\n"
+                f"Provider: Google\nOperation: {html_escape(operation)}\n"
+                f"Evidence ID: <code>{html_escape(evidence.get('id') or evidence.get('htmlLink') or 'verified')}</code>",
+                parse_mode="HTML",
+            )
+            return {"status": "completed", "verified": True, "approval_id": approval_id, "result": result}
+        await update.message.reply_text("⚠️ Google responded, but KZ could not verify the result. It is marked unverified.")
+        return {"status": "unverified", "approval_id": approval_id}
+
     if lower in {"account status", "check connected accounts", "what accounts are connected",
                  "show connected accounts", "monitor account status"}:
         await update.message.reply_text("🧠 KZ is checking your connected accounts...")
@@ -316,6 +374,40 @@ async def handle_telegram_request(update: Any, text: str) -> Optional[dict[str, 
         _monitor_disable(user_id)
         await update.message.reply_text("🛑 Account monitoring stopped. No background Gmail checks will be performed.")
         return {"status": "stopped"}
+
+    if lower in {"check my drive", "check drive", "show my drive files"}:
+        from google_connector import _account, _execute
+        if not _account(user_id):
+            await update.message.reply_text("🔌 KZ checked your account: Google Drive is not connected.")
+            return {"status": "not_connected"}
+        await update.message.reply_text("🧠 KZ is checking the connected Google Drive...")
+        result = await _run_sync(_execute, user_id, "list_drive", {"query": "trashed = false", "limit": 10})
+        files = result.get("files") or []
+        if not files:
+            await update.message.reply_text("📁 Drive check complete — no files found.")
+        else:
+            lines = ["📁 <b>DRIVE CHECK COMPLETE</b>", ""]
+            for item in files[:10]:
+                lines.append("• " + html_escape(item.get("name") or "(unnamed)") + " — " + html_escape(item.get("mimeType") or ""))
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+        return {"status": "completed", "kind": "drive_read", "result": result}
+
+    if lower in {"check my calendar", "check calendar", "what is on my calendar", "show my calendar"}:
+        from google_connector import _account, _execute
+        if not _account(user_id):
+            await update.message.reply_text("🔌 KZ checked your account: Google Calendar is not connected.")
+            return {"status": "not_connected"}
+        await update.message.reply_text("🧠 KZ is checking your connected Google Calendar...")
+        result = await _run_sync(_execute, user_id, "list_calendar", {"limit": 10})
+        events = result.get("events") or []
+        if not events:
+            await update.message.reply_text("🗓️ Calendar check complete — no upcoming events found.")
+        else:
+            lines = ["🗓️ <b>CALENDAR CHECK COMPLETE</b>", ""]
+            for item in events[:10]:
+                lines.append("• " + html_escape(item.get("summary") or "(untitled)") + " — " + html_escape(str(item.get("start") or "")))
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+        return {"status": "completed", "kind": "calendar_read", "result": result}
 
     if lower in {"check my email", "check my gmail", "check my inbox", "check email", "check gmail"}:
         from google_connector import _account, _execute
@@ -402,8 +494,49 @@ async def morning_telegram_digest(bot: Any) -> dict[str, int]:
     return {"sent": sent, "failed": failed}
 
 
+async def account_monitor_job(context: Any) -> None:
+    """Background account watcher: immediate daytime feedback, morning buffering during sleep."""
+    try:
+        events = await _run_sync(monitor_tick)
+        if not events:
+            return
+        from neon_memory import NeonMemory
+        mem = NeonMemory()
+        with mem.lock:
+            conn = mem._connect()
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT platform,external_id,user_id FROM kz_memory_identities WHERE platform='telegram'")
+                identities = cur.fetchall() or []
+            finally:
+                conn.close()
+        targets = {}
+        for row in identities:
+            raw_user = str(row[2] or "")
+            if raw_user.startswith("web:"):
+                raw_user = raw_user[4:]
+            targets[raw_user] = str(row[1])
+        for event in events:
+            if event.get("sleep_buffered"):
+                continue
+            chat_id = targets.get(str(event.get("user_id") or ""))
+            if not chat_id:
+                continue
+            items = event.get("items") or []
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="👁️ <b>KZ ACCOUNT MONITOR</b>\n\n"
+                     f"Google Gmail: {len(items)} new unread message(s) detected.\n"
+                     "KZ has not replied, sent, deleted, or modified anything.\n"
+                     "Say <code>CHECK MY EMAIL</code> to inspect them.",
+                parse_mode="HTML",
+            )
+    except Exception as exc:
+        logger.warning("Account monitor job failed: %s", exc)
+
+
+
 def html_escape(value: Any) -> str:
     import html
     return html.escape(str(value or ""))
-
 
