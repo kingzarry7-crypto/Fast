@@ -276,7 +276,7 @@ def confirm_connection(user_id: str, account_id: str | None = None) -> Dict[str,
             "KZ cannot connect this account yet. The live browser session does not contain enough evidence of a completed login."
         )
     with _LOCK:
-        item = _SESSIONS.get(str(user_id))
+        item = _SESSIONS.get(_account_key(user_id, account_id))
         if item is not None:
             item["account_connected"] = True
             item["connected_at"] = datetime.now(timezone.utc).isoformat()
@@ -284,7 +284,7 @@ def confirm_connection(user_id: str, account_id: str | None = None) -> Dict[str,
 
 
 def inspect(user_id: str, account_id: str | None = None) -> Dict[str, Any]:
-    page = _page(user_id)
+    page = _page(user_id, account_id)
     text = page.locator("body").inner_text(timeout=10000)[:12000]
     verification = _set_human_verification_state(user_id, page, account_id)
     state = connection_status(user_id, account_id)
@@ -295,7 +295,7 @@ def navigate(user_id: str, url: str, account_id: str | None = None) -> Dict[str,
     if not re.match(r"^https?://", url, re.I):
         raise ValueError("Only http(s) URLs are allowed")
 
-    page = _page(user_id)
+    page = _page(user_id, account_id)
     try:
         page.goto(url, wait_until="domcontentloaded", timeout=45000)
     except Exception as exc:
@@ -340,7 +340,7 @@ def click(user_id: str, selector: Optional[str] = None, text: Optional[str] = No
 
 def fill(user_id: str, selector: str, value: str, account_id: str | None = None) -> Dict[str, Any]:
     if not selector: raise ValueError("selector is required")
-    _page(user_id).locator(selector).first.fill(str(value)); return {"success": True, "selector": selector}
+    _page(user_id, account_id).locator(selector).first.fill(str(value)); return {"success": True, "selector": selector}
 
 def select(user_id: str, selector: str, value: str, account_id: str | None = None) -> Dict[str, Any]:
     _page(user_id).locator(selector).first.select_option(str(value)); return {"success": True, "selector": selector}
