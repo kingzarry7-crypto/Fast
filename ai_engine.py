@@ -2239,6 +2239,21 @@ class AIEngine:
         history = self._load_memory_history(user_id, limit=20 if casual else 15)
         persistent_ctx = self._load_persistent_context(user_id)
 
+        # --- Connected account context ---
+        # Server-side verified only: account names/capabilities, never OAuth tokens.
+        try:
+            from account_agent import account_context_for_ai
+            account_ctx = account_context_for_ai(user_id)
+            if account_ctx:
+                persistent_ctx = (
+                    persistent_ctx
+                    + "\n\n--- CONNECTED ACCOUNT CAPABILITIES ---\n"
+                    + account_ctx
+                    + "\n--- END CONNECTED ACCOUNT CAPABILITIES ---"
+                ).strip()
+        except Exception as e:
+            logger.debug("Connected account context injection skipped: %s", e)
+
         # --- Owner/Admin identity context ---
         # This is derived from configured admin IDs; no secret credentials are sent to the model.
         try:
