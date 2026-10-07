@@ -4482,6 +4482,18 @@ def main():
                 name="kz-account-monitor",
             )
             logger.info("👁️ Account monitor scheduled every %ss", monitor_interval)
+            try:
+                morning_hour = max(0, min(23, env_int("KZ_ACCOUNT_MORNING_HOUR", 8)))
+                morning_minute = max(0, min(59, env_int("KZ_ACCOUNT_MORNING_MINUTE", 0)))
+                morning_tz = ZoneInfo(clean_env_str(os.getenv("KZ_TIMEZONE"), "Africa/Lagos"))
+                application.job_queue.run_daily(
+                    morning_telegram_digest,
+                    time=dt_time(hour=morning_hour, minute=morning_minute, tzinfo=morning_tz),
+                    name="kz-account-morning-digest",
+                )
+                logger.info("🌅 Account morning digest scheduled daily at %02d:%02d %s", morning_hour, morning_minute, morning_tz.key)
+            except Exception as e:
+                logger.warning("Account morning digest scheduler unavailable: %s", e)
             print("🔔 Notification job scheduled every 60s", flush=True)
         else:
             print("⚠️ JobQueue not available - add python-telegram-bot[job-queue] to requirements.txt", flush=True)
