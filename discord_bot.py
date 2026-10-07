@@ -469,7 +469,7 @@ async def handle_linked_account_message(message: discord.Message, content: str) 
     if low not in account_intents and low not in gmail_intents:
         return False
     try:
-        from account_agent import web_user_id, account_snapshot, _format_accounts
+        from account_agent import web_user_id, account_snapshot, _format_accounts, channel_user_id
         web_id = await asyncio.to_thread(web_user_id, "discord", str(message.author.id))
         if not web_id:
             await message.reply(
@@ -1074,7 +1074,7 @@ class KingZarryAI(discord.Client):
                 try:
                     async with message.channel.typing():
                         if intent["kind"] == "create":
-                            item = await asyncio.to_thread(work_create, str(message.author.id), intent["goal"].strip())
+                            item = await asyncio.to_thread(work_create, channel_user_id("discord", str(message.author.id)), intent["goal"].strip())
                             await message.reply(work_format_text(item), mention_author=False)
                             return
                         workflow_id = intent["workflow_id"].strip()
