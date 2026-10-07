@@ -36,6 +36,14 @@ import uvicorn
 from ai_engine import AIEngine
 
 try:
+    from connector_api import router as connector_api_router
+except Exception as _connector_api_import_error:
+    connector_api_router = None
+    logging.getLogger("king_zarry_api").exception(
+        "Official connector API unavailable: %s", type(_connector_api_import_error).__name__
+    )
+
+try:
     from fiverr_api import router as fiverr_api_router
 except Exception as _fiverr_api_import_error:
     fiverr_api_router = None
@@ -119,6 +127,9 @@ if not allowed_origins:
 
 if fiverr_api_router is not None:
     app.include_router(fiverr_api_router)
+
+if connector_api_router is not None:
+    app.include_router(connector_api_router)
 
 app.add_middleware(
     CORSMiddleware,
