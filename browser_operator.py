@@ -343,16 +343,16 @@ def fill(user_id: str, selector: str, value: str, account_id: str | None = None)
     _page(user_id, account_id).locator(selector).first.fill(str(value)); return {"success": True, "selector": selector}
 
 def select(user_id: str, selector: str, value: str, account_id: str | None = None) -> Dict[str, Any]:
-    _page(user_id).locator(selector).first.select_option(str(value)); return {"success": True, "selector": selector}
+    _page(user_id, account_id).locator(selector).first.select_option(str(value)); return {"success": True, "selector": selector}
 
 def upload(user_id: str, selector: str, path: str, account_id: str | None = None) -> Dict[str, Any]:
     file_path = Path(str(path)).expanduser().resolve()
     if not file_path.is_file(): raise ValueError("upload file does not exist")
-    _page(user_id).locator(selector).first.set_input_files(str(file_path)); return {"success": True, "filename": file_path.name}
+    _page(user_id, account_id).locator(selector).first.set_input_files(str(file_path)); return {"success": True, "filename": file_path.name}
 
 def screenshot(user_id: str, account_id: str | None = None) -> bytes:
     """Capture the current browser viewport for user-controlled remote interaction."""
-    return _page(user_id).screenshot(full_page=False)
+    return _page(user_id, account_id).screenshot(full_page=False)
 
 
 def viewport(user_id: str, account_id: str | None = None) -> Dict[str, Any]:
