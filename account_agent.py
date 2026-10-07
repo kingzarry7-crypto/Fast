@@ -366,18 +366,32 @@ async def handle_telegram_request(update: Any, text: str) -> Optional[dict[str, 
     raw = str(text or "").strip()
     lower = raw.lower()
 
-    if lower in {"approve", "reject", "send it", "send the email", "send the email now"}:
+    approval_match = re.match(
+        r"^(approve|reject|send it|send the email|send the email now)(?:\\s+([0-9a-fA-F-]{36}))?\\s*$",
+        raw,
+        re.I,
+    )
+    if approval_match:
+        approval_action = approval_match.group(1).lower()
+        requested_approval_id = str(approval_match.group(2) or "").strip()
         from google_connector import _account, _execute, _fingerprint, _audit
         with get_db_cursor(commit=False) as cur:
-            cur.execute(
-                """SELECT id,operation,target,exact_content,action_fingerprint,status
-                   FROM web_approvals
-                   WHERE id IN (SELECT id FROM web_approvals
-                                WHERE user_id=%s AND service='google' AND operation='send_gmail'
-                                  AND status='pending')
-                   ORDER BY created_at DESC LIMIT 1""",
-                (user_id,),
-            )
+            if requested_approval_id:
+                cur.execute(
+                    """SELECT id,operation,target,exact_content,action_fingerprint,status
+                       FROM web_approvals
+                       WHERE id=%s AND user_id=%s AND service='google' AND operation='send_gmail'
+                       LIMIT 1""",
+                    (requested_approval_id, user_id),
+                )
+            else:
+                cur.execute(
+                    """SELECT id,operation,target,exact_content,action_fingerprint,status
+                       FROM web_approvals
+                       WHERE user_id=%s AND service='google' AND operation='send_gmail' AND status='pending'
+                       ORDER BY created_at DESC LIMIT 1""",
+                    (user_id,),
+                )
             row = cur.fetchone()
         if not row:
             await update.message.reply_text("ℹ️ KZ has no pending Google action waiting for approval.")
@@ -390,7 +404,7 @@ async def handle_telegram_request(update: Any, text: str) -> Optional[dict[str, 
         if _fingerprint(operation, target, payload) != fingerprint:
             await update.message.reply_text("🛑 KZ rejected the action because its approval fingerprint no longer matches.")
             return {"status": "fingerprint_mismatch"}
-        if lower == "reject":
+        if approval_action == "reject":
             with get_db_cursor(commit=True) as cur:
                 cur.execute("UPDATE web_approvals SET status='rejected',rejected_at=NOW() WHERE id=%s AND status='pending'", (approval_id,))
             _audit(user_id, "connector_action_rejected", operation, target, approval_id)
@@ -522,16 +536,32 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
 
     snapshot = account_snapshot(uid)
 
-    if lower in {"approve", "reject"}:
+    approval_match = re.match(
+        r"^(approve|reject|send it|send the email|send the email now)(?:\\s+([0-9a-fA-F-]{36}))?\\s*$",
+        raw,
+        re.I,
+    )
+    if approval_match:
+        approval_action = approval_match.group(1).lower()
+        requested_approval_id = str(approval_match.group(2) or "").strip()
         from google_connector import _execute, _fingerprint, _audit
         with get_db_cursor(commit=False) as cur:
-            cur.execute(
-                """SELECT id,operation,target,exact_content,action_fingerprint,status
-                   FROM web_approvals
-                   WHERE user_id=%s AND service='google' AND operation='send_gmail' AND status='pending'
-                   ORDER BY created_at DESC LIMIT 1""",
-                (uid,),
-            )
+            if requested_approval_id:
+                cur.execute(
+                    """SELECT id,operation,target,exact_content,action_fingerprint,status
+                       FROM web_approvals
+                       WHERE id=%s AND user_id=%s AND service='google' AND operation='send_gmail'
+                       LIMIT 1""",
+                    (requested_approval_id, uid),
+                )
+            else:
+                cur.execute(
+                    """SELECT id,operation,target,exact_content,action_fingerprint,status
+                       FROM web_approvals
+                       WHERE user_id=%s AND service='google' AND operation='send_gmail' AND status='pending'
+                       ORDER BY created_at DESC LIMIT 1""",
+                    (uid,),
+                )
             row = cur.fetchone()
         if not row:
             return {"status": "no_pending_approval", "kind": "approval",
