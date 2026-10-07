@@ -16,7 +16,6 @@ on:
       - "channel_work.py"
       - "bot.py"
       - "discord_bot.py"
-      - "connector_api.py"
       - "browser_*.py"
       - "connector_api.py"
       - "job_outreach_agent.py"
@@ -40,6 +39,7 @@ on:
       - "channel_work.py"
       - "bot.py"
       - "discord_bot.py"
+      - "connector_api.py"
 
 jobs:
   frontend:
