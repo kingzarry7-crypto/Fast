@@ -110,6 +110,53 @@ def _sleeping() -> bool:
         return False
 
 
+def account_context_for_ai(user_id: str) -> str:
+    """Return non-secret connected-account capabilities for the LLM."""
+    try:
+        snapshot = account_snapshot(str(user_id))
+        if not snapshot.get("connected"):
+            return (
+                "CONNECTED ACCOUNTS: none. "
+                "Do not claim access to Gmail, Drive, Calendar, or other external accounts."
+            )
+        lines = [
+            "CONNECTED ACCOUNTS (verified server-side; credentials are never exposed to the model):",
+        ]
+        for provider, accounts in snapshot.get("providers", {}).items():
+            for account in accounts:
+                scopes = account.get("scopes") or []
+                scope_names = []
+                for scope in scopes:
+                    s = str(scope)
+                    if "gmail.readonly" in s:
+                        scope_names.append("gmail.read")
+                    elif "gmail.send" in s:
+                        scope_names.append("gmail.send")
+                    elif "drive.metadata.readonly" in s:
+                        scope_names.append("drive.read")
+                    elif "drive.file" in s:
+                        scope_names.append("drive.write")
+                    elif "calendar.readonly" in s:
+                        scope_names.append("calendar.read")
+                    elif "calendar.events" in s:
+                        scope_names.append("calendar.write")
+                lines.append(
+                    f"- {provider}: {account.get('account') or 'connected account'}"
+                    + (f" [capabilities: {', '.join(sorted(set(scope_names)))}]" if scope_names else "")
+                )
+        lines.extend([
+            "ACCOUNT-AWARE RULES:",
+            "1. You may tell the user that KZ has verified access only to the capabilities listed above.",
+            "2. For account work, route through KZ's connector/account agent; never invent completion.",
+            "3. Read-only checks may execute immediately when the connector permits them.",
+            "4. External sends, replies, writes, deletes, or other consequential actions require the existing approval gate.",
+            "5. After execution, report only the provider's verified result/evidence.",
+        ])
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning("Account context load failed: %s", type(exc).__name__)
+        return "CONNECTED ACCOUNT CONTEXT: unavailable. Do not claim external account access."
+
 def _send_gmail_preview(user_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     from google_connector import _account, _approval
     account = _account(user_id)
