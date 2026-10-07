@@ -456,6 +456,72 @@ async def ensure_not_banned(interaction: discord.Interaction) -> bool:
 async def track_user(user: discord.abc.User):
     await asyncio.to_thread(remember_user_sync, user.id, str(user))
 
+
+async def handle_linked_account_message(message: discord.Message, content: str) -> bool:
+    """Route Discord account-status/read requests through the linked Web identity used by Telegram."""
+    raw = str(content or "").strip()
+    low = raw.lower()
+    account_intents = {
+        "account status", "check connected accounts", "what accounts are connected",
+        "show connected accounts", "check my connections", "monitor account status",
+    }
+    gmail_intents = {"check my gmail", "check gmail", "check my email", "check email", "show my inbox"}
+    if low not in account_intents and low not in gmail_intents:
+        return False
+    try:
+        from account_agent import web_user_id, account_snapshot, _format_accounts
+        web_id = await asyncio.to_thread(web_user_id, "discord", str(message.author.id))
+        if not web_id:
+            await message.reply(
+                "🔗 **This Discord account is not linked to your KING ZARRY web account yet.**\n\n"
+                "Open the web **Memory** page, generate a link code, then use **/link CODE** here. "
+                "After that I can see the same connected accounts available to your web account.",
+                mention_author=False,
+            )
+            return True
+        snapshot = await asyncio.to_thread(account_snapshot, web_id)
+        if low in account_intents:
+            await message.reply(_format_accounts(snapshot), mention_author=False)
+            return True
+        if not snapshot.get("connected"):
+            await message.reply(
+                "🔌 **No official external account is connected to your KING ZARRY web account.** "
+                "Connect Google Workspace/GitHub/TikTok from the web Connected Accounts panel first.",
+                mention_author=False,
+            )
+            return True
+        from google_connector import _execute, _account
+        google = await asyncio.to_thread(_account, web_id)
+        if not google:
+            await message.reply(
+                "📭 Your linked KZ account has connected providers, but Google Workspace is not connected.",
+                mention_author=False,
+            )
+            return True
+        result = await asyncio.to_thread(
+            _execute, web_id, "list_gmail",
+            {"query": "is:unread newer_than:1d", "limit": 10},
+        )
+        messages = result.get("messages") or []
+        if not messages:
+            await message.reply("📭 Gmail check complete — no unread messages from the last day.", mention_author=False)
+            return True
+        lines = [f"📬 **Gmail — {len(messages)} unread message(s)**", ""]
+        for item in messages[:8]:
+            subject = str(item.get("subject") or "(no subject)")
+            sender = str(item.get("from") or "unknown sender")
+            snippet = str(item.get("snippet") or "").replace("\n", " ")[:180]
+            lines.append(f"• **{subject}**\n  From: {sender}\n  {snippet}")
+        await message.reply("\n".join(lines)[:1900], mention_author=False)
+        return True
+    except Exception as exc:
+        logger.warning("Discord linked-account request failed: %s", type(exc).__name__)
+        await message.reply(
+            "⚠️ I found the Discord account-link path, but the connected-account service is temporarily unavailable.",
+            mention_author=False,
+        )
+        return True
+
 def generate_elevenlabs_voice(text: str) -> io.BytesIO:
     if not eleven_client:
         raise RuntimeError("ELEVENLABS_API_KEY is not configured.")
@@ -993,6 +1059,12 @@ class KingZarryAI(discord.Client):
             is_audio = ct.startswith("audio/") or name.endswith((".ogg",".mp3",".m4a",".wav",".flac",".mp4",".webm",".opus",".aac",".wma"))
             if is_audio and not ct.startswith("image/"): audio_attachments.append(a)
         if not content and not images and not audio_attachments: return
+
+        # Linked-account routing runs before Work/media/market/AI so account requests
+        # use the canonical Web identity instead of Discord's local user ID.
+        if content and not images and not audio_attachments:
+            if await handle_linked_account_message(message, content):
+                return
 
         # Natural-language Work control uses the same persistent engine as Web and Telegram.
         # Only clear Work intents are intercepted; ordinary conversation remains on the AI path.
