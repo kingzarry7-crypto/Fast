@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import threading
 import time
+import hashlib
 from typing import Any, Dict
 
 _STARTED = False
@@ -10,6 +11,28 @@ _LOCK = threading.Lock()
 _LAST_RUN = None
 _LAST_ERROR = None
 _RUN_COUNT = 0
+
+
+def _acquire_distributed_lock():
+    """Prevent multiple Railway replicas from executing the same workflows."""
+    try:
+        from database import get_connection
+        conn = get_connection()
+        key = int.from_bytes(
+            hashlib.sha256(b"king-zarry-workflow-worker").digest()[:8],
+            "big",
+            signed=True,
+        )
+        with conn.cursor() as cur:
+            cur.execute("SELECT pg_try_advisory_lock(%s)", (key,))
+            acquired = bool(cur.fetchone()[0])
+        if not acquired:
+            conn.close()
+            return False, None
+        return True, conn
+    except Exception:
+        # Preserve the existing single-process fallback when PostgreSQL is unavailable.
+        return True, None
 
 
 def status() -> Dict[str, Any]:
@@ -29,8 +52,19 @@ def run_once(limit: int = 25) -> Dict[str, Any]:
     _LAST_RUN = datetime.now(timezone.utc).isoformat()
     resumed = 0
     errors = 0
+    lock_conn = None
 
     try:
+        acquired, lock_conn = _acquire_distributed_lock()
+        if not acquired:
+            return {
+                "resumed": 0,
+                "errors": 0,
+                "checked": 0,
+                "skipped": True,
+                "reason": "another workflow worker holds the distributed lock",
+            }
+
         from workflow_store import list_workflows_for_worker
         from workflow_engine import run_workflow
 
@@ -58,16 +92,25 @@ def run_once(limit: int = 25) -> Dict[str, Any]:
                     attempts=1,
                 )
         except Exception:
-            # Reliability telemetry must never stop the scheduler.
             pass
 
-        _LAST_ERROR = (
-            None if errors == 0
-            else f"{errors} workflow(s) failed to resume"
-        )
+        _LAST_ERROR = None if errors == 0 else f"{errors} workflow(s) failed to resume"
     except Exception as exc:
         errors += 1
         _LAST_ERROR = f"{type(exc).__name__}: {str(exc)[:240]}"
+    finally:
+        if lock_conn is not None:
+            try:
+                with lock_conn.cursor() as cur:
+                    cur.execute("SELECT pg_advisory_unlock(%s)", (
+                        int.from_bytes(hashlib.sha256(b"king-zarry-workflow-worker").digest()[:8], "big", signed=True),
+                    ))
+            except Exception:
+                pass
+            try:
+                lock_conn.close()
+            except Exception:
+                pass
 
     _RUN_COUNT += 1
     return {
