@@ -340,92 +340,21 @@ def install_streaming_chat(
     # ------------------------------------------------------------------
     try:
         from fastapi.responses import JSONResponse, StreamingResponse as _ConnectorStreamingResponse
-        from account_agent import _parse_email_request, _format_gmail_result
+        from account_agent import handle_web_request
         from google_connector import _account as _google_account, _approval as _google_approval, _execute as _google_execute
 
         def _connector_chat_intent(text: str):
-            raw = str(text or "").strip()
-            lower = raw.lower()
-
-            # Explicit inbox/read requests are safe and can execute directly.
-            read_email = bool(
-                re.search(
-                    r"\b(check|read|show|open|look at|look into)\b.{0,40}\b(my )?(email|gmail|inbox)\b",
-                    lower,
-                )
-                or re.fullmatch(r"(my )?(email|gmail|inbox)( please)?", lower)
-            )
-
-            if read_email:
-                return {"kind": "read_gmail"}
-
-            # Use the existing, already-tested email parser for send requests.
-            payload = _parse_email_request(raw)
-            if payload:
-                return {"kind": "send_gmail", "payload": payload}
-
-            return None
+            # Shared account-agent owns connector intent detection for web and Telegram.
+            return bool(handle_web_request)
 
         def _connector_reply(user_id: str, message: str, conversation_id: str):
-            intent = _connector_chat_intent(message)
-            if not intent:
+            result = handle_web_request(user_id, message)
+            if not result:
                 return None
-
-            account = _google_account(user_id)
-            if not account:
-                return {
-                    "kind": intent["kind"],
-                    "reply": (
-                        "🔌 Google Gmail is not connected to this KZ account. "
-                        "Connect Google from Dashboard → Connections, then ask me again."
-                    ),
-                    "conversation_id": conversation_id,
-                }
-
-            if intent["kind"] == "read_gmail":
-                result = _google_execute(
-                    user_id,
-                    "list_gmail",
-                    {"query": "in:anywhere", "limit": 10},
-                )
-                return {
-                    "kind": "read_gmail",
-                    "reply": _format_gmail_result(result),
-                    "conversation_id": conversation_id,
-                }
-
-            payload = intent["payload"]
-            approval = _google_approval(
-                user_id,
-                "send_gmail",
-                payload["to"],
-                payload,
-            )
-            account_name = account.get("display_name") or account.get("provider_account_id") or "connected Google account"
-            reply = (
-                "✉️ EMAIL READY — I found your connected Google account "
-                f"({account_name}) and prepared the exact Gmail action.\n\n"
-                f"To: {payload['to']}\n"
-                f"Subject: {payload['subject']}\n"
-                f"Message: {payload['body']}\n\n"
-                f"🛡️ Approval required before sending. "
-                f"Approval ID: {approval['approval_id']}\n"
-                "Open Dashboard → Connections → Google to approve or reject it. "
-                "I will only report it as sent after Google returns verified evidence."
-            )
             return {
-                "kind": "send_gmail",
-                "reply": reply,
-                "approval_id": approval["approval_id"],
-                "connector_action": {
-                    "provider": "google",
-                    "operation": "send_gmail",
-                    "status": "waiting_for_approval",
-                    "approval_id": approval["approval_id"],
-                    "target": payload["to"],
-                    "payload": payload,
-                },
+                **result,
                 "conversation_id": conversation_id,
+                "connector_action": result.get("connector_action"),
             }
 
         async def _handle_connector_chat(request: Request, message: str, *, stream: bool, requested_conversation_id: str | None = None):
