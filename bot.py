@@ -62,6 +62,7 @@ from channel_work import create as work_create, list_recent as work_list, get as
 from work_intent import parse as parse_work_intent
 from google_connector import _account, _approval, _execute, _fingerprint, _audit
 from memory_link_bridge import resolve_platform_identity
+from account_agent import handle_telegram_request, account_monitor_job, morning_telegram_digest
 
 def clean_env_str(value, default=""):
     if not value:
@@ -2260,8 +2261,13 @@ def _agent_signal_fingerprint(symbol: str, analysis: dict) -> str:
 
 
 async def agent_morning_brief_job(context: ContextTypes.DEFAULT_TYPE):
-    """Generate the daily Agent brief once and DM it to active Telegram VIP users."""
+    """Generate the daily Agent brief and account-aware morning feedback."""
     try:
+        try:
+            account_digest = await morning_telegram_digest(context.bot)
+            logger.info("account morning digest: sent=%s failed=%s", account_digest.get("sent"), account_digest.get("failed"))
+        except Exception as account_err:
+            logger.warning("account morning digest failed: %s", account_err)
         from agent_core import build_morning_brief
 
         targets = set()
@@ -3766,6 +3772,13 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
         return
     if not await require_subscription(update):
         return
+    try:
+        account_result = await handle_telegram_request(update, text)
+        if account_result is not None:
+            return
+    except Exception as account_err:
+        logger.warning("Telegram account-agent routing failed in shared pipeline: %s", account_err)
+        return
     user_id = str(update.effective_user.id)
     upper = text.upper()
     for kw in ["BTC", "ETH", "SOL", "XAU", "GOLD"]:
@@ -3999,10 +4012,11 @@ async def handle_text(update, context):
         return
 
     try:
-        if await _handle_telegram_google_email(update, update.message.text.strip()):
+        account_result = await handle_telegram_request(update, update.message.text.strip())
+        if account_result is not None:
             return
-    except Exception as google_err:
-        logger.warning("Telegram Google connector routing failed: %s", google_err)
+    except Exception as account_err:
+        logger.warning("Telegram account-agent routing failed: %s", account_err)
 
     try:
         if await handle_natural_work_intent(update, context, update.message.text.strip()):
@@ -4470,6 +4484,14 @@ def main():
                 application.job_queue.run_once(_agent_boot_ping, when=15)
             else:
                 logger.info("🤖 Agent signal watch disabled (set AGENT_SIGNAL_WATCH=true to enable)")
+            monitor_interval = max(60, env_int("KZ_ACCOUNT_MONITOR_INTERVAL_SEC", 600))
+            application.job_queue.run_repeating(
+                account_monitor_job,
+                interval=monitor_interval,
+                first=45,
+                name="kz-account-monitor",
+            )
+            logger.info("👁️ Account monitor scheduled every %ss", monitor_interval)
             print("🔔 Notification job scheduled every 60s", flush=True)
         else:
             print("⚠️ JobQueue not available - add python-telegram-bot[job-queue] to requirements.txt", flush=True)
