@@ -108,7 +108,81 @@ export default function ConnectionsPanel() {
         }
       } catch {}
     }, 3000);
-    return () => window.clearInterval(timer);
+  
+  async function refreshOfficialConnectors() {
+    try {
+      const r = await fetch("/api/connectors/status", { credentials: "include", cache: "no-store" });
+      const d = await readApiResponse(r);
+      if (r.ok) setGithub(d.github || null);
+    } catch {}
+  }
+
+  async function connectGitHub() {
+    window.location.href = "/api/connectors/github/start";
+  }
+
+  async function loadGitHubRepos() {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/connectors/github/action", {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operation: "list_repositories", payload: {} }),
+      });
+      const d = await readApiResponse(r);
+      if (!r.ok) throw new Error(d.detail || "Could not read GitHub repositories");
+      setGithubRepos(d.result?.repositories || []);
+      setMessage("✓ GitHub repositories loaded through the authorized connector.");
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not read GitHub repositories"); }
+    finally { setBusy(false); }
+  }
+
+  async function createGitHubIssue() {
+    if (!githubOwner.trim() || !githubRepo.trim() || !githubIssueTitle.trim()) return;
+    setBusy(true);
+    try {
+      const r = await fetch("/api/connectors/github/action", {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operation: "create_issue", payload: {
+          owner: githubOwner.trim(), repo: githubRepo.trim(),
+          title: githubIssueTitle.trim(), body: githubIssueBody.trim()
+        }}),
+      });
+      const d = await readApiResponse(r);
+      if (!r.ok) throw new Error(d.detail || "Could not prepare GitHub action");
+      setGithubApproval(d);
+      setMessage("GitHub action prepared. Nothing has been sent yet — approval is required.");
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not prepare GitHub action"); }
+    finally { setBusy(false); }
+  }
+
+  async function decideGitHubApproval(approved: boolean) {
+    if (!githubApproval?.approval_id) return;
+    setBusy(true);
+    try {
+      const r = await fetch("/api/connectors/github/approve/" + encodeURIComponent(githubApproval.approval_id), {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approved }),
+      });
+      const d = await readApiResponse(r);
+      if (!r.ok) throw new Error(d.detail || "Could not process approval");
+      setGithubApproval(null);
+      setMessage(d.status === "completed" && d.verified ? "✓ GitHub action completed and verified." : approved ? "GitHub action was not verified." : "GitHub action rejected.");
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not process approval"); }
+    finally { setBusy(false); }
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    void refreshOfficialConnectors();
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("connector") === "github" && q.get("connected") === "1") {
+      setMessage("✓ GitHub connected. KZ can use the authorized account without your GitHub password.");
+      void refreshOfficialConnectors();
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [open]);
+
+  return () => window.clearInterval(timer);
   }, [open, page?.human_verification?.required, accountId]);
 
   async function start() {
@@ -454,6 +528,29 @@ export default function ConnectionsPanel() {
 
               {connection && <div className="mt-3 rounded-lg border border-white/5 bg-white/[0.02] p-3"><div className="flex items-center justify-between"><span className="font-mono-tech text-[9px] tracking-widest text-zinc-500">ACCOUNT STATE</span><span className="font-mono-tech text-[9px] tracking-widest text-cyan-200">{statusLabel}</span></div><div className="mt-1 truncate text-[10px] text-zinc-600">{connection.url}</div></div>}
               {message && <p className="mt-2 text-xs leading-relaxed text-zinc-400">{message}</p>}
+            </div>
+
+            <div className="mb-4 rounded-lg border border-cyan-400/20 bg-cyan-400/[0.03] p-3">
+              <div className="font-mono-tech text-[10px] tracking-[0.18em] text-cyan-200">OFFICIAL CONNECTORS</div>
+              <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Use provider authorization instead of browser login when KZ has an official connector.</p>
+              <div className="mt-3 rounded-lg border border-white/5 bg-black/20 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div><div className="text-sm text-white">GitHub</div><div className="text-[9px] text-zinc-600">{github?.connected ? "CONNECTED" : github?.configured === false ? "BACKEND NOT CONFIGURED" : "READY TO CONNECT"}</div></div>
+                  {github?.connected ? <span className="rounded border border-cyan-400/20 px-2 py-1 text-[9px] text-cyan-200">AUTHORIZED</span> : <button onClick={connectGitHub} disabled={busy || github?.configured === false} className="rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 font-mono-tech text-[9px] tracking-widest text-cyan-100 disabled:opacity-40">CONNECT GITHUB</button>}
+                </div>
+                {github?.connected && <div className="mt-3 space-y-2">
+                  <button onClick={loadGitHubRepos} disabled={busy} className="w-full rounded-lg border border-white/10 py-2 font-mono-tech text-[9px] tracking-widest text-zinc-300 disabled:opacity-40">READ MY REPOSITORIES</button>
+                  {githubRepos.length > 0 && <div className="max-h-28 overflow-auto space-y-1">{githubRepos.map((repo: any) => <button key={repo.full_name} onClick={() => { const p=String(repo.full_name||"").split("/"); setGithubOwner(p[0]||""); setGithubRepo(p[1]||""); }} className="block w-full rounded border border-white/5 px-2 py-1 text-left text-[10px] text-zinc-400 hover:text-cyan-200">{repo.full_name}</button>)}</div>}
+                  <div className="border-t border-white/5 pt-3">
+                    <div className="font-mono-tech text-[9px] tracking-widest text-amber-200">WORK — APPROVAL REQUIRED</div>
+                    <div className="mt-2 grid grid-cols-2 gap-2"><input value={githubOwner} onChange={e=>setGithubOwner(e.target.value)} placeholder="owner" className="rounded border border-white/10 bg-black/20 p-2 text-xs text-white"/><input value={githubRepo} onChange={e=>setGithubRepo(e.target.value)} placeholder="repo" className="rounded border border-white/10 bg-black/20 p-2 text-xs text-white"/></div>
+                    <input value={githubIssueTitle} onChange={e=>setGithubIssueTitle(e.target.value)} placeholder="Issue title" className="mt-2 w-full rounded border border-white/10 bg-black/20 p-2 text-xs text-white"/>
+                    <textarea value={githubIssueBody} onChange={e=>setGithubIssueBody(e.target.value)} placeholder="What should KZ do?" className="mt-2 min-h-16 w-full rounded border border-white/10 bg-black/20 p-2 text-xs text-white"/>
+                    <button onClick={createGitHubIssue} disabled={busy || !githubOwner.trim() || !githubRepo.trim() || !githubIssueTitle.trim()} className="mt-2 w-full rounded-lg border border-amber-400/25 bg-amber-400/5 py-2 font-mono-tech text-[9px] tracking-widest text-amber-100 disabled:opacity-40">PREPARE — ASK BEFORE SEND</button>
+                  </div>
+                  {githubApproval && <div className="mt-3 rounded border border-amber-400/25 bg-amber-400/5 p-3"><div className="font-mono-tech text-[9px] tracking-widest text-amber-200">APPROVAL REQUIRED</div><div className="mt-1 text-xs text-zinc-400">{githubApproval.operation} → {githubApproval.target}</div><div className="mt-2 flex gap-2"><button onClick={()=>void decideGitHubApproval(false)} disabled={busy} className="flex-1 rounded border border-white/10 py-2 text-[9px] text-zinc-400">REJECT</button><button onClick={()=>void decideGitHubApproval(true)} disabled={busy} className="flex-1 rounded border border-cyan-400/25 bg-cyan-400/10 py-2 text-[9px] text-cyan-100">APPROVE & EXECUTE</button></div></div>}
+                </div>}
+              </div>
             </div>
 
             {page && (
