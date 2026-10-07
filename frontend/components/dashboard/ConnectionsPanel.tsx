@@ -31,7 +31,7 @@ async function readApiResponse(response: Response): Promise<any> {
   try {
     return JSON.parse(raw);
   } catch {
-    const preview = raw.replace(/\\s+/g, " ").trim().slice(0, 240);
+    const preview = raw.replace(/\s+/g, " ").trim().slice(0, 240);
     throw new Error(`HTTP ${response.status}: KZ server returned a non-JSON response: ${preview}`);
   }
 }
@@ -96,7 +96,7 @@ export default function ConnectionsPanel() {
       if (challengePress.current) return;
       try {
         const r = await fetch(`/api/browser/inspect?account_id=${encodeURIComponent(accountId)}`, { credentials: "include" });
-        const d = await r.json();
+        const d = await readApiResponse(r);
         if (r.ok && d.page) {
           setPage(d.page);
           setConnection(d.page.connection || null);
@@ -117,7 +117,7 @@ export default function ConnectionsPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: url.trim(), account_id: accountId }),
       });
-      const d = await r.json();
+      const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Could not open account");
       setPage(d.page);
       setConnection(d.page?.connection || null);
@@ -138,7 +138,7 @@ export default function ConnectionsPanel() {
     setBusy(true);
     try {
       const r = await fetch(`/api/browser/inspect?account_id=${encodeURIComponent(accountId)}`, { credentials: "include" });
-      const d = await r.json();
+      const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Could not inspect session");
       setPage(d.page);
       setConnection(d.page?.connection || null);
@@ -159,7 +159,7 @@ export default function ConnectionsPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ account_id: accountId }),
       });
-      const d = await r.json();
+      const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "The account is not ready");
       setConnection(d.connection);
       setMessage("ACCOUNT CONNECTED. KZ can now prepare approved tasks for this browser session.");
@@ -192,7 +192,7 @@ export default function ConnectionsPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...payload, account_id: accountId }),
       });
-      const d = await r.json();
+      const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Action failed");
       setPage(d.page);
       setConnection(d.page?.connection || null);
@@ -225,7 +225,7 @@ export default function ConnectionsPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "manual_click", x, y, account_id: accountId }),
       });
-      const d = await r.json();
+      const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Browser click failed");
       setPage(d.page);
       setConnection(d.page?.connection || null);
@@ -295,7 +295,7 @@ export default function ConnectionsPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "human_press", x: press.x, y: press.y, duration_ms: durationMs, account_id: accountId }),
       });
-      const d = await r.json();
+      const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Manual browser interaction failed");
       setPage(d.page);
       setConnection(d.page?.connection || null);
@@ -332,7 +332,7 @@ export default function ConnectionsPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ goal: task.trim(), account_id: accountId }),
       });
-      const d = await r.json();
+      const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Could not create task");
       setWorkflow(d.workflow);
       setMessage(
