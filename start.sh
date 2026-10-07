@@ -93,11 +93,14 @@ echo "════════════════════════�
 echo "✅ All services launched. Monitoring..."
 echo "═══════════════════════════════════════════════════════════════"
 
-wait -n "${API_PID}" "${BOT_PID}"
+# The Telegram poller is intentionally auxiliary. A Telegram conflict or
+# temporary bot failure must never take down the FastAPI web/connector service.
+# Keep the API alive and only shut everything down when the API itself exits.
+wait "${API_PID}"
 EXIT_CODE=$?
 
-echo "⚠️ One service exited (code ${EXIT_CODE}). Shutting down the rest..."
-kill "${API_PID}" "${BOT_PID}" 2>/dev/null || true
+echo "⚠️ FastAPI exited (code ${EXIT_CODE}). Shutting down the bot process..."
+kill "${BOT_PID}" 2>/dev/null || true
 wait 2>/dev/null || true
 
 exit "${EXIT_CODE}"
