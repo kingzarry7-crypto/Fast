@@ -60,6 +60,8 @@ logger = logging.getLogger("king_zarry")
 
 from channel_work import create as work_create, list_recent as work_list, get as work_get, approve as work_approve, format_workflow as work_format, format_recent as work_format_recent
 from work_intent import parse as parse_work_intent
+from google_connector import _account, _approval, _execute, _fingerprint, _audit
+from memory_link_bridge import resolve_platform_identity
 
 def clean_env_str(value, default=""):
     if not value:
@@ -3910,12 +3912,97 @@ async def _process_telegram_text_pipeline(update, context, text: str, is_voice_t
         except Exception as ve:
             logger.warning(f"Voice follow-up failed: {ve}")
 
+def _telegram_email_request(text: str):
+    raw = str(text or "").strip()
+    if not re.search(r"\b(?:send|email|mail)\b", raw, re.I):
+        return None
+    m = re.search(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", raw, re.I)
+    if not m:
+        return None
+    to = m.group(0)
+    sm = re.search(r"\bsubject\s*[:=-]\s*(.+?)(?=\n|\b(?:body|message|saying)\b\s*[:=-]|$)", raw, re.I | re.S)
+    subject = sm.group(1).strip() if sm else "Message from King Zarry AI"
+    bm = re.search(r"\b(?:body|message|saying)\s*[:=-]\s*(.+)$", raw, re.I | re.S)
+    body = bm.group(1).strip() if bm else ""
+    if not body:
+        remainder=(raw[:m.start()]+" "+raw[m.end():]).strip()
+        remainder=re.sub(r"^.*?\b(?:send|email|mail)\b","",remainder,flags=re.I).strip()
+        remainder=re.sub(r"^\b(?:an?\s+)?email\b","",remainder,flags=re.I).strip()
+        remainder=re.sub(r"^\b(?:to|for)\b","",remainder,flags=re.I).strip()
+        body=re.sub(r"^\b(?:saying|that)\b\s*","",remainder,flags=re.I).strip()
+        if sm: body=re.sub(r"\bsubject\s*[:=-]\s*.+$","",body,flags=re.I|re.S).strip()
+    return {"to":to,"subject":subject[:300],"body":body[:20000]} if body else None
+
+async def _handle_telegram_google_email(update, text: str):
+    telegram_id=str(update.effective_user.id)
+    canonical=resolve_platform_identity("telegram", telegram_id)
+    if not canonical:
+        return False
+    decision=str(text or "").strip().upper()
+    if decision in {"APPROVE","REJECT"}:
+        from database import get_db_cursor
+        with get_db_cursor(commit=False) as cur:
+            cur.execute("""SELECT id,operation,target,exact_content,action_fingerprint FROM web_approvals
+                           WHERE user_id=%s AND service='google' AND operation='send_gmail' AND status='pending'
+                           ORDER BY created_at DESC LIMIT 1""",(canonical,))
+            row=cur.fetchone()
+        if not row:
+            await update.message.reply_text("ℹ️ There is no pending Gmail action waiting for approval.")
+            return True
+        approval_id,operation,target,exact,stored_fp=str(row[0]),str(row[1] or "send_gmail"),str(row[2] or ""),str(row[3] or "{}"),str(row[4] or "")
+        payload=json.loads(exact)
+        if _fingerprint(operation,target,payload)!=stored_fp:
+            await update.message.reply_text("🛑 Approval check failed. KZ did not execute the email.")
+            return True
+        if decision=="REJECT":
+            with get_db_cursor(commit=True) as cur:
+                cur.execute("UPDATE web_approvals SET status='rejected',rejected_at=NOW() WHERE id=%s AND user_id=%s AND status='pending'",(approval_id,canonical))
+            _audit(canonical,"connector_action_rejected",operation,target,approval_id)
+            await update.message.reply_text("🛑 Email cancelled. Nothing was sent.")
+            return True
+        with get_db_cursor(commit=True) as cur:
+            cur.execute("UPDATE web_approvals SET status='approved',approved_at=NOW() WHERE id=%s AND user_id=%s AND status='pending'",(approval_id,canonical))
+        try:
+            result=await asyncio.to_thread(_execute,canonical,operation,payload)
+        except Exception as exc:
+            with get_db_cursor(commit=True) as cur:
+                cur.execute("UPDATE web_approvals SET status='expired' WHERE id=%s AND status='approved'",(approval_id,))
+            logger.warning("Telegram Gmail execution failed: %s",exc)
+            await update.message.reply_text("❌ Gmail could not send the email. No success was claimed.")
+            return True
+        verified=bool(result.get("verified"))
+        with get_db_cursor(commit=True) as cur:
+            cur.execute("UPDATE web_approvals SET status=%s,executed_at=NOW() WHERE id=%s AND status='approved'",("executed" if verified else "expired",approval_id))
+        _audit(canonical,"connector_action_verified" if verified else "connector_action_unverified",operation,target,approval_id)
+        if verified:
+            msg=result.get("message") or {}
+            await update.message.reply_text("✅ <b>EMAIL SENT & VERIFIED</b>\n\nTo: "+html.escape(payload["to"])+"\nSubject: "+html.escape(payload["subject"])+"\nMessage ID: <code>"+html.escape(str(msg.get("id") or "unknown"))+"</code>",parse_mode="HTML")
+        else:
+            await update.message.reply_text("⚠️ Gmail responded, but KZ could not verify the sent message. It is marked unverified.")
+        return True
+    payload=_telegram_email_request(text)
+    if not payload:
+        return False
+    account=_account(canonical)
+    if not account:
+        await update.message.reply_text("📧 Google is not connected to this KZ account. Connect Google Workspace first.")
+        return True
+    approval=_approval(canonical,"send_gmail",payload["to"],payload)
+    await update.message.reply_text("📧 <b>EMAIL READY — APPROVAL REQUIRED</b>\n\nFrom: "+html.escape(str(account.get("display_name") or "Connected Google account"))+"\nTo: "+html.escape(payload["to"])+"\nSubject: "+html.escape(payload["subject"])+"\n\n<b>Message:</b>\n"+html.escape(payload["body"][:5000])+"\n\n⚠️ This will send a real email from your connected Gmail.\n\nReply <code>APPROVE</code> to send it or <code>REJECT</code> to cancel.",parse_mode="HTML")
+    return True
+
 async def handle_text(update, context):
 
     if not update.message or not update.message.text:
         return
     if update.message.text.startswith("/"):
         return
+
+    try:
+        if await _handle_telegram_google_email(update, update.message.text.strip()):
+            return
+    except Exception as google_err:
+        logger.warning("Telegram Google connector routing failed: %s", google_err)
 
     try:
         if await handle_natural_work_intent(update, context, update.message.text.strip()):
