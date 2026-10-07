@@ -22,6 +22,13 @@ _SLEEP_START = os.getenv("KZ_SLEEP_START", "23:00")
 _SLEEP_END = os.getenv("KZ_SLEEP_END", "07:00")
 
 
+def channel_user_id(platform: str, external_id: str) -> str:
+    """Return the shared workflow identity for any channel."""
+    resolved = web_user_id(platform, external_id)
+    if resolved:
+        return resolved
+    return f"{str(platform).strip().lower()}:{str(external_id).strip()}"
+
 def web_user_id(platform: str, external_id: str) -> Optional[str]:
     """Resolve a channel identity to the UUID used by web_connected_accounts."""
     raw = resolve_platform_identity(platform, str(external_id))
