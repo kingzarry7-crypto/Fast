@@ -346,6 +346,8 @@ def install_streaming_chat(
             raw = str(text or "").strip().lower()
             if not raw:
                 return False
+            if raw in {"approve", "reject"}:
+                return True
             if raw in {
                 "account status", "check connected accounts", "what accounts are connected",
                 "show connected accounts", "check my connections", "monitor account status",
