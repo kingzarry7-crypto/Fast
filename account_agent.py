@@ -497,6 +497,59 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
 
     snapshot = account_snapshot(uid)
 
+    if lower in {"approve", "reject"}:
+        from google_connector import _execute, _fingerprint, _audit
+        with get_db_cursor(commit=False) as cur:
+            cur.execute(
+                """SELECT id,operation,target,exact_content,action_fingerprint,status
+                   FROM web_approvals
+                   WHERE user_id=%s AND service='google' AND operation='send_gmail' AND status='pending'
+                   ORDER BY created_at DESC LIMIT 1""",
+                (uid,),
+            )
+            row = cur.fetchone()
+        if not row:
+            return {"status": "no_pending_approval", "kind": "approval",
+                    "reply": "ℹ️ KZ has no pending Google action waiting for permission."}
+        approval_id = str(row[0])
+        operation = str(row[1] or "")
+        target = str(row[2] or "")
+        payload = json.loads(str(row[3] or "{}"))
+        fingerprint = str(row[4] or "")
+        if _fingerprint(operation, target, payload) != fingerprint:
+            return {"status": "fingerprint_mismatch", "kind": "approval",
+                    "reply": "🛑 KZ blocked the action because its approved payload no longer matches."}
+        if lower == "reject":
+            with get_db_cursor(commit=True) as cur:
+                cur.execute("UPDATE web_approvals SET status='rejected',rejected_at=NOW() WHERE id=%s AND status='pending'", (approval_id,))
+            _audit(uid, "connector_action_rejected", operation, target, approval_id)
+            return {"status": "rejected", "kind": "approval",
+                    "reply": f"🛑 REJECTED — KZ did not execute the Google action. Approval ID: {approval_id}"}
+        with get_db_cursor(commit=True) as cur:
+            cur.execute("UPDATE web_approvals SET status='approved',approved_at=NOW() WHERE id=%s AND status='pending'", (approval_id,))
+        try:
+            result = _execute(uid, operation, payload)
+        except Exception as exc:
+            with get_db_cursor(commit=True) as cur:
+                cur.execute("UPDATE web_approvals SET status='expired' WHERE id=%s AND status='approved'", (approval_id,))
+            logger.warning("Web approved Google action failed: %s", type(exc).__name__)
+            return {"status": "failed", "kind": "approval",
+                    "reply": "❌ EXECUTION FAILED — KZ did not claim the action was completed.",
+                    "approval_id": approval_id}
+        verified = bool(result.get("verified"))
+        with get_db_cursor(commit=True) as cur:
+            cur.execute("UPDATE web_approvals SET status=%s,executed_at=NOW() WHERE id=%s AND status='approved'",
+                        ("executed" if verified else "expired", approval_id))
+        _audit(uid, "connector_action_verified" if verified else "connector_action_unverified", operation, target, approval_id)
+        if verified:
+            evidence = result.get("message") or result.get("event") or result.get("file") or {}
+            evidence_id = evidence.get("id") or evidence.get("htmlLink") or "verified"
+            return {"status": "completed", "kind": "approval", "approval_id": approval_id,
+                    "reply": f"✅ WORK COMPLETED & VERIFIED\n\nProvider: Google\nOperation: {operation}\nEvidence: {evidence_id}",
+                    "result": result}
+        return {"status": "unverified", "kind": "approval", "approval_id": approval_id,
+                "reply": "⚠️ Google responded, but KZ could not verify the resulting resource. It is marked unverified."}
+
     if lower in {
         "account status", "check connected accounts", "what accounts are connected",
         "show connected accounts", "check my connections", "monitor account status",
