@@ -49,12 +49,18 @@ def status() -> Dict[str, Any]:
 def _profile_root() -> Path:
     return Path(os.getenv("BROWSER_PROFILE_DIR", "./data/browser_profiles")).resolve()
 
-def _session(user_id: str) -> Dict[str, Any]:
+def _account_key(user_id: str, account_id: str | None = None) -> str:
+    """Return an isolated session key for one user/account pair."""
+    account = re.sub(r"[^A-Za-z0-9_.-]", "_", str(account_id or "default").strip()) or "default"
+    return f"{str(user_id)}::{account}"
+
+def _session(user_id: str, account_id: str | None = None) -> Dict[str, Any]:
     global _PLAYWRIGHT
     with _LOCK:
-        if str(user_id) in _SESSIONS: return _SESSIONS[str(user_id)]
+        key = _account_key(user_id, account_id)
+        if key in _SESSIONS: return _SESSIONS[key]
         if sync_playwright is None: raise RuntimeError("Playwright is not installed")
-        root = _profile_root() / re.sub(r"[^A-Za-z0-9_.-]", "_", str(user_id))
+        root = _profile_root() / re.sub(r"[^A-Za-z0-9_.-]", "_", str(user_id)) / re.sub(r"[^A-Za-z0-9_.-]", "_", str(account_id or "default"))
         root.mkdir(parents=True, exist_ok=True)
         if _PLAYWRIGHT is None: _PLAYWRIGHT = sync_playwright().start()
         # Prefer an explicitly configured/system browser, then the Chromium
@@ -82,7 +88,7 @@ def _session(user_id: str) -> Dict[str, Any]:
         if executable: kwargs["executable_path"] = executable
         context = _PLAYWRIGHT.chromium.launch_persistent_context(str(root), **kwargs)
         item = {"context": context, "page": context.pages[0] if context.pages else context.new_page()}
-        _SESSIONS[str(user_id)] = item
+        _SESSIONS[key] = item
         return item
 
 
@@ -114,18 +120,18 @@ def _detect_human_verification(page: Page) -> Dict[str, Any]:
     }
 
 
-def _set_human_verification_state(user_id: str, page: Page) -> Dict[str, Any]:
+def _set_human_verification_state(user_id: str, page: Page, account_id: str | None = None) -> Dict[str, Any]:
     state = _detect_human_verification(page)
     with _LOCK:
-        item = _SESSIONS.get(str(user_id))
+        item = _SESSIONS.get(_account_key(user_id, account_id))
         if item is not None:
             item["human_verification"] = state
     return state
 
-def _page(user_id: str) -> Page: return _session(user_id)["page"]
-def close(user_id: str) -> None:
+def _page(user_id: str, account_id: str | None = None) -> Page: return _session(user_id, account_id)["page"]
+def close(user_id: str, account_id: str | None = None) -> None:
     with _LOCK:
-        item = _SESSIONS.pop(str(user_id), None)
+        item = _SESSIONS.pop(_account_key(user_id, account_id), None)
         if item:
             try: item["context"].close()
             except Exception: pass
@@ -135,9 +141,9 @@ def _target(page: Page, selector: Optional[str] = None, text: Optional[str] = No
     if text: return page.get_by_text(text, exact=True).first
     raise ValueError("selector or text is required")
 
-def connection_status(user_id: str) -> Dict[str, Any]:
+def connection_status(user_id: str, account_id: str | None = None) -> Dict[str, Any]:
     """Return a conservative, freshly-verified login/session state."""
-    page = _page(user_id)
+    page = _page(user_id, account_id)
     verification = _set_human_verification_state(user_id, page)
     try:
         text = page.locator("body").inner_text(timeout=5000)[:16000].lower()
@@ -216,7 +222,7 @@ def connection_status(user_id: str) -> Dict[str, Any]:
     )
 
     with _LOCK:
-        session = _SESSIONS.get(str(user_id)) or {}
+        session = _SESSIONS.get(_account_key(user_id, account_id)) or {}
         previously_confirmed = bool(session.get("account_connected"))
         # Never let a previous confirmation override current live evidence.
         if previously_confirmed and not authenticated:
@@ -258,9 +264,9 @@ def connection_status(user_id: str) -> Dict[str, Any]:
         "title": page.title(),
     }
 
-def confirm_connection(user_id: str) -> Dict[str, Any]:
+def confirm_connection(user_id: str, account_id: str | None = None) -> Dict[str, Any]:
     """Mark the current authenticated browser session as connected after user confirmation."""
-    page = _page(user_id)
+    page = _page(user_id, account_id)
     verification = _set_human_verification_state(user_id, page)
     if verification.get("required"):
         raise PermissionError("Human verification is still required. Complete it yourself first.")
@@ -277,14 +283,14 @@ def confirm_connection(user_id: str) -> Dict[str, Any]:
     return connection_status(user_id)
 
 
-def inspect(user_id: str) -> Dict[str, Any]:
+def inspect(user_id: str, account_id: str | None = None) -> Dict[str, Any]:
     page = _page(user_id)
     text = page.locator("body").inner_text(timeout=10000)[:12000]
     verification = _set_human_verification_state(user_id, page)
     state = connection_status(user_id)
     return {"url": page.url, "title": page.title(), "text": text, "human_verification": verification, "connection": state, "buttons": [{"text": (x.inner_text() or "")[:160], "selector": "#" + x.get_attribute("id") if x.get_attribute("id") else None} for x in page.locator("button, [role=\"button\"]").all()[:40]], "links": [{"text": (x.inner_text() or "")[:160], "href": x.get_attribute("href")} for x in page.locator("a").all()[:40]], "inputs": [{"selector": "#"+x.get_attribute("id") if x.get_attribute("id") else "input[name=\""+str(x.get_attribute("name") or "")+"\"]", "type": x.get_attribute("type") or "text", "name": x.get_attribute("name"), "placeholder": x.get_attribute("placeholder")} for x in page.locator("input,textarea,select").all()[:40]]}
 
-def navigate(user_id: str, url: str) -> Dict[str, Any]:
+def navigate(user_id: str, url: str, account_id: str | None = None) -> Dict[str, Any]:
     url = str(url or "").strip()
     if not re.match(r"^https?://", url, re.I):
         raise ValueError("Only http(s) URLs are allowed")
@@ -328,28 +334,28 @@ def navigate(user_id: str, url: str) -> Dict[str, Any]:
     verification = _set_human_verification_state(user_id, page)
     return {"success": True, "url": page.url, "title": page.title(), "human_verification": verification}
 
-def click(user_id: str, selector: Optional[str] = None, text: Optional[str] = None) -> Dict[str, Any]:
+def click(user_id: str, selector: Optional[str] = None, text: Optional[str] = None, account_id: str | None = None) -> Dict[str, Any]:
     page = _page(user_id); _target(page, selector, text).click(timeout=15000); page.wait_for_timeout(300)
     return {"success": True, "url": page.url, "title": page.title()}
 
-def fill(user_id: str, selector: str, value: str) -> Dict[str, Any]:
+def fill(user_id: str, selector: str, value: str, account_id: str | None = None) -> Dict[str, Any]:
     if not selector: raise ValueError("selector is required")
     _page(user_id).locator(selector).first.fill(str(value)); return {"success": True, "selector": selector}
 
-def select(user_id: str, selector: str, value: str) -> Dict[str, Any]:
+def select(user_id: str, selector: str, value: str, account_id: str | None = None) -> Dict[str, Any]:
     _page(user_id).locator(selector).first.select_option(str(value)); return {"success": True, "selector": selector}
 
-def upload(user_id: str, selector: str, path: str) -> Dict[str, Any]:
+def upload(user_id: str, selector: str, path: str, account_id: str | None = None) -> Dict[str, Any]:
     file_path = Path(str(path)).expanduser().resolve()
     if not file_path.is_file(): raise ValueError("upload file does not exist")
     _page(user_id).locator(selector).first.set_input_files(str(file_path)); return {"success": True, "filename": file_path.name}
 
-def screenshot(user_id: str) -> bytes:
+def screenshot(user_id: str, account_id: str | None = None) -> bytes:
     """Capture the current browser viewport for user-controlled remote interaction."""
     return _page(user_id).screenshot(full_page=False)
 
 
-def viewport(user_id: str) -> Dict[str, Any]:
+def viewport(user_id: str, account_id: str | None = None) -> Dict[str, Any]:
     page = _page(user_id)
     size = page.viewport_size or {}
     return {
@@ -358,7 +364,7 @@ def viewport(user_id: str) -> Dict[str, Any]:
     }
 
 
-def manual_click(user_id: str, x: float, y: float) -> Dict[str, Any]:
+def manual_click(user_id: str, x: float, y: float, account_id: str | None = None) -> Dict[str, Any]:
     """Forward one click explicitly chosen by the logged-in KZ user.
 
     This is not autonomous browser control: the coordinate comes directly
@@ -378,7 +384,7 @@ def manual_click(user_id: str, x: float, y: float) -> Dict[str, Any]:
     return {"success": True, "x": px, "y": py, "url": page.url, "title": page.title()}
 
 
-def human_click(user_id: str, x: float, y: float) -> Dict[str, Any]:
+def human_click(user_id: str, x: float, y: float, account_id: str | None = None) -> Dict[str, Any]:
     """Allow the authenticated user to interact with an active human challenge.
 
     This is deliberately limited to the period where the detector says a human
@@ -397,7 +403,7 @@ def human_click(user_id: str, x: float, y: float) -> Dict[str, Any]:
     return {"success": True, "x": px, "y": py, "human_verification": _set_human_verification_state(user_id, page)}
 
 
-def _human_pointer_position(user_id: str, x: float, y: float):
+def _human_pointer_position(user_id: str, x: float, y: float, account_id: str | None = None):
     page = _page(user_id)
     challenge = _set_human_verification_state(user_id, page)
     if not challenge.get("required"):
@@ -409,14 +415,14 @@ def _human_pointer_position(user_id: str, x: float, y: float):
     return page, px, py
 
 
-def human_down(user_id: str, x: float, y: float) -> Dict[str, Any]:
+def human_down(user_id: str, x: float, y: float, account_id: str | None = None) -> Dict[str, Any]:
     page, px, py = _human_pointer_position(user_id, x, y)
     page.mouse.move(px, py)
     page.mouse.down()
     return {"success": True, "x": px, "y": py}
 
 
-def human_up(user_id: str, x: float, y: float) -> Dict[str, Any]:
+def human_up(user_id: str, x: float, y: float, account_id: str | None = None) -> Dict[str, Any]:
     page, px, py = _human_pointer_position(user_id, x, y)
     page.mouse.move(px, py)
     page.mouse.up()
@@ -424,7 +430,7 @@ def human_up(user_id: str, x: float, y: float) -> Dict[str, Any]:
     return {"success": True, "x": px, "y": py, "human_verification": _set_human_verification_state(user_id, page)}
 
 
-def human_press(user_id: str, x: float, y: float, duration_ms: int) -> Dict[str, Any]:
+def human_press(user_id: str, x: float, y: float, duration_ms: int, account_id: str | None = None) -> Dict[str, Any]:
     """Replay one user-initiated press-and-hold without choosing or solving the challenge."""
     page, px, py = _human_pointer_position(user_id, x, y)
     duration = max(100, min(int(duration_ms), 15000))
@@ -457,7 +463,7 @@ def human_press(user_id: str, x: float, y: float, duration_ms: int) -> Dict[str,
     }
 
 
-def human_move(user_id: str, x: float, y: float) -> Dict[str, Any]:
+def human_move(user_id: str, x: float, y: float, account_id: str | None = None) -> Dict[str, Any]:
     """Move the user's pointer inside an active human challenge."""
     page = _page(user_id)
     challenge = _set_human_verification_state(user_id, page)
@@ -470,7 +476,7 @@ def human_move(user_id: str, x: float, y: float) -> Dict[str, Any]:
     page.mouse.move(px, py)
     return {"success": True, "x": px, "y": py}
 
-def check_human_verification(user_id: str) -> Dict[str, Any]:
+def check_human_verification(user_id: str, account_id: str | None = None) -> Dict[str, Any]:
     """Wait briefly for the provider to finish updating the manual challenge."""
     page = _page(user_id)
     last = {"required": True, "reason": "human_verification_required", "indicators": []}
@@ -498,7 +504,7 @@ def check_human_verification(user_id: str) -> Dict[str, Any]:
         "title": page.title(),
     }
 
-def plan_goal(user_id: str, goal: str) -> Dict[str, Any]:
+def plan_goal(user_id: str, goal: str, account_id: str | None = None) -> Dict[str, Any]:
     page = inspect(user_id)
     from llm_client import ask
     prompt = "You are the KZ browser planner. User goal: " + goal + "\nCurrent URL: " + str(page.get("url")) + "\nTitle: " + str(page.get("title")) + "\nVisible text:\n" + str(page.get("text",""))[:9000] + "\nReturn JSON only with actions: navigate, inspect, click, fill, select, upload, submit, post, publish, send. Never invent passwords, OTPs, payment data, identity or secrets. Do not act outside the goal. Public submit/post/publish/send is consequential and requires approval. For edits, do not publish unless explicitly requested. If required information is missing, return an empty actions list and summary."
@@ -589,7 +595,7 @@ def _is_external_action(action: Dict[str, Any]) -> bool:
     return False
 
 
-def execute_plan(user_id: str, actions: list[dict[str, Any]], *, allow_external: bool = False) -> Dict[str, Any]:
+def execute_plan(user_id: str, actions: list[dict[str, Any]], *, allow_external: bool = False, account_id: str | None = None) -> Dict[str, Any]:
     results = []
     external = any(_is_external_action(a) for a in actions)
 
