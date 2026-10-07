@@ -31,7 +31,7 @@ async function readApiResponse(response: Response): Promise<any> {
   try {
     return JSON.parse(raw);
   } catch {
-    const preview = raw.replace(/\\s+/g, " ").trim().slice(0, 240);
+    const preview = raw.replace(/\s+/g, " ").trim().slice(0, 240);
     throw new Error(`HTTP ${response.status}: KZ server returned a non-JSON response: ${preview}`);
   }
 }
@@ -39,6 +39,9 @@ async function readApiResponse(response: Response): Promise<any> {
 export default function ConnectionsPanel() {
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
+  const [accountId, setAccountId] = useState("default");
+  const [accountName, setAccountName] = useState("Primary Account");
+  const [savedAccounts, setSavedAccounts] = useState<{ id: string; name: string; url?: string }[]>([]);
   const [page, setPage] = useState<Page | null>(null);
   const [connection, setConnection] = useState<Connection | null>(null);
   const [busy, setBusy] = useState(false);
@@ -51,12 +54,49 @@ export default function ConnectionsPanel() {
   const challengePress = useRef<{ x: number; y: number; startedAt: number; pointerId: number } | null>(null);
 
   useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("kz_connected_accounts");
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed) && parsed.length) {
+        setSavedAccounts(parsed);
+        const active = parsed[0];
+        if (active?.id) {
+          setAccountId(active.id);
+          setAccountName(active.name || "Account");
+        }
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try { window.localStorage.setItem("kz_connected_accounts", JSON.stringify(savedAccounts)); } catch {}
+  }, [savedAccounts]);
+
+  function saveCurrentAccount() {
+    const id = accountId.trim() || "default";
+    const name = accountName.trim() || "Account";
+    const next = [...savedAccounts.filter((x) => x.id !== id), { id, name, url: url.trim() }];
+    setSavedAccounts(next);
+  }
+
+  function newAccount() {
+    const id = "acct_" + crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+    setAccountId(id);
+    setAccountName("New Account");
+    setUrl("");
+    setPage(null);
+    setConnection(null);
+    setWorkflow(null);
+    setMessage("New isolated browser account created. Open its login page and sign in yourself.");
+  }
+
+  useEffect(() => {
     if (!open || !page?.human_verification?.required) return;
     const timer = window.setInterval(async () => {
       if (challengePress.current) return;
       try {
-        const r = await fetch("/api/browser/inspect", { credentials: "include" });
-        const d = await r.json();
+        const r = await fetch(`/api/browser/inspect?account_id=${encodeURIComponent(accountId)}`, { credentials: "include" });
+        const d = await readApiResponse(r);
         if (r.ok && d.page) {
           setPage(d.page);
           setConnection(d.page.connection || null);
@@ -75,12 +115,13 @@ export default function ConnectionsPanel() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url.trim() }),
+        body: JSON.stringify({ url: url.trim(), account_id: accountId }),
       });
-      const d = await r.json();
+      const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Could not open account");
       setPage(d.page);
       setConnection(d.page?.connection || null);
+      saveCurrentAccount();
       setMessage(
         d.page?.human_verification?.required
           ? "Human verification is required. Complete it yourself in this browser session; KZ will not bypass it."
@@ -96,8 +137,8 @@ export default function ConnectionsPanel() {
   async function refresh() {
     setBusy(true);
     try {
-      const r = await fetch("/api/browser/inspect", { credentials: "include" });
-      const d = await r.json();
+      const r = await fetch(`/api/browser/inspect?account_id=${encodeURIComponent(accountId)}`, { credentials: "include" });
+      const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Could not inspect session");
       setPage(d.page);
       setConnection(d.page?.connection || null);
@@ -115,8 +156,10 @@ export default function ConnectionsPanel() {
       const r = await fetch("/api/browser/connect/confirm", {
         method: "POST",
         credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_id: accountId }),
       });
-      const d = await r.json();
+      const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "The account is not ready");
       setConnection(d.connection);
       setMessage("ACCOUNT CONNECTED. KZ can now prepare approved tasks for this browser session.");
@@ -147,9 +190,9 @@ export default function ConnectionsPanel() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, account_id: accountId }),
       });
-      const d = await r.json();
+      const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Action failed");
       setPage(d.page);
       setConnection(d.page?.connection || null);
@@ -180,9 +223,9 @@ export default function ConnectionsPanel() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "manual_click", x, y }),
+        body: JSON.stringify({ type: "manual_click", x, y, account_id: accountId }),
       });
-      const d = await r.json();
+      const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Browser click failed");
       setPage(d.page);
       setConnection(d.page?.connection || null);
@@ -201,7 +244,7 @@ export default function ConnectionsPanel() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "human_verify" }),
+        body: JSON.stringify({ type: "human_verify", account_id: accountId }),
         signal: controller.signal,
       });
       const d = await readApiResponse(r);
@@ -250,9 +293,9 @@ export default function ConnectionsPanel() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "human_press", x: press.x, y: press.y, duration_ms: durationMs }),
+        body: JSON.stringify({ type: "human_press", x: press.x, y: press.y, duration_ms: durationMs, account_id: accountId }),
       });
-      const d = await r.json();
+      const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Manual browser interaction failed");
       setPage(d.page);
       setConnection(d.page?.connection || null);
@@ -287,9 +330,9 @@ export default function ConnectionsPanel() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal: task.trim() }),
+        body: JSON.stringify({ goal: task.trim(), account_id: accountId }),
       });
-      const d = await r.json();
+      const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Could not create task");
       setWorkflow(d.workflow);
       setMessage(
@@ -341,6 +384,36 @@ export default function ConnectionsPanel() {
             </div>
 
             <div className="border-b border-white/5 p-4">
+              <div className="mb-2 grid grid-cols-[1fr_auto] gap-2">
+                <input
+                  value={accountName}
+                  onChange={(e) => setAccountName(e.target.value)}
+                  placeholder="Account name"
+                  className="w-full rounded-lg border border-cyan-400/15 bg-white/[0.03] p-3 text-sm text-white outline-none"
+                />
+                <button onClick={newAccount} type="button" className="rounded-lg border border-cyan-400/20 px-3 text-[9px] tracking-widest text-cyan-200">NEW</button>
+              </div>
+              <div className="mb-2 flex gap-2">
+                <select
+                  value={accountId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    const found = savedAccounts.find((x) => x.id === id);
+                    setAccountId(id);
+                    setAccountName(found?.name || "Account");
+                    setUrl(found?.url || "");
+                    setPage(null);
+                    setConnection(null);
+                    setWorkflow(null);
+                    setMessage("Switched to an isolated account browser profile.");
+                  }}
+                  className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 p-2 text-xs text-white"
+                >
+                  {!savedAccounts.length && <option value="default">Primary Account</option>}
+                  {savedAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+                <div className="truncate rounded-lg border border-white/5 px-2 py-2 text-[9px] text-zinc-600">{accountId}</div>
+              </div>
               <input
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
