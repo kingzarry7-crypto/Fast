@@ -65,8 +65,18 @@ def connected_accounts(user_id: str) -> list[dict[str, Any]]:
             (str(user_id),),
         )
         rows = cur.fetchall() or []
+
     out = []
     for row in rows:
+        if hasattr(row, "keys"):
+            out.append(dict(row))
+        else:
+            out.append({
+                "id": row[0], "provider": row[1], "provider_account_id": row[2],
+                "display_name": row[3], "scopes": row[4], "metadata": row[5],
+                "revoked_at": row[6], "updated_at": row[7],
+            })
+
     # Browser-connected accounts are stored in Neon metadata so Telegram/Discord
     # can see the same web-connected session even though Playwright itself lives
     # in the FastAPI process.
@@ -89,14 +99,7 @@ def connected_accounts(user_id: str) -> list[dict[str, Any]]:
             })
     except Exception as exc:
         logger.warning("Browser account registry unavailable: %s", type(exc).__name__)
-        if hasattr(row, "keys"):
-            out.append(dict(row))
-        else:
-            out.append({
-                "id": row[0], "provider": row[1], "provider_account_id": row[2],
-                "display_name": row[3], "scopes": row[4], "metadata": row[5],
-                "revoked_at": row[6], "updated_at": row[7],
-            })
+
     return out
 
 
