@@ -83,6 +83,10 @@ def _session(user_id: str, account_id: str | None = None) -> Dict[str, Any]:
                 "--disable-dev-shm-usage",
                 "--disable-gpu",
                 "--disable-software-rasterizer",
+                "--disable-background-networking",
+                "--disable-background-timer-throttling",
+                "--disable-renderer-backgrounding",
+                "--disable-features=Translate,BackForwardCache",
             ],
         }
         if executable: kwargs["executable_path"] = executable
@@ -93,9 +97,16 @@ def _session(user_id: str, account_id: str | None = None) -> Dict[str, Any]:
 
 
 def _detect_human_verification(page: Page) -> Dict[str, Any]:
+    # Avoid repeatedly walking large pages during rapid UI polling. The state is
+    # refreshed at most every 750ms; explicit navigation/action calls still
+    # invalidate it by using the page URL as part of the cache key.
     """Detect provider anti-bot/human-verification pages without bypassing them."""
+    now = time.monotonic()
+    cached = getattr(page, "_kz_hv_cache", None)
+    if isinstance(cached, dict) and now - float(cached.get("at", 0)) < 0.75 and cached.get("url") == page.url:
+        return dict(cached["state"])
     try:
-        text = page.locator("body").inner_text(timeout=5000)[:16000]
+        text = page.locator("body").inner_text(timeout=1200)[:10000]
     except Exception:
         text = ""
     try:
@@ -111,8 +122,11 @@ def _detect_human_verification(page: Page) -> Dict[str, Any]:
     )
     matched = [x for x in indicators if x in combined]
     if not matched:
-        return {"required": False, "reason": None, "indicators": []}
-    return {
+        state = {"required": False, "reason": None, "indicators": []}
+        try: page._kz_hv_cache = {"at": now, "url": page.url, "state": state}
+        except Exception: pass
+        return state
+    state = {
         "required": True,
         "reason": "human_verification_required",
         "indicators": matched[:6],
@@ -285,7 +299,7 @@ def confirm_connection(user_id: str, account_id: str | None = None) -> Dict[str,
 
 def inspect(user_id: str, account_id: str | None = None) -> Dict[str, Any]:
     page = _page(user_id, account_id)
-    text = page.locator("body").inner_text(timeout=10000)[:12000]
+    text = page.locator("body").inner_text(timeout=2500)[:12000]
     verification = _set_human_verification_state(user_id, page, account_id)
     state = connection_status(user_id, account_id)
     return {"url": page.url, "title": page.title(), "text": text, "human_verification": verification, "connection": state, "buttons": [{"text": (x.inner_text() or "")[:160], "selector": "#" + x.get_attribute("id") if x.get_attribute("id") else None} for x in page.locator("button, [role=\"button\"]").all()[:40]], "links": [{"text": (x.inner_text() or "")[:160], "href": x.get_attribute("href")} for x in page.locator("a").all()[:40]], "inputs": [{"selector": "#"+x.get_attribute("id") if x.get_attribute("id") else "input[name=\""+str(x.get_attribute("name") or "")+"\"]", "type": x.get_attribute("type") or "text", "name": x.get_attribute("name"), "placeholder": x.get_attribute("placeholder")} for x in page.locator("input,textarea,select").all()[:40]]}
@@ -335,7 +349,7 @@ def navigate(user_id: str, url: str, account_id: str | None = None) -> Dict[str,
     return {"success": True, "url": page.url, "title": page.title(), "human_verification": verification}
 
 def click(user_id: str, selector: Optional[str] = None, text: Optional[str] = None, account_id: str | None = None) -> Dict[str, Any]:
-    page = _page(user_id, account_id); _target(page, selector, text).click(timeout=15000); page.wait_for_timeout(300)
+    page = _page(user_id, account_id); _target(page, selector, text).click(timeout=15000); page.wait_for_timeout(80)
     return {"success": True, "url": page.url, "title": page.title()}
 
 def fill(user_id: str, selector: str, value: str, account_id: str | None = None) -> Dict[str, Any]:
@@ -380,7 +394,7 @@ def manual_click(user_id: str, x: float, y: float, account_id: str | None = None
     if px < 0 or py < 0 or px > size["width"] or py > size["height"]:
         raise ValueError("Click coordinates are outside the browser viewport.")
     page.mouse.click(px, py)
-    page.wait_for_timeout(350)
+    page.wait_for_timeout(100)
     return {"success": True, "x": px, "y": py, "url": page.url, "title": page.title()}
 
 
@@ -426,7 +440,7 @@ def human_up(user_id: str, x: float, y: float, account_id: str | None = None) ->
     page, px, py = _human_pointer_position(user_id, x, y, account_id)
     page.mouse.move(px, py)
     page.mouse.up()
-    page.wait_for_timeout(500)
+    page.wait_for_timeout(200)
     return {"success": True, "x": px, "y": py, "human_verification": _set_human_verification_state(user_id, page, account_id)}
 
 
