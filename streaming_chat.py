@@ -196,6 +196,34 @@ def _build_stream_generator(
     memory = memory_factory(user_id, conversation_id)
     engine = ai_engine.AIEngine(memory=memory)
 
+    # Account/connector actions must never fall through to the general LLM.
+    # The streaming endpoint used to bypass account_agent entirely, which made
+    # connected Gmail requests receive a generic "I cannot send email" answer.
+    # Keep the existing approval/evidence gate authoritative by routing these
+    # requests through the same web account agent used by /api/chat.
+    try:
+        from account_agent import handle_web_request
+        connector_result = handle_web_request(str(user_id), message)
+    except Exception as exc:
+        logger.warning("Streaming connector router failed: %s", type(exc).__name__)
+        connector_result = None
+
+    if connector_result is not None:
+        reply = str(connector_result.get("reply") or "").strip()
+        if reply:
+            engine._save_memory(user_id, message, reply)
+            yield _sse({"type": "start", "provider": "account_agent"})
+            yield _sse({"type": "delta", "text": reply})
+            yield _sse({
+                "type": "done",
+                "conversation_id": conversation_id,
+                "text": reply,
+                "connector": True,
+                "status": connector_result.get("status"),
+                "kind": connector_result.get("kind"),
+            })
+            return
+
     # Streaming is intentionally limited to ordinary text chat. The normal
     # /api/chat path remains authoritative for tools, web research, media and
     # images, so this feature cannot silently bypass those systems.
