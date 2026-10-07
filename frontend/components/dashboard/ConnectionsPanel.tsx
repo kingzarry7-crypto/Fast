@@ -290,8 +290,15 @@ export default function ConnectionsPanel() {
     if (!open) return;
     void refreshOfficialConnectors();
     const q = new URLSearchParams(window.location.search);
-    if ((q.get("connector") === "github" || q.get("connector") === "tiktok") && q.get("connected") === "1") {
-      setMessage(q.get("connector") === "tiktok" ? "✓ TikTok connected through official authorization." : "✓ GitHub connected. KZ can use the authorized account without your GitHub password.");
+    if ((q.get("connector") === "github" || q.get("connector") === "tiktok" || q.get("connector") === "google") && q.get("connected") === "1") {
+      const connectedProvider = q.get("connector");
+      setMessage(
+        connectedProvider === "tiktok"
+          ? "✓ TikTok connected through official authorization."
+          : connectedProvider === "google"
+            ? "✓ Google connected. KZ can use the authorized Google account without your Google password."
+            : "✓ GitHub connected. KZ can use the authorized account without your GitHub password."
+      );
       void refreshOfficialConnectors();
       window.history.replaceState({}, "", window.location.pathname);
     }
