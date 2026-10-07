@@ -384,7 +384,7 @@ def human_up(user_id: str, x: float, y: float) -> Dict[str, Any]:
 
 
 def human_press(user_id: str, x: float, y: float, duration_ms: int) -> Dict[str, Any]:
-    """Replay one user-initiated press-and-hold without choosing or solving the challenge."""
+    """Execute only the user's own press-and-hold, then wait for the challenge state to settle."""
     page, px, py = _human_pointer_position(user_id, x, y)
     duration = max(100, min(int(duration_ms), 15000))
     page.mouse.move(px, py)
@@ -393,80 +393,31 @@ def human_press(user_id: str, x: float, y: float, duration_ms: int) -> Dict[str,
         page.wait_for_timeout(duration)
     finally:
         page.mouse.up()
-    page.wait_for_timeout(500)
+
+    # Give the provider time to complete its challenge/network transition.
+    deadline = time.monotonic() + 8.0
+    verification = _set_human_verification_state(user_id, page)
+    while verification.get("required") and time.monotonic() < deadline:
+        page.wait_for_timeout(500)
+        verification = _set_human_verification_state(user_id, page)
+
+    verified = not verification.get("required", False)
     return {
         "success": True,
-        "x": px,
-        "y": py,
-        "duration_ms": duration,
-        "human_verification": _set_human_verification_state(user_id, page),
-    }
-
-
-def human_move(user_id: str, x: float, y: float) -> Dict[str, Any]:
-    """Move the user's pointer inside an active human challenge."""
-    page = _page(user_id)
-    challenge = _set_human_verification_state(user_id, page)
-    if not challenge.get("required"):
-        raise PermissionError("Manual challenge interaction is only available while human verification is active.")
-    size = viewport(user_id)
-    px, py = float(x), float(y)
-    if px < 0 or py < 0 or px > size["width"] or py > size["height"]:
-        raise ValueError("Pointer coordinates are outside the browser viewport.")
-    page.mouse.move(px, py)
-    return {"success": True, "x": px, "y": py}
-
-def check_human_verification(user_id: str) -> Dict[str, Any]:
-    """Wait briefly for the provider to finish updating the manual challenge."""
-    page = _page(user_id)
-    last = {"required": True, "reason": "human_verification_required", "indicators": []}
-    deadline = time.monotonic() + 6.0
-
-    while time.monotonic() < deadline:
-        last = _set_human_verification_state(user_id, page)
-        if not last.get("required"):
-            break
-        page.wait_for_timeout(500)
-
-    verified = not last.get("required", False)
-    state = connection_status(user_id)
-    return {
         "verified": verified,
         "status": "verified" if verified else "still_required",
         "message": (
-            "Human verification completed in the live browser session."
+            "VERIFIED: the live browser no longer reports a human-verification challenge."
             if verified
-            else "The live browser still reports a human-verification challenge."
+            else "NOT VERIFIED: the live browser still reports a human-verification challenge."
         ),
-        "human_verification": last,
-        "connection": state,
-        "url": page.url,
-        "title": page.title(),
+        "x": px,
+        "y": py,
+        "duration_ms": duration,
+        "human_verification": verification,
     }
 
-def plan_goal(user_id: str, goal: str) -> Dict[str, Any]:
-    page = inspect(user_id)
-    from llm_client import ask
-    prompt = "You are the KZ browser planner. User goal: " + goal + "\nCurrent URL: " + str(page.get("url")) + "\nTitle: " + str(page.get("title")) + "\nVisible text:\n" + str(page.get("text",""))[:9000] + "\nReturn JSON only with actions: navigate, inspect, click, fill, select, upload, submit, post, publish, send. Never invent passwords, OTPs, payment data, identity or secrets. Do not act outside the goal. Public submit/post/publish/send is consequential and requires approval. For edits, do not publish unless explicitly requested. If required information is missing, return an empty actions list and summary."
-    raw = str(ask([{"role":"system","content":"Return valid JSON and nothing else."},{"role":"user","content":prompt}], max_tokens=900) or "").strip()
-    raw = re.sub(r"^```(?:json)?\\s*|\\s*```$", "", raw, flags=re.I)
-    data = json.loads(raw)
-    actions = data.get("actions") if isinstance(data, dict) else []
-    if not isinstance(actions, list): raise ValueError("browser planner returned invalid actions")
-    allowed = {"navigate","inspect","click","fill","select","upload","submit","post","publish","send"}
-    clean = []
-    for action in actions[:30]:
-        if not isinstance(action, dict):
-            continue
-        kind = str(action.get("type") or "").lower()
-        if kind in allowed:
-            clean.append({
-                k: action[k]
-                for k in ("type", "selector", "text", "value", "url", "path")
-                if k in action
-            })
-    data["actions"] = clean
-    return {"success": True, "plan": data, "page": page}
+
 
 def _verification_evidence(before: Dict[str, Any], after: Dict[str, Any], actions: list[dict[str, Any]]) -> Dict[str, Any]:
     """Require destination-page evidence before calling an external action verified."""
