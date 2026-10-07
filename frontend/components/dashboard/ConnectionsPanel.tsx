@@ -180,7 +180,7 @@ export default function ConnectionsPanel() {
       void refreshOfficialConnectors();
       window.history.replaceState({}, "", window.location.pathname);
     }
-  }, [open]);
+  }, [open, refreshOfficialConnectors]);
 
   return () => window.clearInterval(timer);
   }, [open, page?.human_verification?.required, accountId]);
