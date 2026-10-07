@@ -8,7 +8,8 @@ from typing import Any
 
 def create(user_id: str, goal: str) -> dict[str, Any]:
     from workflow_engine import create_workflow
-    return create_workflow(str(user_id), goal)
+    # Channel processes only enqueue work. FastAPI owns browser execution.
+    return create_workflow(str(user_id), goal, run_now=False)
 
 def list_recent(user_id: str, limit: int = 5) -> list[dict[str, Any]]:
     from workflow_engine import list_workflows
