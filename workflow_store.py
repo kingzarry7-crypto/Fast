@@ -276,7 +276,7 @@ def list_workflows_for_worker(limit: int = 25) -> List[Dict[str, Any]]:
     Only statuses that are already safe to resume are returned. Approval-pending
     workflows are deliberately excluded so the worker can never auto-approve them.
     """
-    allowed = ("approved", "executing", "researching", "verifying")
+    allowed = ("planning", "approved", "executing", "researching", "verifying")
     with _LOCK:
         conn = _conn()
         if conn is not None and init_workflow_store():
