@@ -471,7 +471,7 @@ async def github_action(request: Request):
 
     target = f"{payload.get('owner','')}/{payload.get('repo','')}"
     fingerprint = _action_fingerprint("github", operation, target, payload)
-    approval_id = secrets.token_hex(16)
+    approval_id = str(uuid.uuid4())
     exact_content = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
     with get_db_cursor(commit=True) as cur:
