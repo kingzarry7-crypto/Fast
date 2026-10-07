@@ -20,8 +20,8 @@ def install_workflow_api(app, require_current_user, row_value=None):
     engine._research = research_with_fallback
 
     original_create = engine.create_workflow
-    def create_with_action_preview(user_id, goal):
-        item = original_create(user_id, goal)
+    def create_with_action_preview(user_id, goal, account_id=None, run_now=True):
+        item = original_create(user_id, goal, account_id=account_id, run_now=run_now)
         try:
             from agent_action_gateway import plan_action_from_goal
             for step in item.get("plan", []):
@@ -76,7 +76,7 @@ def install_workflow_api(app, require_current_user, row_value=None):
         body=await request.json(); goal=str((body or {}).get('goal') or '').strip()
         if not goal: raise HTTPException(status_code=400, detail='goal is required')
         if len(goal) > 4000: raise HTTPException(status_code=400, detail='goal is too long')
-        return {'status':'ok','workflow':engine.create_workflow(user_id,goal)}
+        return {'status':'ok','workflow':engine.create_workflow(user_id,goal,run_now=True)}
 
     @app.get('/api/business/dashboard')
     def business_dashboard_route(request: Request):
@@ -336,8 +336,17 @@ def install_workflow_api(app, require_current_user, row_value=None):
             result=engine.approve_workflow(workflow_id,uid(row),approved)
         except ValueError:
             raise HTTPException(status_code=404, detail='Workflow not found')
+        if approved and result.get('status') in {'approved','executing','verifying','completed'}:
+            try:
+                result = engine.run_workflow(workflow_id, uid(row))
+            except Exception:
+                pass
         return {'status':'ok','workflow':result}
 
+    try:
+        engine.start_worker()
+    except Exception as exc:
+        print('KZ_WORKFLOW_WORKER_FAILED', type(exc).__name__, flush=True)
     try:
         from workflow_scheduler import start
         start()
