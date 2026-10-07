@@ -154,7 +154,7 @@ def plan_goal(workflow_id: str, user_id: str, goal: str) -> Dict[str, Any]:
     }
 
 
-def create_workflow(user_id: str, goal: str) -> Dict[str, Any]:
+def create_workflow(user_id: str, goal: str, account_id: str | None = None) -> Dict[str, Any]:
     goal = str(goal or "").strip()
     if not goal:
         raise ValueError("goal is required")
@@ -168,7 +168,7 @@ def create_workflow(user_id: str, goal: str) -> Dict[str, Any]:
         "risk": plan["risk"],
         "requires_approval": plan["requires_approval"],
         "plan": plan["steps"],
-        "context": {"kind": plan["kind"], "created_by": "kz_workflow_engine"},
+        "context": {"kind": plan["kind"], "created_by": "kz_workflow_engine", "account_id": str(account_id or "default")},
         "result": {},
         "potential_revenue": plan["potential_revenue"],
         "estimated_cost": 0.0,
@@ -176,7 +176,7 @@ def create_workflow(user_id: str, goal: str) -> Dict[str, Any]:
         "updated_at": _now(),
     }
     save_workflow(item)
-    add_event(workflow_id, str(user_id), "workflow_created", {"goal": goal, "kind": plan["kind"]})
+    add_event(workflow_id, str(user_id), "workflow_created", {"goal": goal, "kind": plan["kind"], "account_id": str(account_id or "default")})
     return run_workflow(workflow_id, str(user_id))
 
 
@@ -198,6 +198,7 @@ def _research(goal: str) -> Dict[str, Any]:
 
 
 def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
+    account_id = str((item.get("context") or {}).get("account_id") or "default")
     action = step["action"]
     goal = item["goal"]
     low = goal.lower()
@@ -221,12 +222,12 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
         urls = re.findall(r"https?://[^\\s)\\]}>,]+", goal)
         if not urls:
             return {"success": False, "error": "Website URL is required before I can operate the site."}
-        page = navigate(str(item["user_id"]), urls[0])
+        page = navigate(str(item["user_id"]), urls[0], account_id)
         return {"success": True, "page": page, "message": "Website opened and inspected before any external change."}
 
     if action == "browser_plan":
         from browser_operator import plan_goal, run_in_browser_thread
-        result = run_in_browser_thread(plan_goal, str(item["user_id"]), goal)
+        result = run_in_browser_thread(plan_goal, str(item["user_id"]), goal, account_id)
         plan = result.get("plan") or {}
         item["result"]["browser_plan"] = plan
         external = any(
@@ -269,7 +270,7 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
 
         from browser_operator import execute_plan, run_in_browser_thread
         result = run_in_browser_thread(
-            execute_plan, str(item["user_id"]), actions, allow_external=True
+            execute_plan, str(item["user_id"]), actions, allow_external=True, account_id=account_id
         )
         result["approval_id"] = approval_id
         result["action_fingerprint"] = current_fingerprint
@@ -277,7 +278,7 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
 
     if action == "browser_verify":
         from browser_operator import inspect, run_in_browser_thread
-        page = run_in_browser_thread(inspect, str(item["user_id"]))
+        page = run_in_browser_thread(inspect, str(item["user_id"]), account_id)
         browser_result = item.get("result", {}).get("browser_execute") or {}
         verification = browser_result.get("verification") or {}
         verified = verification.get("verification_status") == "verified_sent"
@@ -471,7 +472,8 @@ def resume_human_verification(workflow_id: str, user_id: str) -> Dict[str, Any]:
         return item
 
     from browser_operator import inspect, run_in_browser_thread
-    page = run_in_browser_thread(inspect, str(user_id))
+    account_id = str((item.get("context") or {}).get("account_id") or "default")
+    page = run_in_browser_thread(inspect, str(user_id), account_id)
     challenge = page.get("human_verification") or {}
     if challenge.get("required"):
         item["result"]["human_verification"] = challenge
