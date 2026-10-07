@@ -18,6 +18,7 @@ import os
 import secrets
 import time
 import urllib.parse
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -438,6 +439,219 @@ async def github_callback(request: Request):
     _audit(user_id, "connector_connected", target=str(me.get("login") or "github"))
     return RedirectResponse(f"{FRONTEND_URL}/dashboard?connector=github&connected=1")
 
+
+
+# ---------------------------------------------------------------------------
+# TikTok official connector (OAuth 2.0 + QR authorization)
+# ---------------------------------------------------------------------------
+TIKTOK_AUTHORIZE = "https://www.tiktok.com/v2/auth/authorize/"
+TIKTOK_TOKEN = "https://open.tiktokapis.com/v2/oauth/token/"
+TIKTOK_QR_CREATE = "https://open.tiktokapis.com/v2/oauth/get_qrcode/"
+TIKTOK_QR_CHECK = "https://open.tiktokapis.com/v2/oauth/check_qrcode/"
+TIKTOK_USER_INFO = "https://open.tiktokapis.com/v2/user/info/"
+TIKTOK_CLIENT_KEY = os.getenv("TIKTOK_CLIENT_KEY", "").strip()
+TIKTOK_CLIENT_SECRET = os.getenv("TIKTOK_CLIENT_SECRET", "").strip()
+TIKTOK_REDIRECT_URI = os.getenv("TIKTOK_REDIRECT_URI", "").strip()
+TIKTOK_SCOPES = os.getenv("TIKTOK_OAUTH_SCOPES", "user.info.basic").strip()
+_TIKTOK_QR_SESSIONS: Dict[str, Dict[str, Any]] = {}
+
+
+def _tiktok_configured() -> bool:
+    return bool(TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET and TIKTOK_REDIRECT_URI and CONNECTOR_STATE_SECRET)
+
+
+def _tiktok_save_connection(
+    user_id: str,
+    open_id: str,
+    access_token: str,
+    refresh_token: Optional[str],
+    expires_in: Optional[int],
+    scopes: list[str],
+    profile: Optional[Dict[str, Any]] = None,
+) -> None:
+    profile = profile or {}
+    expires_at = None
+    if expires_in:
+        expires_at = datetime.fromtimestamp(_now() + int(expires_in), timezone.utc)
+    metadata = {
+        "open_id": open_id,
+        "display_name": profile.get("display_name"),
+        "avatar_url": profile.get("avatar_url"),
+    }
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            INSERT INTO web_connected_accounts
+              (user_id, provider, provider_account_id, display_name, scopes,
+               access_token_encrypted, refresh_token_encrypted, token_expires_at, metadata, revoked_at)
+            VALUES (%s, 'tiktok', %s, %s, %s::jsonb, %s, %s, %s, %s::jsonb, NULL)
+            ON CONFLICT (user_id, provider, provider_account_id)
+            DO UPDATE SET
+              display_name = EXCLUDED.display_name,
+              scopes = EXCLUDED.scopes,
+              access_token_encrypted = EXCLUDED.access_token_encrypted,
+              refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
+              token_expires_at = EXCLUDED.token_expires_at,
+              metadata = EXCLUDED.metadata,
+              revoked_at = NULL,
+              updated_at = NOW()
+            """,
+            (
+                user_id, open_id, str(profile.get("display_name") or "TikTok"),
+                json.dumps(scopes), _encrypt(access_token), _encrypt(refresh_token),
+                expires_at, json.dumps(metadata),
+            ),
+        )
+
+
+def _tiktok_profile(access_token: str) -> Dict[str, Any]:
+    response = requests.get(
+        TIKTOK_USER_INFO,
+        params={"fields": "open_id,union_id,avatar_url,display_name"},
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=25,
+    )
+    if response.status_code >= 400:
+        return {}
+    body = response.json()
+    return body.get("data") or {}
+
+
+def _tiktok_exchange(code: str, user_id: str) -> Dict[str, Any]:
+    response = requests.post(
+        TIKTOK_TOKEN,
+        data={
+            "client_key": TIKTOK_CLIENT_KEY,
+            "client_secret": TIKTOK_CLIENT_SECRET,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": TIKTOK_REDIRECT_URI,
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded", "Cache-Control": "no-cache"},
+        timeout=25,
+    )
+    if response.status_code >= 400:
+        try:
+            detail = response.json().get("error_description") or response.json().get("error")
+        except Exception:
+            detail = None
+        raise HTTPException(status_code=502, detail=f"TikTok token exchange failed{': ' + str(detail) if detail else ''}")
+    token_data = response.json()
+    access_token = str(token_data.get("access_token") or "")
+    open_id = str(token_data.get("open_id") or "")
+    if not access_token or not open_id:
+        raise HTTPException(status_code=502, detail="TikTok did not return an access token and open_id")
+    profile = _tiktok_profile(access_token)
+    scopes = [x.strip() for x in str(token_data.get("scope") or TIKTOK_SCOPES).replace(" ", ",").split(",") if x.strip()]
+    _tiktok_save_connection(user_id, open_id, access_token, token_data.get("refresh_token"), token_data.get("expires_in"), scopes, profile)
+    _audit(user_id, "connector_connected", target=str(profile.get("display_name") or open_id))
+    return {"open_id": open_id, "display_name": profile.get("display_name"), "scopes": scopes}
+
+
+@router.get("/tiktok/start")
+async def tiktok_start(request: Request):
+    user_id = _user_id(request)
+    if not _tiktok_configured():
+        raise HTTPException(status_code=503, detail="TikTok connector is not configured on KZ")
+    state = _sign_state({"provider": "tiktok", "user_id": user_id, "nonce": secrets.token_urlsafe(18), "exp": _now() + 600})
+    params = {
+        "client_key": TIKTOK_CLIENT_KEY,
+        "response_type": "code",
+        "scope": TIKTOK_SCOPES,
+        "redirect_uri": TIKTOK_REDIRECT_URI,
+        "state": state,
+    }
+    return RedirectResponse(TIKTOK_AUTHORIZE + "?" + urllib.parse.urlencode(params))
+
+
+@router.get("/tiktok/callback")
+async def tiktok_callback(request: Request):
+    if not _tiktok_configured():
+        raise HTTPException(status_code=503, detail="TikTok connector is not configured on KZ")
+    error = request.query_params.get("error")
+    if error:
+        return RedirectResponse(f"{FRONTEND_URL}/dashboard?connector_error=tiktok_{urllib.parse.quote(error)}")
+    payload = _verify_state(request.query_params.get("state") or "")
+    if payload.get("provider") != "tiktok":
+        raise HTTPException(status_code=400, detail="Invalid TikTok connector state")
+    user_id = _user_id(request)
+    if str(payload.get("user_id")) != user_id:
+        raise HTTPException(status_code=403, detail="TikTok authorization belongs to a different KZ session")
+    code = request.query_params.get("code") or ""
+    if not code:
+        raise HTTPException(status_code=400, detail="TikTok authorization code missing")
+    result = _tiktok_exchange(code, user_id)
+    return RedirectResponse(f"{FRONTEND_URL}/dashboard?connector=tiktok&connected=1&name={urllib.parse.quote(str(result.get('display_name') or 'TikTok'))}")
+
+
+@router.post("/tiktok/qr/start")
+async def tiktok_qr_start(request: Request):
+    user_id = _user_id(request)
+    if not _tiktok_configured():
+        raise HTTPException(status_code=503, detail="TikTok connector is not configured on KZ")
+    client_ticket = secrets.token_urlsafe(18)
+    state = _sign_state({"provider": "tiktok", "user_id": user_id, "nonce": secrets.token_urlsafe(18), "exp": _now() + 600})
+    response = requests.post(
+        TIKTOK_QR_CREATE,
+        data={"client_key": TIKTOK_CLIENT_KEY, "scope": TIKTOK_SCOPES, "state": state},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        timeout=25,
+    )
+    body = response.json()
+    if response.status_code >= 400 or body.get("error"):
+        raise HTTPException(status_code=502, detail=str(body.get("error_description") or body.get("error") or "TikTok QR creation failed"))
+    scan_url = str(body.get("scan_qrcode_url") or "")
+    token = str(body.get("token") or "")
+    if not scan_url or not token:
+        raise HTTPException(status_code=502, detail="TikTok did not return a QR authorization URL")
+    parsed = urllib.parse.urlsplit(scan_url)
+    query = urllib.parse.parse_qs(parsed.query)
+    query["client_ticket"] = [client_ticket]
+    scan_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urllib.parse.urlencode(query, doseq=True), parsed.fragment))
+    session_id = secrets.token_urlsafe(24)
+    _TIKTOK_QR_SESSIONS[session_id] = {
+        "user_id": user_id, "token": token, "client_ticket": client_ticket,
+        "created_at": _now(), "state": state,
+    }
+    return {"status": "pending", "session_id": session_id, "scan_qrcode_url": scan_url, "expires_in": 600}
+
+
+@router.post("/tiktok/qr/status")
+async def tiktok_qr_status(request: Request):
+    user_id = _user_id(request)
+    body = await request.json()
+    session_id = str(body.get("session_id") or "").strip()
+    session = _TIKTOK_QR_SESSIONS.get(session_id)
+    if not session or session.get("user_id") != user_id:
+        raise HTTPException(status_code=404, detail="TikTok QR session not found or expired")
+    if _now() - int(session.get("created_at") or 0) > 600:
+        _TIKTOK_QR_SESSIONS.pop(session_id, None)
+        return {"status": "expired"}
+    response = requests.post(
+        TIKTOK_QR_CHECK,
+        data={"client_key": TIKTOK_CLIENT_KEY, "client_secret": TIKTOK_CLIENT_SECRET, "token": session["token"]},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        timeout=25,
+    )
+    data = response.json()
+    if response.status_code >= 400 or data.get("error"):
+        raise HTTPException(status_code=502, detail=str(data.get("error_description") or data.get("error") or "TikTok QR status check failed"))
+    status = str(data.get("status") or "new")
+    if status == "confirmed":
+        returned_ticket = str(data.get("client_ticket") or "")
+        if returned_ticket != str(session.get("client_ticket") or ""):
+            raise HTTPException(status_code=502, detail="TikTok QR integrity check failed")
+        redirect_uri = str(data.get("redirect_uri") or "")
+        parsed = urllib.parse.urlparse(redirect_uri)
+        code = urllib.parse.parse_qs(parsed.query).get("code", [""])[0]
+        if not code:
+            raise HTTPException(status_code=502, detail="TikTok confirmed the QR code but returned no authorization code")
+        result = _tiktok_exchange(code, user_id)
+        _TIKTOK_QR_SESSIONS.pop(session_id, None)
+        return {"status": "connected", "connected": True, "account": result}
+    if status == "expired":
+        _TIKTOK_QR_SESSIONS.pop(session_id, None)
+    return {"status": status, "connected": False}
 
 @router.post("/github/disconnect")
 async def github_disconnect(request: Request):
