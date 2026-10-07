@@ -196,8 +196,10 @@ def install_browser_api(app, require_current_user, row_value=None):
         user_id = uid(row)
         if not user_id:
             raise HTTPException(status_code=401, detail="Authenticated user required")
+        body = await request.json()
+        account_id = str((body or {}).get("account_id") or "default").strip()[:120] or "default"
         from browser_operator import close
-        await _browser_call(close, user_id)
+        await _browser_call(close, user_id, account_id)
         return {"status": "ok", "message": "Browser session closed. Persistent session data remains on the configured browser profile volume."}
 
     @app.get("/api/browser/status")
