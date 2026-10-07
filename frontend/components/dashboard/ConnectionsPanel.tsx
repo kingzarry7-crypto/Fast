@@ -204,7 +204,7 @@ export default function ConnectionsPanel() {
         body: JSON.stringify({ type: "human_verify" }),
         signal: controller.signal,
       });
-      const d = await r.json().catch(() => ({}));
+      const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Verification check failed");
       setPage(d.page);
       setConnection(d.page?.connection || null);
