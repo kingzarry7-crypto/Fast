@@ -44,6 +44,14 @@ except Exception as _connector_api_import_error:
     )
 
 try:
+    from google_connector import router as google_connector_router
+except Exception as _google_connector_import_error:
+    google_connector_router = None
+    logging.getLogger("king_zarry_api").exception(
+        "Google connector API unavailable: %s", type(_google_connector_import_error).__name__
+    )
+
+try:
     from fiverr_api import router as fiverr_api_router
 except Exception as _fiverr_api_import_error:
     fiverr_api_router = None
@@ -130,6 +138,9 @@ if fiverr_api_router is not None:
 
 if connector_api_router is not None:
     app.include_router(connector_api_router)
+
+if google_connector_router is not None:
+    app.include_router(google_connector_router)
 
 app.add_middleware(
     CORSMiddleware,
