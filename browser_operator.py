@@ -73,7 +73,11 @@ def _session(user_id: str) -> Dict[str, Any]:
             "headless": not bool(os.getenv("DISPLAY")),
             "viewport": {"width": 1440, "height": 900},
             "accept_downloads": True,
-            "args": ["--disable-dev-shm-usage"],
+            "args": [
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-software-rasterizer",
+            ],
         }
         if executable: kwargs["executable_path"] = executable
         context = _PLAYWRIGHT.chromium.launch_persistent_context(str(root), **kwargs)
@@ -282,8 +286,45 @@ def inspect(user_id: str) -> Dict[str, Any]:
 
 def navigate(user_id: str, url: str) -> Dict[str, Any]:
     url = str(url or "").strip()
-    if not re.match(r"^https?://", url, re.I): raise ValueError("Only http(s) URLs are allowed")
-    page = _page(user_id); page.goto(url, wait_until="domcontentloaded", timeout=45000)
+    if not re.match(r"^https?://", url, re.I):
+        raise ValueError("Only http(s) URLs are allowed")
+
+    page = _page(user_id)
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=45000)
+    except Exception as exc:
+        message = str(exc)
+        # Chromium can crash a renderer on heavier sites such as WhatsApp Web.
+        # Recover the page inside the existing persistent browser context and
+        # retry once instead of exposing a raw Playwright Page.goto crash.
+        if "Page crashed" not in message and "page crashed" not in message.lower():
+            raise
+        with _LOCK:
+            session = _SESSIONS.get(str(user_id))
+        if not session:
+            raise RuntimeError("The KZ browser session is no longer available. Please open login again.")
+        context = session["context"]
+        try:
+            try:
+                page.close()
+            except Exception:
+                pass
+            page = context.new_page()
+            with _LOCK:
+                session["page"] = page
+            page.goto(url, wait_until="commit", timeout=45000)
+            try:
+                page.wait_for_load_state("domcontentloaded", timeout=20000)
+            except Exception:
+                # Some SPA-heavy sites remain active while the document is
+                # already usable. A committed page is enough to continue.
+                pass
+        except Exception as retry_exc:
+            raise RuntimeError(
+                "The website browser page crashed while opening this site. KZ recovered the browser session, "
+                "but the site could not be loaded. Please try OPEN LOGIN again."
+            ) from retry_exc
+
     verification = _set_human_verification_state(user_id, page)
     return {"success": True, "url": page.url, "title": page.title(), "human_verification": verification}
 
