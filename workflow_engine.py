@@ -154,7 +154,7 @@ def plan_goal(workflow_id: str, user_id: str, goal: str) -> Dict[str, Any]:
     }
 
 
-def create_workflow(user_id: str, goal: str, account_id: str | None = None) -> Dict[str, Any]:
+def create_workflow(user_id: str, goal: str, account_id: str | None = None, run_now: bool = True) -> Dict[str, Any]:
     goal = str(goal or "").strip()
     if not goal:
         raise ValueError("goal is required")
@@ -177,7 +177,7 @@ def create_workflow(user_id: str, goal: str, account_id: str | None = None) -> D
     }
     save_workflow(item)
     add_event(workflow_id, str(user_id), "workflow_created", {"goal": goal, "kind": plan["kind"], "account_id": str(account_id or "default")})
-    return run_workflow(workflow_id, str(user_id))
+    return run_workflow(workflow_id, str(user_id)) if run_now else item
 
 
 def _update(item: Dict[str, Any], status: str | None = None) -> Dict[str, Any]:
@@ -457,7 +457,7 @@ def approve_workflow(workflow_id: str, user_id: str, approved: bool) -> Dict[str
     item["status"] = WorkflowStatus.APPROVED.value if approved else WorkflowStatus.PAUSED.value
     save_workflow(item)
     add_event(item["id"], item["user_id"], "approval_decided", {"approved": approved})
-    return run_workflow(item["id"], item["user_id"]) if approved else item
+    return item
 
 
 
