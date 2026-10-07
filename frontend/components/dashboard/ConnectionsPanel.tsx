@@ -126,19 +126,24 @@ export default function ConnectionsPanel() {
     try {
       const r = await fetch("/api/connectors/status", { credentials: "include", cache: "no-store" });
       const d = await readApiResponse(r);
-      if (r.ok) {
-        setGithub(d.github || null);
-        setTiktok(d.tiktok || null);
-      }
+      if (!r.ok) throw new Error(d.detail || "Could not load connector status");
+      setGithub(d.github || null);
+      setTiktok(d.tiktok || null);
       try {
         const gr = await fetch("/api/connectors/google/status", { credentials: "include", cache: "no-store" });
         const gd = await readApiResponse(gr);
         if (gr.ok) setGoogle(gd);
-      } catch {}
+        else setGoogle((current: any) => current || { configured: false, connected: false });
+      } catch {
+        setGoogle((current: any) => current || { configured: false, connected: false });
       }
-    } catch {}
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Could not load official connector status");
+      setGithub((current: any) => current || { configured: true, connected: false });
+      setTiktok((current: any) => current || { configured: true, connected: false });
+      setGoogle((current: any) => current || { configured: true, connected: false });
+    }
   }
-
 
   async function connectGoogle() {
     window.location.href = "/api/connectors/google/start";
@@ -634,7 +639,7 @@ export default function ConnectionsPanel() {
                       <div className="text-sm font-medium text-white">GitHub</div>
                       <div className="text-[10px] text-zinc-500">{github?.connected ? "AUTHORIZED ACCOUNT CONNECTED" : github?.configured ? "OAuth ready" : "SERVER SETUP REQUIRED"}</div>
                     </div>
-                    {!github?.connected && <button onClick={connectGitHub} disabled={!github?.configured || busy} className="rounded-md border border-cyan-400/30 px-3 py-2 text-[9px] tracking-widest text-cyan-200 disabled:opacity-40">CONNECT</button>}
+                    {!github?.connected && <button onClick={connectGitHub} disabled={busy} className="rounded-md border border-cyan-400/30 px-3 py-2 text-[9px] tracking-widest text-cyan-200 disabled:opacity-40">CONNECT</button>}
                   </div>
                 </div>
                 <div className="rounded-lg border border-blue-400/20 bg-blue-400/[0.03] p-3">
@@ -643,7 +648,7 @@ export default function ConnectionsPanel() {
                       <div className="text-sm font-medium text-white">Google Workspace</div>
                       <div className="text-[10px] text-zinc-500">{google?.connected ? "AUTHORIZED ACCOUNT CONNECTED" : google?.configured ? "OAuth ready" : "SERVER SETUP REQUIRED"}</div>
                     </div>
-                    {!google?.connected && <button onClick={connectGoogle} disabled={!google?.configured || busy} className="rounded-md border border-blue-400/30 px-3 py-2 text-[9px] tracking-widest text-blue-200 disabled:opacity-40">CONNECT</button>}
+                    {!google?.connected && <button onClick={connectGoogle} disabled={busy} className="rounded-md border border-blue-400/30 px-3 py-2 text-[9px] tracking-widest text-blue-200 disabled:opacity-40">CONNECT</button>}
                   </div>
                   {google?.connected && <div className="mt-3 space-y-2">
                     <div className="grid grid-cols-3 gap-2">
@@ -674,7 +679,7 @@ export default function ConnectionsPanel() {
                       <div className="text-[10px] text-zinc-500">{tiktok?.connected ? "AUTHORIZED ACCOUNT CONNECTED" : tiktok?.configured ? "OAuth + QR ready" : "SERVER SETUP REQUIRED"}</div>
                     </div>
                     {!tiktok?.connected && <div className="flex gap-2">
-                      <button onClick={connectTikTok} disabled={!tiktok?.configured || busy} className="rounded-md border border-pink-400/30 px-3 py-2 text-[9px] tracking-widest text-pink-200 disabled:opacity-40">CONNECT</button>
+                      <button onClick={connectTikTok} disabled={busy} className="rounded-md border border-pink-400/30 px-3 py-2 text-[9px] tracking-widest text-pink-200 disabled:opacity-40">CONNECT</button>
                       <button onClick={startTikTokQr} disabled={!tiktok?.configured || busy} className="rounded-md border border-white/10 px-3 py-2 text-[9px] tracking-widest text-zinc-300 disabled:opacity-40">QR</button>
                     </div>}
                   </div>
