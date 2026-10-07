@@ -366,7 +366,7 @@ async def handle_telegram_request(update: Any, text: str) -> Optional[dict[str, 
     raw = str(text or "").strip()
     lower = raw.lower()
 
-    if lower in {"approve", "reject"}:
+    if lower in {"approve", "reject", "send it", "send the email", "send the email now"}:
         from google_connector import _account, _execute, _fingerprint, _audit
         with get_db_cursor(commit=False) as cur:
             cur.execute(
