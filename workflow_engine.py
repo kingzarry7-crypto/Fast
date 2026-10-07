@@ -527,7 +527,8 @@ def start_worker() -> None:
 
 
 def list_workflows_for_worker() -> List[Dict[str, Any]]:
-    # Store currently exposes per-user listing; worker uses the memory mirror
-    # when available. Production Railway runs are resumed by explicit API calls
-    # and this lightweight worker is deliberately conservative.
-    return []
+    try:
+        from workflow_store import list_workflows_for_worker as _list
+        return _list()
+    except Exception:
+        return []
