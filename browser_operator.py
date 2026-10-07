@@ -306,7 +306,7 @@ def navigate(user_id: str, url: str, account_id: str | None = None) -> Dict[str,
         if "Page crashed" not in message and "page crashed" not in message.lower():
             raise
         with _LOCK:
-            session = _SESSIONS.get(str(user_id))
+            session = _SESSIONS.get(_account_key(user_id, account_id))
         if not session:
             raise RuntimeError("The KZ browser session is no longer available. Please open login again.")
         context = session["context"]
@@ -335,7 +335,7 @@ def navigate(user_id: str, url: str, account_id: str | None = None) -> Dict[str,
     return {"success": True, "url": page.url, "title": page.title(), "human_verification": verification}
 
 def click(user_id: str, selector: Optional[str] = None, text: Optional[str] = None, account_id: str | None = None) -> Dict[str, Any]:
-    page = _page(user_id); _target(page, selector, text).click(timeout=15000); page.wait_for_timeout(300)
+    page = _page(user_id, account_id); _target(page, selector, text).click(timeout=15000); page.wait_for_timeout(300)
     return {"success": True, "url": page.url, "title": page.title()}
 
 def fill(user_id: str, selector: str, value: str, account_id: str | None = None) -> Dict[str, Any]:
@@ -356,7 +356,7 @@ def screenshot(user_id: str, account_id: str | None = None) -> bytes:
 
 
 def viewport(user_id: str, account_id: str | None = None) -> Dict[str, Any]:
-    page = _page(user_id)
+    page = _page(user_id, account_id)
     size = page.viewport_size or {}
     return {
         "width": int(size.get("width") or 0),
@@ -371,7 +371,7 @@ def manual_click(user_id: str, x: float, y: float, account_id: str | None = None
     from the user's live-browser click. It is primarily for login UI controls
     that are not represented reliably as accessible buttons.
     """
-    page = _page(user_id)
+    page = _page(user_id, account_id)
     challenge = _set_human_verification_state(user_id, page, account_id)
     if challenge.get("required"):
         raise PermissionError("Use the manual human-verification control while a challenge is active.")
@@ -390,7 +390,7 @@ def human_click(user_id: str, x: float, y: float, account_id: str | None = None)
     This is deliberately limited to the period where the detector says a human
     verification challenge is present. KZ never chooses the coordinates.
     """
-    page = _page(user_id)
+    page = _page(user_id, account_id)
     challenge = _set_human_verification_state(user_id, page, account_id)
     if not challenge.get("required"):
         raise PermissionError("Manual challenge interaction is only available while human verification is active.")
@@ -404,7 +404,7 @@ def human_click(user_id: str, x: float, y: float, account_id: str | None = None)
 
 
 def _human_pointer_position(user_id: str, x: float, y: float, account_id: str | None = None):
-    page = _page(user_id)
+    page = _page(user_id, account_id)
     challenge = _set_human_verification_state(user_id, page, account_id)
     if not challenge.get("required"):
         raise PermissionError("Manual challenge interaction is only available while human verification is active.")
@@ -465,7 +465,7 @@ def human_press(user_id: str, x: float, y: float, duration_ms: int, account_id: 
 
 def human_move(user_id: str, x: float, y: float, account_id: str | None = None) -> Dict[str, Any]:
     """Move the user's pointer inside an active human challenge."""
-    page = _page(user_id)
+    page = _page(user_id, account_id)
     challenge = _set_human_verification_state(user_id, page, account_id)
     if not challenge.get("required"):
         raise PermissionError("Manual challenge interaction is only available while human verification is active.")
@@ -478,7 +478,7 @@ def human_move(user_id: str, x: float, y: float, account_id: str | None = None) 
 
 def check_human_verification(user_id: str, account_id: str | None = None) -> Dict[str, Any]:
     """Wait briefly for the provider to finish updating the manual challenge."""
-    page = _page(user_id)
+    page = _page(user_id, account_id)
     last = {"required": True, "reason": "human_verification_required", "indicators": []}
     deadline = time.monotonic() + 6.0
 
