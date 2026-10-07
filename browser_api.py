@@ -92,6 +92,8 @@ def install_browser_api(app, require_current_user, row_value=None):
         user_id = uid(row)
         if not user_id:
             raise HTTPException(status_code=401, detail="Authenticated user required")
+        body = await request.json()
+        account_id = str((body or {}).get("account_id") or "default").strip()[:120] or "default"
         from browser_operator import confirm_connection
         try:
             connection = await _browser_call(confirm_connection, user_id, account_id)
@@ -212,8 +214,9 @@ def install_browser_api(app, require_current_user, row_value=None):
         user_id = uid(row)
         if not user_id:
             raise HTTPException(status_code=401, detail="Authenticated user required")
+        account_id = str(request.query_params.get("account_id") or "default").strip()[:120] or "default"
         try:
-            return {"status": "ok", "page": await _browser_call(_snapshot, user_id)}
+            return {"status": "ok", "page": await _browser_call(_snapshot, user_id, account_id)}
         except Exception as exc:
             raise HTTPException(status_code=409, detail=f"{type(exc).__name__}: {str(exc)[:300]}")
 
