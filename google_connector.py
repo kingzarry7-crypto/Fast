@@ -425,10 +425,17 @@ async def google_callback(request: Request):
     error = request.query_params.get("error")
     if error:
         return RedirectResponse(f"{FRONTEND_URL}/dashboard?connector_error=google_{urllib.parse.quote(error)}")
+    # The OAuth callback lands directly on Railway. The KZ login cookie may
+    # have been issued on the Vercel frontend host (the normal /api proxy
+    # path), so requiring _user_id(request) here can reject a valid OAuth
+    # callback even though the signed state was created for the logged-in user.
+    # The state is HMAC-signed by KZ, short-lived, and carries the user id;
+    # use that authenticated state to finish the one-time authorization-code
+    # exchange instead of requiring the frontend cookie on the callback host.
     payload = _verify_state(request.query_params.get("state") or "")
-    user_id = _user_id(request)
-    if str(payload.get("user_id")) != user_id:
-        raise HTTPException(status_code=403, detail="Google authorization belongs to a different KZ session")
+    user_id = str(payload.get("user_id") or "").strip()
+    if not user_id:
+        raise HTTPException(status_code=403, detail="Google authorization state has no KZ user")
     code = request.query_params.get("code") or ""
     if not code:
         raise HTTPException(status_code=400, detail="Google authorization code missing")
