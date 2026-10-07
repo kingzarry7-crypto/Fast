@@ -307,3 +307,41 @@ COMMENT ON TABLE web_messages IS 'Messages within web conversations';
 COMMENT ON TABLE web_permissions IS 'Web-only permission infrastructure - separate from Telegram - stores service permission levels with scopes and allowed_operations - never stores passwords, API keys, or secrets';
 COMMENT ON TABLE web_approvals IS 'Web-only exact one-time approvals - separate from Telegram - represents a single approved action with SHA-256 fingerprint - an approval must never become a general permission - never stores secrets';
 COMMENT ON TABLE web_audit_logs IS 'Web-only audit trail - separate from Telegram - security logging for permission and approval events - must NEVER store passwords, API keys, access tokens, refresh tokens, secrets, or authentication credentials';
+
+
+-- ============================================================
+-- CONNECTED PROVIDER ACCOUNTS
+-- ============================================================
+-- Provider-authorized accounts. Access/refresh tokens are encrypted
+-- application ciphertext and are never returned to the client or audit log.
+CREATE TABLE IF NOT EXISTS web_connected_accounts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES web_users(id) ON DELETE CASCADE,
+    provider VARCHAR(100) NOT NULL,
+    provider_account_id VARCHAR(255) NOT NULL,
+    display_name VARCHAR(255),
+    scopes JSONB NOT NULL DEFAULT '[]'::jsonb,
+    access_token_encrypted TEXT,
+    refresh_token_encrypted TEXT,
+    token_expires_at TIMESTAMPTZ,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    revoked_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(user_id, provider, provider_account_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_web_connected_accounts_user
+    ON web_connected_accounts(user_id);
+CREATE INDEX IF NOT EXISTS idx_web_connected_accounts_provider
+    ON web_connected_accounts(provider);
+CREATE INDEX IF NOT EXISTS idx_web_connected_accounts_active
+    ON web_connected_accounts(user_id, provider, revoked_at);
+
+DROP TRIGGER IF EXISTS update_web_connected_accounts_updated_at ON web_connected_accounts;
+CREATE TRIGGER update_web_connected_accounts_updated_at
+    BEFORE UPDATE ON web_connected_accounts
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+COMMENT ON TABLE web_connected_accounts IS 'Provider-authorized accounts; encrypted access/refresh tokens only; never expose credentials to KZ memory, workflow text, or audit details.';
+
