@@ -341,8 +341,7 @@ def install_streaming_chat(
     try:
         from fastapi.responses import JSONResponse, StreamingResponse as _ConnectorStreamingResponse
         from account_agent import handle_web_request
-        from google_connector import _account as _google_account, _approval as _google_approval, _execute as _google_execute
-
+        
         def _connector_chat_intent(text: str):
             raw = str(text or "").strip().lower()
             if not raw:
@@ -358,8 +357,8 @@ def install_streaming_chat(
             if raw.startswith(("monitor my account", "monitor my gmail", "watch my gmail", "stop monitoring")):
                 return True
             return bool(
-                re.search(r"\\b(send|email|mail)\\b", raw)
-                and re.search(r"\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b", raw, re.I)
+                re.search(r"\b(send|email|mail)\b", raw)
+                and re.search(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", raw, re.I)
             )
 
         def _connector_reply(user_id: str, message: str, conversation_id: str):
