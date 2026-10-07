@@ -84,10 +84,22 @@ fi
 # ------------------------------------------------------------------
 # 2) Telegram + Discord bot
 # ------------------------------------------------------------------
-echo "🤖 Starting Telegram + Discord bot (bot.py)..."
+echo "🤖 Starting Telegram bot (bot.py)..."
 python bot.py &
 BOT_PID=$!
-echo "   → Bot PID: ${BOT_PID}"
+echo "   → Telegram bot PID: ${BOT_PID}"
+
+# discord_bot.py is intentionally separate because bot.py detects it and
+# skips its legacy inline Discord client to avoid duplicate Discord connections.
+DISCORD_PID=""
+if [ -f "discord_bot.py" ] && [ -n "${DISCORD_BOT_TOKEN:-}" ]; then
+  echo "💬 Starting Discord bot (discord_bot.py)..."
+  python discord_bot.py &
+  DISCORD_PID=$!
+  echo "   → Discord bot PID: ${DISCORD_PID}"
+else
+  echo "ℹ️ Discord bot not started (discord_bot.py missing or DISCORD_BOT_TOKEN not configured)."
+fi
 
 echo "═══════════════════════════════════════════════════════════════"
 echo "✅ All services launched. Monitoring..."
@@ -99,8 +111,9 @@ echo "════════════════════════�
 wait "${API_PID}"
 EXIT_CODE=$?
 
-echo "⚠️ FastAPI exited (code ${EXIT_CODE}). Shutting down the bot process..."
+echo "⚠️ FastAPI exited (code ${EXIT_CODE}). Shutting down bot processes..."
 kill "${BOT_PID}" 2>/dev/null || true
+if [ -n "${DISCORD_PID}" ]; then kill "${DISCORD_PID}" 2>/dev/null || true; fi
 wait 2>/dev/null || true
 
 exit "${EXIT_CODE}"
