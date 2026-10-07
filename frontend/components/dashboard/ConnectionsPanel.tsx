@@ -39,6 +39,13 @@ export default function ConnectionsPanel() {
   const [accountId, setAccountId] = useState("default");
   const [accountName, setAccountName] = useState("Primary Account");
   const [savedAccounts, setSavedAccounts] = useState<{ id: string; name: string; url?: string }[]>([]);
+  const [github, setGithub] = useState<any>(null);
+  const [githubRepos, setGithubRepos] = useState<any[]>([]);
+  const [githubOwner, setGithubOwner] = useState("");
+  const [githubRepo, setGithubRepo] = useState("");
+  const [githubIssueTitle, setGithubIssueTitle] = useState("");
+  const [githubIssueBody, setGithubIssueBody] = useState("");
+  const [githubApproval, setGithubApproval] = useState<any>(null);
   const [page, setPage] = useState<Page | null>(null);
   const [connection, setConnection] = useState<Connection | null>(null);
   const [busy, setBusy] = useState(false);
