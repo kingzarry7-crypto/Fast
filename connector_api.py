@@ -103,7 +103,7 @@ def _verify_state(value: str) -> Dict[str, Any]:
         payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
         if int(payload.get("exp") or 0) < _now():
             raise ValueError("expired")
-        if payload.get("provider") != "github":
+        if payload.get("provider") not in {"github", "tiktok"}:
             raise ValueError("wrong provider")
         return payload
     except HTTPException:
