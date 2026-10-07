@@ -137,7 +137,7 @@ export default function ConnectionsPanel() {
   async function refresh() {
     setBusy(true);
     try {
-      const r = await fetch("/api/browser/inspect", { credentials: "include" });
+      const r = await fetch(`/api/browser/inspect?account_id=${encodeURIComponent(accountId)}`, { credentials: "include" });
       const d = await r.json();
       if (!r.ok) throw new Error(d.detail || "Could not inspect session");
       setPage(d.page);
