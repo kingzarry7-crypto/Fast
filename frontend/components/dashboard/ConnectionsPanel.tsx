@@ -244,9 +244,9 @@ export default function ConnectionsPanel() {
       setPage(d.page);
       setConnection(d.page?.connection || null);
       setMessage(
-        d.page?.human_verification?.required
-          ? "The challenge is still active. Try the press-and-hold again exactly as Fiverr requests."
-          : "Human verification appears complete. KZ is waiting for you to confirm the account."
+        d.result?.verified
+          ? "✓ VERIFIED — Fiverr's challenge cleared. KZ is now checking the real login session."
+          : "NOT VERIFIED — Fiverr's challenge is still active. Try the press-and-hold again exactly as Fiverr requests."
       );
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Manual browser interaction failed");
