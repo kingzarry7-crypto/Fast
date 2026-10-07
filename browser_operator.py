@@ -121,6 +121,32 @@ def _detect_human_verification(page: Page) -> Dict[str, Any]:
         "checking your browser", "are you a robot", "unusual traffic", "anti-bot",
     )
     matched = [x for x in indicators if x in combined]
+    # CAPTCHA/Turnstile/reCAPTCHA challenges are commonly rendered inside
+    # cross-origin iframes, so their text is not present in the top-level body.
+    try:
+        for frame in page.frames:
+            frame_url = str(frame.url or "").lower()
+            if any(token in frame_url for token in (
+                "captcha", "recaptcha", "hcaptcha", "turnstile", "challenge",
+                "arkoselabs", "funcaptcha", "cloudflare",
+            )):
+                matched.append("human_verification_frame")
+                break
+    except Exception:
+        pass
+    try:
+        for selector in (
+            'iframe[src*="captcha" i]', 'iframe[src*="recaptcha" i]',
+            'iframe[src*="hcaptcha" i]', 'iframe[src*="turnstile" i]',
+            '[class*="captcha" i]', '[id*="captcha" i]',
+            '[class*="challenge" i]', '[id*="challenge" i]',
+        ):
+            if page.locator(selector).count() > 0:
+                matched.append("human_verification_element")
+                break
+    except Exception:
+        pass
+    matched = list(dict.fromkeys(matched))
     if not matched:
         state = {"required": False, "reason": None, "indicators": []}
         try: page._kz_hv_cache = {"at": now, "url": page.url, "state": state}
