@@ -25,12 +25,9 @@ type Page = {
 
 async function readApiResponse(response: Response): Promise<any> {
   const raw = await response.text();
-  if (!raw) {
-    throw new Error(`HTTP ${response.status}: empty response from KZ server`);
-  }
-  try {
-    return JSON.parse(raw);
-  } catch {
+  if (!raw) throw new Error(`HTTP ${response.status}: empty response from KZ server`);
+  try { return JSON.parse(raw); }
+  catch {
     const preview = raw.replace(/\s+/g, " ").trim().slice(0, 240);
     throw new Error(`HTTP ${response.status}: KZ server returned a non-JSON response: ${preview}`);
   }
@@ -51,7 +48,7 @@ export default function ConnectionsPanel() {
   const [workflow, setWorkflow] = useState<any>(null);
   const [message, setMessage] = useState("");
   const [challengeBusy, setChallengeBusy] = useState(false);
-  const challengePress = useRef<{ x: number; y: number; startedAt: number; pointerId: number } | null>(null);
+  const challengePress = useRef<{ x: number; y: number; startedAt: number; pointerId: number; remoteDown: boolean } | null>(null);
 
   useEffect(() => {
     try {
@@ -104,7 +101,7 @@ export default function ConnectionsPanel() {
       } catch {}
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [open, page?.human_verification?.required]);
+  }, [open, page?.human_verification?.required, accountId]);
 
   async function start() {
     if (!url.trim()) return;
@@ -112,9 +109,7 @@ export default function ConnectionsPanel() {
     setMessage("");
     try {
       const r = await fetch("/api/browser/connect/start", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: url.trim(), account_id: accountId }),
       });
       const d = await readApiResponse(r);
@@ -127,11 +122,8 @@ export default function ConnectionsPanel() {
           ? "Human verification is required. Complete it yourself in this browser session; KZ will not bypass it."
           : "Login yourself. Email, username, password and OTP values are used only to operate the current browser session and are not saved as KZ memory."
       );
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Could not connect");
-    } finally {
-      setBusy(false);
-    }
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not connect"); }
+    finally { setBusy(false); }
   }
 
   async function refresh() {
@@ -142,11 +134,8 @@ export default function ConnectionsPanel() {
       if (!r.ok) throw new Error(d.detail || "Could not inspect session");
       setPage(d.page);
       setConnection(d.page?.connection || null);
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Could not inspect session");
-    } finally {
-      setBusy(false);
-    }
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not inspect session"); }
+    finally { setBusy(false); }
   }
 
   async function confirmConnection() {
@@ -154,9 +143,7 @@ export default function ConnectionsPanel() {
     setMessage("");
     try {
       const r = await fetch("/api/browser/connect/confirm", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ account_id: accountId }),
       });
       const d = await readApiResponse(r);
@@ -164,22 +151,16 @@ export default function ConnectionsPanel() {
       setConnection(d.connection);
       setMessage("ACCOUNT CONNECTED. KZ can now prepare approved tasks for this browser session.");
       await refresh();
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Could not confirm account");
-    } finally {
-      setBusy(false);
-    }
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not confirm account"); }
+    finally { setBusy(false); }
   }
 
   async function action(type: string) {
     setBusy(true);
     try {
-      const button =
-        type === "click"
-          ? (page?.buttons || []).find(
-              (x) => x.selector === selector || (!x.selector && selector === "__text__:" + x.text)
-            )
-          : null;
+      const button = type === "click"
+        ? (page?.buttons || []).find((x) => x.selector === selector || (!x.selector && selector === "__text__:" + x.text))
+        : null;
       const payload = {
         type,
         selector: button?.selector || (type === "click" && button ? undefined : selector),
@@ -187,9 +168,7 @@ export default function ConnectionsPanel() {
         text: button?.text || undefined,
       };
       const r = await fetch("/api/browser/connect/action", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...payload, account_id: accountId }),
       });
       const d = await readApiResponse(r);
@@ -197,11 +176,8 @@ export default function ConnectionsPanel() {
       setPage(d.page);
       setConnection(d.page?.connection || null);
       if (type === "fill") setValue("");
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Action failed");
-    } finally {
-      setBusy(false);
-    }
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Action failed"); }
+    finally { setBusy(false); }
   }
 
   function challengeCoordinates(event: MouseEvent<HTMLImageElement>) {
@@ -220,18 +196,14 @@ export default function ConnectionsPanel() {
     const { x, y } = challengeCoordinates(event as unknown as MouseEvent<HTMLImageElement>);
     try {
       const r = await fetch("/api/browser/connect/action", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "manual_click", x, y, account_id: accountId }),
       });
       const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Browser click failed");
       setPage(d.page);
       setConnection(d.page?.connection || null);
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Browser click failed");
-    }
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Browser click failed"); }
   }
 
   async function checkHumanVerification() {
@@ -241,42 +213,56 @@ export default function ConnectionsPanel() {
     const timeout = window.setTimeout(() => controller.abort(), 15000);
     try {
       const r = await fetch("/api/browser/connect/action", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "human_verify", account_id: accountId }),
-        signal: controller.signal,
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "human_verify", account_id: accountId }), signal: controller.signal,
       });
       const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Verification check failed");
       setPage(d.page);
       setConnection(d.page?.connection || null);
-      if (d.result?.verified) {
-        setMessage("✓ VERIFIED — Fiverr's human-verification challenge has cleared. KZ is now checking your actual login session.");
-      } else {
-        setMessage("NOT VERIFIED — Fiverr is still reporting the human-verification challenge. Complete it, wait for it to finish, then press CHECK VERIFICATION again.");
-      }
+      setMessage(d.result?.verified
+        ? "✓ VERIFIED — Fiverr's human-verification challenge has cleared. KZ is now checking your actual login session."
+        : "NOT VERIFIED — Fiverr is still reporting the human-verification challenge. Complete it, wait for it to finish, then press CHECK VERIFICATION again.");
     } catch (e) {
-      setMessage(
-        e instanceof DOMException && e.name === "AbortError"
-          ? "CHECK FAILED — Fiverr did not respond to the verification check within 15 seconds. Press REFRESH VIEW and try CHECK VERIFICATION again."
-          : e instanceof Error
-            ? "CHECK FAILED — " + e.message
-            : "CHECK FAILED — Could not check verification."
-      );
+      setMessage(e instanceof DOMException && e.name === "AbortError"
+        ? "CHECK FAILED — Fiverr did not respond to the verification check within 15 seconds. Press REFRESH VIEW and try CHECK VERIFICATION again."
+        : e instanceof Error ? "CHECK FAILED — " + e.message : "CHECK FAILED — Could not check verification.");
     } finally {
       window.clearTimeout(timeout);
       setChallengeBusy(false);
     }
   }
 
-  function beginHumanPress(event: PointerEvent<HTMLImageElement>) {
-    if (!page?.human_verification?.required || !page.screenshot || challengePress.current) return;
+  // Press-and-hold is now a real remote press. The previous implementation
+  // waited until pointer-up and then sent a single human_press request, which
+  // meant the server browser never received the mouse-down while the user was
+  // physically holding the control. That broke challenges that require the
+  // hold to remain active for their full duration.
+  async function beginHumanPress(event: PointerEvent<HTMLImageElement>) {
+    if (!page?.human_verification?.required || !page.screenshot || challengePress.current || challengeBusy || busy) return;
     const { x, y } = challengeCoordinates(event as unknown as MouseEvent<HTMLImageElement>);
-    challengePress.current = { x, y, startedAt: performance.now(), pointerId: event.pointerId };
+    const press = { x, y, startedAt: performance.now(), pointerId: event.pointerId, remoteDown: false };
+    challengePress.current = press;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     event.preventDefault();
-    setMessage("Holding the challenge control… release when Fiverr accepts the press.");
+    setChallengeBusy(true);
+    setMessage("PRESS STARTED — keep holding the control until the verification accepts it.");
+
+    try {
+      const r = await fetch("/api/browser/connect/action", {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "human_down", x, y, account_id: accountId }),
+      });
+      const d = await readApiResponse(r);
+      if (!r.ok) throw new Error(d.detail || "Could not start the remote press");
+      press.remoteDown = true;
+      setMessage("HOLDING — keep your mouse/finger down until the challenge accepts the press.");
+    } catch (e) {
+      challengePress.current = null;
+      try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch {}
+      setChallengeBusy(false);
+      setMessage(e instanceof Error ? e.message : "Could not start the remote press");
+    }
   }
 
   async function finishHumanPress(event: PointerEvent<HTMLImageElement>) {
@@ -287,37 +273,46 @@ export default function ConnectionsPanel() {
     try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch {}
 
     const durationMs = Math.max(100, Math.min(Math.round(performance.now() - press.startedAt), 15000));
-    setChallengeBusy(true);
     try {
+      // Always release a successful remote mouse-down, even if the network
+      // request took a little longer than expected.
       const r = await fetch("/api/browser/connect/action", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "human_press", x: press.x, y: press.y, duration_ms: durationMs, account_id: accountId }),
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "human_up", x: press.x, y: press.y, account_id: accountId }),
       });
       const d = await readApiResponse(r);
-      if (!r.ok) throw new Error(d.detail || "Manual browser interaction failed");
+      if (!r.ok) throw new Error(d.detail || "Could not release the remote press");
       setPage(d.page);
       setConnection(d.page?.connection || null);
       if (!d.page?.human_verification?.required) {
         setMessage("✓ HUMAN VERIFIED — refreshing the live Fiverr session and checking your real login status...");
-        // Fiverr may finish rebuilding the authenticated shell just after the
-        // challenge disappears. Give it a moment, then re-read live state.
         window.setTimeout(() => { void refresh(); }, 1200);
       } else {
         setMessage("The challenge is still active. Try the press-and-hold again exactly as Fiverr requests.");
       }
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Manual browser interaction failed");
+      setMessage(e instanceof Error ? e.message : "Could not release the remote press");
     } finally {
       setChallengeBusy(false);
     }
   }
 
-  function cancelHumanPress(event: PointerEvent<HTMLImageElement>) {
-    if (!challengePress.current || challengePress.current.pointerId !== event.pointerId) return;
+  async function cancelHumanPress(event: PointerEvent<HTMLImageElement>) {
+    const press = challengePress.current;
+    if (!press || press.pointerId !== event.pointerId) return;
     challengePress.current = null;
     try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch {}
+    event.preventDefault();
+
+    if (press.remoteDown) {
+      try {
+        await fetch("/api/browser/connect/action", {
+          method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "human_up", x: press.x, y: press.y, account_id: accountId }),
+        });
+      } catch {}
+    }
+    setChallengeBusy(false);
     setMessage("Challenge press cancelled. Press and hold the control again.");
   }
 
@@ -327,47 +322,25 @@ export default function ConnectionsPanel() {
     setMessage("");
     try {
       const r = await fetch("/api/browser/connect/task", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ goal: task.trim(), account_id: accountId }),
       });
       const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Could not create task");
       setWorkflow(d.workflow);
-      setMessage(
-        d.workflow?.status === "waiting_for_approval"
-          ? "TASK READY FOR APPROVAL. KZ will not perform the consequential action until you approve it."
-          : "Task created and prepared."
-      );
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Could not create task");
-    } finally {
-      setBusy(false);
-    }
+      setMessage(d.workflow?.status === "waiting_for_approval"
+        ? "TASK READY FOR APPROVAL. KZ will not perform the consequential action until you approve it."
+        : "Task created and prepared.");
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Could not create task"); }
+    finally { setBusy(false); }
   }
 
   const status = connection?.status || page?.connection?.status || "not_connected";
-  const statusLabel =
-    status === "connected"
-      ? "CONNECTED"
-      : status === "human_verification"
-        ? "HUMAN VERIFICATION"
-        : status === "login_required"
-          ? "LOGIN REQUIRED"
-          : status === "ready_to_confirm"
-            ? "READY TO CONFIRM"
-            : "NOT CONNECTED";
+  const statusLabel = status === "connected" ? "CONNECTED" : status === "human_verification" ? "HUMAN VERIFICATION" : status === "login_required" ? "LOGIN REQUIRED" : status === "ready_to_confirm" ? "READY TO CONFIRM" : "NOT CONNECTED";
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="rounded-md border border-cyan-400/30 bg-cyan-400/5 px-2.5 py-1.5 font-mono-tech text-[10px] tracking-widest text-cyan-200 hover:bg-cyan-400/10"
-      >
-        ACCOUNTS
-      </button>
+      <button type="button" onClick={() => setOpen(true)} className="rounded-md border border-cyan-400/30 bg-cyan-400/5 px-2.5 py-1.5 font-mono-tech text-[10px] tracking-widest text-cyan-200 hover:bg-cyan-400/10">ACCOUNTS</button>
 
       {open && (
         <>
@@ -376,68 +349,32 @@ export default function ConnectionsPanel() {
             <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
               <div>
                 <div className="font-mono-tech text-xs tracking-[0.2em] text-cyan-200">CONNECTED ACCOUNTS · LOGIN DASHBOARD</div>
-                <div className="mt-1 text-[10px] text-zinc-500">
-                  Log in yourself inside the browser below. KZ only marks the account connected after the live session shows authenticated evidence; it will not guess from an open page.
-                </div>
+                <div className="mt-1 text-[10px] text-zinc-500">Log in yourself inside the browser below. KZ only marks the account connected after the live session shows authenticated evidence; it will not guess from an open page.</div>
               </div>
               <button onClick={() => setOpen(false)} className="px-2 py-1 text-zinc-500">×</button>
             </div>
 
             <div className="border-b border-white/5 p-4">
               <div className="mb-2 grid grid-cols-[1fr_auto] gap-2">
-                <input
-                  value={accountName}
-                  onChange={(e) => setAccountName(e.target.value)}
-                  placeholder="Account name"
-                  className="w-full rounded-lg border border-cyan-400/15 bg-white/[0.03] p-3 text-sm text-white outline-none"
-                />
+                <input value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder="Account name" className="w-full rounded-lg border border-cyan-400/15 bg-white/[0.03] p-3 text-sm text-white outline-none" />
                 <button onClick={newAccount} type="button" className="rounded-lg border border-cyan-400/20 px-3 text-[9px] tracking-widest text-cyan-200">NEW</button>
               </div>
               <div className="mb-2 flex gap-2">
-                <select
-                  value={accountId}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    const found = savedAccounts.find((x) => x.id === id);
-                    setAccountId(id);
-                    setAccountName(found?.name || "Account");
-                    setUrl(found?.url || "");
-                    setPage(null);
-                    setConnection(null);
-                    setWorkflow(null);
-                    setMessage("Switched to an isolated account browser profile.");
-                  }}
-                  className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 p-2 text-xs text-white"
-                >
+                <select value={accountId} onChange={(e) => {
+                  const id = e.target.value;
+                  const found = savedAccounts.find((x) => x.id === id);
+                  setAccountId(id); setAccountName(found?.name || "Account"); setUrl(found?.url || ""); setPage(null); setConnection(null); setWorkflow(null);
+                  setMessage("Switched to an isolated account browser profile.");
+                }} className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 p-2 text-xs text-white">
                   {!savedAccounts.length && <option value="default">Primary Account</option>}
                   {savedAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
                 <div className="truncate rounded-lg border border-white/5 px-2 py-2 text-[9px] text-zinc-600">{accountId}</div>
               </div>
-              <input
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://your-site.com/login"
-                className="w-full rounded-lg border border-cyan-400/15 bg-white/[0.03] p-3 text-sm text-white outline-none"
-              />
-              <button
-                disabled={busy || !url.trim()}
-                onClick={start}
-                className="mt-2 w-full rounded-lg border border-cyan-400/25 bg-cyan-400/10 py-2 font-mono-tech text-[9px] tracking-widest text-cyan-100 disabled:opacity-40"
-              >
-                {busy ? "OPENING..." : "OPEN LOGIN"}
-              </button>
+              <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://your-site.com/login" className="w-full rounded-lg border border-cyan-400/15 bg-white/[0.03] p-3 text-sm text-white outline-none" />
+              <button disabled={busy || !url.trim()} onClick={start} className="mt-2 w-full rounded-lg border border-cyan-400/25 bg-cyan-400/10 py-2 font-mono-tech text-[9px] tracking-widest text-cyan-100 disabled:opacity-40">{busy ? "OPENING..." : "OPEN LOGIN"}</button>
 
-              {connection && (
-                <div className="mt-3 rounded-lg border border-white/5 bg-white/[0.02] p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono-tech text-[9px] tracking-widest text-zinc-500">ACCOUNT STATE</span>
-                    <span className="font-mono-tech text-[9px] tracking-widest text-cyan-200">{statusLabel}</span>
-                  </div>
-                  <div className="mt-1 truncate text-[10px] text-zinc-600">{connection.url}</div>
-                </div>
-              )}
-
+              {connection && <div className="mt-3 rounded-lg border border-white/5 bg-white/[0.02] p-3"><div className="flex items-center justify-between"><span className="font-mono-tech text-[9px] tracking-widest text-zinc-500">ACCOUNT STATE</span><span className="font-mono-tech text-[9px] tracking-widest text-cyan-200">{statusLabel}</span></div><div className="mt-1 truncate text-[10px] text-zinc-600">{connection.url}</div></div>}
               {message && <p className="mt-2 text-xs leading-relaxed text-zinc-400">{message}</p>}
             </div>
 
@@ -445,36 +382,17 @@ export default function ConnectionsPanel() {
               <div className="min-h-0 flex-1 overflow-y-auto p-4">
                 {!page.human_verification?.required && page.screenshot && (
                   <div className="mb-3 rounded-lg border border-cyan-400/20 bg-black p-2">
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="font-mono-tech text-[9px] tracking-widest text-cyan-200">LIVE LOGIN BROWSER</span>
-                      <span className="text-[9px] text-zinc-600">Click the browser yourself</span>
-                    </div>
-                    <img
-                      src={page.screenshot}
-                      alt="Live KZ browser login view"
-                      onPointerUp={(event) => {
-                        event.preventDefault();
-                        void clickLiveBrowser(event);
-                      }}
-                      draggable={false}
-                      style={{ touchAction: "none", userSelect: "none" }}
-                      className="block h-auto w-full cursor-pointer select-none"
-                    />
-                    <p className="mt-2 text-[10px] leading-relaxed text-zinc-600">
-                      Use this live browser to choose login controls yourself. Enter email/password in the fields below; KZ does not solve verification challenges.
-                    </p>
+                    <div className="mb-2 flex items-center justify-between"><span className="font-mono-tech text-[9px] tracking-widest text-cyan-200">LIVE LOGIN BROWSER</span><span className="text-[9px] text-zinc-600">Click the browser yourself</span></div>
+                    <img src={page.screenshot} alt="Live KZ browser login view" onPointerUp={(event) => { event.preventDefault(); void clickLiveBrowser(event); }} draggable={false} style={{ touchAction: "none", userSelect: "none" }} className="block h-auto w-full cursor-pointer select-none" />
+                    <p className="mt-2 text-[10px] leading-relaxed text-zinc-600">Use this live browser to choose login controls yourself. Enter email/password in the fields below; KZ does not solve verification challenges.</p>
                   </div>
                 )}
 
                 {page.human_verification?.required && (
                   <div className="mb-3 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3">
                     <div className="font-mono-tech text-[10px] tracking-widest text-amber-200">HUMAN VERIFICATION REQUIRED</div>
-                    <p className="mt-1 text-xs leading-relaxed text-amber-100/80">
-                      {page.human_verification.message || "Complete the challenge yourself. KZ will not bypass it."}
-                    </p>
-                    <p className="mt-2 text-[10px] leading-relaxed text-amber-100/60">
-                      The server browser is shown below. Complete the challenge yourself exactly as Fiverr asks. KZ forwards only your manual press/hold input; it does not solve or bypass the challenge.
-                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-amber-100/80">{page.human_verification.message || "Complete the challenge yourself. KZ will not bypass it."}</p>
+                    <p className="mt-2 text-[10px] leading-relaxed text-amber-100/60">The server browser is shown below. Complete the challenge yourself exactly as Fiverr asks. KZ forwards only your manual press/hold input; it does not solve or bypass the challenge.</p>
                     {page.screenshot && (
                       <div className="mt-3 overflow-hidden rounded-lg border border-amber-400/20 bg-black">
                         <img
@@ -491,39 +409,19 @@ export default function ConnectionsPanel() {
                       </div>
                     )}
                     <div className="mt-2 grid grid-cols-2 gap-2">
-                      <button onClick={checkHumanVerification} disabled={busy || challengeBusy} className="rounded-lg border border-amber-400/30 bg-amber-400/10 py-2 font-mono-tech text-[9px] tracking-widest text-amber-100 disabled:opacity-40">
-                        {challengeBusy ? "CHECKING..." : "CHECK VERIFICATION"}
-                      </button>
-                      <button onClick={refresh} disabled={busy || challengeBusy} className="rounded-lg border border-amber-400/20 py-2 font-mono-tech text-[9px] tracking-widest text-amber-200 disabled:opacity-40">
-                        REFRESH VIEW
-                      </button>
+                      <button onClick={checkHumanVerification} disabled={busy || challengeBusy} className="rounded-lg border border-amber-400/30 bg-amber-400/10 py-2 font-mono-tech text-[9px] tracking-widest text-amber-100 disabled:opacity-40">{challengeBusy ? "CHECKING..." : "CHECK VERIFICATION"}</button>
+                      <button onClick={refresh} disabled={busy || challengeBusy} className="rounded-lg border border-amber-400/20 py-2 font-mono-tech text-[9px] tracking-widest text-amber-200 disabled:opacity-40">REFRESH VIEW</button>
                     </div>
                   </div>
                 )}
 
                 {status !== "connected" && !page.human_verification?.required && (
                   <div className="space-y-2">
-                    <button
-                      onClick={refresh}
-                      disabled={busy}
-                      className="w-full rounded-lg border border-cyan-400/20 py-2 font-mono-tech text-[9px] tracking-widest text-cyan-200 disabled:opacity-40"
-                    >
-                      {busy ? "CHECKING LIVE SESSION..." : "VERIFY LOGIN"}
+                    <button onClick={refresh} disabled={busy} className="w-full rounded-lg border border-cyan-400/20 py-2 font-mono-tech text-[9px] tracking-widest text-cyan-200 disabled:opacity-40">{busy ? "CHECKING LIVE SESSION..." : "VERIFY LOGIN"}</button>
+                    <button onClick={confirmConnection} disabled={busy || status !== "ready_to_confirm"} className="w-full rounded-lg border border-cyan-400/30 bg-cyan-400/10 py-3 font-mono-tech text-[10px] tracking-widest text-cyan-100 disabled:opacity-40">
+                      {status === "login_required" ? "LOGIN REQUIRED" : status === "ready_to_confirm" ? "LOGIN VERIFIED — CONNECT ACCOUNT" : "CHECKING LOGIN..."}
                     </button>
-                    <button
-                      onClick={confirmConnection}
-                      disabled={busy || status !== "ready_to_confirm"}
-                      className="w-full rounded-lg border border-cyan-400/30 bg-cyan-400/10 py-3 font-mono-tech text-[10px] tracking-widest text-cyan-100 disabled:opacity-40"
-                    >
-                      {status === "login_required"
-                        ? "LOGIN REQUIRED"
-                        : status === "ready_to_confirm"
-                          ? "LOGIN VERIFIED — CONNECT ACCOUNT"
-                          : "CHECKING LOGIN..."}
-                    </button>
-                    <p className="text-[10px] leading-relaxed text-zinc-600">
-                      KZ will never display CONNECTED merely because this website opened. The live browser must first show authenticated evidence.
-                    </p>
+                    <p className="text-[10px] leading-relaxed text-zinc-600">KZ will never display CONNECTED merely because this website opened. The live browser must first show authenticated evidence.</p>
                   </div>
                 )}
 
@@ -531,93 +429,22 @@ export default function ConnectionsPanel() {
                   <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 p-3">
                     <div className="font-mono-tech text-[10px] tracking-widest text-cyan-200">ACCOUNT READY</div>
                     <p className="mt-1 text-xs text-zinc-500">Give KZ the task you want performed inside this account.</p>
-                    <textarea
-                      value={task}
-                      onChange={(e) => setTask(e.target.value)}
-                      placeholder="Example: Find the best matching opportunity and prepare the application. Do not submit until I approve."
-                      className="mt-3 min-h-24 w-full rounded-lg border border-white/10 bg-black/20 p-3 text-sm text-white outline-none"
-                    />
-                    <button
-                      onClick={createTask}
-                      disabled={busy || !task.trim()}
-                      className="mt-2 w-full rounded-lg border border-cyan-400/25 bg-cyan-400/10 py-2 font-mono-tech text-[9px] tracking-widest text-cyan-100 disabled:opacity-40"
-                    >
-                      {busy ? "PREPARING..." : "PLAN TASK"}
-                    </button>
-                    {workflow && (
-                      <div className="mt-3 rounded-lg border border-white/5 p-3 text-xs text-zinc-400">
-                        <div>Workflow: <span className="text-cyan-200">{workflow.id}</span></div>
-                        <div className="mt-1">Status: <span className="text-cyan-200">{workflow.status}</span></div>
-                        {workflow.status === "waiting_for_approval" && (
-                          <div className="mt-2 text-amber-200">Open the approval queue to approve or reject the consequential action.</div>
-                        )}
-                      </div>
-                    )}
+                    <textarea value={task} onChange={(e) => setTask(e.target.value)} placeholder="Example: Find the best matching opportunity and prepare the application. Do not submit until I approve." className="mt-3 min-h-24 w-full rounded-lg border border-white/10 bg-black/20 p-3 text-sm text-white outline-none" />
+                    <button onClick={createTask} disabled={busy || !task.trim()} className="mt-2 w-full rounded-lg border border-cyan-400/25 bg-cyan-400/10 py-2 font-mono-tech text-[9px] tracking-widest text-cyan-100 disabled:opacity-40">{busy ? "PREPARING..." : "PLAN TASK"}</button>
+                    {workflow && <div className="mt-3 rounded-lg border border-white/5 p-3 text-xs text-zinc-400"><div>Workflow: <span className="text-cyan-200">{workflow.id}</span></div><div className="mt-1">Status: <span className="text-cyan-200">{workflow.status}</span></div>{workflow.status === "waiting_for_approval" && <div className="mt-2 text-amber-200">Open the approval queue to approve or reject the consequential action.</div>}</div>}
                   </div>
                 )}
 
-                <div className="mt-3 rounded-lg border border-white/5 bg-white/[0.02] p-3">
-                  <div className="truncate text-xs text-cyan-200">{page.title || "Connected page"}</div>
-                  <div className="mt-1 break-all text-[9px] text-zinc-600">{page.url}</div>
-                </div>
+                <div className="mt-3 rounded-lg border border-white/5 bg-white/[0.02] p-3"><div className="truncate text-xs text-cyan-200">{page.title || "Connected page"}</div><div className="mt-1 break-all text-[9px] text-zinc-600">{page.url}</div></div>
 
                 <div className="mt-3 space-y-2">
-                  {(page.buttons || []).filter((x) => x.text).map((x, i) => (
-                    <button
-                      key={"b" + i}
-                      onClick={() => setSelector(x.selector || "__text__:" + x.text)}
-                      className={
-                        "block w-full rounded-lg border p-2 text-left text-xs " +
-                        (selector === x.selector
-                          ? "border-amber-400/40 bg-amber-400/10 text-amber-100"
-                          : "border-white/5 text-zinc-500")
-                      }
-                    >
-                      BUTTON · {x.text}
-                    </button>
-                  ))}
-                  {(page.inputs || []).map((x, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setSelector(x.selector)}
-                      className={
-                        "block w-full rounded-lg border p-2 text-left text-xs " +
-                        (selector === x.selector
-                          ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
-                          : "border-white/5 text-zinc-500")
-                      }
-                    >
-                      {x.type} · {x.name || x.placeholder || x.selector}
-                    </button>
-                  ))}
+                  {(page.buttons || []).filter((x) => x.text).map((x, i) => <button key={"b" + i} onClick={() => setSelector(x.selector || "__text__:" + x.text)} className={"block w-full rounded-lg border p-2 text-left text-xs " + (selector === x.selector ? "border-amber-400/40 bg-amber-400/10 text-amber-100" : "border-white/5 text-zinc-500")}>BUTTON · {x.text}</button>)}
+                  {(page.inputs || []).map((x, i) => <button key={i} onClick={() => setSelector(x.selector)} className={"block w-full rounded-lg border p-2 text-left text-xs " + (selector === x.selector ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100" : "border-white/5 text-zinc-500")}>{x.type} · {x.name || x.placeholder || x.selector}</button>)}
                 </div>
 
-                {selector && (
-                  <div className="mt-3 rounded-lg border border-cyan-400/15 p-3">
-                    <div className="font-mono-tech text-[9px] tracking-widest text-cyan-300">BROWSER FIELD</div>
-                    <div className="mt-1 text-[10px] text-zinc-600">The value is sent only to the current browser action; KZ does not write it to memory.</div>
-                    <input
-                      value={value}
-                      onChange={(e) => setValue(e.target.value)}
-                      type={page.inputs?.find((x) => x.selector === selector)?.type === "password" ? "password" : "text"}
-                      placeholder="Enter value"
-                      className="mt-2 w-full rounded-lg border border-white/10 bg-black/20 p-2 text-sm text-white"
-                      autoComplete="off"
-                    />
-                    <button
-                      onClick={() => action("fill")}
-                      disabled={busy}
-                      className="mt-2 w-full rounded-lg border border-cyan-400/20 py-2 font-mono-tech text-[9px] tracking-widest text-cyan-200"
-                    >
-                      FILL CURRENT FIELD
-                    </button>
-                  </div>
-                )}
+                {selector && <div className="mt-3 rounded-lg border border-cyan-400/15 p-3"><div className="font-mono-tech text-[9px] tracking-widest text-cyan-300">BROWSER FIELD</div><div className="mt-1 text-[10px] text-zinc-600">The value is sent only to the current browser action; KZ does not write it to memory.</div><input value={value} onChange={(e) => setValue(e.target.value)} type={page.inputs?.find((x) => x.selector === selector)?.type === "password" ? "password" : "text"} placeholder="Enter value" className="mt-2 w-full rounded-lg border border-white/10 bg-black/20 p-2 text-sm text-white" autoComplete="off" /><button onClick={() => action("fill")} disabled={busy} className="mt-2 w-full rounded-lg border border-cyan-400/20 py-2 font-mono-tech text-[9px] tracking-widest text-cyan-200">FILL CURRENT FIELD</button></div>}
 
-                <div className="mt-3 flex gap-2">
-                  <button onClick={refresh} disabled={busy} className="flex-1 rounded-lg border border-white/10 py-2 font-mono-tech text-[9px] tracking-widest text-zinc-400">REFRESH</button>
-                  <button onClick={() => action("click")} disabled={busy || !selector} className="flex-1 rounded-lg border border-amber-400/20 py-2 font-mono-tech text-[9px] tracking-widest text-amber-200">CLICK SELECTED</button>
-                </div>
+                <div className="mt-3 flex gap-2"><button onClick={refresh} disabled={busy} className="flex-1 rounded-lg border border-white/10 py-2 font-mono-tech text-[9px] tracking-widest text-zinc-400">REFRESH</button><button onClick={() => action("click")} disabled={busy || !selector} className="flex-1 rounded-lg border border-amber-400/20 py-2 font-mono-tech text-[9px] tracking-widest text-amber-200">CLICK SELECTED</button></div>
 
                 <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-white/5 bg-black/20 p-3 text-[10px] text-zinc-500">{page.text || ""}</pre>
               </div>
