@@ -435,10 +435,14 @@ async def github_callback(request: Request):
     error = request.query_params.get("error")
     if error:
         return RedirectResponse(f"{FRONTEND_URL}/dashboard?connector_error={urllib.parse.quote(error)}")
+    # OAuth returns directly to Railway, while the login cookie may live on
+    # the Vercel frontend host behind the /api proxy. The signed, short-lived
+    # state already binds this authorization request to the logged-in KZ user,
+    # so do not require the frontend cookie on the provider callback host.
     payload = _verify_state(request.query_params.get("state") or "")
-    user_id = _user_id(request)
-    if str(payload.get("user_id")) != user_id:
-        raise HTTPException(status_code=403, detail="Connector authorization belongs to a different KZ session")
+    user_id = str(payload.get("user_id") or "").strip()
+    if not user_id:
+        raise HTTPException(status_code=403, detail="Connector authorization state has no KZ user")
     code = request.query_params.get("code") or ""
     if not code:
         raise HTTPException(status_code=400, detail="GitHub authorization code missing")
