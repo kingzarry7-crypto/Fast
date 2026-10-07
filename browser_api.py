@@ -156,6 +156,15 @@ def install_browser_api(app, require_current_user, row_value=None):
                 result = await _browser_call(
                     manual_click, user_id, float(body.get("x")), float(body.get("y")), account_id
                 )
+            elif kind == "manual_scroll":
+                from browser_operator import manual_scroll
+                result = await _browser_call(
+                    manual_scroll,
+                    user_id,
+                    float(body.get("delta_x") or 0),
+                    float(body.get("delta_y") or 0),
+                    account_id,
+                )
             elif kind == "human_down":
                 from browser_operator import human_down
                 result = await _browser_call(
