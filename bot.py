@@ -4194,6 +4194,43 @@ async def memory_link_command(update, context):
         logger.warning("Telegram memory link failed: %s", type(exc).__name__)
         await update.message.reply_text("⚠️ Shared memory linking is temporarily unavailable.")
 
+_TELEGRAM_LOCK_CONN = None
+
+def _acquire_telegram_single_poller_lock() -> bool:
+    """Allow only one Telegram polling process across all Railway replicas."""
+    global _TELEGRAM_LOCK_CONN
+    database_url = clean_env_str(
+        os.getenv("DATABASE_URL")
+        or os.getenv("NEON_DATABASE_URL")
+        or os.getenv("POSTGRES_URL")
+    )
+    if not database_url:
+        print("⚠️ Telegram single-poller lock unavailable: no PostgreSQL DATABASE_URL configured.", flush=True)
+        return True
+    try:
+        import psycopg2
+        import hashlib
+        lock_key = int.from_bytes(
+            hashlib.sha256((TELEGRAM_BOT_TOKEN + ":telegram-poller").encode("utf-8")).digest()[:8],
+            "big",
+            signed=True,
+        )
+        conn = psycopg2.connect(database_url, connect_timeout=10)
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute("SELECT pg_try_advisory_lock(%s)", (lock_key,))
+            acquired = bool(cur.fetchone()[0])
+        if not acquired:
+            conn.close()
+            print("🛑 Telegram poller lock is already held by another KZ instance. This process will not start polling.", flush=True)
+            return False
+        _TELEGRAM_LOCK_CONN = conn
+        print("🔒 Telegram single-poller lock acquired.", flush=True)
+        return True
+    except Exception as exc:
+        print(f"⚠️ Telegram single-poller lock check failed: {type(exc).__name__}: {str(exc)[:200]}", flush=True)
+        return True
+
 def main():
     print("🔵 MAIN: entered main()", flush=True)
 
@@ -4218,6 +4255,10 @@ def main():
     print(f"📊 Primary TF: {PRIMARY_EXECUTION_TF} | Architecture: 4H→1H→15M→5M", flush=True)
 
     print("🔵 MAIN: building Application...", flush=True)
+    if not _acquire_telegram_single_poller_lock():
+        print("ℹ️ Another Telegram instance is active; FastAPI/other services remain available.", flush=True)
+        return
+
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     print("🔵 MAIN: Application built OK", flush=True)
 
