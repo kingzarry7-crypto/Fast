@@ -393,13 +393,26 @@ def human_press(user_id: str, x: float, y: float, duration_ms: int) -> Dict[str,
         page.wait_for_timeout(duration)
     finally:
         page.mouse.up()
-    page.wait_for_timeout(500)
+    # Fiverr can take several seconds to remove the challenge iframe and
+    # rebuild the authenticated page. Do not stop immediately after releasing
+    # the pointer; poll the live browser and then refresh the real connection
+    # state before returning.
+    deadline = time.monotonic() + 10.0
+    verification = _set_human_verification_state(user_id, page)
+    while verification.get("required") and time.monotonic() < deadline:
+        page.wait_for_timeout(500)
+        verification = _set_human_verification_state(user_id, page)
+
+    state = connection_status(user_id)
     return {
         "success": True,
+        "verified": not verification.get("required", False),
+        "status": "verified" if not verification.get("required", False) else "still_required",
         "x": px,
         "y": py,
         "duration_ms": duration,
-        "human_verification": _set_human_verification_state(user_id, page),
+        "human_verification": verification,
+        "connection": state,
     }
 
 
