@@ -342,15 +342,47 @@ def _github_execute(user_id: str, operation: str, payload: Dict[str, Any]) -> Di
 async def connector_status(request: Request):
     user_id = _user_id(request)
     account = _github_account(user_id)
+    tiktok_account = _provider_account(user_id, "tiktok")
     return {
         "github": {
             "configured": _github_configured(),
             "connected": bool(account),
             "account": account,
             "authorization_mode": "oauth",
-        }
+        },
+        "tiktok": {
+            "configured": _tiktok_configured(),
+            "connected": bool(tiktok_account),
+            "account": tiktok_account,
+            "authorization_mode": "oauth_qr",
+        },
     }
 
+
+def _provider_account(user_id: str, provider: str) -> Optional[Dict[str, Any]]:
+    with get_db_cursor(commit=False) as cur:
+        cur.execute(
+            """
+            SELECT id, provider, provider_account_id, display_name, scopes,
+                   token_expires_at, metadata
+            FROM web_connected_accounts
+            WHERE user_id = %s AND provider = %s AND revoked_at IS NULL
+            ORDER BY updated_at DESC LIMIT 1
+            """,
+            (user_id, provider),
+        )
+        row = cur.fetchone()
+    if not row:
+        return None
+    return {
+        "id": str(_row_value(row, "id", 0)),
+        "provider": str(_row_value(row, "provider", 1) or provider),
+        "provider_account_id": str(_row_value(row, "provider_account_id", 2) or ""),
+        "display_name": str(_row_value(row, "display_name", 3) or provider),
+        "scopes": _row_value(row, "scopes", 4) or [],
+        "token_expires_at": str(_row_value(row, "token_expires_at", 5) or "") or None,
+        "metadata": _row_value(row, "metadata", 6) or {},
+    }
 
 @router.get("/accounts")
 async def connector_accounts(request: Request):
