@@ -508,6 +508,23 @@ def human_press(user_id: str, x: float, y: float, duration_ms: int, account_id: 
     }
 
 
+def manual_scroll(user_id: str, delta_x: float = 0, delta_y: float = 0, account_id: str | None = None) -> Dict[str, Any]:
+    """Forward a scroll gesture chosen by the authenticated user to the live browser."""
+    page = _page(user_id, account_id)
+    challenge = _set_human_verification_state(user_id, page, account_id)
+    dx = max(-2000.0, min(float(delta_x), 2000.0))
+    dy = max(-2000.0, min(float(delta_y), 2000.0))
+    if dx == 0 and dy == 0:
+        return {"success": True, "scroll": {"x": 0, "y": 0}, "human_verification": challenge}
+    page.mouse.wheel(dx, dy)
+    page.wait_for_timeout(80)
+    return {
+        "success": True,
+        "scroll": {"x": dx, "y": dy},
+        "human_verification": _set_human_verification_state(user_id, page, account_id),
+    }
+
+
 def human_move(user_id: str, x: float, y: float, account_id: str | None = None) -> Dict[str, Any]:
     """Move the user's pointer inside an active human challenge."""
     page = _page(user_id, account_id)
