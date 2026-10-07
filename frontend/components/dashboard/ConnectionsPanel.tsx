@@ -108,7 +108,9 @@ export default function ConnectionsPanel() {
         }
       } catch {}
     }, 3000);
-  
+    return () => window.clearInterval(timer);
+  }, [open, page?.human_verification?.required, accountId]);
+
   async function refreshOfficialConnectors() {
     try {
       const r = await fetch("/api/connectors/status", { credentials: "include", cache: "no-store" });
@@ -180,10 +182,7 @@ export default function ConnectionsPanel() {
       void refreshOfficialConnectors();
       window.history.replaceState({}, "", window.location.pathname);
     }
-  }, [open, refreshOfficialConnectors]);
-
-  return () => window.clearInterval(timer);
-  }, [open, page?.human_verification?.required, accountId]);
+  }, [open]);
 
   async function start() {
     if (!url.trim()) return;
