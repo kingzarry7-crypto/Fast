@@ -428,7 +428,7 @@ def install_streaming_chat(
                 "conversation_id": conversation_id,
             }
 
-        async def _handle_connector_chat(request: Request, message: str, *, stream: bool):
+        async def _handle_connector_chat(request: Request, message: str, *, stream: bool, requested_conversation_id: str | None = None):
             user_row = await __import__("asyncio").to_thread(
                 require_current_user, request
             )
@@ -436,7 +436,12 @@ def install_streaming_chat(
             conversation_id = await __import__("asyncio").to_thread(
                 get_or_create_conversation,
                 user_id,
-                None,
+                (requested_conversation_id or "").strip() or None,
+            )
+            await __import__("asyncio").to_thread(
+                maybe_set_conversation_title,
+                conversation_id,
+                message,
             )
             result = await __import__("asyncio").to_thread(
                 _connector_reply,
@@ -506,6 +511,7 @@ def install_streaming_chat(
                     request,
                     message,
                     stream=request.url.path == "/api/chat/stream",
+                    requested_conversation_id=str(payload.get("conversation_id") or "").strip() or None,
                 )
             except HTTPException as exc:
                 return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
