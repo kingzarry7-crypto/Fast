@@ -327,4 +327,197 @@ def install_streaming_chat(
             },
         )
 
+
+    # ------------------------------------------------------------------
+    # Connector-aware chat bridge
+    #
+    # The main /api/chat and streaming /api/chat/stream routes normally
+    # delegate to AIEngine. That is correct for ordinary conversation, but
+    # it also meant a natural-language request such as "send an email to
+    # ..." never reached the already-connected Google connector. Intercept
+    # only explicit Gmail read/send intents here and leave all other chat
+    # traffic untouched.
+    # ------------------------------------------------------------------
+    try:
+        from fastapi.responses import JSONResponse, StreamingResponse as _ConnectorStreamingResponse
+        from account_agent import _parse_email_request, _format_gmail_result
+        from google_connector import _account as _google_account, _approval as _google_approval, _execute as _google_execute
+
+        def _connector_chat_intent(text: str):
+            raw = str(text or "").strip()
+            lower = raw.lower()
+
+            # Explicit inbox/read requests are safe and can execute directly.
+            read_email = bool(
+                re.search(
+                    r"\b(check|read|show|open|look at|look into)\b.{0,40}\b(my )?(email|gmail|inbox)\b",
+                    lower,
+                )
+                or re.fullmatch(r"(my )?(email|gmail|inbox)( please)?", lower)
+            )
+
+            if read_email:
+                return {"kind": "read_gmail"}
+
+            # Use the existing, already-tested email parser for send requests.
+            payload = _parse_email_request(raw)
+            if payload:
+                return {"kind": "send_gmail", "payload": payload}
+
+            return None
+
+        def _connector_reply(user_id: str, message: str, conversation_id: str):
+            intent = _connector_chat_intent(message)
+            if not intent:
+                return None
+
+            account = _google_account(user_id)
+            if not account:
+                return {
+                    "kind": intent["kind"],
+                    "reply": (
+                        "🔌 Google Gmail is not connected to this KZ account. "
+                        "Connect Google from Dashboard → Connections, then ask me again."
+                    ),
+                    "conversation_id": conversation_id,
+                }
+
+            if intent["kind"] == "read_gmail":
+                result = _google_execute(
+                    user_id,
+                    "list_gmail",
+                    {"query": "in:anywhere", "limit": 10},
+                )
+                return {
+                    "kind": "read_gmail",
+                    "reply": _format_gmail_result(result),
+                    "conversation_id": conversation_id,
+                }
+
+            payload = intent["payload"]
+            approval = _google_approval(
+                user_id,
+                "send_gmail",
+                payload["to"],
+                payload,
+            )
+            account_name = account.get("display_name") or account.get("provider_account_id") or "connected Google account"
+            reply = (
+                "✉️ EMAIL READY — I found your connected Google account "
+                f"({account_name}) and prepared the exact Gmail action.\n\n"
+                f"To: {payload['to']}\n"
+                f"Subject: {payload['subject']}\n"
+                f"Message: {payload['body']}\n\n"
+                f"🛡️ Approval required before sending. "
+                f"Approval ID: {approval['approval_id']}\n"
+                "Open Dashboard → Connections → Google to approve or reject it. "
+                "I will only report it as sent after Google returns verified evidence."
+            )
+            return {
+                "kind": "send_gmail",
+                "reply": reply,
+                "approval_id": approval["approval_id"],
+                "connector_action": {
+                    "provider": "google",
+                    "operation": "send_gmail",
+                    "status": "waiting_for_approval",
+                    "approval_id": approval["approval_id"],
+                    "target": payload["to"],
+                    "payload": payload,
+                },
+                "conversation_id": conversation_id,
+            }
+
+        async def _handle_connector_chat(request: Request, message: str, *, stream: bool):
+            user_row = await __import__("asyncio").to_thread(
+                require_current_user, request
+            )
+            user_id = str(user_row["id"] if isinstance(user_row, dict) else user_row[0])
+            conversation_id = await __import__("asyncio").to_thread(
+                get_or_create_conversation,
+                user_id,
+                None,
+            )
+            result = await __import__("asyncio").to_thread(
+                _connector_reply,
+                user_id,
+                message,
+                str(conversation_id),
+            )
+            if not result:
+                return None
+
+            # Persist the same user/assistant exchange that normal chat would
+            # persist, without invoking the LLM for an external action.
+            try:
+                memory = memory_factory(user_id, str(conversation_id))
+                memory.add_message(user_id, "user", message)
+                memory.add_message(user_id, "assistant", result["reply"])
+            except Exception as exc:
+                logger.warning("Connector chat memory write failed: %s", type(exc).__name__)
+
+            if not stream:
+                return JSONResponse({
+                    "status": "success",
+                    "reply": result["reply"],
+                    "conversation_id": str(conversation_id),
+                    **({"connector_action": result["connector_action"]} if result.get("connector_action") else {}),
+                })
+
+            async def connector_events():
+                yield _sse({"type": "start", "provider": "connector"})
+                yield _sse({"type": "delta", "text": result["reply"]})
+                yield _sse({
+                    "type": "done",
+                    "conversation_id": str(conversation_id),
+                    "text": result["reply"],
+                    **({"connector_action": result["connector_action"]} if result.get("connector_action") else {}),
+                })
+
+            return _ConnectorStreamingResponse(
+                connector_events(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache, no-transform",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",
+                },
+            )
+
+        @app.middleware("http")
+        async def connector_chat_middleware(request: Request, call_next):
+            if request.method != "POST" or request.url.path not in {"/api/chat", "/api/chat/stream"}:
+                return await call_next(request)
+
+            try:
+                raw_body = await request.body()
+                payload = json.loads(raw_body.decode("utf-8") or "{}")
+                message = str(payload.get("message") or "").strip()
+                if not message:
+                    return await call_next(request)
+
+                # Only authenticate/intercept when this is an explicit connector
+                # intent. Ordinary chat keeps its exact existing behavior.
+                intent = _connector_chat_intent(message)
+                if not intent:
+                    return await call_next(request)
+
+                return await _handle_connector_chat(
+                    request,
+                    message,
+                    stream=request.url.path == "/api/chat/stream",
+                )
+            except HTTPException as exc:
+                return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+            except Exception as exc:
+                logger.exception("Connector chat bridge failed: %s", type(exc).__name__)
+                return JSONResponse(
+                    {"detail": "Connected-account action could not be prepared safely."},
+                    status_code=500,
+                )
+
+        logger.info("CONNECTOR_CHAT_BRIDGE_INSTALLED")
+    except Exception as exc:
+        logger.exception("CONNECTOR_CHAT_BRIDGE_FAILED: %s", type(exc).__name__)
+
     logger.info("REALTIME_TEXT_STREAMING_PATCH_INSTALLED")
