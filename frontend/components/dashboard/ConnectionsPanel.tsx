@@ -23,6 +23,19 @@ type Page = {
   inputs?: { selector: string; type: string; name?: string | null; placeholder?: string | null }[];
 };
 
+async function readApiResponse(response: Response): Promise<any> {
+  const raw = await response.text();
+  if (!raw) {
+    throw new Error(`HTTP ${response.status}: empty response from KZ server`);
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const preview = raw.replace(/\\s+/g, " ").trim().slice(0, 240);
+    throw new Error(`HTTP ${response.status}: KZ server returned a non-JSON response: ${preview}`);
+  }
+}
+
 export default function ConnectionsPanel() {
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
@@ -191,7 +204,7 @@ export default function ConnectionsPanel() {
         body: JSON.stringify({ type: "human_verify" }),
         signal: controller.signal,
       });
-      const d = await r.json().catch(() => ({}));
+      const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Verification check failed");
       setPage(d.page);
       setConnection(d.page?.connection || null);
