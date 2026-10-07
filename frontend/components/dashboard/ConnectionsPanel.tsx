@@ -631,7 +631,8 @@ export default function ConnectionsPanel() {
               <button onClick={() => setOpen(false)} className="px-2 py-1 text-zinc-500">×</button>
             </div>
 
-            <div className="border-b border-white/5 p-4">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              <div className="border-b border-white/5 p-4">
               <div className="mb-3 font-mono-tech text-[10px] tracking-[0.18em] text-cyan-200">OFFICIAL CONNECTORS</div>
               <div className="grid gap-2">
                 <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
@@ -795,6 +796,7 @@ export default function ConnectionsPanel() {
                 <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-white/5 bg-black/20 p-3 text-[10px] text-zinc-500">{page.text || ""}</pre>
               </div>
             )}
+              </div>
           </aside>
         </>
       )}
