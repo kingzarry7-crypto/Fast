@@ -356,12 +356,6 @@ def _execute(user_id: str, operation: str, payload: Dict[str, Any]) -> Dict[str,
         if not name or not content:
             raise HTTPException(status_code=400, detail="name and content are required")
         metadata = {"name": name, "mimeType": mime_type}
-        r = _google_request(user_id, "POST", GOOGLE_DRIVE + "/files",
-                            headers={"Content-Type": mime_type}, params={"uploadType": "multipart"},
-                            json=None)
-        # The Drive multipart endpoint is intentionally not used through a
-        # generic JSON request. Use the simple media upload endpoint instead;
-        # the file is created with the supplied name via multipart below.
         boundary = "kz_" + secrets.token_hex(12)
         metadata_bytes = json.dumps(metadata).encode("utf-8")
         content_bytes = content.encode("utf-8")
