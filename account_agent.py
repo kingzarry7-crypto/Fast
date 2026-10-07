@@ -609,6 +609,14 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
                 f"🛡️ Permission required before sending. Approval ID: {result['approval_id']}. "
                 "Approve this exact action; KZ will then send it through Google and report verified evidence."
             ),
+            "connector_action": {
+                "provider": "google",
+                "operation": "send_gmail",
+                "status": "waiting_for_approval",
+                "approval_id": result["approval_id"],
+                "target": payload["to"],
+                "payload": payload,
+            },
         }
 
     return None
