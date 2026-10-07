@@ -49,6 +49,7 @@ export default function ConnectionsPanel() {
   const [message, setMessage] = useState("");
   const [challengeBusy, setChallengeBusy] = useState(false);
   const challengePress = useRef<{ x: number; y: number; startedAt: number; pointerId: number; remoteDown: boolean } | null>(null);
+  const scrollBatch = useRef<{ dx: number; dy: number; timer: number | null }>({ dx: 0, dy: 0, timer: null });
 
   useEffect(() => {
     try {
@@ -212,6 +213,37 @@ export default function ConnectionsPanel() {
     };
   }
 
+  function queueBrowserScroll(event: React.WheelEvent<HTMLImageElement>) {
+    if (!page?.screenshot || busy) return;
+    event.preventDefault();
+    const batch = scrollBatch.current;
+    batch.dx += event.deltaX;
+    batch.dy += event.deltaY;
+    if (batch.timer !== null) return;
+    batch.timer = window.setTimeout(async () => {
+      const dx = batch.dx;
+      const dy = batch.dy;
+      batch.dx = 0;
+      batch.dy = 0;
+      batch.timer = null;
+      if (!dx && !dy) return;
+      try {
+        const r = await fetch("/api/browser/connect/action", {
+          method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "manual_scroll", delta_x: dx, delta_y: dy, account_id: accountId }),
+        });
+        const d = await readApiResponse(r);
+        if (!r.ok) throw new Error(d.detail || "Browser scroll failed");
+        if (d.page) {
+          setPage(d.page);
+          setConnection(d.page.connection || null);
+        }
+      } catch (e) {
+        setMessage(e instanceof Error ? e.message : "Browser scroll failed");
+      }
+    }, 50);
+  }
+
   async function clickLiveBrowser(event: PointerEvent<HTMLImageElement>) {
     if (!page?.screenshot || page.human_verification?.required || challengeBusy || busy) return;
     const { x, y } = challengeCoordinates(event as unknown as MouseEvent<HTMLImageElement>);
@@ -247,7 +279,7 @@ export default function ConnectionsPanel() {
         if (recovered) {
           setPage(recovered);
           setConnection(recovered.connection || null);
-          setMessage("✓ VERIFIED — LIVE LOGIN BROWSER RESTORED. Continue your login yourself.");
+          setMessage("✓ VERIFIED — LOGIN IS NOT COMPLETE. The live browser is restored; scroll and log in yourself. KZ will only show READY TO CONFIRM after authenticated evidence is detected.");
         } else {
           setMessage("✓ HUMAN VERIFICATION CLEARED — Fiverr is still rebuilding the login page. Press REFRESH VIEW once.");
         }
@@ -321,7 +353,7 @@ export default function ConnectionsPanel() {
         if (recovered) {
           setPage(recovered);
           setConnection(recovered.connection || null);
-          setMessage("✓ HUMAN VERIFIED — LIVE LOGIN BROWSER RESTORED. Continue your login yourself.");
+          setMessage("✓ HUMAN VERIFIED — LOGIN IS NOT COMPLETE. The live browser is restored; scroll and log in yourself. KZ will only show READY TO CONFIRM after authenticated evidence is detected.");
         } else {
           await refresh();
           setMessage("✓ HUMAN VERIFICATION CLEARED — the login page is being restored. Press REFRESH VIEW once if Fiverr is still loading.");
@@ -422,8 +454,8 @@ export default function ConnectionsPanel() {
                 {!page.human_verification?.required && page.screenshot && (
                   <div className="mb-3 rounded-lg border border-cyan-400/20 bg-black p-2">
                     <div className="mb-2 flex items-center justify-between"><span className="font-mono-tech text-[9px] tracking-widest text-cyan-200">LIVE LOGIN BROWSER</span><span className="text-[9px] text-zinc-600">Click the browser yourself</span></div>
-                    <img src={page.screenshot} alt="Live KZ browser login view" onPointerUp={(event) => { event.preventDefault(); void clickLiveBrowser(event); }} draggable={false} style={{ touchAction: "none", userSelect: "none" }} className="block h-auto w-full cursor-pointer select-none" />
-                    <p className="mt-2 text-[10px] leading-relaxed text-zinc-600">Use this live browser to choose login controls yourself. Enter email/password in the fields below; KZ does not solve verification challenges.</p>
+                    <img src={page.screenshot} alt="Live KZ browser login view" onPointerUp={(event) => { event.preventDefault(); void clickLiveBrowser(event); }} onWheel={queueBrowserScroll} draggable={false} style={{ touchAction: "none", userSelect: "none" }} className="block h-auto w-full cursor-pointer select-none" />
+                    <p className="mt-2 text-[10px] leading-relaxed text-zinc-600">Scroll and click inside this live browser yourself. You can move through the full login page, then enter your credentials in the visible controls. KZ does not auto-login or treat human verification as account login.</p>
                   </div>
                 )}
 
@@ -438,6 +470,7 @@ export default function ConnectionsPanel() {
                           src={page.screenshot}
                           alt="Live KZ browser view for manual human verification"
                           onPointerDown={beginHumanPress}
+                          onWheel={queueBrowserScroll}
                           onPointerUp={finishHumanPress}
                           onPointerCancel={cancelHumanPress}
                           onLostPointerCapture={cancelHumanPress}
