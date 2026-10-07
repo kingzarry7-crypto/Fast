@@ -26,6 +26,7 @@ from news_engine import news_engine
 import market as market_engine
 from channel_work import create as work_create, list_recent as work_list, get as work_get, approve as work_approve, format_workflow as work_format, format_recent as work_format_recent, format_workflow_text as work_format_text, format_recent_text as work_format_recent_text
 from work_intent import parse as parse_work_intent
+from account_agent import channel_user_id
 
 # Shared personal price alerts (same table as Telegram)
 try:
