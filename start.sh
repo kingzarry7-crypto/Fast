@@ -18,8 +18,10 @@ echo "   → Runtime PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH}"
 #    the Chromium executable managed by Playwright during the image build.
 #    This is diagnostic only; it never downloads browsers at runtime.
 # ------------------------------------------------------------------
-echo "🖥️ Starting virtual display for the interactive browser..."
-if command -v Xvfb >/dev/null 2>&1; then
+echo "🖥️ Configuring browser display..."
+# Headless Chromium is substantially lighter on Railway. Screenshots and
+# user-controlled browser interaction still work in headless mode.
+if [ "${BROWSER_HEADLESS:-true}" = "false" ] && command -v Xvfb >/dev/null 2>&1; then
   export DISPLAY="${DISPLAY:-:99}"
   if ! pgrep -f "Xvfb ${DISPLAY}" >/dev/null 2>&1; then
     Xvfb "${DISPLAY}" -screen 0 1440x900x24 -nolisten tcp >/tmp/kz-xvfb.log 2>&1 &
@@ -28,7 +30,8 @@ if command -v Xvfb >/dev/null 2>&1; then
     sleep 1
   fi
 else
-  echo "⚠️ Xvfb is unavailable; browser will remain headless."
+  export BROWSER_HEADLESS="true"
+  echo "✅ Using lightweight headless Chromium (set BROWSER_HEADLESS=false only when a real display is required)."
 fi
 
 echo "🌐 Checking browser runtime..."
