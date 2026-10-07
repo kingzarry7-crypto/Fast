@@ -63,7 +63,7 @@ from channel_work import create as work_create, list_recent as work_list, get as
 from work_intent import parse as parse_work_intent
 from google_connector import _account, _approval, _execute, _fingerprint, _audit
 from memory_link_bridge import resolve_platform_identity
-from account_agent import handle_telegram_request, account_monitor_job, morning_telegram_digest
+from account_agent import handle_telegram_request, account_monitor_job, morning_telegram_digest, channel_user_id
 
 def clean_env_str(value, default=""):
     if not value:
@@ -4188,7 +4188,7 @@ async def work_command(update, context):
     args = list(context.args or [])
     try:
         if not args:
-            await update.message.reply_text(work_format_recent(await asyncio.to_thread(work_list, str(user.id), 5)), parse_mode="HTML")
+            await update.message.reply_text(work_format_recent(await asyncio.to_thread(work_list, channel_user_id("telegram", str(user.id)), 5)), parse_mode="HTML")
             return
         action = args[0].lower()
         if action in {"approve", "reject", "status"}:
@@ -4197,13 +4197,13 @@ async def work_command(update, context):
                 return
             workflow_id = args[1].strip()
             if action == "status":
-                item = await asyncio.to_thread(work_get, str(user.id), workflow_id)
+                item = await asyncio.to_thread(work_get, channel_user_id("telegram", str(user.id)), workflow_id)
                 if not item:
                     await update.message.reply_text("❌ Workflow not found.")
                     return
                 await update.message.reply_text(work_format(item), parse_mode="HTML")
                 return
-            item = await asyncio.to_thread(work_approve, str(user.id), workflow_id, action == "approve")
+            item = await asyncio.to_thread(work_approve, channel_user_id("telegram", str(user.id)), workflow_id, action == "approve")
             await update.message.reply_text(work_format(item), parse_mode="HTML")
             return
         goal = " ".join(args).strip()
@@ -4213,7 +4213,7 @@ async def work_command(update, context):
         if len(goal) > 4000:
             await update.message.reply_text("❌ Work goal is too long. Keep it under 4000 characters.")
             return
-        item = await asyncio.to_thread(work_create, str(user.id), goal)
+        item = await asyncio.to_thread(work_create, channel_user_id("telegram", str(user.id)), goal)
         await update.message.reply_text(work_format(item), parse_mode="HTML")
     except Exception as exc:
         logger.exception("KZ Work command failed")
