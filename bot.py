@@ -3105,8 +3105,27 @@ async def quick_symbol_command(symbol, update, context):
     await update.message.chat.send_action("typing")
     status=await update.message.reply_text(f"👑 <b>KING ZARRY AI</b>\n\n📡 Multi-timeframe analysis 4H→1H→15M→5M...\n📊 {symbol}\n📰 Checking news & events...",parse_mode="HTML")
     try:
-        mtf_data = await asyncio.to_thread(analyze_multi_timeframe, symbol)
-        news_data = await asyncio.to_thread(news_engine.get_news_for_asset, symbol)
+        # Market is the critical dependency. Retry once on a transient provider/network failure.
+        try:
+            mtf_data = await asyncio.to_thread(analyze_multi_timeframe, symbol)
+        except Exception as market_error:
+            logger.warning(
+                "Signal market fetch failed for %s; retrying once: %s: %s",
+                symbol, type(market_error).__name__, str(market_error)[:300],
+            )
+            await asyncio.sleep(1.0)
+            mtf_data = await asyncio.to_thread(analyze_multi_timeframe, symbol)
+
+        # News must never make an otherwise valid market signal fail.
+        try:
+            news_data = await asyncio.to_thread(news_engine.get_news_for_asset, symbol)
+        except Exception as news_error:
+            logger.warning(
+                "Signal news fetch failed for %s; continuing without news: %s: %s",
+                symbol, type(news_error).__name__, str(news_error)[:300],
+            )
+            news_data = {"risk": "UNKNOWN", "events": [], "headlines": []}
+
         mtf_data = await asyncio.to_thread(ai_confirm_signal_mtf, mtf_data, news_data)
         try:
             memory_instance.save_trading_preferences(str(update.effective_user.id), preferred_assets=symbol)
@@ -3126,9 +3145,13 @@ async def quick_symbol_command(symbol, update, context):
         except Exception:
             pass
     except Exception as error:
-        logger.error(f"Signal Error: {error}")
+        logger.exception("Signal Error for %s", symbol)
         try:
-            await status.edit_text("❌ <b>Signal Error</b>\n\nFailed to fetch market data. Please try again.",parse_mode="HTML")
+            await status.edit_text(
+                "❌ <b>Signal Error</b>\n\n"
+                "The market feed is temporarily unavailable. Please try again in a moment.",
+                parse_mode="HTML",
+            )
         except Exception:
             await update.message.reply_text("❌ Signal Error: Unable to fetch market data.",disable_web_page_preview=True)
 
