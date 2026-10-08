@@ -556,12 +556,22 @@ async def connector_status(request: Request):
     user_id = _user_id(request)
     account = _github_account(user_id)
     tiktok_account = _provider_account(user_id, "tiktok")
+
+    shopify_missing = []
+    if not SHOPIFY_CLIENT_ID: shopify_missing.append("SHOPIFY_CLIENT_ID")
+    if not SHOPIFY_CLIENT_SECRET: shopify_missing.append("SHOPIFY_CLIENT_SECRET")
+    if not SHOPIFY_REDIRECT_URI: shopify_missing.append("SHOPIFY_REDIRECT_URI")
+    if not CONNECTOR_STATE_SECRET: shopify_missing.append("CONNECTOR_STATE_SECRET")
+    if not os.getenv("KZ_CONNECTOR_ENCRYPTION_KEY", "").strip(): shopify_missing.append("KZ_CONNECTOR_ENCRYPTION_KEY")
+
     return {
         "shopify": {
             "configured": _shopify_configured(),
             "connected": bool(_provider_account(user_id, "shopify")),
             "account": _provider_account(user_id, "shopify"),
             "authorization_mode": "oauth",
+            "redirect_uri": SHOPIFY_REDIRECT_URI,
+            "missing_configuration": shopify_missing,
         },
         "github": {
             "configured": _github_configured(),
