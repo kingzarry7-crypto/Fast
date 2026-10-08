@@ -45,7 +45,7 @@ GOOGLE_GMAIL = "https://gmail.googleapis.com/gmail/v1"
 GOOGLE_DRIVE = "https://www.googleapis.com/drive/v3"
 GOOGLE_CALENDAR = "https://www.googleapis.com/calendar/v3"
 
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://fast.kingzarry7.workers.dev").rstrip("/")
 CONNECTOR_STATE_SECRET = os.getenv("CONNECTOR_STATE_SECRET") or os.getenv("SESSION_SECRET") or ""
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "").strip()
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
