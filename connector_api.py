@@ -415,8 +415,27 @@ SHOPIFY_SCOPES = os.getenv(
     "read_products,write_products,read_orders,write_inventory",
 ).strip()
 
+# Never log secret values; only log whether Railway exposed the required settings.
+logger.info(
+    "SHOPIFY_ENV client_id=%s client_secret=%s redirect=%s state_secret_32plus=%s encryption_key_32plus=%s missing=%s",
+    bool(SHOPIFY_CLIENT_ID), bool(SHOPIFY_CLIENT_SECRET), bool(SHOPIFY_REDIRECT_URI),
+    len(CONNECTOR_STATE_SECRET.strip()) >= 32,
+    len(os.getenv("KZ_CONNECTOR_ENCRYPTION_KEY", "").strip()) >= 32,
+    ",".join(_shopify_missing_configuration()) or "none",
+)
+
+def _shopify_missing_configuration() -> list[str]:
+    """Return only Shopify settings that the running backend cannot see."""
+    missing = []
+    if not SHOPIFY_CLIENT_ID: missing.append("SHOPIFY_CLIENT_ID")
+    if not SHOPIFY_CLIENT_SECRET: missing.append("SHOPIFY_CLIENT_SECRET")
+    if not SHOPIFY_REDIRECT_URI: missing.append("SHOPIFY_REDIRECT_URI")
+    if len(CONNECTOR_STATE_SECRET.strip()) < 32: missing.append("CONNECTOR_STATE_SECRET")
+    if len(os.getenv("KZ_CONNECTOR_ENCRYPTION_KEY", "").strip()) < 32: missing.append("KZ_CONNECTOR_ENCRYPTION_KEY")
+    return missing
+
 def _shopify_configured() -> bool:
-    return bool(SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET and SHOPIFY_REDIRECT_URI and CONNECTOR_STATE_SECRET)
+    return not _shopify_missing_configuration()
 
 def _shopify_store(value: str) -> str:
     store = str(value or "").strip().lower()
@@ -491,8 +510,10 @@ def _shopify_token(user_id: str, store: str = "") -> tuple[str, str]:
 @router.get("/shopify/start")
 async def shopify_start(request: Request, shop: str):
     user_id = _connector_user_id(request)
-    if not _shopify_configured():
-        raise HTTPException(status_code=503, detail="Shopify connector is not configured on KZ")
+    missing = _shopify_missing_configuration()
+    if missing:
+        logger.error("SHOPIFY_CONFIG_MISSING %s", ",".join(missing))
+        raise HTTPException(status_code=503, detail="Shopify connector is not configured on KZ: missing " + ", ".join(missing))
     store = _shopify_store(shop)
     state = _sign_state({"provider":"shopify","user_id":user_id,"store":store,"return_url":_oauth_return_url(request),"nonce":secrets.token_urlsafe(18),"exp":_now()+600})
     params={"response_type":"code","client_id":SHOPIFY_CLIENT_ID,"scope":SHOPIFY_SCOPES,"redirect_uri":SHOPIFY_REDIRECT_URI,"state":state}
@@ -587,12 +608,7 @@ async def connector_status(request: Request):
     account = _github_account(user_id)
     tiktok_account = _provider_account(user_id, "tiktok")
 
-    shopify_missing = []
-    if not SHOPIFY_CLIENT_ID: shopify_missing.append("SHOPIFY_CLIENT_ID")
-    if not SHOPIFY_CLIENT_SECRET: shopify_missing.append("SHOPIFY_CLIENT_SECRET")
-    if not SHOPIFY_REDIRECT_URI: shopify_missing.append("SHOPIFY_REDIRECT_URI")
-    if not CONNECTOR_STATE_SECRET: shopify_missing.append("CONNECTOR_STATE_SECRET")
-    if not os.getenv("KZ_CONNECTOR_ENCRYPTION_KEY", "").strip(): shopify_missing.append("KZ_CONNECTOR_ENCRYPTION_KEY")
+    shopify_missing = _shopify_missing_configuration()
 
     return {
         "shopify": {
