@@ -172,6 +172,14 @@ def account_context_for_ai(user_id: str) -> str:
                         scope_names.append("calendar.read")
                     elif "calendar.events" in s:
                         scope_names.append("calendar.write")
+                    elif "read_products" in s:
+                        scope_names.append("shopify.products.read")
+                    elif "write_products" in s:
+                        scope_names.append("shopify.products.write")
+                    elif "read_orders" in s:
+                        scope_names.append("shopify.orders.read")
+                    elif "write_inventory" in s:
+                        scope_names.append("shopify.inventory.write")
                 lines.append(
                     f"- {provider}: {account.get('account') or 'connected account'}"
                     + (f" [capabilities: {', '.join(sorted(set(scope_names)))}]" if scope_names else "")
@@ -287,6 +295,63 @@ def _format_gmail_result(result: dict[str, Any]) -> str:
         snippet = str(item.get("snippet") or "").replace("\n", " ")[:180]
         lines.append(f"• {subject}\n  From: {sender}\n  {date}\n  {snippet}")
     return "\n".join(lines)
+
+
+def _shopify_read_intent(text: str) -> Optional[dict[str, str]]:
+    """Recognize safe Shopify read requests and route them to the official connector."""
+    raw = str(text or "").strip()
+    lower = raw.lower()
+    if not raw:
+        return None
+
+    if re.search(r"\b(shopify|my store|my shop|storefront)\b", lower):
+        if re.search(r"\b(order|orders|sales|purchases)\b", lower):
+            return {"operation": "orders", "kind": "shopify_orders"}
+        if re.search(r"\b(product|products|inventory|stock|items)\b", lower):
+            return {"operation": "products", "kind": "shopify_products"}
+        return {"operation": "shop", "kind": "shopify_store"}
+
+    if not any(p == "shopify" for p in (snapshot.get("providers") or {})):
+        return None
+    if re.search(r"\b(products|inventory|stock|items)\b", lower):
+        return {"operation": "products", "kind": "shopify_products"}
+    if re.search(r"\b(orders|sales|purchases)\b", lower):
+        return {"operation": "orders", "kind": "shopify_orders"}
+    return None
+
+
+def _format_shopify_result(result: dict[str, Any], kind: str) -> str:
+    if kind == "shopify_store":
+        shop = result.get("shop") or {}
+        return (
+            "🛍️ SHOPIFY CHECK COMPLETE\n\n"
+            f"Store: {shop.get('name') or shop.get('myshopifyDomain') or 'Connected Shopify store'}\n"
+            f"Domain: {shop.get('myshopifyDomain') or 'unknown'}"
+        )
+    if kind == "shopify_products":
+        products = ((result.get("products") or {}).get("nodes") or [])
+        if not products:
+            return "🛍️ SHOPIFY PRODUCTS CHECK COMPLETE — no products were returned."
+        lines = [f"🛍️ SHOPIFY PRODUCTS — {len(products)} returned", ""]
+        for item in products[:20]:
+            lines.append(
+                f"• {item.get('title') or '(untitled)'} — "
+                f"{item.get('status') or 'unknown'} — {item.get('handle') or ''}"
+            )
+        return "\n".join(lines)
+    if kind == "shopify_orders":
+        orders = ((result.get("orders") or {}).get("nodes") or [])
+        if not orders:
+            return "🛍️ SHOPIFY ORDERS CHECK COMPLETE — no orders were returned."
+        lines = [f"🛍️ SHOPIFY ORDERS — {len(orders)} returned", ""]
+        for item in orders[:20]:
+            lines.append(
+                f"• {item.get('name') or '(unnamed order)'} — "
+                f"{item.get('displayFinancialStatus') or 'unknown payment'} — "
+                f"{item.get('displayFulfillmentStatus') or 'unknown fulfillment'}"
+            )
+        return "\n".join(lines)
+    return "🛍️ Shopify check completed."
 
 
 def _format_accounts(snapshot: dict[str, Any]) -> str:
@@ -548,6 +613,61 @@ async def handle_telegram_request(update: Any, text: str) -> Optional[dict[str, 
                 lines.append("• " + html_escape(item.get("summary") or "(untitled)") + " — " + html_escape(str(item.get("start") or "")))
             await update.message.reply_text("\n".join(lines), parse_mode="HTML")
         return {"status": "completed", "kind": "calendar_read", "result": result}
+
+    shopify_intent = _shopify_read_intent(raw)
+    if shopify_intent:
+        try:
+            from connector_api import _provider_account, _shopify_request, _shopify_token
+
+            account = _provider_account(uid, "shopify")
+            if not account:
+                return {
+                    "status": "not_connected",
+                    "kind": shopify_intent["kind"],
+                    "reply": "🔌 KZ checked the account registry: Shopify is not connected to this KZ account.",
+                }
+
+            store, token = _shopify_token(uid, "")
+            operation = shopify_intent["operation"]
+            if operation == "shop":
+                result = _shopify_request(
+                    store, token,
+                    "query { shop { id name myshopifyDomain } }",
+                )
+            elif operation == "products":
+                result = _shopify_request(
+                    store, token,
+                    "query { products(first: 20) { nodes { id title status handle } } }",
+                )
+            elif operation == "orders":
+                result = _shopify_request(
+                    store, token,
+                    "query { orders(first: 20, sortKey: CREATED_AT, reverse: true) { nodes { id name createdAt displayFinancialStatus displayFulfillmentStatus } } }",
+                )
+            else:
+                return None
+
+            data = result.get("data") or {}
+            return {
+                "status": "completed",
+                "kind": shopify_intent["kind"],
+                "provider": "shopify",
+                "operation": operation,
+                "target": store,
+                "reply": _format_shopify_result(data, shopify_intent["kind"]),
+                "result": data,
+            }
+        except Exception as exc:
+            logger.warning("Web Shopify read failed: %s", type(exc).__name__)
+            detail = getattr(exc, "detail", None)
+            return {
+                "status": "failed",
+                "kind": shopify_intent["kind"],
+                "provider": "shopify",
+                "reply": "❌ KZ could not complete the Shopify check. No success was claimed."
+                        + (f"\nReason: {str(detail)[:220]}" if detail else ""),
+                "error": type(exc).__name__,
+            }
 
     gmail_intent = _gmail_read_intent(raw)
     if gmail_intent:
