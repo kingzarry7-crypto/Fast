@@ -1179,7 +1179,7 @@ class KingZarryAI(discord.Client):
             if im and not images:
                 async with message.channel.typing():
                     try:
-                        md = await asyncio.to_thread(market_engine.analyze_market, sym, tf)
+                        md = await asyncio.to_thread(market_engine.get_market_snapshot, sym, tf)
                         nd = await asyncio.to_thread(news_engine.get_news_for_asset, sym)
                         emb = build_discord_signal_embed(md, nd)
                         cf = None
