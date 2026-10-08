@@ -409,22 +409,55 @@ def install_streaming_chat(
                 require_current_user, request
             )
             user_id = str(user_row["id"] if isinstance(user_row, dict) else user_row[0])
-            conversation_id = await __import__("asyncio").to_thread(
-                get_or_create_conversation,
-                user_id,
-                (requested_conversation_id or "").strip() or None,
-            )
-            await __import__("asyncio").to_thread(
-                maybe_set_conversation_title,
-                conversation_id,
-                message,
-            )
-            result = await __import__("asyncio").to_thread(
-                _connector_reply,
-                user_id,
-                message,
-                str(conversation_id),
-            )
+            # Conversation persistence is useful, but it must never prevent
+            # a connected-account action from being prepared or executed.
+            # If the conversation table/path is temporarily unavailable, keep
+            # the connector action authoritative and use a transient ID.
+            requested_id = (requested_conversation_id or "").strip() or None
+            try:
+                conversation_id = await __import__("asyncio").to_thread(
+                    get_or_create_conversation,
+                    user_id,
+                    requested_id,
+                )
+                try:
+                    await __import__("asyncio").to_thread(
+                        maybe_set_conversation_title,
+                        conversation_id,
+                        message,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Connector conversation title update skipped: %s",
+                        type(exc).__name__,
+                    )
+            except Exception as exc:
+                import uuid
+                conversation_id = requested_id or str(uuid.uuid4())
+                logger.warning(
+                    "Connector conversation setup skipped; action continues: %s",
+                    type(exc).__name__,
+                )
+
+            try:
+                result = await __import__("asyncio").to_thread(
+                    _connector_reply,
+                    user_id,
+                    message,
+                    str(conversation_id),
+                )
+            except Exception as exc:
+                logger.exception(
+                    "Connected-account action preparation failed: %s",
+                    type(exc).__name__,
+                )
+                return JSONResponse(
+                    {
+                        "detail": "Connected-account action failed before preparation.",
+                        "error_type": type(exc).__name__,
+                    },
+                    status_code=502,
+                )
             if not result:
                 return None
 
