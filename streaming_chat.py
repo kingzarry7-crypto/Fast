@@ -525,12 +525,20 @@ def install_streaming_chat(
                 if work_intent and work_intent.get("kind") == "create":
                     try:
                         from kz_agent import run as run_kz_agent
+                        user_row = await __import__("asyncio").to_thread(
+                            require_current_user, request
+                        )
+                        user_id = str(
+                            user_row.get("id")
+                            if isinstance(user_row, dict)
+                            else user_row[0]
+                        )
                         agent = await __import__("asyncio").to_thread(
                             run_kz_agent,
-                            str((await __import__("asyncio").to_thread(require_current_user, request))["id"]),
+                            user_id,
                             str(work_intent.get("goal") or message),
                             account_id=str(payload.get("account_id") or "").strip() or None,
-                            run_now=False,
+                            run_now=True,
                         )
                         reply = (
                             "KZ AGENT mission started.\\n\\n"
