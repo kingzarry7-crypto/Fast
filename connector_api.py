@@ -552,10 +552,6 @@ async def shopify_start(request: Request, shop: str = "", return_url: str = ""):
         "scope": SHOPIFY_SCOPES,
         "redirect_uri": SHOPIFY_REDIRECT_URI,
         "state": state,
-        # Shopify may route the legacy authorization request through
-        # admin.shopify.com first. Supplying the empty grant_options[] value
-        # preserves the callback parameters through that transition.
-        "grant_options[]": "",
     }
     logger.info("SHOPIFY_OAUTH_START store=%s return=%s redirect_uri=%s", store, callback_frontend, SHOPIFY_REDIRECT_URI)
     return RedirectResponse(SHOPIFY_AUTHORIZE.format(shop=store)+"?"+urllib.parse.urlencode(params))
