@@ -374,7 +374,10 @@ def install_streaming_chat(
             raw = str(text or "").strip().lower()
             if not raw:
                 return False
-            if raw in {"approve", "reject"}:
+            # Approval commands may include the exact approval UUID.
+            # Keep them on the deterministic connector path instead of letting
+            # the general LLM answer as if Gmail were unavailable.
+            if re.fullmatch(r"(approve|reject)(?:\\s+[0-9a-fA-F-]{36})?", raw):
                 return True
             if raw in {
                 "account status", "check connected accounts", "what accounts are connected",
