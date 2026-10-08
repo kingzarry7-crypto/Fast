@@ -30,6 +30,7 @@ export function useChat(
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const agentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const conversationIdRef = useRef<string | null | undefined>(conversationId);
   conversationIdRef.current = conversationId;
 
@@ -152,7 +153,16 @@ export function useChat(
                 setMessages((prev) =>
                   prev.map((item) =>
                     item.id === aiId
-                      ? { ...item, status: "" }
+                      ? { ...item, status: provider === "kz_agent" ? "KZ AGENT • STARTING" : "" }
+                      : item
+                  )
+                );
+              },
+              onAgent: (agent) => {
+                setMessages((prev) =>
+                  prev.map((item) =>
+                    item.id === aiId
+                      ? { ...item, status: agent.activity ? `KZ AGENT • ${agent.activity}` : "KZ AGENT • WORKING" }
                       : item
                   )
                 );
@@ -166,10 +176,41 @@ export function useChat(
             setMessages((prev) =>
               prev.map((item) =>
                 item.id === aiId
-                  ? { ...item, text: streamed.reply, status: "AI CORE • RESPONSE RECEIVED", approval: streamed.approval || extractApproval(streamed.reply) }
+                  ? { ...item, text: streamed.reply, status: streamed.agent?.id ? "KZ AGENT • WORKING" : "AI CORE • RESPONSE RECEIVED", approval: streamed.approval || extractApproval(streamed.reply) }
                   : item
               )
             );
+
+            if (streamed.agent?.id) {
+              const agentId = streamed.agent.id;
+              if (agentPollRef.current) clearInterval(agentPollRef.current);
+              agentPollRef.current = setInterval(async () => {
+                try {
+                  const live = await api.getKZAgentStatus(agentId);
+                  const state = live.agent;
+                  if (!state) return;
+                  const terminal = ["completed", "failed", "paused"].includes(String(state.status || ""));
+                  setMessages((prev) =>
+                    prev.map((item) =>
+                      item.id === aiId
+                        ? {
+                            ...item,
+                            status: terminal
+                              ? `KZ AGENT • ${String(state.status || "").replaceAll("_", " ").toUpperCase()}`
+                              : `KZ AGENT • ${state.activity || "WORKING"}`,
+                          }
+                        : item
+                    )
+                  );
+                  if (terminal && agentPollRef.current) {
+                    clearInterval(agentPollRef.current);
+                    agentPollRef.current = null;
+                  }
+                } catch {
+                  // A temporary status poll failure must never interrupt the mission.
+                }
+              }, 2000);
+            }
             void api
               .generateChatSuggestions(effectiveText, streamed.reply, abortRef.current?.signal)
               .then((result) => {
@@ -284,6 +325,10 @@ export function useChat(
   const stop = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
+    if (agentPollRef.current) {
+      clearInterval(agentPollRef.current);
+      agentPollRef.current = null;
+    }
     setSending(false);
     setMessages((prev) =>
       prev.map((item) =>
@@ -296,6 +341,10 @@ export function useChat(
 
   const clear = useCallback(() => {
     abortRef.current?.abort();
+    if (agentPollRef.current) {
+      clearInterval(agentPollRef.current);
+      agentPollRef.current = null;
+    }
     abortRef.current = null;
     setMessages([]);
     setError(null);
