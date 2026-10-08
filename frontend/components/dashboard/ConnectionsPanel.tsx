@@ -754,7 +754,7 @@ export default function ConnectionsPanel() {
                 <div className="truncate rounded-lg border border-white/5 px-2 py-2 text-[9px] text-zinc-600">{accountId}</div>
               </div>
               <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/login" className="w-full rounded-lg border border-cyan-400/15 bg-white/[0.03] p-3 text-sm text-white outline-none" />
-              <button disabled={busy || !url.trim()} onClick={start} className="mt-2 w-full rounded-lg border border-cyan-400/25 bg-cyan-400/10 py-2 font-mono-tech text-[9px] tracking-widest text-cyan-100 disabled:opacity-40">{busy ? "OPENING..." : "OPEN LOGIN"}</button>
+              <button disabled={busy || !url.trim()} onClick={() => void start()} className="mt-2 w-full rounded-lg border border-cyan-400/25 bg-cyan-400/10 py-2 font-mono-tech text-[9px] tracking-widest text-cyan-100 disabled:opacity-40">{busy ? "OPENING..." : "OPEN LOGIN"}</button>
 
               {connection && <div className="mt-3 rounded-lg border border-white/5 bg-white/[0.02] p-3"><div className="flex items-center justify-between"><span className="font-mono-tech text-[9px] tracking-widest text-zinc-500">ACCOUNT STATE</span><span className="font-mono-tech text-[9px] tracking-widest text-cyan-200">{statusLabel}</span></div><div className="mt-1 truncate text-[10px] text-zinc-600">{connection.url}</div></div>}
               {message && <p className="mt-2 text-xs leading-relaxed text-zinc-400">{message}</p>}
