@@ -874,6 +874,48 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
             "reply": "🛑 Account monitoring stopped. KZ will no longer perform background Gmail checks for this account.",
         }
 
+    shopify_intent = _shopify_read_intent(raw, snapshot)
+    if shopify_intent:
+        try:
+            from connector_api import _provider_account, _shopify_request, _shopify_token
+            account = _provider_account(uid, "shopify")
+            if not account:
+                return {
+                    "status": "not_connected",
+                    "kind": shopify_intent["kind"],
+                    "provider": "shopify",
+                    "reply": "🔌 KZ checked the account registry: Shopify is not connected to this KZ account.",
+                }
+            store, token = _shopify_token(uid, "")
+            operation = shopify_intent["operation"]
+            queries = {
+                "shop": "query { shop { id name myshopifyDomain } }",
+                "products": "query { products(first: 20) { nodes { id title status handle } } }",
+                "orders": "query { orders(first: 20, sortKey: CREATED_AT, reverse: true) { nodes { id name createdAt displayFinancialStatus displayFulfillmentStatus } } }",
+            }
+            result = _shopify_request(store, token, queries[operation])
+            data = result.get("data") or {}
+            return {
+                "status": "completed",
+                "kind": shopify_intent["kind"],
+                "provider": "shopify",
+                "operation": operation,
+                "target": store,
+                "reply": _format_shopify_result(data, shopify_intent["kind"]),
+                "result": data,
+            }
+        except Exception as exc:
+            logger.warning("Web Shopify read failed: %s", type(exc).__name__)
+            detail = getattr(exc, "detail", None)
+            return {
+                "status": "failed",
+                "kind": shopify_intent["kind"],
+                "provider": "shopify",
+                "reply": "❌ KZ could not complete the Shopify check. No success was claimed."
+                        + (f"\nReason: {str(detail)[:220]}" if detail else ""),
+                "error": type(exc).__name__,
+            }
+
     gmail_intent = _gmail_read_intent(raw)
     if gmail_intent:
         try:
