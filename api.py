@@ -1528,6 +1528,38 @@ async def chat_endpoint(request: Request, chat: ChatRequest):
             _get_or_create_conversation, user_id, conv_id
         )
         await asyncio.to_thread(_maybe_set_conversation_title, conversation_id, message)
+
+        # Account/connector actions must never fall through to the general LLM.
+        # The streaming route already uses this authoritative router; the normal
+        # /api/chat route must use the same path so Shopify/Gmail requests are
+        # executed against the authenticated user's connected accounts.
+        try:
+            from account_agent import handle_web_request
+            connector_result = await asyncio.to_thread(
+                handle_web_request, user_id, message
+            )
+        except Exception as connector_exc:
+            logger.warning(
+                "Web connector router failed: %s",
+                type(connector_exc).__name__,
+            )
+            connector_result = None
+
+        if connector_result is not None:
+            reply = str(connector_result.get("reply") or "").strip()
+            if reply:
+                return {
+                    "status": connector_result.get("status") or "completed",
+                    "reply": reply,
+                    "conversation_id": conversation_id,
+                    "connector": bool(connector_result.get("provider")),
+                    "provider": connector_result.get("provider"),
+                    "operation": connector_result.get("operation"),
+                    "target": connector_result.get("target"),
+                    "kind": connector_result.get("kind"),
+                    "approval_id": connector_result.get("approval_id"),
+                }
+
         # NOTE: Do NOT call _save_web_message here. The AIEngine's WebMemoryAdapter
         # now handles saving both user and assistant messages to web_messages.
         response_text = await _run_web_ai(user_id, enriched_message, image_data, conversation_id)
