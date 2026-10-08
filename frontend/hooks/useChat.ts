@@ -239,11 +239,26 @@ export function useChat(
     [sending, userId, serverSubscribed]
   );
 
-  const clear = useCallback(() => {
+  const stop = useCallback(() => {
     abortRef.current?.abort();
-    setMessages([]);
-    setError(null);
+    abortRef.current = null;
+    setSending(false);
+    setMessages((prev) =>
+      prev.map((item) =>
+        item.role === "assistant" && item.status === ""
+          ? { ...item, status: "AI CORE • STOPPED" }
+          : item
+      )
+    );
   }, []);
 
-  return { messages, setMessages, sending, error, send, clear };
+  const clear = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setMessages([]);
+    setError(null);
+    setSending(false);
+  }, []);
+
+  return { messages, setMessages, sending, error, send, stop, clear };
 }
