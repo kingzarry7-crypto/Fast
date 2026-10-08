@@ -627,7 +627,7 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
     snapshot = account_snapshot(uid)
 
     approval_match = re.match(
-        r"^(approve|reject|send it|send the email|send the email now)(?:\\s+([0-9a-fA-F-]{36}))?\\s*$",
+        r"^(approve|reject|send it|send the email|send the email now)(?:\s+([0-9a-fA-F-]{36}))?\s*$",
         raw,
         re.I,
     )
@@ -670,23 +670,32 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
             _audit(uid, "connector_action_rejected", operation, target, approval_id)
             return {"status": "rejected", "kind": "approval",
                     "reply": f"🛑 REJECTED — KZ did not execute the Google action. Approval ID: {approval_id}"}
-        with get_db_cursor(commit=True) as cur:
-            cur.execute("UPDATE web_approvals SET status='approved',approved_at=NOW() WHERE id=%s AND status='pending'", (approval_id,))
         try:
+            with get_db_cursor(commit=True) as cur:
+                cur.execute("UPDATE web_approvals SET status='approved',approved_at=NOW() WHERE id=%s AND status='pending'", (approval_id,))
             result = _execute(uid, operation, payload)
         except Exception as exc:
-            with get_db_cursor(commit=True) as cur:
-                cur.execute("UPDATE web_approvals SET status='expired' WHERE id=%s AND status='approved'", (approval_id,))
-            logger.warning("Web approved Google action failed: %s", type(exc).__name__)
+            logger.exception("Web approved Google action failed approval=%s operation=%s: %s", approval_id, operation, type(exc).__name__)
+            try:
+                with get_db_cursor(commit=True) as cur:
+                    cur.execute("UPDATE web_approvals SET status='expired' WHERE id=%s AND status='approved'", (approval_id,))
+            except Exception as db_exc:
+                logger.exception("Could not mark failed Google approval expired: %s", type(db_exc).__name__)
+            detail = getattr(exc, "detail", None)
+            safe_detail = str(detail or "").strip()[:300]
             return {"status": "failed", "kind": "approval",
-                    "reply": "❌ EXECUTION FAILED — KZ did not claim the action was completed.",
+                    "reply": "❌ EXECUTION FAILED — KZ did not claim the action was completed."
+                            + (f"\nReason: {safe_detail}" if safe_detail else ""),
                     "approval_id": approval_id}
         verified = bool(result.get("verified"))
-        with get_db_cursor(commit=True) as cur:
-            cur.execute("UPDATE web_approvals SET status=%s,executed_at=NOW() WHERE id=%s AND status='approved'",
-                        ("executed" if verified else "expired", approval_id))
-        _audit(uid, "connector_action_verified" if verified else "connector_action_unverified", operation, target, approval_id)
-        if verified:
+        try:
+            with get_db_cursor(commit=True) as cur:
+                cur.execute("UPDATE web_approvals SET status=%s,executed_at=NOW() WHERE id=%s AND status='approved'",
+                            ("executed" if verified else "expired", approval_id))
+            _audit(uid, "connector_action_verified" if verified else "connector_action_unverified", operation, target, approval_id)
+        except Exception as audit_exc:
+            logger.exception("Google approval result persistence failed approval=%s: %s", approval_id, type(audit_exc).__name__)
+                if verified:
             evidence = result.get("message") or result.get("event") or result.get("file") or {}
             evidence_id = evidence.get("id") or evidence.get("htmlLink") or "verified"
             return {"status": "completed", "kind": "approval", "approval_id": approval_id,
