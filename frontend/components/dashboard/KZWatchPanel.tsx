@@ -30,7 +30,7 @@ export default function KZWatchPanel() {
       const d = await r.json();
       if (!r.ok) throw new Error(d?.detail || "Watcher unavailable");
       setItems(d.findings || []);
-      setEnabled(Boolean(d.watcher?.running || d.watcher?.enabled));
+      setEnabled(Boolean(d.watcher?.subscribed));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Watcher unavailable");
     }
