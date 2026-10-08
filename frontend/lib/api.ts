@@ -391,8 +391,8 @@ export async function decideGoogleApproval(
   approvalId: string,
   decision: "once" | "always" | "reject",
   signal?: AbortSignal,
-): Promise<{ status?: string; approval_id?: string; verified?: boolean; result?: unknown }> {
-  return request<{ status?: string; approval_id?: string; verified?: boolean; result?: unknown }>(
+): Promise<{ status?: string; approval_id?: string; verified?: boolean; permission_saved?: boolean; result?: unknown }> {
+  return request<{ status?: string; approval_id?: string; verified?: boolean; permission_saved?: boolean; result?: unknown }>(
     `/api/connectors/google/approve/${encodeURIComponent(approvalId)}`,
     { method: "POST", body: { approved: decision !== "reject", remember: decision === "always" }, signal },
   );
