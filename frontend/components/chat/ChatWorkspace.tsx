@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import ChatMessage from "@/components/chat/ChatMessage";
+import AICore from "@/components/AICore";
 import { useChat } from "@/hooks/useChat";
 import { useVoice, type VoiceStyle } from "@/hooks/useVoice";
 import { useRealtimeVoice } from "@/hooks/useRealtimeVoice";
