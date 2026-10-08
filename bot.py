@@ -4177,13 +4177,8 @@ async def handle_text(update, context):
     if update.message.text.startswith("/"):
         return
 
-    try:
-        account_result = await handle_telegram_request(update, update.message.text.strip())
-        if account_result is not None:
-            return
-    except Exception as account_err:
-        logger.warning("Telegram account-agent routing failed: %s", account_err)
-
+    # Account-agent routing is handled once inside the shared Telegram pipeline.
+    # Do not run the connector/account checks twice for every normal message.
     try:
         if await handle_natural_work_intent(update, context, update.message.text.strip()):
             return
