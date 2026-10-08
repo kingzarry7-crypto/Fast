@@ -396,6 +396,8 @@ def _save_shopify_connection(user_id: str, store: str, token: str, refresh_token
               display_name = EXCLUDED.display_name,
               scopes = EXCLUDED.scopes,
               access_token_encrypted = EXCLUDED.access_token_encrypted,
+              refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
+              token_expires_at = EXCLUDED.token_expires_at,
               metadata = EXCLUDED.metadata,
               revoked_at = NULL,
               updated_at = NOW()
