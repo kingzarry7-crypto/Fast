@@ -10,7 +10,7 @@ from openai import OpenAI
 
 # (environment variable, OpenAI-compatible base URL, default model)
 PROVIDERS = [
-    ("GROQ_API_KEY", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile"),
+    ("GROQ_API_KEY", "https://api.groq.com/openai/v1", "openai/gpt-oss-20b"),
     (
         "GEMINI_API_KEY",
         "https://generativelanguage.googleapis.com/v1beta/openai/",
