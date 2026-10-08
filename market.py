@@ -937,6 +937,55 @@ def _gold_free_get_price(symbol: str) -> float:
         return cached[0]
     raise RuntimeError("Gold price providers failed: " + "; ".join(errors[:5]))
 
+def _gold_xaus_get_candles(timeframe: str, outputsize: int) -> list:
+    """Build real Gold candles from XAUS's 2-minute recorded XAU series."""
+    tf = str(timeframe).lower().strip()
+    minutes = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60}.get(tf)
+    if minutes is None:
+        return []
+    hours = min(48, max(2, int((minutes * max(outputsize, 15) * 2) / 60) + 2))
+    r = requests.get(
+        f"{GOLD_SECONDARY_URL}/api/v1/intraday",
+        params={"symbol": "xau", "hours": hours},
+        timeout=18,
+    )
+    if r.status_code != 200:
+        raise RuntimeError(f"xaus_intraday:{r.status_code}")
+    data = r.json()
+    points = data.get("points") if isinstance(data, dict) else None
+    if not isinstance(points, list) or len(points) < 15:
+        raise RuntimeError("xaus_intraday:insufficient_points")
+    rows = []
+    for p in points:
+        try:
+            ts = p.get("t")
+            price = safe_float(p.get("p"))
+            if not ts or price is None or price <= 0:
+                continue
+            dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+            rows.append((dt, price))
+        except Exception:
+            continue
+    if len(rows) < 15:
+        raise RuntimeError("xaus_intraday:invalid_points")
+    rows.sort(key=lambda x: x[0])
+    buckets = {}
+    for dt, price in rows:
+        epoch_minute = int(dt.timestamp() // 60)
+        bucket_minute = (epoch_minute // minutes) * minutes
+        bucket = datetime.fromtimestamp(bucket_minute * 60, tz=timezone.utc)
+        key = bucket.isoformat()
+        if key not in buckets:
+            buckets[key] = {"datetime": key, "open": price, "high": price, "low": price, "close": price, "volume": "0"}
+        else:
+            b = buckets[key]
+            b["high"] = max(b["high"], price)
+            b["low"] = min(b["low"], price)
+            b["close"] = price
+    candles = list(buckets.values())
+    return candles[-max(15, min(int(outputsize or 150), 1000)):]
+
+
 def _gold_free_get_candles(symbol: str, timeframe: str = "15m", outputsize: int = 150) -> list:
     tf = str(timeframe).lower().strip()
     interval = {"1m":"1m","5m":"5m","15m":"15m","30m":"30m","1h":"1h","2h":"1h","4h":"4h","1d":"1d"}.get(tf, "15m")
@@ -972,6 +1021,13 @@ def _gold_free_get_candles(symbol: str, timeframe: str = "15m", outputsize: int 
         errors.append(f"biquote:{r.status_code}")
     except Exception as exc:
         errors.append(f"biquote:{type(exc).__name__}")
+    try:
+        candles = _gold_xaus_get_candles(tf, limit)
+        if len(candles) >= 15:
+            _GOLD_CANDLE_CACHE[cache_key] = (now, candles, "xaus_intraday")
+            return candles
+    except Exception as exc:
+        errors.append(f"xaus:{type(exc).__name__}")
     if _get_twelve_api_key():
         try:
             candles = _twelve_get_candles(symbol, timeframe, outputsize)
