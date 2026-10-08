@@ -64,6 +64,8 @@ export default function ChatWorkspace({
   const [voicePanelOpen, setVoicePanelOpen] = useState(false);
   const [callMode, setCallMode] = useState(false);
   const [callMuted, setCallMuted] = useState(false);
+  const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
+  const [callElapsed, setCallElapsed] = useState(0);
   const callModeRef = useRef(false);
   const callMutedRef = useRef(false);
   const lastVoiceResponseRef = useRef<string | null>(null);
@@ -173,6 +175,17 @@ export default function ChatWorkspace({
     const timer = window.setInterval(() => setActivityTick((value) => value + 1), 1800);
     return () => window.clearInterval(timer);
   }, [sending]);
+
+  useEffect(() => {
+    if (!callMode || !callStartedAt) {
+      setCallElapsed(0);
+      return;
+    }
+    const tick = () => setCallElapsed(Math.max(0, Math.floor((Date.now() - callStartedAt) / 1000)));
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [callMode, callStartedAt]);
 
   useEffect(() => {
     const el = listRef.current;
@@ -402,6 +415,8 @@ export default function ChatWorkspace({
     callModeRef.current = true;
     callMutedRef.current = false;
     setCallMuted(false);
+    setCallStartedAt(Date.now());
+    setCallElapsed(0);
     setCallMode(true);
 
     if (realtimeSupported && realtimeEnabled) {
@@ -429,6 +444,8 @@ export default function ChatWorkspace({
     callModeRef.current = false;
     callMutedRef.current = false;
     setCallMuted(false);
+    setCallStartedAt(null);
+    setCallElapsed(0);
     setCallMode(false);
     stopRealtime();
     stopListening();
