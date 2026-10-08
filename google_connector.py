@@ -17,6 +17,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import time
@@ -35,6 +36,7 @@ from database import get_db_cursor
 
 
 router = APIRouter(prefix="/api/connectors/google", tags=["google-connector"])
+logger = logging.getLogger("king_zarry_google_connector")
 
 GOOGLE_AUTHORIZE = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
