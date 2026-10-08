@@ -2407,7 +2407,18 @@ class AIEngine:
 
         first_response = self._call_providers(prompt_for_providers, history, image, persistent_ctx, casual, provider_override)
         if not first_response:
-            return "My brain lagged for a sec 😅 try me again in a moment."
+            # Never hide the actual provider failure behind a dead-end message.
+            # If every paid/free provider is unavailable, return a useful status
+            # response instead of pretending the assistant simply "lagged".
+            logger.error(
+                "AIEngine produced no response | user=%s | providers=%s",
+                user_id[:3] + "***",
+                self._get_provider_order(provider_override),
+            )
+            return (
+                "I'm having trouble reaching my AI providers right now. "
+                "The connection is being retried automatically — please send that message again in a few seconds."
+            )
 
         if _detect_forbidden_tool_attempts(first_response):
             logger.warning(f"Forbidden tool attempt blocked for user {user_id[:3]}***")
@@ -2707,7 +2718,9 @@ class AIEngine:
             "model": OPENAI_MODEL,
             "messages": messages,
             "temperature": 0.85 if casual else 0.7,
-            "max_tokens": 700 if casual else 1200,
+            # max_tokens is deprecated; max_completion_tokens is the current
+            # Chat Completions field and works with newer OpenAI models.
+            "max_completion_tokens": 700 if casual else 1200,
         }
         resp = self._request_with_retry(
             OPENAI_URL, headers, payload, "openai",
@@ -2716,10 +2729,18 @@ class AIEngine:
         data = resp.json()
         choices = data.get("choices") or []
         if not choices:
+            logger.warning("OpenAI returned no choices | response_keys=%s", list(data.keys())[:20])
             return None
         message = choices[0].get("message") or {}
         content = message.get("content")
-        return content if isinstance(content, str) else None
+        if isinstance(content, str) and content.strip():
+            return content
+        # Some newer responses may expose text in a different field.
+        output_text = data.get("output_text")
+        if isinstance(output_text, str) and output_text.strip():
+            return output_text
+        logger.warning("OpenAI returned an empty message | choice_keys=%s", list(message.keys())[:20])
+        return None
 
     def _gemini(self, prompt: str, history: List[dict], image: Optional[Tuple[str, bytes]], persistent_ctx: str = "", casual: bool = False) -> Optional[str]:
         if not GEMINI_API_KEY:
