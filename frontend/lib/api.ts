@@ -705,7 +705,7 @@ export const api = {
   getMarkets, getMarketDetail, getSignals, getNews,
   getAgentStatus, runAgentGoal, generateMorningBrief, getLatestMorningBrief, listAgentJobs, approveAgentJob,
   getAgentLearning, getAgentV2, getAgentIntelligence, getAgentPreferences, updateAgentPreferences,
-  getAgentActionStatus, listAgentActions, approveAgentAction,
+  getAgentActionStatus, listAgentActions, approveAgentAction, getKZAgentStatus,
 };
 
 export type { AuthUser, AuthResponse, MeResponse, ChatResponse, ApiErrorData } from "@/types";
