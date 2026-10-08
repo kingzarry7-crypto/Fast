@@ -103,6 +103,28 @@ def redeem_link_code(platform: str, external_id: str, code: str, username: Optio
     mem.add_identity(canonical, platform, external_id, username=username)
     return {"canonical_user_id": canonical, "platform": platform}
 
+def resolve_user_channels(canonical_user_id: str) -> Dict[str, list[str]]:
+    """Return linked Telegram/Discord external IDs for one shared user."""
+    mem = _db()
+    result: Dict[str, list[str]] = {"telegram": [], "discord": []}
+    try:
+        with mem.lock:
+            conn = mem._connect()
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT platform, external_id FROM kz_memory_identities WHERE user_id=%s AND platform IN ('telegram','discord')",
+                    (str(canonical_user_id),),
+                )
+                for platform, external_id in cur.fetchall() or []:
+                    result.setdefault(str(platform), []).append(str(external_id))
+            finally:
+                conn.close()
+    except Exception:
+        pass
+    return result
+
+
 def resolve_platform_identity(platform: str, external_id: str) -> Optional[str]:
     try:
         return _db().resolve_identity(platform, external_id)
