@@ -28,6 +28,7 @@ export interface ChatMessage {
   suggestions?: string[];
   imagePreviewUrl?: string;
   imageName?: string;
+  approval?: { id: string; provider: "google"; operation: string; target?: string; allowAlways?: boolean };
 }
 
 export interface ApiErrorData {
