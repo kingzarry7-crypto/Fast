@@ -26,7 +26,7 @@ from typing import Any, Dict, Optional
 
 import requests
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from nacl.secret import SecretBox
 
 from database import get_db_cursor
@@ -200,6 +200,12 @@ def _oauth_return_url(request: Request) -> str:
         except Exception:
             raw = ""
     return raw if _is_allowed_frontend_origin(raw) else configured
+
+
+def _shopify_browser_redirect(url: str) -> HTMLResponse:
+    """Return a top-level browser page after Shopify OAuth completes."""
+    safe_url = str(url).replace("&", "&amp;").replace('"', "&quot;")
+    return HTMLResponse(content=f"<!doctype html><meta charset='utf-8'><meta http-equiv='refresh' content='0;url={safe_url}'><p>Returning to King Zarry AI…</p>", status_code=200, headers={"Cache-Control":"no-store"})
 
 
 def _state_return_url(payload: Dict[str, Any]) -> str:
@@ -560,11 +566,11 @@ async def shopify_callback(request: Request):
     except Exception:
         callback_frontend = FRONTEND_URL
     if not _shopify_configured():
-        return RedirectResponse(f"{callback_frontend}/dashboard?connector_error=shopify_not_configured")
+        return _shopify_browser_redirect(f"{callback_frontend}/dashboard?connector_error=shopify_not_configured")
     error=request.query_params.get("error")
     if error:
         detail=request.query_params.get("error_description") or error
-        return RedirectResponse(f"{callback_frontend}/dashboard?connector_error=shopify_{urllib.parse.quote(str(detail)[:300])}")
+        return _shopify_browser_redirect(f"{callback_frontend}/dashboard?connector_error=shopify_{urllib.parse.quote(str(detail)[:300])}")
     try:
         payload=_verify_state(state_value)
         callback_frontend = _state_return_url(payload)
@@ -618,12 +624,12 @@ async def shopify_callback(request: Request):
         shop_data=((body.get("data") or {}).get("shop") or {})
         _save_shopify_connection(user_id,store,token,data.get("refresh_token"),data.get("expires_in"),scopes,shop_data)
         _audit(user_id,"connector_connected",target=store)
-        return RedirectResponse(f"{callback_frontend}/dashboard?connector=shopify&connected=1&name={urllib.parse.quote(str(shop_data.get('name') or store))}&shop={urllib.parse.quote(store)}")
+        return _shopify_browser_redirect(f"{callback_frontend}/dashboard?connector=shopify&connected=1&name={urllib.parse.quote(str(shop_data.get('name') or store))}&shop={urllib.parse.quote(store)}")
     except HTTPException as exc:
-        return RedirectResponse(f"{callback_frontend}/dashboard?connector_error=shopify_{urllib.parse.quote(str(exc.detail or 'authorization_failed')[:300])}")
+        return _shopify_browser_redirect(f"{callback_frontend}/dashboard?connector_error=shopify_{urllib.parse.quote(str(exc.detail or 'authorization_failed')[:300])}")
     except Exception as exc:
         logger.exception("Shopify callback failed: %s", type(exc).__name__)
-        return RedirectResponse(f"{callback_frontend}/dashboard?connector_error=shopify_callback_failed")
+        return _shopify_browser_redirect(f"{callback_frontend}/dashboard?connector_error=shopify_callback_failed")
 
 @router.post("/shopify/action")
 async def shopify_action(request: Request):
