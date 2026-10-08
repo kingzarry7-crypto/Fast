@@ -297,7 +297,7 @@ def _format_gmail_result(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _shopify_read_intent(text: str) -> Optional[dict[str, str]]:
+def _shopify_read_intent(text: str, snapshot: dict[str, Any]) -> Optional[dict[str, str]]:
     """Recognize safe Shopify read requests and route them to the official connector."""
     raw = str(text or "").strip()
     lower = raw.lower()
@@ -614,7 +614,7 @@ async def handle_telegram_request(update: Any, text: str) -> Optional[dict[str, 
             await update.message.reply_text("\n".join(lines), parse_mode="HTML")
         return {"status": "completed", "kind": "calendar_read", "result": result}
 
-    shopify_intent = _shopify_read_intent(raw)
+    shopify_intent = _shopify_read_intent(raw, snapshot)
     if shopify_intent:
         try:
             from connector_api import _provider_account, _shopify_request, _shopify_token
