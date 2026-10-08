@@ -36,7 +36,7 @@ router = APIRouter(prefix="/api/connectors", tags=["connectors"])
 GITHUB_AUTHORIZE = "https://github.com/login/oauth/authorize"
 GITHUB_TOKEN = "https://github.com/login/oauth/access_token"
 GITHUB_API = "https://api.github.com"
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://fast.kingzarry7.workers.dev").rstrip("/")
 CONNECTOR_STATE_SECRET = os.getenv("CONNECTOR_STATE_SECRET") or os.getenv("SESSION_SECRET") or ""
 GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "").strip()
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "").strip()
