@@ -49,7 +49,7 @@ export default function ChatWorkspace({
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const { messages, setMessages, sending, error, send, clear } = useChat(
+  const { messages, setMessages, sending, error, send, stop: stopChat, clear } = useChat(
     user?.id,
     user?.is_subscribed,
     conversationId
@@ -668,12 +668,26 @@ export default function ChatWorkspace({
             const label = phases[activityTick % phases.length];
             return (
               <div className="flex items-center gap-3 px-1 py-3" aria-live="polite">
-                <span className="flex items-center gap-1.5" aria-hidden="true">
-                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-pulse" />
-                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-pulse [animation-delay:150ms]" />
-                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-pulse [animation-delay:300ms]" />
-                </span>
-                <span className="text-xs font-medium tracking-wide text-cyan-200/80">{label}</span>
+                <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                  <span className="flex items-center gap-1.5" aria-hidden="true">
+                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-pulse" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-pulse [animation-delay:150ms]" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-pulse [animation-delay:300ms]" />
+                  </span>
+                  <span className="truncate text-xs font-medium tracking-wide text-cyan-200/80">{label}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={stopChat}
+                  className="flex h-9 shrink-0 items-center gap-2 rounded-full border border-white/10 bg-[#1d1d1f] px-3.5 text-xs font-medium text-white shadow-[0_4px_14px_rgba(0,0,0,.28)] transition hover:bg-[#29292c] active:scale-95"
+                  aria-label="Stop King Zarry AI"
+                  title="Stop King Zarry AI"
+                >
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500 text-white shadow-[0_0_12px_rgba(34,211,238,.28)]">
+                    <span className="h-2 w-2 rounded-[2px] bg-white" />
+                  </span>
+                  <span>Stop</span>
+                </button>
               </div>
             );
           })()}
