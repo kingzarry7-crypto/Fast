@@ -567,7 +567,7 @@ async def google_start(request: Request):
     state = _sign_state({"provider": "google", "user_id": user_id, "nonce": secrets.token_urlsafe(18), "exp": _now() + 600})
     params = {"client_id": GOOGLE_CLIENT_ID, "redirect_uri": GOOGLE_REDIRECT_URI,
               "response_type": "code", "scope": GOOGLE_SCOPES, "access_type": "offline",
-              "prompt": "consent", "include_granted_scopes": "true", "state": state}
+              "prompt": "select_account consent", "include_granted_scopes": "true", "state": state}
     return RedirectResponse(GOOGLE_AUTHORIZE + "?" + urllib.parse.urlencode(params))
 
 
