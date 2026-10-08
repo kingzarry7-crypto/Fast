@@ -203,13 +203,16 @@ def queue_channel_notifications(user_id: str, findings: list[dict[str, Any]]) ->
         conn.close()
 
 
-def pending_channel_notifications(user_id: str, limit: int = 20) -> list[dict[str, Any]]:
+def pending_channel_notifications(user_id: str, platform: str, limit: int = 20) -> list[dict[str, Any]]:
     conn = _conn()
     if conn is None or not init():
         return []
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT id,finding_id,title,message,kind FROM kz_watch_notifications WHERE user_id=%s AND (telegram_delivered=FALSE OR discord_delivered=FALSE) ORDER BY created_at ASC LIMIT %s", (str(user_id), max(1, min(int(limit), 50))))
+            column = "telegram_delivered" if str(platform) == "telegram" else "discord_delivered" if str(platform) == "discord" else ""
+            if not column:
+                return []
+            cur.execute(f"SELECT id,finding_id,title,message,kind FROM kz_watch_notifications WHERE user_id=%s AND {column}=FALSE ORDER BY created_at ASC LIMIT %s", (str(user_id), max(1, min(int(limit), 50))))
             return [dict(zip(["id","finding_id","title","message","kind"], row)) for row in cur.fetchall()]
     except Exception:
         return []
