@@ -254,10 +254,10 @@ export function useChat(
               approval: undefined,
               status: result.status === "completed" ? "AI CORE • ACTION VERIFIED" : result.status === "rejected" ? "AI CORE • ACTION REJECTED" : "AI CORE • APPROVAL SAVED",
               text: result.status === "completed"
-                ? `${item.text}\\n\\n✓ Action approved and verified.`
+                ? `${item.text}\n\n✓ Action approved and verified.`
                 : result.status === "rejected"
-                  ? `${item.text}\\n\\nAction rejected. Nothing was sent.`
-                  : `${item.text}\\n\\n✓ Allowed always. This permission was saved and the current action was completed.`,
+                  ? `${item.text}\n\nAction rejected. Nothing was sent.`
+                  : `${item.text}\n\n✓ Allowed always. This permission was saved and the current action was completed.`,
             }
           : item
       ));
