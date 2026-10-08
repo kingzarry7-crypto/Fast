@@ -608,7 +608,7 @@ def _approval(user_id: str, operation: str, target: str, payload: Dict[str, Any]
 
 @router.get("/status")
 async def google_status(request: Request):
-    user_id = _user_id(request)
+    user_id = _connector_user_id(request)
     account = _account(user_id)
     missing = []
     if not GOOGLE_CLIENT_ID: missing.append("GOOGLE_CLIENT_ID")
@@ -624,7 +624,7 @@ async def google_status(request: Request):
 
 @router.get("/start")
 async def google_start(request: Request):
-    user_id = _user_id(request)
+    user_id = _connector_user_id(request)
     if not _configured():
         raise HTTPException(status_code=503, detail="Google connector is not configured on KZ")
     state = _sign_state({"provider": "google", "user_id": user_id, "return_url": _oauth_return_url(request), "nonce": secrets.token_urlsafe(18), "exp": _now() + 600})
@@ -722,7 +722,7 @@ async def google_callback(request: Request):
 
 @router.post("/disconnect")
 async def google_disconnect(request: Request):
-    user_id = _user_id(request)
+    user_id = _connector_user_id(request)
     with get_db_cursor(commit=True) as cur:
         cur.execute("UPDATE web_connected_accounts SET revoked_at=NOW(),updated_at=NOW() WHERE user_id=%s AND provider='google' AND revoked_at IS NULL", (user_id,))
     _audit(user_id, "connector_disconnected")
@@ -731,7 +731,7 @@ async def google_disconnect(request: Request):
 
 @router.post("/action")
 async def google_action(request: Request):
-    user_id = _user_id(request)
+    user_id = _connector_user_id(request)
     body = await request.json()
     operation = str(body.get("operation") or "").strip().lower()
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
@@ -745,7 +745,7 @@ async def google_action(request: Request):
 
 @router.post("/approve/{approval_id}")
 async def google_approve(approval_id: str, request: Request):
-    user_id = _user_id(request)
+    user_id = _connector_user_id(request)
     body = await request.json()
     approved = bool(body.get("approved"))
     remember = bool(body.get("remember"))
