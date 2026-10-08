@@ -280,6 +280,12 @@ def _execute(user_id: str, operation: str, payload: Dict[str, Any]) -> Dict[str,
     if operation == "list_gmail":
         q = str(payload.get("query") or "in:anywhere").strip()[:500]
         limit = max(1, min(int(payload.get("limit") or 20), 50))
+        r = _google_request(
+            user_id,
+            "GET",
+            GOOGLE_GMAIL + "/users/me/messages",
+            params={"q": q, "maxResults": limit},
+        )
         body = r.json()
         messages = body.get("messages") or []
         result_size_estimate = body.get("resultSizeEstimate")
