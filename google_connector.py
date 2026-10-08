@@ -669,12 +669,6 @@ async def google_approve(approval_id: str, request: Request):
         return {"status": "rejected", "approval_id": approval_id}
     with get_db_cursor(commit=True) as cur:
         cur.execute("UPDATE web_approvals SET status='approved',approved_at=NOW() WHERE id=%s AND status='pending'", (approval_id,))
-    if remember:
-        try:
-            _grant_automatic_permission(user_id, operation)
-        except Exception as exc:
-            logger.warning("Could not save Google allow-always permission: %s", type(exc).__name__)
-            raise HTTPException(status_code=502, detail="Could not save the allow-always permission")
     try:
         result = _execute(user_id, operation, payload)
     except Exception:
@@ -688,4 +682,10 @@ async def google_approve(approval_id: str, request: Request):
     _audit(user_id, "connector_action_verified" if verified else "connector_action_unverified", operation, target, approval_id)
     if not verified:
         raise HTTPException(status_code=502, detail="Google accepted the request but KZ could not verify the resulting resource")
-    return {"status": "completed", "verified": True, "approval_id": approval_id, "result": result}
+    if remember:
+        try:
+            _grant_automatic_permission(user_id, operation)
+        except Exception as exc:
+            logger.warning("Google allow-always permission could not be saved after verified action: %s", type(exc).__name__)
+            return {"status": "completed", "verified": True, "approval_id": approval_id, "result": result, "permission_saved": False}
+    return {"status": "completed", "verified": True, "approval_id": approval_id, "result": result, "permission_saved": bool(remember)}
