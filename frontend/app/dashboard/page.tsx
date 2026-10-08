@@ -8,6 +8,7 @@ import RobotHead from "@/components/RobotHead";
 import WorkPanel from "@/components/dashboard/WorkPanel";
 import RevenuePanel from "@/components/dashboard/RevenuePanel";
 import OpportunityPanel from "@/components/dashboard/OpportunityPanel";
+import KZWatchPanel from "@/components/dashboard/KZWatchPanel";
 import DeliveryPanel from "@/components/dashboard/DeliveryPanel";
 import BusinessPanel from "@/components/dashboard/BusinessPanel";
 import WorkerPanel from "@/components/dashboard/WorkerPanel";
@@ -84,6 +85,7 @@ export default function DashboardPage() {
             <ConnectionsPanel />
             <RevenuePanel />
             <OpportunityPanel />
+            <KZWatchPanel />
             <DeliveryPanel />
             <BusinessPanel />
             <WorkerPanel />
