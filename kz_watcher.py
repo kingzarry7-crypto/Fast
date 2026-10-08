@@ -301,7 +301,7 @@ def get_finding(user_id: str, finding_id: str) -> dict[str, Any] | None:
 
 
 def mark_status(user_id: str, finding_id: str, status: str) -> dict[str, Any]:
-    allowed = {"new", "seen", "dismissed", "actioned"}
+    allowed = {"new", "seen", "dismissed", "prepared", "actioned"}
     if status not in allowed:
         raise ValueError("invalid watcher finding status")
     conn = _conn()
@@ -343,7 +343,7 @@ def prepare(user_id: str, finding_id: str) -> dict[str, Any]:
         "until the user explicitly approves the consequential step."
     )
     result = run(str(user_id), goal, run_now=True)
-    mark_status(str(user_id), finding_id, "actioned")
+    mark_status(str(user_id), finding_id, "prepared")
     return {"status": "ok", "finding": item, "agent": result}
 
 
