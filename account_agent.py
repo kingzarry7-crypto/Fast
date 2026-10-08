@@ -204,27 +204,41 @@ def _send_gmail_preview(user_id: str, payload: dict[str, Any]) -> dict[str, Any]
 
 
 def _parse_email_request(text: str) -> Optional[dict[str, str]]:
+    """Parse natural-language Gmail compose/send requests without falling through to the LLM."""
     raw = str(text or "").strip()
-    if not re.search(r"\b(send|email|mail)\b", raw, re.I):
+    if not re.search(r"\b(send|email|mail|compose|draft|write)\b", raw, re.I):
         return None
+
     match = re.search(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", raw, re.I)
     if not match:
         return None
     to = match.group(0)
+
     sm = re.search(
-        r"\bsubject\s*[:=-]\s*(.+?)(?=\n|\b(?:body|message|saying|tell)\b\s*[:=-]|$)",
+        r"\bsubject\s*[:=-]\s*(.+?)(?=\n|\b(?:body|message|saying|tell|say|about|regarding)\b\s*[:=-]?|$)",
         raw, re.I | re.S,
     )
-    bm = re.search(r"\b(?:body|message|saying|tell)\s*[:=-]\s*(.+)$", raw, re.I | re.S)
-    subject = sm.group(1).strip() if sm else "Message from King Zarry AI"
+    bm = re.search(
+        r"\b(?:body|message|saying|say|tell(?:\s+them)?(?:\s+that)?|about|regarding)\b\s*[:=-]?\s*(.+)$",
+        raw, re.I | re.S,
+    )
+    subject = sm.group(1).strip() if sm else ""
+
     body = bm.group(1).strip() if bm else ""
     if not body:
-        body = re.sub(r"^.*?\b(?:send|email|mail)\b", "", raw, flags=re.I).strip()
-        body = re.sub(r"\bsubject\s*[:=-].*$", "", body, flags=re.I | re.S).strip()
+        body = raw
+        body = re.sub(r"^.*?\b(?:send|email|mail|compose|draft|write)\b", "", body, flags=re.I).strip()
+        body = re.sub(re.escape(to), "", body, count=1, flags=re.I).strip()
         body = re.sub(r"^\b(?:an?\s+)?email\b", "", body, flags=re.I).strip()
         body = re.sub(r"^\b(?:to|for)\b", "", body, flags=re.I).strip()
+        body = re.sub(r"^\b(?:subject)\s*[:=-]\s*[^\n]+", "", body, flags=re.I).strip()
+        body = re.sub(r"^\b(?:saying|say|tell(?:\s+them)?(?:\s+that)?)\b\s*[:=-]?\s*", "", body, flags=re.I).strip()
+        body = re.sub(r"^\b(?:about|regarding)\b\s*[:=-]?\s*", "", body, flags=re.I).strip()
+
     if not body:
         return None
+    if not subject:
+        subject = "Message from King Zarry AI"
     return {"to": to, "subject": subject[:300], "body": body[:20000]}
 
 
@@ -547,7 +561,41 @@ async def handle_telegram_request(update: Any, text: str) -> Optional[dict[str, 
         await update.message.reply_text(reply, parse_mode="HTML" if gmail_intent["kind"].endswith("count") else None)
         return {"status": "completed", "kind": gmail_intent["kind"], "result": result}
 
+    email_action_requested = bool(
+        re.search(r"\b(send|email|mail|compose|draft|write)\b", lower)
+    )
+    email_address_present = bool(
+        re.search(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", raw, re.I)
+    )
     payload = _parse_email_request(raw)
+    if email_action_requested:
+        try:
+            from google_connector import _account
+            if not _account(uid):
+                return {
+                    "status": "not_connected",
+                    "kind": "send_gmail",
+                    "reply": "🔌 KZ checked the account registry: Gmail is not connected to this KZ account.",
+                }
+        except Exception:
+            return {
+                "status": "failed",
+                "kind": "send_gmail",
+                "reply": "❌ KZ could not verify the Gmail connection. No email was sent.",
+            }
+        if not email_address_present:
+            return {
+                "status": "needs_details",
+                "kind": "send_gmail",
+                "reply": "📧 Gmail is connected. Tell me the recipient email address, then I can prepare the email for your approval.",
+            }
+        if not payload:
+            return {
+                "status": "needs_details",
+                "kind": "send_gmail",
+                "reply": "📧 I found the recipient, but I still need the email content. Tell me what you want the message to say, and KZ will prepare it for your approval.",
+            }
+
     if payload:
         from google_connector import _account
         if not _account(user_id):
