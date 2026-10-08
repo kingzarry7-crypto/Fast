@@ -280,9 +280,9 @@ def _execute(user_id: str, operation: str, payload: Dict[str, Any]) -> Dict[str,
     if operation == "list_gmail":
         q = str(payload.get("query") or "in:anywhere").strip()[:500]
         limit = max(1, min(int(payload.get("limit") or 20), 50))
-        r = _google_request(user_id, "GET", GOOGLE_GMAIL + "/users/me/messages",
-                            params={"q": q, "maxResults": limit})
-        messages = r.json().get("messages") or []
+        body = r.json()
+        messages = body.get("messages") or []
+        result_size_estimate = body.get("resultSizeEstimate")
         items = []
         for item in messages[:limit]:
             mid = str(item.get("id") or "")
@@ -294,7 +294,8 @@ def _execute(user_id: str, operation: str, payload: Dict[str, Any]) -> Dict[str,
             items.append({"id": mid, "thread_id": m.get("threadId"), "snippet": m.get("snippet"),
                            "from": headers.get("From"), "to": headers.get("To"),
                            "subject": headers.get("Subject"), "date": headers.get("Date")})
-        return {"verified": True, "operation": operation, "messages": items}
+        return {"verified": True, "operation": operation, "messages": items,
+                "result_size_estimate": result_size_estimate}
 
     if operation == "list_drive":
         q = str(payload.get("query") or "trashed = false").strip()[:1000]
