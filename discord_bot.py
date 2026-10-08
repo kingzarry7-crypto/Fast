@@ -1273,7 +1273,7 @@ async def kz_watch_channel_notification_job():
                 discord_ids = channels.get("discord") or []
                 if not discord_ids:
                     continue
-                for item in pending_channel_notifications(user_id, 10):
+                for item in pending_channel_notifications(user_id, "discord", 10):
                     text = (
                         "👀 KZ WATCH FOUND SOMETHING\n\n"
                         + "**" + str(item.get("title") or "New finding") + "**\n"
