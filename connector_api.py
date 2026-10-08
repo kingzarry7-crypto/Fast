@@ -571,8 +571,12 @@ async def shopify_callback(request: Request):
         if payload.get("provider")!="shopify":
             raise HTTPException(status_code=400, detail="Invalid Shopify connector state")
         user_id=str(payload.get("user_id") or "").strip()
-        callback_shop = _shopify_store(str(request.query_params.get("shop") or ""))
         expected_store = _shopify_store(str(payload.get("store") or ""))
+        # Shopify normally returns shop in the callback. Some managed-install/admin
+        # transitions can omit it; the signed state already binds this callback to
+        # the exact store that started OAuth, so use that trusted value when absent.
+        callback_shop_raw = str(request.query_params.get("shop") or "").strip()
+        callback_shop = _shopify_store(callback_shop_raw) if callback_shop_raw else expected_store
         if callback_shop != expected_store:
             raise HTTPException(status_code=400, detail="Shopify callback store does not match the authorization request")
         store = expected_store
@@ -614,7 +618,7 @@ async def shopify_callback(request: Request):
         shop_data=((body.get("data") or {}).get("shop") or {})
         _save_shopify_connection(user_id,store,token,data.get("refresh_token"),data.get("expires_in"),scopes,shop_data)
         _audit(user_id,"connector_connected",target=store)
-        return RedirectResponse(f"{callback_frontend}/dashboard?connector=shopify&connected=1&name={urllib.parse.quote(str(shop_data.get('name') or store))}")
+        return RedirectResponse(f"{callback_frontend}/dashboard?connector=shopify&connected=1&name={urllib.parse.quote(str(shop_data.get('name') or store))}&shop={urllib.parse.quote(store)}")
     except HTTPException as exc:
         return RedirectResponse(f"{callback_frontend}/dashboard?connector_error=shopify_{urllib.parse.quote(str(exc.detail or 'authorization_failed')[:300])}")
     except Exception as exc:
