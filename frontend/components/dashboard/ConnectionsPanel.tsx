@@ -314,6 +314,24 @@ export default function ConnectionsPanel() {
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
+
+    // Shopify managed-install can return to the configured KZ application URL
+    // with the store in the query string before the authorization-code grant
+    // starts. Immediately hand that store back to the server-side connector
+    // while preserving the authenticated KZ web session.
+    const shopParam = (q.get("shop") || "").trim();
+    const shopHmac = (q.get("hmac") || "").trim();
+    if (shopParam && shopHmac && !q.get("connector") && !q.get("connector_error")) {
+      const returnUrl = window.location.origin.replace(/\/$/, "") + "/dashboard";
+      window.location.replace(
+        "/api/connectors/shopify/start?shop=" +
+        encodeURIComponent(shopParam) +
+        "&return_url=" +
+        encodeURIComponent(returnUrl)
+      );
+      return;
+    }
+
     const hasConnectorReturn = Boolean(q.get("connector_error") || (q.get("connector") && q.get("connected") === "1"));
     if (hasConnectorReturn) setOpen(true);
     if (!open && !hasConnectorReturn) return;
