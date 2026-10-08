@@ -146,6 +146,7 @@ export default function ConnectionsPanel() {
       setGithub((current: any) => current || { configured: true, connected: false });
       setTiktok((current: any) => current || { configured: true, connected: false });
       setGoogle((current: any) => current || { configured: true, connected: false });
+      setShopify((current: any) => current || { configured: false, connected: false });
     }
   }
 
