@@ -69,6 +69,78 @@ def install_workflow_api(app, require_current_user, row_value=None):
         except Exception:
             return ''
 
+    @app.post('/api/agent/run')
+    async def kz_agent_run_route(request: Request):
+        row = require_current_user(request); user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        body = await request.json()
+        goal = str((body or {}).get('goal') or '').strip()
+        account_id = str((body or {}).get('account_id') or '').strip() or None
+        run_now = bool((body or {}).get('run_now', True))
+        if not goal:
+            raise HTTPException(status_code=400, detail='goal is required')
+        if len(goal) > 4000:
+            raise HTTPException(status_code=400, detail='goal is too long')
+        from kz_agent import run
+        return {'status': 'ok', 'agent': run(user_id, goal, account_id=account_id, run_now=run_now)}
+
+    @app.get('/api/agent/status/{workflow_id}')
+    def kz_agent_status_route(workflow_id: str, request: Request):
+        row = require_current_user(request); user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        from kz_agent import get
+        result = get(user_id, workflow_id)
+        if result.get('status') == 'not_found':
+            raise HTTPException(status_code=404, detail='Agent mission not found')
+        return {'status': 'ok', 'agent': result}
+
+    @app.get('/api/agent/events/{workflow_id}')
+    def kz_agent_events_route(workflow_id: str, request: Request, limit: int = 100):
+        row = require_current_user(request); user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        from workflow_store import get_workflow, list_events
+        if not get_workflow(workflow_id, user_id):
+            raise HTTPException(status_code=404, detail='Agent mission not found')
+        return {'status': 'ok', 'events': list_events(workflow_id, user_id, limit)}
+
+    @app.post('/api/agent/approve')
+    async def kz_agent_approve_route(request: Request):
+        row = require_current_user(request); user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        body = await request.json()
+        workflow_id = str((body or {}).get('workflow_id') or '').strip()
+        approved = bool((body or {}).get('approved', False))
+        if not workflow_id:
+            raise HTTPException(status_code=400, detail='workflow_id is required')
+        from kz_agent import approve
+        return {'status': 'ok', 'agent': approve(user_id, workflow_id, approved)}
+
+    @app.post('/api/agent/human-verify')
+    async def kz_agent_human_verify_route(request: Request):
+        row = require_current_user(request); user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        body = await request.json()
+        workflow_id = str((body or {}).get('workflow_id') or '').strip()
+        if not workflow_id:
+            raise HTTPException(status_code=400, detail='workflow_id is required')
+        from kz_agent import resume_human_verification
+        return {'status': 'ok', 'agent': resume_human_verification(user_id, workflow_id)}
+
+    @app.get('/api/agent/missions')
+    def kz_agent_missions_route(request: Request, limit: int = 20):
+        row = require_current_user(request); user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        from kz_agent import list_recent
+        return {'status': 'ok', 'agent': list_recent(user_id, limit)}
+
+
+
     @app.post('/api/workflows')
     async def create_workflow_route(request: Request):
         row=require_current_user(request); user_id=uid(row)
