@@ -347,6 +347,25 @@ export default function ConnectionsPanel() {
     }
     if ((q.get("connector") === "github" || q.get("connector") === "tiktok" || q.get("connector") === "google" || q.get("connector") === "shopify") && q.get("connected") === "1") {
       const connectedProvider = q.get("connector");
+      // Render the verified OAuth result immediately. A status request must not
+      // make a successful callback look disconnected because of a transient
+      // proxy/session read failure.
+      const returnedAccount = connectedProvider === "shopify"
+        ? {
+            provider: "shopify",
+            provider_account_id: q.get("shop") || "",
+            display_name: q.get("name") || q.get("shop") || "Shopify",
+            metadata: { store: q.get("shop") || "" },
+          }
+        : connectedProvider === "google"
+          ? {
+              provider: "google",
+              display_name: q.get("email") || "Google",
+              metadata: { email: q.get("email") || "" },
+            }
+          : null;
+      if (connectedProvider === "shopify") setShopify({ configured: true, connected: true, account: returnedAccount });
+      if (connectedProvider === "google") setGoogle({ configured: true, connected: true, account: returnedAccount });
       setMessage(
         connectedProvider === "tiktok"
           ? "✓ TikTok connected through official authorization."
