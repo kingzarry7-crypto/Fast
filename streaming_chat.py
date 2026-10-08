@@ -386,10 +386,10 @@ def install_streaming_chat(
                 return True
             if raw.startswith(("monitor my account", "monitor my gmail", "watch my gmail", "stop monitoring")):
                 return True
-            return bool(
-                re.search(r"\b(send|email|mail)\b", raw)
-                and re.search(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", raw, re.I)
-            )
+            # Route all explicit email work to the connector, even when
+            # the user has not supplied the recipient/content yet. This keeps
+            # compose/send requests out of the generic LLM fallback.
+            return bool(re.search(r"\b(send|email|mail|compose|draft|write)\b", raw))
 
         def _connector_reply(user_id: str, message: str, conversation_id: str):
             result = handle_web_request(user_id, message)
