@@ -440,7 +440,89 @@ def _execute(user_id: str, operation: str, payload: Dict[str, Any]) -> Dict[str,
     raise HTTPException(status_code=400, detail=f"Unsupported Google operation: {operation}")
 
 
+def _automatic_operation_name(operation: str) -> str:
+    operation = str(operation or "").strip().lower()
+    if operation == "send_gmail":
+        return "send"
+    if operation == "create_calendar_event":
+        return "write"
+    if operation == "upload_drive_text":
+        return "write"
+    return operation
+
+def _has_automatic_permission(user_id: str, operation: str) -> bool:
+    """Check the user's persistent 'allow always' permission for this Google action."""
+    allowed_operation = _automatic_operation_name(operation)
+    try:
+        with get_db_cursor(commit=False) as cur:
+            cur.execute(
+                """SELECT permission_level, allowed_operations
+                   FROM web_permissions
+                   WHERE user_id=%s AND service='google' AND revoked_at IS NULL
+                   LIMIT 1""",
+                (user_id,),
+            )
+            row = cur.fetchone()
+        if not row:
+            return False
+        level = str(_row_value(row, "permission_level", 0) or "")
+        raw_ops = _row_value(row, "allowed_operations", 1)
+        if isinstance(raw_ops, str):
+            try:
+                raw_ops = json.loads(raw_ops)
+            except Exception:
+                raw_ops = []
+        return level == "automatic_action" and allowed_operation in (raw_ops or [])
+    except Exception as exc:
+        logger.warning("Google automatic permission check failed: %s", type(exc).__name__)
+        return False
+
+def _grant_automatic_permission(user_id: str, operation: str) -> None:
+    allowed_operation = _automatic_operation_name(operation)
+    scope = {
+        "send_gmail": "gmail.send",
+        "create_calendar_event": "calendar.events",
+        "upload_drive_text": "drive.file",
+    }.get(str(operation), "google.action")
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            """INSERT INTO web_permissions
+               (user_id, service, permission_level, scopes, allowed_operations, granted_at, updated_at, revoked_at)
+               VALUES (%s,'google','automatic_action',%s::jsonb,%s::jsonb,NOW(),NOW(),NULL)
+               ON CONFLICT (user_id, service)
+               DO UPDATE SET
+                 permission_level='automatic_action',
+                 scopes=EXCLUDED.scopes,
+                 allowed_operations=(
+                   SELECT COALESCE(jsonb_agg(DISTINCT value), '[]'::jsonb)
+                   FROM jsonb_array_elements_text(
+                     COALESCE(web_permissions.allowed_operations, '[]'::jsonb) || EXCLUDED.allowed_operations
+                   ) AS value
+                 ),
+                 granted_at=NOW(),
+                 updated_at=NOW(),
+                 revoked_at=NULL""",
+            (user_id, json.dumps([scope]), json.dumps([allowed_operation])),
+        )
+
 def _approval(user_id: str, operation: str, target: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    if _has_automatic_permission(user_id, operation):
+        try:
+            result = _execute(user_id, operation, payload)
+            if result.get("verified"):
+                return {
+                    "status": "completed",
+                    "verified": True,
+                    "provider": "google",
+                    "operation": operation,
+                    "target": target,
+                    "result": result,
+                    "message": "Action completed using your saved Google permission.",
+                }
+        except Exception as exc:
+            logger.warning("Saved Google permission execution failed: %s", type(exc).__name__)
+            # Fail closed: if the saved permission cannot complete this action,
+            # surface the normal approval card instead of claiming success.
     fingerprint = _fingerprint(operation, target, payload)
     approval_id = str(uuid.uuid4())
     exact = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
@@ -562,6 +644,7 @@ async def google_approve(approval_id: str, request: Request):
     user_id = _user_id(request)
     body = await request.json()
     approved = bool(body.get("approved"))
+    remember = bool(body.get("remember"))
     with get_db_cursor(commit=False) as cur:
         cur.execute("""SELECT id,operation,target,exact_content,action_fingerprint,status
                        FROM web_approvals WHERE id=%s AND user_id=%s AND service='google' LIMIT 1""",
@@ -586,6 +669,12 @@ async def google_approve(approval_id: str, request: Request):
         return {"status": "rejected", "approval_id": approval_id}
     with get_db_cursor(commit=True) as cur:
         cur.execute("UPDATE web_approvals SET status='approved',approved_at=NOW() WHERE id=%s AND status='pending'", (approval_id,))
+    if remember:
+        try:
+            _grant_automatic_permission(user_id, operation)
+        except Exception as exc:
+            logger.warning("Could not save Google allow-always permission: %s", type(exc).__name__)
+            raise HTTPException(status_code=502, detail="Could not save the allow-always permission")
     try:
         result = _execute(user_id, operation, payload)
     except Exception:
