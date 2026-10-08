@@ -845,18 +845,21 @@ async def create_voice_note_file(text: str) -> BytesIO:
         raise RuntimeError(f"TTS unavailable: {e}")
 
 def get_market_candles(symbol, interval=DEFAULT_TIMEFRAME, outputsize=150):
-    """Candles via market.py — Binance free for crypto, Twelve for gold/forex."""
+    """Single source of truth: market.py owns provider routing and Gold fallbacks."""
+    from market import get_candles as _m_get_candles
+    tf = str(interval or "15m").lower().strip()
+    tf = {"15min": "15m", "5min": "5m", "1min": "1m", "30min": "30m", "1day": "1d"}.get(tf, tf)
     try:
-        from market import get_candles as _m_get_candles
-        tf = str(interval or "15m").lower().strip()
-        # bot historically used 15min/5min Twelve names
-        tf = {"15min": "15m", "5min": "5m", "1min": "1m", "30min": "30m", "1day": "1d"}.get(tf, tf)
         candles = _m_get_candles(symbol, tf, outputsize)
         if not candles or len(candles) < 15:
             raise RuntimeError(f"Only {len(candles) if candles else 0} candles for {symbol}")
         return candles
     except Exception as e:
-        # Legacy Twelve path as last resort
+        # Gold must not silently jump back to the legacy Twelve Data path.
+        # market.py already tries BiQuote -> XAUS -> Twelve (only if configured).
+        upper = str(symbol or "").upper().replace(" ", "")
+        if upper in {"XAU", "XAUUSD", "XAU/USD", "GOLD"}:
+            raise RuntimeError(f"Gold market data unavailable from centralized providers: {e}")
         if not TWELVE_DATA_API_KEY:
             raise RuntimeError(f"Market data unavailable for {symbol}: {e}")
         response = requests.get(
