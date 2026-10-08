@@ -432,6 +432,9 @@ SHOPIFY_CLIENT_SECRET = os.getenv("SHOPIFY_CLIENT_SECRET", "").strip()
 # Default the KZ Shopify connector to the owner store so the user does not have to re-enter it.
 # Railway can override this with SHOPIFY_STORE_DOMAIN when needed.
 SHOPIFY_STORE_DOMAIN = os.getenv("SHOPIFY_STORE_DOMAIN", "kingzarry-store.myshopify.com").strip()
+# Optional Shopify Dev Dashboard installation link. When configured, Shopify
+# presents its own store picker instead of KZ asking for a myshopify.com domain.
+SHOPIFY_INSTALL_URL = os.getenv("SHOPIFY_INSTALL_URL", "").strip()
 SHOPIFY_REDIRECT_URI = (
     os.getenv("SHOPIFY_REDIRECT_URI", "").strip()
     or "https://fast-production-0eba.up.railway.app/api/connectors/shopify/callback"
@@ -535,16 +538,66 @@ def _shopify_token(user_id: str, store: str = "") -> tuple[str, str]:
         raise HTTPException(status_code=401, detail="Shopify connection is incomplete")
     return store_name, token
 
+def _shopify_app_request_hmac_valid(request: Request) -> bool:
+    """Validate the signed query Shopify sends to an app URL after install."""
+    supplied = str(request.query_params.get("hmac") or "").strip()
+    if not supplied or not SHOPIFY_CLIENT_SECRET:
+        return False
+    pairs = [(key, value) for key, value in request.query_params.multi_items() if key != "hmac"]
+    pairs.sort()
+    message = urllib.parse.urlencode(pairs)
+    expected = hmac.new(
+        SHOPIFY_CLIENT_SECRET.encode("utf-8"),
+        message.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(supplied, expected)
+
+
 @router.get("/shopify/start")
-async def shopify_start(request: Request, shop: str = "", return_url: str = ""):
+async def shopify_start(request: Request, shop: str = "", return_url: str = "", hmac_value: str = "", timestamp: str = ""):
     user_id = _connector_user_id(request)
     missing = _shopify_missing_configuration()
     if missing:
         logger.error("SHOPIFY_CONFIG_MISSING %s", ",".join(missing))
         raise HTTPException(status_code=503, detail="Shopify connector is not configured on KZ: missing " + ", ".join(missing))
-    store = _shopify_store(shop or SHOPIFY_STORE_DOMAIN)
+
     requested_return = str(return_url or "").strip().rstrip("/")
     callback_frontend = requested_return if _is_allowed_frontend_origin(requested_return) else _oauth_return_url(request)
+
+    # Preferred path: use Shopify's generated installation link. Shopify then
+    # shows the merchant's store picker; the app URL returns to
+    # /shopify/install-return, which starts the authorization-code exchange for
+    # the selected store. This removes the legacy "paste your shop domain" UX.
+    if SHOPIFY_INSTALL_URL and not shop:
+        state = _sign_state({
+            "provider": "shopify_install",
+            "user_id": user_id,
+            "return_url": callback_frontend,
+            "nonce": secrets.token_urlsafe(18),
+            "exp": _now() + 600,
+        })
+        response = RedirectResponse(SHOPIFY_INSTALL_URL)
+        response.set_cookie(
+            "kz_shopify_pending_state",
+            state,
+            max_age=600,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            path="/api/connectors/shopify",
+        )
+        logger.info("SHOPIFY_MANAGED_INSTALL_START return=%s install_url_configured=true", callback_frontend)
+        return response
+
+    store = _shopify_store(shop or SHOPIFY_STORE_DOMAIN)
+
+    # If Shopify sent an app-launch signature, require it before accepting the
+    # selected store. Direct KZ starts without these parameters remain supported.
+    if shop and hmac_value:
+        if not _shopify_app_request_hmac_valid(request):
+            raise HTTPException(status_code=400, detail="Shopify app request HMAC validation failed")
+
     state = _sign_state({"provider":"shopify","user_id":user_id,"store":store,"return_url":callback_frontend,"nonce":secrets.token_urlsafe(18),"exp":_now()+600})
     params={
         "response_type": "code",
@@ -555,6 +608,57 @@ async def shopify_start(request: Request, shop: str = "", return_url: str = ""):
     }
     logger.info("SHOPIFY_OAUTH_START store=%s return=%s redirect_uri=%s", store, callback_frontend, SHOPIFY_REDIRECT_URI)
     return RedirectResponse(SHOPIFY_AUTHORIZE.format(shop=store)+"?"+urllib.parse.urlencode(params))
+
+
+@router.get("/shopify/install-return")
+async def shopify_install_return(request: Request):
+    """Handle the Shopify-generated install link returning to KZ."""
+    pending_state = str(request.cookies.get("kz_shopify_pending_state") or "").strip()
+    if not pending_state:
+        return _shopify_browser_redirect(
+            f"{FRONTEND_URL}/dashboard?connector_error=shopify_missing_pending_session"
+        )
+
+    try:
+        payload = _verify_state(pending_state)
+        if payload.get("provider") != "shopify_install":
+            raise HTTPException(status_code=400, detail="Invalid Shopify installation state")
+        if not _shopify_app_request_hmac_valid(request):
+            raise HTTPException(status_code=400, detail="Shopify installation request HMAC validation failed")
+
+        user_id = str(payload.get("user_id") or "").strip()
+        store = _shopify_store(str(request.query_params.get("shop") or ""))
+        callback_frontend = _state_return_url(payload)
+        oauth_state = _sign_state({
+            "provider": "shopify",
+            "user_id": user_id,
+            "store": store,
+            "return_url": callback_frontend,
+            "nonce": secrets.token_urlsafe(18),
+            "exp": _now() + 600,
+        })
+        params = {
+            "response_type": "code",
+            "client_id": SHOPIFY_CLIENT_ID,
+            "scope": SHOPIFY_SCOPES,
+            "redirect_uri": SHOPIFY_REDIRECT_URI,
+            "state": oauth_state,
+        }
+        response = RedirectResponse(
+            SHOPIFY_AUTHORIZE.format(shop=store) + "?" + urllib.parse.urlencode(params)
+        )
+        response.delete_cookie("kz_shopify_pending_state", path="/api/connectors/shopify")
+        logger.info("SHOPIFY_INSTALL_RETURN store=%s user=%s", store, user_id)
+        return response
+    except HTTPException as exc:
+        return _shopify_browser_redirect(
+            f"{FRONTEND_URL}/dashboard?connector_error=shopify_{urllib.parse.quote(str(exc.detail)[:300])}"
+        )
+    except Exception:
+        logger.exception("SHOPIFY_INSTALL_RETURN_FAILED")
+        return _shopify_browser_redirect(
+            f"{FRONTEND_URL}/dashboard?connector_error=shopify_install_return_failed"
+        )
 
 @router.get("/shopify/callback")
 async def shopify_callback(request: Request):
@@ -661,6 +765,8 @@ async def connector_status(request: Request):
             "connected": bool(_provider_account(user_id, "shopify")),
             "account": _provider_account(user_id, "shopify"),
             "authorization_mode": "oauth",
+            "installation_mode": "shopify_store_picker" if SHOPIFY_INSTALL_URL else "direct_store_oauth",
+            "install_url_configured": bool(SHOPIFY_INSTALL_URL),
             "redirect_uri": SHOPIFY_REDIRECT_URI,
             "missing_configuration": shopify_missing,
         },
