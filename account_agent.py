@@ -657,6 +657,11 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
             return {"status": "no_pending_approval", "kind": "approval",
                     "reply": "ℹ️ KZ has no pending Google action waiting for permission."}
         approval_id = str(row[0])
+        approval_status = str(row[5] or "").strip().lower()
+        if approval_status != "pending":
+            return {"status": "approval_already_processed", "kind": "approval",
+                    "approval_id": approval_id,
+                    "reply": f"ℹ️ This approval has already been processed ({approval_status}). KZ will not send the email again."}
         operation = str(row[1] or "")
         target = str(row[2] or "")
         payload = json.loads(str(row[3] or "{}"))
