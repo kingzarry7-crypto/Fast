@@ -1255,7 +1255,7 @@ n" + "="*60, flush=True)
             try: await message.reply("❌ Error. Try again.", mention_author=False)
             except Exception: pass
 
-client = KingZarryAI()
+from discord.ext import tasks\n\nclient = KingZarryAI()
 
 
 @tasks.loop(seconds=60)
