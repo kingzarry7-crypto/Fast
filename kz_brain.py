@@ -10,6 +10,9 @@ import re
 from typing import Any, Callable
 
 SAFE_TOOLS = {
+    "shopify_read": {"description": "Read Shopify store, products, orders, and inventory through the official connector.", "risk": "green"},
+    "autods_research": {"description": "Research AutoDS products, suppliers, margins, and store signals through the approved connection.", "risk": "green"},
+    "fiverr_watch": {"description": "Monitor Fiverr opportunities and inspect permitted pages through the isolated browser.", "risk": "green"},
     "web_research": {
         "description": "Research current public information and opportunities.",
         "risk": "green",
@@ -41,6 +44,9 @@ SAFE_TOOLS = {
 }
 
 APPROVAL_TOOLS = {
+    "shopify_write": {"description": "Create or modify Shopify products, prices, inventory, or other store data.", "risk": "yellow"},
+    "autods_write": {"description": "Import, publish, or change AutoDS store/fulfillment data.", "risk": "yellow"},
+    "fiverr_action": {"description": "Send Fiverr messages, submit offers, or perform delivery actions.", "risk": "yellow"},
     "gmail_send": {
         "description": "Send an email through an approved connected account.",
         "risk": "yellow",
@@ -93,6 +99,26 @@ def plan(goal: str) -> dict[str, Any]:
     reasoning: list[str] = []
     low = raw.lower()
 
+    if _has(low, "shopify", "store product", "shopify store"):
+        tools.append("shopify_read")
+        reasoning.append("Shopify store data can be inspected through the official connector.")
+        if _has(low, "create", "add", "publish", "update", "change", "delete", "price", "inventory"):
+            tools.append("shopify_write")
+            reasoning.append("Shopify changes require approval.")
+
+    if _has(low, "autods", "dropshipping", "supplier", "product research"):
+        tools.append("autods_research")
+        reasoning.append("AutoDS can be researched through the authenticated connection.")
+        if _has(low, "import", "publish", "fulfill", "order", "change", "update"):
+            tools.append("autods_write")
+            reasoning.append("AutoDS changes or fulfillment actions require approval.")
+
+    if _has(low, "fiverr"):
+        tools.append("fiverr_watch")
+        if _has(low, "message", "reply", "offer", "submit", "apply", "deliver", "send"):
+            tools.append("fiverr_action")
+            reasoning.append("Fiverr external actions require approval.")
+
     if _has(low, "gmail", "email", "inbox", "mail"):
         tools.append("gmail_read")
         reasoning.append("Email-related work can use the connected Google account.")
@@ -141,7 +167,7 @@ def plan(goal: str) -> dict[str, Any]:
     else:
         reasoning.append("No consequential external action is required by the detected intent.")
 
-    if _has(low, "client", "freelance", "fiverr", "upwork", "job", "opportun"):
+    if _has(low, "client", "freelance", "fiverr", "upwork", "job", "opportun", "shopify", "autods", "dropshipping"):
         kind = "opportunity"
     elif "github_change" in tools:
         kind = "engineering"
