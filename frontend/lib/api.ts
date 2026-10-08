@@ -292,8 +292,9 @@ export async function streamChatMessage(
     signal?: AbortSignal;
     onDelta: (text: string) => void;
     onStart?: (provider?: string) => void;
+    onAgent?: (agent: { id?: string; status?: string; activity?: string }) => void;
   }
-): Promise<{ reply: string; conversation_id?: string; approval?: { id: string; provider: "google"; operation: string; target?: string } }> {
+): Promise<{ reply: string; conversation_id?: string; approval?: { id: string; provider: "google"; operation: string; target?: string }; agent?: { id?: string; status?: string; activity?: string } }> {
   const trimmed = (message || "").trim();
   if (!trimmed) throw new ApiError({ status: 400, message: "Message required" });
   if (trimmed.length > 4000) throw new ApiError({ status: 400, message: "Message too long" });
@@ -330,6 +331,7 @@ export async function streamChatMessage(
   let conversationId: string | undefined;
   let streamError = "";
   let approval: { id: string; provider: "google"; operation: string; target?: string } | undefined;
+  let agent: { id?: string; status?: string; activity?: string } | undefined;
 
   const consumeEvent = (raw: string) => {
     const line = raw.split(/\r?\n/).find((value) => value.startsWith("data:"));
@@ -338,6 +340,14 @@ export async function streamChatMessage(
       const event = JSON.parse(line.slice(5).trim()) as Record<string, unknown>;
       if (event.type === "start") {
         options.onStart?.(typeof event.provider === "string" ? event.provider : undefined);
+      } else if (event.type === "agent" && event.agent && typeof event.agent === "object") {
+        const value = event.agent as Record<string, unknown>;
+        agent = {
+          id: typeof value.id === "string" ? value.id : undefined,
+          status: typeof value.status === "string" ? value.status : undefined,
+          activity: typeof value.activity === "string" ? value.activity : undefined,
+        };
+        options.onAgent?.(agent);
       } else if (event.type === "delta" && typeof event.text === "string") {
         reply += event.text;
         options.onDelta(event.text);
@@ -374,7 +384,7 @@ export async function streamChatMessage(
     throw new ApiError({ status: 502, message: streamError });
   }
   if (!reply.trim()) throw new ApiError({ status: 502, message: "AI streaming returned no response" });
-  return { reply, conversation_id: conversationId, approval };
+  return { reply, conversation_id: conversationId, approval, agent };
 }
 
 export async function decideGoogleApproval(
@@ -699,3 +709,14 @@ export const api = {
 };
 
 export type { AuthUser, AuthResponse, MeResponse, ChatResponse, ApiErrorData } from "@/types";
+
+
+export async function getKZAgentStatus(
+  workflowId: string,
+  signal?: AbortSignal,
+): Promise<{ status?: string; agent?: { id?: string; goal?: string; status?: string; activity?: string; completed_steps?: number; total_steps?: number; current_step?: { title?: string; status?: string; approval_id?: string }; requires_approval?: boolean } }> {
+  return request<{ status?: string; agent?: { id?: string; goal?: string; status?: string; activity?: string; completed_steps?: number; total_steps?: number; current_step?: { title?: string; status?: string; approval_id?: string }; requires_approval?: boolean } }>(
+    `/api/agent/status/${encodeURIComponent(workflowId)}`,
+    { method: "GET", signal },
+  );
+}
