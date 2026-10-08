@@ -1399,7 +1399,7 @@ async def handle_signal(interaction, symbol, timeframe="15m", defer=True):
     if defer: await interaction.response.defer()
     try:
         tf = _ntf(timeframe)
-        md = await asyncio.to_thread(market_engine.analyze_market, symbol, tf)
+        md = await asyncio.to_thread(market_engine.get_market_snapshot, symbol, tf)
         nd = await asyncio.to_thread(news_engine.get_news_for_asset, symbol)
         emb = build_discord_signal_embed(md, nd)
         cf = None
@@ -1454,7 +1454,7 @@ async def crypto(interaction):
     res = []
     for s in ["BTC/USD", "ETH/USD", "SOL/USD", "XAU/USD"]:
         try:
-            d = await asyncio.to_thread(market_engine.analyze_market, s, "15m")
+            d = await asyncio.to_thread(market_engine.get_market_snapshot, s, "15m")
             p = safe_float(d.get("price"))
             sg = d.get("signal", "WAIT")
             res.append(f"**{s}**: `${p:,.2f}` - {sg}")
