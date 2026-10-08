@@ -429,6 +429,9 @@ SHOPIFY_TOKEN = "https://{shop}/admin/oauth/access_token"
 SHOPIFY_API_VERSION = os.getenv("SHOPIFY_API_VERSION", "2026-07").strip()
 SHOPIFY_CLIENT_ID = os.getenv("SHOPIFY_CLIENT_ID", "").strip()
 SHOPIFY_CLIENT_SECRET = os.getenv("SHOPIFY_CLIENT_SECRET", "").strip()
+# Default the KZ Shopify connector to the owner store so the user does not have to re-enter it.
+# Railway can override this with SHOPIFY_STORE_DOMAIN when needed.
+SHOPIFY_STORE_DOMAIN = os.getenv("SHOPIFY_STORE_DOMAIN", "kingzarry-store.myshopify.com").strip()
 SHOPIFY_REDIRECT_URI = (
     os.getenv("SHOPIFY_REDIRECT_URI", "").strip()
     or "https://fast-production-0eba.up.railway.app/api/connectors/shopify/callback"
@@ -533,13 +536,13 @@ def _shopify_token(user_id: str, store: str = "") -> tuple[str, str]:
     return store_name, token
 
 @router.get("/shopify/start")
-async def shopify_start(request: Request, shop: str, return_url: str = ""):
+async def shopify_start(request: Request, shop: str = "", return_url: str = ""):
     user_id = _connector_user_id(request)
     missing = _shopify_missing_configuration()
     if missing:
         logger.error("SHOPIFY_CONFIG_MISSING %s", ",".join(missing))
         raise HTTPException(status_code=503, detail="Shopify connector is not configured on KZ: missing " + ", ".join(missing))
-    store = _shopify_store(shop)
+    store = _shopify_store(shop or SHOPIFY_STORE_DOMAIN)
     requested_return = str(return_url or "").strip().rstrip("/")
     callback_frontend = requested_return if _is_allowed_frontend_origin(requested_return) else _oauth_return_url(request)
     state = _sign_state({"provider":"shopify","user_id":user_id,"store":store,"return_url":callback_frontend,"nonce":secrets.token_urlsafe(18),"exp":_now()+600})
