@@ -518,6 +518,14 @@ export default function ChatWorkspace({
     ?.text?.trim()
     .slice(0, 64);
 
+  // Prevent accidental duplicate connector/approval messages from being shown twice.
+  const visibleMessages = messages.filter((message, index, list) => {
+    const key = `${message.role}::${String(message.text || "").trim()}`;
+    return list.findIndex((candidate) =>
+      `${candidate.role}::${String(candidate.text || "").trim()}` === key
+    ) === index;
+  });
+
   return (
     <div
       className={
@@ -628,7 +636,7 @@ export default function ChatWorkspace({
             </div>
           )}
 
-          {messages.map((m) => (
+          {visibleMessages.map((m) => (
             <ChatMessage
               key={m.id}
               id={m.id}
@@ -775,16 +783,31 @@ export default function ChatWorkspace({
               </>
             )}
 
-            <button
-              type="submit"
-              disabled={sending || (!input.trim() && !attached)}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-cyan-400/25 bg-[#07111d] text-cyan-200 shadow-[0_0_14px_rgba(0,240,255,0.08)] hover:bg-cyan-500/10 hover:border-cyan-300/50 disabled:opacity-30 disabled:bg-zinc-800 disabled:text-zinc-500"
-              title="Send"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
+            {sending ? (
+              <button
+                type="button"
+                onClick={stopChat}
+                aria-label="Stop King Zarry AI"
+                title="Stop King Zarry AI"
+                className="flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/10 bg-[#1d1d1f] px-3 text-[10px] font-medium text-white shadow-[0_4px_14px_rgba(0,0,0,.28)] transition hover:bg-[#29292c] active:scale-95"
+              >
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500 shadow-[0_0_12px_rgba(34,211,238,.28)]">
+                  <span className="h-2 w-2 rounded-[2px] bg-white" />
+                </span>
+                <span className="hidden sm:inline">Stop</span>
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!input.trim() && !attached}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-cyan-400/25 bg-[#07111d] text-cyan-200 shadow-[0_0_14px_rgba(0,240,255,0.08)] hover:bg-cyan-500/10 hover:border-cyan-300/50 disabled:opacity-30 disabled:bg-zinc-800 disabled:text-zinc-500"
+                title="Send"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            )}
           </div>
           )}
         </div>
