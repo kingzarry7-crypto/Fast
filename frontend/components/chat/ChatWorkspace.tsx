@@ -13,8 +13,6 @@ import {
   type MembershipSnapshot,
 } from "@/lib/membership";
 
-type CoreState = "idle" | "thinking" | "speaking" | "listening" | "error";
-
 interface AttachedImage {
   base64: string;
   mime: string;
