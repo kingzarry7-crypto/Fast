@@ -130,6 +130,19 @@ allowed_origins = [
     if origin.strip()
 ]
 
+# Keep the current production frontend hosts accepted even if Railway still
+# has an older FRONTEND_URL value. This is additive; it does not expose
+# credentials or bypass the authenticated session checks.
+for _origin in (
+    "https://kingzarry.bid",
+    "https://www.kingzarry.bid",
+    "https://app.kingzarry.bid",
+    "https://fast.kingzarry7.workers.dev",
+    "https://fast-a84x.vercel.app",
+):
+    if _origin not in allowed_origins:
+        allowed_origins.append(_origin)
+
 if not allowed_origins:
     allowed_origins = ["http://localhost:3000"]
 
