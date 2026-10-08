@@ -2767,6 +2767,51 @@ async def provider_registry_watch_job(context: ContextTypes.DEFAULT_TYPE):
         logger.warning("Provider registry scan failed: %s", e)
 
 
+async def kz_watch_channel_notification_job(context: ContextTypes.DEFAULT_TYPE):
+    """Deliver important KZ Watch findings to linked Telegram users."""
+    try:
+        from kz_watcher import pending_channel_notifications, mark_channel_notification_delivered
+        from memory_link_bridge import resolve_user_channels
+        # The watcher keeps canonical user IDs. Only users with a linked Telegram
+        # identity are eligible for this channel.
+        user_ids = set()
+        try:
+            from kz_watcher import configured_user_ids
+            user_ids.update(configured_user_ids())
+        except Exception:
+            pass
+        for user_id in list(user_ids):
+            try:
+                channels = resolve_user_channels(user_id)
+                telegram_ids = channels.get("telegram") or []
+                if not telegram_ids:
+                    continue
+                for item in pending_channel_notifications(user_id, 10):
+                    text = (
+                        "👀 <b>KZ WATCH FOUND SOMETHING</b>\n\n"
+                        + "<b>" + escape_html(str(item.get("title") or "New finding")) + "</b>\n"
+                        + escape_html(str(item.get("message") or ""))[:1400]
+                        + "\n\n"
+                        + "Open KZ Watch in the dashboard to review and prepare it for approval."
+                    )
+                    sent = False
+                    for chat_id in telegram_ids:
+                        try:
+                            await context.bot.send_message(
+                                chat_id=chat_id,
+                                text=text,
+                                parse_mode="HTML",
+                                disable_web_page_preview=True,
+                            )
+                            sent = True
+                        except Exception as exc:
+                            logger.warning("KZ Watch Telegram delivery failed: %s", type(exc).__name__)
+                    if sent:
+                        mark_channel_notification_delivered(item["id"], "telegram")
+            except Exception as exc:
+                logger.warning("KZ Watch Telegram cycle failed: %s", type(exc).__name__)
+
+
 async def notification_job(context: ContextTypes.DEFAULT_TYPE):
     conn=db_connect()
     try:
@@ -4405,7 +4450,7 @@ def main():
 
     try:
         if application.job_queue:
-            application.job_queue.run_repeating(notification_job, interval=60, first=60)
+            application.job_queue.run_repeating(notification_job, interval=60, first=60)\n            application.job_queue.run_repeating(kz_watch_channel_notification_job, interval=60, first=45, name="kz-watch-telegram-notifications")
             application.job_queue.run_repeating(
                 provider_registry_watch_job,
                 interval=max(30, env_int("PROVIDER_WATCH_INTERVAL", 60)),
