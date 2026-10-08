@@ -1051,7 +1051,9 @@ class KingZarryAI(discord.Client):
             await interaction.followup.send("⚠️ Shared memory linking is temporarily unavailable.", ephemeral=True)
 
     async def on_ready(self):
-        print("\n" + "="*60, flush=True)
+        print("\    if not kz_watch_channel_notification_job.is_running():
+        kz_watch_channel_notification_job.start()
+n" + "="*60, flush=True)
         print("👑 KING ZARRY AI DISCORD IS ONLINE", flush=True)
         print("="*60, flush=True)
         print(f"🤖 Logged in as: {self.user}", flush=True)
@@ -1254,6 +1256,44 @@ class KingZarryAI(discord.Client):
             except Exception: pass
 
 client = KingZarryAI()
+
+
+@tasks.loop(seconds=60)
+async def kz_watch_channel_notification_job():
+    """Deliver important KZ Watch findings to linked Discord users."""
+    try:
+        from kz_watcher import pending_channel_notifications, mark_channel_notification_delivered
+        from memory_link_bridge import resolve_user_channels, resolve_platform_identity
+        from kz_watcher import configured_user_ids
+        for user_id in configured_user_ids():
+            try:
+                channels = resolve_user_channels(user_id)
+                discord_ids = channels.get("discord") or []
+                if not discord_ids:
+                    continue
+                for item in pending_channel_notifications(user_id, 10):
+                    text = (
+                        "👀 KZ WATCH FOUND SOMETHING\n\n"
+                        + "**" + str(item.get("title") or "New finding") + "**\n"
+                        + str(item.get("message") or "")[:1400]
+                        + "\n\nOpen KZ Watch in the dashboard to review and prepare it for approval."
+                    )
+                    sent = False
+                    for external_id in discord_ids:
+                        try:
+                            member = client.get_user(int(external_id)) or await client.fetch_user(int(external_id))
+                            if member:
+                                await member.send(text)
+                                sent = True
+                        except Exception as exc:
+                            logger.warning("KZ Watch Discord delivery failed: %s", type(exc).__name__)
+                    if sent:
+                        mark_channel_notification_delivered(item["id"], "discord")
+            except Exception as exc:
+                logger.warning("KZ Watch Discord cycle failed: %s", type(exc).__name__)
+
+
+
 
 from discord.ext import tasks
 
