@@ -38,6 +38,15 @@ GITHUB_AUTHORIZE = "https://github.com/login/oauth/authorize"
 GITHUB_TOKEN = "https://github.com/login/oauth/access_token"
 GITHUB_API = "https://api.github.com"
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://fast.kingzarry7.workers.dev").rstrip("/")
+# Production frontend origins. The custom domain is now supported alongside the
+# existing workers.dev/Vercel hosts so OAuth can return to whichever host
+# actually started the flow.
+FRONTEND_CUSTOM_DOMAIN = "kingzarry.bid"
+FRONTEND_CUSTOM_ORIGINS = {
+    "https://kingzarry.bid",
+    "https://www.kingzarry.bid",
+    "https://app.kingzarry.bid",
+}
 CONNECTOR_STATE_SECRET = os.getenv("CONNECTOR_STATE_SECRET") or os.getenv("SESSION_SECRET") or ""
 GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "").strip()
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "").strip()
@@ -158,36 +167,44 @@ def _row_value(row: Any, key: str, index: int = 0) -> Any:
         return None
 
 
-def _oauth_return_url(request: Request) -> str:
-    """Keep OAuth callbacks on the frontend that actually started the flow.
-
-    Railway can receive the provider callback directly, so a stale FRONTEND_URL
-    must not strand the user on an old deployment. Only known KZ frontend
-    origins are accepted.
-    """
-    configured = FRONTEND_URL
-    allowed = {
-        configured,
+def _is_allowed_frontend_origin(value: str) -> bool:
+    origin = str(value or "").strip().rstrip("/")
+    if not origin:
+        return False
+    if origin in {
+        FRONTEND_URL,
         "https://fast-a84x.vercel.app",
         "https://fast.kingzarry7.workers.dev",
-    }
+        *FRONTEND_CUSTOM_ORIGINS,
+    }:
+        return True
+    try:
+        parsed = urllib.parse.urlparse(origin)
+        # Only HTTPS hosts under the domain we control are accepted.
+        return parsed.scheme == "https" and (
+            parsed.hostname == FRONTEND_CUSTOM_DOMAIN
+            or bool(parsed.hostname and parsed.hostname.endswith("." + FRONTEND_CUSTOM_DOMAIN))
+        ) and not parsed.path and not parsed.params and not parsed.query and not parsed.fragment
+    except Exception:
+        return False
+
+
+def _oauth_return_url(request: Request) -> str:
+    """Return OAuth to the exact trusted frontend host that started the flow."""
+    configured = FRONTEND_URL
     raw = (request.headers.get("origin") or "").strip().rstrip("/")
     if not raw:
         try:
-            raw = urllib.parse.urlparse(request.headers.get("referer") or "").scheme + "://" + urllib.parse.urlparse(request.headers.get("referer") or "").netloc
+            parsed = urllib.parse.urlparse(request.headers.get("referer") or "")
+            raw = f"{parsed.scheme}://{parsed.netloc}".rstrip("/") if parsed.scheme and parsed.netloc else ""
         except Exception:
             raw = ""
-    return raw if raw in allowed else configured
+    return raw if _is_allowed_frontend_origin(raw) else configured
 
 
 def _state_return_url(payload: Dict[str, Any]) -> str:
     value = str(payload.get("return_url") or "").strip().rstrip("/")
-    allowed = {
-        FRONTEND_URL,
-        "https://fast-a84x.vercel.app",
-        "https://fast.kingzarry7.workers.dev",
-    }
-    return value if value in allowed else FRONTEND_URL
+    return value if _is_allowed_frontend_origin(value) else FRONTEND_URL
 
 
 def _github_configured() -> bool:
@@ -518,12 +535,7 @@ async def shopify_start(request: Request, shop: str, return_url: str = ""):
         raise HTTPException(status_code=503, detail="Shopify connector is not configured on KZ: missing " + ", ".join(missing))
     store = _shopify_store(shop)
     requested_return = str(return_url or "").strip().rstrip("/")
-    allowed_returns = {
-        FRONTEND_URL,
-        "https://fast-a84x.vercel.app",
-        "https://fast.kingzarry7.workers.dev",
-    }
-    callback_frontend = requested_return if requested_return in allowed_returns else _oauth_return_url(request)
+    callback_frontend = requested_return if _is_allowed_frontend_origin(requested_return) else _oauth_return_url(request)
     state = _sign_state({"provider":"shopify","user_id":user_id,"store":store,"return_url":callback_frontend,"nonce":secrets.token_urlsafe(18),"exp":_now()+600})
     params={"response_type":"code","client_id":SHOPIFY_CLIENT_ID,"scope":SHOPIFY_SCOPES,"redirect_uri":SHOPIFY_REDIRECT_URI,"state":state}
     logger.info("SHOPIFY_OAUTH_START store=%s return=%s redirect_uri=%s", store, callback_frontend, SHOPIFY_REDIRECT_URI)
