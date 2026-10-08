@@ -154,7 +154,8 @@ export default function ConnectionsPanel() {
     const store = shopifyStore.trim();
     if (!store) { setMessage("Enter your Shopify .myshopify.com store domain first."); return; }
     setMessage("Opening Shopify authorization…");
-    window.location.href = "/api/connectors/shopify/start?shop=" + encodeURIComponent(store);
+    const returnUrl = window.location.origin.replace(/\/$/, "");
+    window.location.href = "/api/connectors/shopify/start?shop=" + encodeURIComponent(store) + "&return_url=" + encodeURIComponent(returnUrl);
   }
 
   function openCommerceBrowser(service: "fiverr" | "autods") {
