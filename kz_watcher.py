@@ -89,6 +89,19 @@ def init() -> bool:
                 );
                 CREATE INDEX IF NOT EXISTS idx_kz_watch_runs_user
                     ON kz_watch_runs(user_id, started_at DESC);
+                CREATE TABLE IF NOT EXISTS kz_watch_notifications (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    finding_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    message TEXT NOT NULL DEFAULT '',
+                    kind TEXT NOT NULL DEFAULT 'watch',
+                    delivered BOOLEAN NOT NULL DEFAULT FALSE,
+                    delivered_platform TEXT,
+                    delivered_at TIMESTAMPTZ
+                );
+                CREATE INDEX IF NOT EXISTS idx_kz_watch_notifications_pending
+                    ON kz_watch_notifications(user_id, delivered, created_at DESC);
                 CREATE TABLE IF NOT EXISTS kz_watch_subscriptions (
                     user_id TEXT PRIMARY KEY,
                     enabled BOOLEAN NOT NULL DEFAULT TRUE,
@@ -161,6 +174,63 @@ def _save_finding(user_id: str, item: dict[str, Any]) -> tuple[dict[str, Any], b
         except Exception: pass
         logger.warning("watch finding persistence failed: %s", type(exc).__name__)
         return ({**item, "id": fid, "status": "new", "new": True}, True)
+    finally:
+        conn.close()
+
+
+def queue_channel_notifications(user_id: str, findings: list[dict[str, Any]]) -> int:
+    important = [x for x in findings if int(x.get("score") or 0) >= 70]
+    if not important:
+        return 0
+    conn = _conn()
+    if conn is None or not init():
+        return 0
+    try:
+        with conn.cursor() as cur:
+            for item in important[:10]:
+                nid = hashlib.sha256((str(user_id) + "|" + str(item.get("id"))).encode()).hexdigest()[:32]
+                cur.execute(
+                    "INSERT INTO kz_watch_notifications (id,user_id,finding_id,title,message,kind) VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
+                    (nid, str(user_id), str(item.get("id")), str(item.get("title") or "KZ Watch alert"), str(item.get("summary") or "")[:1200], str(item.get("category") or "watch")),
+                )
+        conn.commit()
+        return len(important[:10])
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return 0
+    finally:
+        conn.close()
+
+
+def pending_channel_notifications(user_id: str, limit: int = 20) -> list[dict[str, Any]]:
+    conn = _conn()
+    if conn is None or not init():
+        return []
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id,finding_id,title,message,kind FROM kz_watch_notifications WHERE user_id=%s AND delivered=FALSE ORDER BY created_at ASC LIMIT %s", (str(user_id), max(1, min(int(limit), 50))))
+            return [dict(zip(["id","finding_id","title","message","kind"], row)) for row in cur.fetchall()]
+    except Exception:
+        return []
+    finally:
+        conn.close()
+
+
+def mark_channel_notification_delivered(notification_id: str, platform: str) -> bool:
+    conn = _conn()
+    if conn is None or not init():
+        return False
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE kz_watch_notifications SET delivered=TRUE, delivered_platform=%s, delivered_at=NOW() WHERE id=%s AND delivered=FALSE", (str(platform), str(notification_id)))
+            ok = cur.rowcount > 0
+        conn.commit()
+        return ok
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return False
     finally:
         conn.close()
 
@@ -241,7 +311,7 @@ def scan_user(user_id: str, categories: list[str] | None = None, max_results: in
 
     # Highest-value signals first. News has zero estimated revenue by design.
     found.sort(key=lambda x: (int(x.get("score") or 0), float(x.get("estimated_value") or 0)), reverse=True)
-    _save_run(user_id, "partial" if errors and found else "failed" if errors else "completed",
+    queue_channel_notifications(user_id, new)\n    _save_run(user_id, "partial" if errors and found else "failed" if errors else "completed",
               wanted, len(found), len(new), "; ".join(errors))
     return {
         "status": "partial" if errors and found else "failed" if errors else "completed",
