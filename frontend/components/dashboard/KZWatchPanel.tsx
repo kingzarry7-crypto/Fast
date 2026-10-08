@@ -23,6 +23,7 @@ export default function KZWatchPanel() {
   const [preparing, setPreparing] = useState("");
   const [error, setError] = useState("");
   const [enabled, setEnabled] = useState(false);
+  const [newCount, setNewCount] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -55,7 +56,7 @@ export default function KZWatchPanel() {
     }
   }
 
-  async function scanNow() {
+  async function scanNow() {\n    setNewCount(0);
     setLoading(true);
     setError("");
     try {
@@ -97,7 +98,7 @@ export default function KZWatchPanel() {
     <div className="relative shrink-0">
       <button type="button" onClick={() => setOpen((v) => !v)}
         className="rounded-md border border-cyan-400/30 bg-cyan-400/5 px-2.5 py-1.5 font-mono-tech text-[10px] tracking-widest text-cyan-300 hover:bg-cyan-400/10">
-        KZ WATCH
+        KZ WATCH{newCount ? ` • ${newCount}` : ""}
       </button>
       {open && (
         <>
