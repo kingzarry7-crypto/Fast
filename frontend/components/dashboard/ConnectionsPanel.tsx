@@ -312,9 +312,11 @@ export default function ConnectionsPanel() {
   }
 
   useEffect(() => {
-    if (!open) return;
-    void refreshOfficialConnectors();
     const q = new URLSearchParams(window.location.search);
+    const hasConnectorReturn = Boolean(q.get("connector_error") || (q.get("connector") && q.get("connected") === "1"));
+    if (hasConnectorReturn) setOpen(true);
+    if (!open && !hasConnectorReturn) return;
+    void refreshOfficialConnectors();
     if (q.get("connector_error")) {
       const rawError = q.get("connector_error") || "connector_error";
       const readable = rawError.replace(/^shopify_/, "Shopify: ").replace(/^google_/, "Google: ").replace(/_/g, " ");
