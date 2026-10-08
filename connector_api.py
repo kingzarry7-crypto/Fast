@@ -510,15 +510,23 @@ def _shopify_token(user_id: str, store: str = "") -> tuple[str, str]:
     return store_name, token
 
 @router.get("/shopify/start")
-async def shopify_start(request: Request, shop: str):
+async def shopify_start(request: Request, shop: str, return_url: str = ""):
     user_id = _connector_user_id(request)
     missing = _shopify_missing_configuration()
     if missing:
         logger.error("SHOPIFY_CONFIG_MISSING %s", ",".join(missing))
         raise HTTPException(status_code=503, detail="Shopify connector is not configured on KZ: missing " + ", ".join(missing))
     store = _shopify_store(shop)
-    state = _sign_state({"provider":"shopify","user_id":user_id,"store":store,"return_url":_oauth_return_url(request),"nonce":secrets.token_urlsafe(18),"exp":_now()+600})
+    requested_return = str(return_url or "").strip().rstrip("/")
+    allowed_returns = {
+        FRONTEND_URL,
+        "https://fast-a84x.vercel.app",
+        "https://fast.kingzarry7.workers.dev",
+    }
+    callback_frontend = requested_return if requested_return in allowed_returns else _oauth_return_url(request)
+    state = _sign_state({"provider":"shopify","user_id":user_id,"store":store,"return_url":callback_frontend,"nonce":secrets.token_urlsafe(18),"exp":_now()+600})
     params={"response_type":"code","client_id":SHOPIFY_CLIENT_ID,"scope":SHOPIFY_SCOPES,"redirect_uri":SHOPIFY_REDIRECT_URI,"state":state}
+    logger.info("SHOPIFY_OAUTH_START store=%s return=%s redirect_uri=%s", store, callback_frontend, SHOPIFY_REDIRECT_URI)
     return RedirectResponse(SHOPIFY_AUTHORIZE.format(shop=store)+"?"+urllib.parse.urlencode(params))
 
 @router.get("/shopify/callback")
