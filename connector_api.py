@@ -435,6 +435,13 @@ SHOPIFY_STORE_DOMAIN = os.getenv("SHOPIFY_STORE_DOMAIN", "kingzarry-store.myshop
 # Optional Shopify Dev Dashboard installation link. When configured, Shopify
 # presents its own store picker instead of KZ asking for a myshopify.com domain.
 SHOPIFY_INSTALL_URL = os.getenv("SHOPIFY_INSTALL_URL", "").strip()
+# Shopify sends a merchant back to this URL after its Dev Dashboard install link.
+# Keep this separate from the OAuth callback: install-return receives Shopify's
+# signed shop context, then starts the normal standalone authorization-code flow.
+SHOPIFY_INSTALL_RETURN_URI = (
+    os.getenv("SHOPIFY_INSTALL_RETURN_URI", "").strip()
+    or "https://fast-production-0eba.up.railway.app/api/connectors/shopify/install-return"
+)
 SHOPIFY_REDIRECT_URI = (
     os.getenv("SHOPIFY_REDIRECT_URI", "").strip()
     or "https://fast-production-0eba.up.railway.app/api/connectors/shopify/callback"
@@ -541,7 +548,16 @@ def _shopify_token(user_id: str, store: str = "") -> tuple[str, str]:
 def _shopify_app_request_hmac_valid(request: Request) -> bool:
     """Validate the signed query Shopify sends to an app URL after install."""
     supplied = str(request.query_params.get("hmac") or "").strip()
-    if not supplied or not SHOPIFY_CLIENT_SECRET:
+    timestamp_raw = str(request.query_params.get("timestamp") or "").strip()
+    if not supplied or not timestamp_raw or not SHOPIFY_CLIENT_SECRET:
+        return False
+    try:
+        timestamp = int(timestamp_raw)
+        # Installation links are short-lived browser handoffs. Reject stale
+        # requests instead of allowing a captured signed URL to be replayed.
+        if abs(_now() - timestamp) > 600:
+            return False
+    except (TypeError, ValueError):
         return False
     pairs = [(key, value) for key, value in request.query_params.multi_items() if key != "hmac"]
     pairs.sort()
@@ -565,11 +581,18 @@ async def shopify_start(request: Request, shop: str = "", return_url: str = ""):
     requested_return = str(return_url or "").strip().rstrip("/")
     callback_frontend = requested_return if _is_allowed_frontend_origin(requested_return) else _oauth_return_url(request)
 
-    # Preferred path: use Shopify's generated installation link. Shopify then
-    # shows the merchant's store picker; the app URL returns to
-    # /shopify/install-return, which starts the authorization-code exchange for
-    # the selected store. This removes the legacy "paste your shop domain" UX.
-    if SHOPIFY_INSTALL_URL and not shop:
+    # Preferred path: use Shopify's generated Dev Dashboard installation link.
+    # Shopify owns the account/store picker and permission screen; KZ never asks
+    # the merchant to paste a myshopify.com domain.
+    if not shop:
+        if not SHOPIFY_INSTALL_URL:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Shopify store picker is not configured. Set SHOPIFY_INSTALL_URL "
+                    "to the Shopify Dev Dashboard install link for this app."
+                ),
+            )
         state = _sign_state({
             "provider": "shopify_install",
             "user_id": user_id,
@@ -590,7 +613,17 @@ async def shopify_start(request: Request, shop: str = "", return_url: str = ""):
         logger.info("SHOPIFY_MANAGED_INSTALL_START return=%s install_url_configured=true", callback_frontend)
         return response
 
-    store = _shopify_store(shop or SHOPIFY_STORE_DOMAIN)
+    # Direct store-specific OAuth remains available for backend/API callers that
+    # explicitly supply a validated shop. The dashboard never uses this branch.
+    if not shop:
+        state = _sign_state({
+            "provider": "shopify_install",
+            "user_id": user_id,
+            "return_url": callback_frontend,
+            "nonce": secrets.token_urlsafe(18),
+            "exp": _now() + 600,
+        })
+    store = _shopify_store(shop)
 
     state = _sign_state({"provider":"shopify","user_id":user_id,"store":store,"return_url":callback_frontend,"nonce":secrets.token_urlsafe(18),"exp":_now()+600})
     params={
@@ -621,7 +654,8 @@ async def shopify_install_return(request: Request):
             raise HTTPException(status_code=400, detail="Shopify installation request HMAC validation failed")
 
         user_id = str(payload.get("user_id") or "").strip()
-        store = _shopify_store(str(request.query_params.get("shop") or ""))
+        callback_shop = str(request.query_params.get("shop") or "").strip()
+        store = _shopify_store(callback_shop)
         callback_frontend = _state_return_url(payload)
         oauth_state = _sign_state({
             "provider": "shopify",
@@ -759,8 +793,9 @@ async def connector_status(request: Request):
             "connected": bool(_provider_account(user_id, "shopify")),
             "account": _provider_account(user_id, "shopify"),
             "authorization_mode": "oauth",
-            "installation_mode": "shopify_store_picker" if SHOPIFY_INSTALL_URL else "direct_store_oauth",
+            "installation_mode": "shopify_store_picker" if SHOPIFY_INSTALL_URL else "shopify_store_picker_not_configured",
             "install_url_configured": bool(SHOPIFY_INSTALL_URL),
+            "install_return_uri": SHOPIFY_INSTALL_RETURN_URI,
             "redirect_uri": SHOPIFY_REDIRECT_URI,
             "missing_configuration": shopify_missing,
         },
