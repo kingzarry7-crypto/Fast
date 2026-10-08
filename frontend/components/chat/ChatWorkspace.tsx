@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import AICore from "@/components/AICore";
 import ChatMessage from "@/components/chat/ChatMessage";
 import { useChat } from "@/hooks/useChat";
 import { useVoice, type VoiceStyle } from "@/hooks/useVoice";
@@ -58,8 +57,8 @@ export default function ChatWorkspace({
   );
   const [membership, setMembership] = useState<MembershipSnapshot | null>(null);
   const [input, setInput] = useState("");
+  const [activityTick, setActivityTick] = useState(0);
   const [capability] = useState("AI");
-  const [coreState, setCoreState] = useState<CoreState>("idle");
   const [attached, setAttached] = useState<AttachedImage | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [autoSpeak, setAutoSpeak] = useState(false);
@@ -166,6 +165,15 @@ export default function ChatWorkspace({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, sending, autoSpeak]);
+
+  useEffect(() => {
+    if (!sending) {
+      setActivityTick(0);
+      return;
+    }
+    const timer = window.setInterval(() => setActivityTick((value) => value + 1), 1800);
+    return () => window.clearInterval(timer);
+  }, [sending]);
 
   useEffect(() => {
     const el = listRef.current;
@@ -506,7 +514,7 @@ export default function ChatWorkspace({
               </button>
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               <span className="font-mono-tech text-[9px] tracking-[0.2em] text-cyan-300/70">
-                {coreState === "idle" ? "READY" : coreState.toUpperCase()}
+                {sending ? "WORKING" : "READY"}
               </span>
             </div>
             <div className="flex items-center gap-1.5">
@@ -557,7 +565,7 @@ export default function ChatWorkspace({
 
       <div
         ref={listRef}
-        className="relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain kz-scroll px-3 sm:px-4"
+        className="relative min-h-0 flex-1 overflow-y-auto overscroll-y-none kz-scroll px-3 sm:px-4"
       >
         <div className="mx-auto w-full max-w-2xl space-y-2.5 py-4 pb-28">
           {showSideHistory && historyOpen && (
@@ -582,7 +590,9 @@ export default function ChatWorkspace({
 
           {messages.length === 0 && !historyLoading && (
             <div className="flex flex-col items-center justify-center min-h-[200px] text-center py-8">
-              <AICore state={coreState === "idle" ? "idle" : coreState} size={100} />
+              <div className="flex h-[100px] w-[100px] items-center justify-center rounded-full border border-cyan-400/15 bg-cyan-400/[0.03]" aria-hidden="true">
+                <span className="h-3 w-3 rounded-full bg-cyan-300/80 shadow-[0_0_18px_rgba(0,240,255,.55)]" />
+              </div>
               <p className="mt-4 font-mono-tech text-[10px] tracking-[0.3em] text-cyan-300/70">READY</p>
               <p className="mt-1 text-xs text-zinc-500">Type a message below</p>
             </div>
@@ -615,32 +625,28 @@ export default function ChatWorkspace({
             />
           ))}
 
-          {sending && (
-            <div className="flex items-center gap-3 px-1 py-2" aria-live="polite">
-              <div
-                className={
-                  "kz-call-core-wrap flex h-11 w-11 shrink-0 items-center justify-center " +
-                  (messages[messages.length - 1]?.role === "assistant" && messages[messages.length - 1]?.text
-                    ? "kz-call-speaking"
-                    : "kz-call-thinking")
-                }
-              >
-                <AICore
-                  state={
-                    messages[messages.length - 1]?.role === "assistant" && messages[messages.length - 1]?.text
-                      ? "speaking"
-                      : "thinking"
-                  }
-                  size={42}
-                />
+          {sending && (() => {
+            const lastUserText = [...messages].reverse().find((message) => message.role === "user")?.text || "";
+            const lower = lastUserText.toLowerCase();
+            const webWork = /\b(search|research|browse|browser|look up|latest|today|news|website|web|google)\b/.test(lower);
+            const accountWork = /\b(gmail|email|mail|drive|calendar|account|send|compose|draft)\b/.test(lower);
+            const phases = webWork
+              ? ["Searching the web…", "Reading sources…", "Checking the latest information…", "Preparing the answer…"]
+              : accountWork
+                ? ["Checking your connected account…", "Preparing the requested action…", "Verifying the details…", "Preparing the answer…"]
+                : ["Thinking…", "Working on it…", "Preparing the answer…"];
+            const label = phases[activityTick % phases.length];
+            return (
+              <div className="flex items-center gap-3 px-1 py-3" aria-live="polite">
+                <span className="flex items-center gap-1.5" aria-hidden="true">
+                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-pulse" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-pulse [animation-delay:150ms]" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-pulse [animation-delay:300ms]" />
+                </span>
+                <span className="text-xs font-medium tracking-wide text-cyan-200/80">{label}</span>
               </div>
-              <span className="text-xs font-medium tracking-wide text-cyan-200/80">
-                {messages[messages.length - 1]?.role === "assistant" && messages[messages.length - 1]?.text
-                  ? "Responding"
-                  : "Thinking"}
-              </span>
-            </div>
-          )}
+            );
+          })()}
 
           {historyLoading && <p className="text-xs text-zinc-500">Loading…</p>}
           {error && (
@@ -701,7 +707,7 @@ export default function ChatWorkspace({
 
       <form
         onSubmit={handleSubmit}
-        className="relative inset-x-0 z-30 shrink-0 border-t border-white/10 bg-[#05080f]/95 backdrop-blur-md px-3 sm:px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+        className="relative inset-x-0 z-30 shrink-0 border-t border-white/10 bg-[#05080f]/95 backdrop-blur-md px-3 sm:px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] [transform:translateZ(0)]"
       >
         <div className="mx-auto w-full max-w-2xl">
           {attached && (
