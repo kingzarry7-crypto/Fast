@@ -2810,6 +2810,8 @@ async def kz_watch_channel_notification_job(context: ContextTypes.DEFAULT_TYPE):
                         mark_channel_notification_delivered(item["id"], "telegram")
             except Exception as exc:
                 logger.warning("KZ Watch Telegram cycle failed: %s", type(exc).__name__)
+    except Exception as exc:
+        logger.warning("KZ Watch Telegram watcher failed: %s", type(exc).__name__)
 
 
 async def notification_job(context: ContextTypes.DEFAULT_TYPE):
