@@ -98,8 +98,14 @@ def init() -> bool:
                     kind TEXT NOT NULL DEFAULT 'watch',
                     delivered BOOLEAN NOT NULL DEFAULT FALSE,
                     delivered_platform TEXT,
-                    delivered_at TIMESTAMPTZ
+                    delivered_at TIMESTAMPTZ,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    telegram_delivered BOOLEAN NOT NULL DEFAULT FALSE,
+                    discord_delivered BOOLEAN NOT NULL DEFAULT FALSE
                 );
+                ALTER TABLE kz_watch_notifications ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+                ALTER TABLE kz_watch_notifications ADD COLUMN IF NOT EXISTS telegram_delivered BOOLEAN NOT NULL DEFAULT FALSE;
+                ALTER TABLE kz_watch_notifications ADD COLUMN IF NOT EXISTS discord_delivered BOOLEAN NOT NULL DEFAULT FALSE;
                 CREATE INDEX IF NOT EXISTS idx_kz_watch_notifications_pending
                     ON kz_watch_notifications(user_id, delivered, created_at DESC);
                 CREATE TABLE IF NOT EXISTS kz_watch_subscriptions (
@@ -317,7 +323,8 @@ def scan_user(user_id: str, categories: list[str] | None = None, max_results: in
 
     # Highest-value signals first. News has zero estimated revenue by design.
     found.sort(key=lambda x: (int(x.get("score") or 0), float(x.get("estimated_value") or 0)), reverse=True)
-    queue_channel_notifications(user_id, new)\n    _save_run(user_id, "partial" if errors and found else "failed" if errors else "completed",
+    queue_channel_notifications(user_id, new)
+    _save_run(user_id, "partial" if errors and found else "failed" if errors else "completed",
               wanted, len(found), len(new), "; ".join(errors))
     return {
         "status": "partial" if errors and found else "failed" if errors else "completed",
