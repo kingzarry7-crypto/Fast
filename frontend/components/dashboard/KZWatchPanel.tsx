@@ -119,6 +119,13 @@ export default function KZWatchPanel() {
               </button>
             </div>
             {error && <div className="mb-2 rounded border border-red-500/20 bg-red-500/5 p-2 text-[10px] text-red-300">{error}</div>}
+            {newCount > 0 && (
+              <button type="button" onClick={() => setNewCount(0)}
+                className="mb-2 w-full rounded border border-emerald-400/20 bg-emerald-400/5 p-2 text-left text-[10px] text-emerald-200">
+                KZ found {newCount} new important watch finding{newCount === 1 ? "" : "s"}. Open the items below to review.
+              </button>
+            )}
+
             {!items.length && !loading && (
               <div className="py-8 text-center font-mono-tech text-[10px] text-zinc-600">No watch findings yet. Run a scan.</div>
             )}
