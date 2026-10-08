@@ -42,3 +42,8 @@ coverage/
 # Temporary files
 *.tmp
 *.temp
+# Cloudflare Workers / OpenNext
+.open-next/
+.wrangler/
+.dev.vars
+.dev.vars.*
