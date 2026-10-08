@@ -453,7 +453,17 @@ def _approval(user_id: str, operation: str, target: str, payload: Dict[str, Any]
         )
         row = cur.fetchone()
         approval_id = str(_row_value(row, "id", 0) or approval_id)
-    _audit(user_id, "connector_action_approval_created", operation, target, approval_id)
+    # The approval row is the source of truth. Audit logging is secondary:
+    # a transient audit-table failure must never discard a valid approval or
+    # prevent the user from approving the exact action.
+    try:
+        _audit(user_id, "connector_action_approval_created", operation, target, approval_id)
+    except Exception as exc:
+        logger.exception(
+            "Google approval audit write failed approval=%s: %s",
+            approval_id,
+            type(exc).__name__,
+        )
     return {"status": "waiting_for_approval", "approval_id": approval_id, "provider": "google",
             "operation": operation, "target": target, "preview": payload,
             "message": "Approval required. KZ will execute only this exact Google action after you approve it."}
