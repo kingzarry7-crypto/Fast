@@ -144,7 +144,7 @@ def _verify_state(value: str) -> Dict[str, Any]:
         payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
         if int(payload.get("exp") or 0) < _now():
             raise ValueError("expired")
-        if payload.get("provider") not in {"github", "tiktok", "shopify"}:
+        if payload.get("provider") not in {"github", "tiktok", "shopify", "shopify_install"}:
             raise ValueError("wrong provider")
         return payload
     except HTTPException:
@@ -555,7 +555,7 @@ def _shopify_app_request_hmac_valid(request: Request) -> bool:
 
 
 @router.get("/shopify/start")
-async def shopify_start(request: Request, shop: str = "", return_url: str = "", hmac_value: str = "", timestamp: str = ""):
+async def shopify_start(request: Request, shop: str = "", return_url: str = ""):
     user_id = _connector_user_id(request)
     missing = _shopify_missing_configuration()
     if missing:
@@ -591,12 +591,6 @@ async def shopify_start(request: Request, shop: str = "", return_url: str = "", 
         return response
 
     store = _shopify_store(shop or SHOPIFY_STORE_DOMAIN)
-
-    # If Shopify sent an app-launch signature, require it before accepting the
-    # selected store. Direct KZ starts without these parameters remain supported.
-    if shop and hmac_value:
-        if not _shopify_app_request_hmac_valid(request):
-            raise HTTPException(status_code=400, detail="Shopify app request HMAC validation failed")
 
     state = _sign_state({"provider":"shopify","user_id":user_id,"store":store,"return_url":callback_frontend,"nonce":secrets.token_urlsafe(18),"exp":_now()+600})
     params={
