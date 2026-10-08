@@ -50,7 +50,7 @@ export default function VoiceCallUI({
         }}
       />
 
-      <div className="relative z-[101] flex h-full min-h-0 flex-col">
+      <div className="relative z-[101] flex h-full min-h-0 flex-col" aria-label="King Zarry AI live voice call">
         <div className="flex items-center justify-between px-5 pt-[max(1.25rem,env(safe-area-inset-top))] sm:px-8">
           <div>
             <p className="text-[10px] font-medium uppercase tracking-[0.28em] text-cyan-300/80">
