@@ -51,7 +51,6 @@ export default function ConnectionsPanel() {
   const [tiktokQr, setTiktokQr] = useState<any>(null);
   const [google, setGoogle] = useState<any>(null);
   const [shopify, setShopify] = useState<any>(null);
-  const [shopifyStore, setShopifyStore] = useState("");
   const [googleData, setGoogleData] = useState<any>(null);
   const [googleApproval, setGoogleApproval] = useState<any>(null);
   const [googleTo, setGoogleTo] = useState("");
@@ -152,11 +151,12 @@ export default function ConnectionsPanel() {
   }
 
   async function connectShopify() {
-    const store = shopifyStore.trim() || "kingzarry-store.myshopify.com";
-    setShopifyStore(store);
-    setMessage("Opening Shopify authorization for kingzarry-store.myshopify.com…");
+    // Shopify chooses the authenticated merchant/store inside its own
+    // authorization surface. KZ no longer asks the user to paste a
+    // myshopify.com domain into the dashboard.
+    setMessage("Opening Shopify authorization…");
     const returnUrl = window.location.origin.replace(/\/$/, "");
-    window.location.href = "/api/connectors/shopify/start?shop=" + encodeURIComponent(store) + "&return_url=" + encodeURIComponent(returnUrl);
+    window.location.href = "/api/connectors/shopify/start?return_url=" + encodeURIComponent(returnUrl);
   }
 
   function openCommerceBrowser(service: "fiverr" | "autods") {
@@ -315,23 +315,6 @@ export default function ConnectionsPanel() {
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
-
-    // Shopify managed-install can return to the configured KZ application URL
-    // with the store in the query string before the authorization-code grant
-    // starts. Immediately hand that store back to the server-side connector
-    // while preserving the authenticated KZ web session.
-    const shopParam = (q.get("shop") || "").trim();
-    const shopHmac = (q.get("hmac") || "").trim();
-    if (shopParam && shopHmac && !q.get("connector") && !q.get("connector_error")) {
-      const returnUrl = window.location.origin.replace(/\/$/, "") + "/dashboard";
-      window.location.replace(
-        "/api/connectors/shopify/start?shop=" +
-        encodeURIComponent(shopParam) +
-        "&return_url=" +
-        encodeURIComponent(returnUrl)
-      );
-      return;
-    }
 
     const hasConnectorReturn = Boolean(q.get("connector_error") || (q.get("connector") && q.get("connected") === "1"));
     if (hasConnectorReturn) setOpen(true);
@@ -730,9 +713,9 @@ export default function ConnectionsPanel() {
                         <div className="mt-1 text-[9px] text-emerald-200/70">{shopify.account.provider_account_id}</div>
                       )}
                     </div>
-                    {!shopify?.connected && <button onClick={()=>void connectShopify()} disabled={busy || !shopifyStore.trim()} className="rounded border border-emerald-400/30 px-3 py-2 text-[9px] tracking-widest text-emerald-200 disabled:opacity-40">CONNECT</button>}
+                    {!shopify?.connected && <button onClick={()=>void connectShopify()} disabled={busy} className="rounded border border-emerald-400/30 px-3 py-2 text-[9px] tracking-widest text-emerald-200 disabled:opacity-40">CONNECT</button>}
                   </div>
-                  {!shopify?.connected && <input value={shopifyStore} onChange={e=>setShopifyStore(e.target.value)} placeholder="your-store.myshopify.com" className="mt-2 w-full rounded border border-white/10 bg-black/20 p-2 text-xs text-white"/>}
+                  {!shopify?.connected && <div className="mt-2 text-[10px] leading-relaxed text-zinc-500">Shopify will handle the account/store selection and permission approval. KZ saves the authorized store after Shopify returns.</div>}
                 </div>
                 <div className="rounded-lg border border-orange-400/20 bg-orange-400/[0.03] p-3">
                   <div className="flex items-center justify-between gap-2"><div><div className="text-sm font-medium text-white">AutoDS</div><div className="text-[10px] text-zinc-500">Isolated browser connection</div></div><button onClick={()=>openCommerceBrowser("autods")} className="rounded border border-orange-400/30 px-3 py-2 text-[9px] tracking-widest text-orange-200">OPEN</button></div>
