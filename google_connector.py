@@ -49,7 +49,10 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "https://fast.kingzarry7.workers.dev").
 CONNECTOR_STATE_SECRET = os.getenv("CONNECTOR_STATE_SECRET") or os.getenv("SESSION_SECRET") or ""
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "").strip()
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
-GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "").strip()
+GOOGLE_REDIRECT_URI = (
+    os.getenv("GOOGLE_REDIRECT_URI", "").strip()
+    or "https://fast-production-0eba.up.railway.app/api/connectors/google/callback"
+)
 
 DEFAULT_GOOGLE_SCOPES = " ".join([
     "openid",
@@ -600,48 +603,83 @@ async def google_callback(request: Request):
         callback_frontend = _state_return_url(_verify_state(state_value))
     except Exception:
         callback_frontend = FRONTEND_URL
-    if not _configured():
-        raise HTTPException(status_code=503, detail="Google connector is not configured on KZ")
-    error = request.query_params.get("error")
-    if error:
-        return RedirectResponse(f"{callback_frontend}/dashboard?connector_error=google_{urllib.parse.quote(error)}")
-    # The OAuth callback lands directly on Railway. The KZ login cookie may
-    # have been issued on the Vercel frontend host (the normal /api proxy
-    # path), so requiring _user_id(request) here can reject a valid OAuth
-    # callback even though the signed state was created for the logged-in user.
-    # The state is HMAC-signed by KZ, short-lived, and carries the user id;
-    # use that authenticated state to finish the one-time authorization-code
-    # exchange instead of requiring the frontend cookie on the callback host.
-    payload = _verify_state(state_value)
-    callback_frontend = _state_return_url(payload)
-    user_id = str(payload.get("user_id") or "").strip()
-    if not user_id:
-        raise HTTPException(status_code=403, detail="Google authorization state has no KZ user")
-    code = request.query_params.get("code") or ""
-    if not code:
-        raise HTTPException(status_code=400, detail="Google authorization code missing")
-    response = requests.post(GOOGLE_TOKEN, data={
-        "code": code, "client_id": GOOGLE_CLIENT_ID, "client_secret": GOOGLE_CLIENT_SECRET,
-        "redirect_uri": GOOGLE_REDIRECT_URI, "grant_type": "authorization_code",
-    }, timeout=25)
-    if response.status_code >= 400:
-        try:
-            detail = response.json().get("error_description") or response.json().get("error")
-        except Exception:
-            detail = None
-        raise HTTPException(status_code=502, detail=f"Google token exchange failed{': ' + str(detail) if detail else ''}")
-    token = response.json()
-    access = str(token.get("access_token") or "")
-    if not access:
-        raise HTTPException(status_code=502, detail="Google did not return an access token")
-    profile_r = requests.get(GOOGLE_USERINFO, headers={"Authorization": f"Bearer {access}"}, timeout=25)
-    if profile_r.status_code >= 400:
-        raise HTTPException(status_code=502, detail="Google profile verification failed")
-    profile = profile_r.json()
-    scopes = [x for x in str(token.get("scope") or GOOGLE_SCOPES).split() if x]
-    _save_account(user_id, profile, token, scopes)
-    _audit(user_id, "connector_connected", target=str(profile.get("email") or profile.get("sub") or "google"))
-    return RedirectResponse(f"{callback_frontend}/dashboard?connector=google&connected=1")
+    try:
+        if not _configured():
+            return RedirectResponse(f"{callback_frontend}/dashboard?connector_error=google_not_configured")
+
+        error = request.query_params.get("error")
+        if error:
+            detail = request.query_params.get("error_description") or error
+            return RedirectResponse(
+                f"{callback_frontend}/dashboard?connector_error=google_{urllib.parse.quote(str(detail)[:300])}"
+            )
+
+        payload = _verify_state(state_value)
+        callback_frontend = _state_return_url(payload)
+        user_id = str(payload.get("user_id") or "").strip()
+        if not user_id:
+            raise HTTPException(status_code=403, detail="Google authorization state has no KZ user")
+
+        code = request.query_params.get("code") or ""
+        if not code:
+            raise HTTPException(status_code=400, detail="Google authorization code missing")
+
+        response = requests.post(
+            GOOGLE_TOKEN,
+            data={
+                "code": code,
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "redirect_uri": GOOGLE_REDIRECT_URI,
+                "grant_type": "authorization_code",
+            },
+            timeout=25,
+        )
+        if response.status_code >= 400:
+            try:
+                detail = response.json().get("error_description") or response.json().get("error")
+            except Exception:
+                detail = None
+            raise HTTPException(
+                status_code=502,
+                detail=f"Google token exchange failed{': ' + str(detail) if detail else ''}"
+            )
+
+        token = response.json()
+        access = str(token.get("access_token") or "")
+        if not access:
+            raise HTTPException(status_code=502, detail="Google did not return an access token")
+
+        profile_r = requests.get(
+            GOOGLE_USERINFO,
+            headers={"Authorization": f"Bearer {access}"},
+            timeout=25,
+        )
+        if profile_r.status_code >= 400:
+            raise HTTPException(status_code=502, detail="Google profile verification failed")
+
+        profile = profile_r.json()
+        scopes = [x for x in str(token.get("scope") or GOOGLE_SCOPES).split() if x]
+        _save_account(user_id, profile, token, scopes)
+        _audit(
+            user_id,
+            "connector_connected",
+            target=str(profile.get("email") or profile.get("sub") or "google"),
+        )
+        return RedirectResponse(
+            f"{callback_frontend}/dashboard?connector=google&connected=1&email="
+            f"{urllib.parse.quote(str(profile.get('email') or ''))}"
+        )
+    except HTTPException as exc:
+        logger.warning("Google callback rejected: %s", str(exc.detail))
+        return RedirectResponse(
+            f"{callback_frontend}/dashboard?connector_error=google_{urllib.parse.quote(str(exc.detail or 'authorization_failed')[:300])}"
+        )
+    except Exception as exc:
+        logger.exception("Google callback failed: %s", type(exc).__name__)
+        return RedirectResponse(
+            f"{callback_frontend}/dashboard?connector_error=google_callback_failed"
+        )
 
 
 @router.post("/disconnect")
