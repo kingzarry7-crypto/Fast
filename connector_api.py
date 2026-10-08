@@ -376,7 +376,10 @@ SHOPIFY_TOKEN = "https://{shop}/admin/oauth/access_token"
 SHOPIFY_API_VERSION = os.getenv("SHOPIFY_API_VERSION", "2026-07").strip()
 SHOPIFY_CLIENT_ID = os.getenv("SHOPIFY_CLIENT_ID", "").strip()
 SHOPIFY_CLIENT_SECRET = os.getenv("SHOPIFY_CLIENT_SECRET", "").strip()
-SHOPIFY_REDIRECT_URI = os.getenv("SHOPIFY_REDIRECT_URI", "").strip()
+SHOPIFY_REDIRECT_URI = (
+    os.getenv("SHOPIFY_REDIRECT_URI", "").strip()
+    or "https://fast-production-0eba.up.railway.app/api/connectors/shopify/callback"
+)
 SHOPIFY_SCOPES = os.getenv(
     "SHOPIFY_OAUTH_SCOPES",
     "read_products,write_products,read_orders,write_inventory",
@@ -462,7 +465,7 @@ async def shopify_start(request: Request, shop: str):
         raise HTTPException(status_code=503, detail="Shopify connector is not configured on KZ")
     store = _shopify_store(shop)
     state = _sign_state({"provider":"shopify","user_id":user_id,"store":store,"return_url":_oauth_return_url(request),"nonce":secrets.token_urlsafe(18),"exp":_now()+600})
-    params={"client_id":SHOPIFY_CLIENT_ID,"scope":SHOPIFY_SCOPES,"redirect_uri":SHOPIFY_REDIRECT_URI,"state":state}
+    params={"response_type":"code","client_id":SHOPIFY_CLIENT_ID,"scope":SHOPIFY_SCOPES,"redirect_uri":SHOPIFY_REDIRECT_URI,"state":state}
     return RedirectResponse(SHOPIFY_AUTHORIZE.format(shop=store)+"?"+urllib.parse.urlencode(params))
 
 @router.get("/shopify/callback")
