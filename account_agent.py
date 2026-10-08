@@ -30,14 +30,73 @@ def channel_user_id(platform: str, external_id: str) -> str:
     return f"{str(platform).strip().lower()}:{str(external_id).strip()}"
 
 def web_user_id(platform: str, external_id: str) -> Optional[str]:
-    """Resolve a channel identity to the UUID used by web_connected_accounts."""
-    raw = resolve_platform_identity(platform, str(external_id))
-    if not raw:
+    """Resolve a channel identity to the web user UUID used by connectors.
+
+    Normal path: use the explicit Web <-> Telegram/Discord identity link.
+    Recovery path: if the link is missing/stale, only auto-bind when there is
+    exactly ONE active web user with connected official accounts. This keeps
+    the single-owner deployment working without guessing between multiple
+    customer accounts.
+    """
+    platform = str(platform or "").strip().lower()
+    external_id = str(external_id or "").strip()
+    raw = resolve_platform_identity(platform, external_id)
+    if raw:
+        value = str(raw).strip()
+        if value.startswith("web:"):
+            value = value[4:]
+        value = value.strip()
+        if value:
+            try:
+                with get_db_cursor(commit=False) as cur:
+                    cur.execute(
+                        """SELECT 1 FROM web_connected_accounts
+                           WHERE user_id=%s AND revoked_at IS NULL
+                           LIMIT 1""",
+                        (value,),
+                    )
+                    if cur.fetchone():
+                        return value
+            except Exception as exc:
+                logger.warning("Connected-account identity check failed: %s", type(exc).__name__)
+            # The old link exists but no longer points at a connected web
+            # account. Fall through to the tightly constrained recovery path.
+
+    try:
+        with get_db_cursor(commit=False) as cur:
+            cur.execute(
+                """SELECT DISTINCT user_id
+                   FROM web_connected_accounts
+                   WHERE revoked_at IS NULL
+                   ORDER BY user_id
+                   LIMIT 2"""
+            )
+            candidates = [str(row[0]) for row in (cur.fetchall() or []) if row and row[0]]
+        # Never guess when more than one web customer has connected accounts.
+        if len(candidates) != 1:
+            return None
+
+        candidate = candidates[0]
+        try:
+            from neon_memory import NeonMemory
+            NeonMemory().add_identity(
+                f"web:{candidate}",
+                platform,
+                external_id,
+                username=None,
+            )
+            logger.info(
+                "ACCOUNT IDENTITY AUTO-HEALED: %s:%s -> web:%s",
+                platform,
+                external_id,
+                candidate,
+            )
+        except Exception as exc:
+            logger.warning("Account identity auto-heal persistence failed: %s", type(exc).__name__)
+        return candidate
+    except Exception as exc:
+        logger.warning("Account identity recovery failed: %s", type(exc).__name__)
         return None
-    value = str(raw).strip()
-    if value.startswith("web:"):
-        value = value[4:]
-    return value or None
 
 
 def _ensure_monitor_table() -> None:
