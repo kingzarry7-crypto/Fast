@@ -1293,6 +1293,8 @@ async def kz_watch_channel_notification_job():
                         mark_channel_notification_delivered(item["id"], "discord")
             except Exception as exc:
                 logger.warning("KZ Watch Discord cycle failed: %s", type(exc).__name__)
+    except Exception as exc:
+        logger.warning("KZ Watch Discord watcher failed: %s", type(exc).__name__)
 
 
 
