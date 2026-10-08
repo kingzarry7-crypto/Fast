@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import ChatMessage from "@/components/chat/ChatMessage";
 import VoiceCallUI from "@/components/chat/VoiceCallUI";
 import { useChat } from "@/hooks/useChat";
@@ -637,7 +637,7 @@ export default function ChatWorkspace({
           )}
 
           {visibleMessages.map((m) => (
-            <React.Fragment key={m.id}>
+            <Fragment key={m.id}>
               <ChatMessage
               key={m.id}
               id={m.id}
@@ -689,7 +689,7 @@ export default function ChatWorkspace({
                 </div>
               </div>
             )}
-            </React.Fragment>
+            </Fragment>
           ))}
 
           {sending && (() => {
