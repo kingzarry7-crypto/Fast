@@ -537,7 +537,17 @@ async def shopify_start(request: Request, shop: str, return_url: str = ""):
     requested_return = str(return_url or "").strip().rstrip("/")
     callback_frontend = requested_return if _is_allowed_frontend_origin(requested_return) else _oauth_return_url(request)
     state = _sign_state({"provider":"shopify","user_id":user_id,"store":store,"return_url":callback_frontend,"nonce":secrets.token_urlsafe(18),"exp":_now()+600})
-    params={"response_type":"code","client_id":SHOPIFY_CLIENT_ID,"scope":SHOPIFY_SCOPES,"redirect_uri":SHOPIFY_REDIRECT_URI,"state":state}
+    params={
+        "response_type": "code",
+        "client_id": SHOPIFY_CLIENT_ID,
+        "scope": SHOPIFY_SCOPES,
+        "redirect_uri": SHOPIFY_REDIRECT_URI,
+        "state": state,
+        # Shopify may route the legacy authorization request through
+        # admin.shopify.com first. Supplying the empty grant_options[] value
+        # preserves the callback parameters through that transition.
+        "grant_options[]": "",
+    }
     logger.info("SHOPIFY_OAUTH_START store=%s return=%s redirect_uri=%s", store, callback_frontend, SHOPIFY_REDIRECT_URI)
     return RedirectResponse(SHOPIFY_AUTHORIZE.format(shop=store)+"?"+urllib.parse.urlencode(params))
 
@@ -561,7 +571,11 @@ async def shopify_callback(request: Request):
         if payload.get("provider")!="shopify":
             raise HTTPException(status_code=400, detail="Invalid Shopify connector state")
         user_id=str(payload.get("user_id") or "").strip()
-        store=_shopify_store(str(payload.get("store") or ""))
+        callback_shop = _shopify_store(str(request.query_params.get("shop") or ""))
+        expected_store = _shopify_store(str(payload.get("store") or ""))
+        if callback_shop != expected_store:
+            raise HTTPException(status_code=400, detail="Shopify callback store does not match the authorization request")
+        store = expected_store
         code=request.query_params.get("code") or ""
         if not code:
             raise HTTPException(status_code=400, detail="Shopify authorization code missing")
