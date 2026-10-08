@@ -415,15 +415,6 @@ SHOPIFY_SCOPES = os.getenv(
     "read_products,write_products,read_orders,write_inventory",
 ).strip()
 
-# Never log secret values; only log whether Railway exposed the required settings.
-logger.info(
-    "SHOPIFY_ENV client_id=%s client_secret=%s redirect=%s state_secret_32plus=%s encryption_key_32plus=%s missing=%s",
-    bool(SHOPIFY_CLIENT_ID), bool(SHOPIFY_CLIENT_SECRET), bool(SHOPIFY_REDIRECT_URI),
-    len(CONNECTOR_STATE_SECRET.strip()) >= 32,
-    len(os.getenv("KZ_CONNECTOR_ENCRYPTION_KEY", "").strip()) >= 32,
-    ",".join(_shopify_missing_configuration()) or "none",
-)
-
 def _shopify_missing_configuration() -> list[str]:
     """Return only Shopify settings that the running backend cannot see."""
     missing = []
@@ -433,6 +424,17 @@ def _shopify_missing_configuration() -> list[str]:
     if len(CONNECTOR_STATE_SECRET.strip()) < 32: missing.append("CONNECTOR_STATE_SECRET")
     if len(os.getenv("KZ_CONNECTOR_ENCRYPTION_KEY", "").strip()) < 32: missing.append("KZ_CONNECTOR_ENCRYPTION_KEY")
     return missing
+
+# Never log secret values; only log whether Railway exposed the required settings.
+# Keep this AFTER _shopify_missing_configuration is defined so importing the
+# connector module cannot fail before FastAPI registers its routes.
+logger.info(
+    "SHOPIFY_ENV client_id=%s client_secret=%s redirect=%s state_secret_32plus=%s encryption_key_32plus=%s missing=%s",
+    bool(SHOPIFY_CLIENT_ID), bool(SHOPIFY_CLIENT_SECRET), bool(SHOPIFY_REDIRECT_URI),
+    len(CONNECTOR_STATE_SECRET.strip()) >= 32,
+    len(os.getenv("KZ_CONNECTOR_ENCRYPTION_KEY", "").strip()) >= 32,
+    ",".join(_shopify_missing_configuration()) or "none",
+)
 
 def _shopify_configured() -> bool:
     return not _shopify_missing_configuration()
