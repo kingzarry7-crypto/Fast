@@ -328,6 +328,8 @@ def clean_ai_response(text):
     text = re.sub(r"\[([^\]]+)\]\((?:https?://|www\.)[^\)]+\)", r"\1", text, flags=re.IGNORECASE)
     # Strip any raw URLs (http/https/www.)
     text = re.sub(r"(?:https?://|www\.)\S+", "", text, flags=re.IGNORECASE)
+    # Plain-message policy: never leak Markdown emphasis markers to Telegram.
+    text = text.replace("***", "").replace("**", "").replace("__", "")
     # Strip a trailing "Sources:" / "📰 Sources:" section and everything after it
     text = re.sub(r"(?im)^\s*(📰\s*)?\*{0,2}sources?:?\*{0,2}\s*$.*", "", text, flags=re.DOTALL)
     # Collapse leftover empty markdown bullets / double blank lines created by stripping links
