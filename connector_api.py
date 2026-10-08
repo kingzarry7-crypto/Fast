@@ -103,7 +103,7 @@ def _verify_state(value: str) -> Dict[str, Any]:
         payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
         if int(payload.get("exp") or 0) < _now():
             raise ValueError("expired")
-        if payload.get("provider") not in {"github", "tiktok"}:
+        if payload.get("provider") not in {"github", "tiktok", "shopify"}:
             raise ValueError("wrong provider")
         return payload
     except HTTPException:
@@ -337,6 +337,148 @@ def _github_execute(user_id: str, operation: str, payload: Dict[str, Any]) -> Di
 
     raise HTTPException(status_code=400, detail=f"Unsupported GitHub operation: {operation}")
 
+
+
+# ---------------------------------------------------------------------------
+# Shopify official Admin API connector (OAuth 2.0).
+# ---------------------------------------------------------------------------
+SHOPIFY_AUTHORIZE = "https://{shop}/admin/oauth/authorize"
+SHOPIFY_TOKEN = "https://{shop}/admin/oauth/access_token"
+SHOPIFY_API_VERSION = os.getenv("SHOPIFY_API_VERSION", "2026-07").strip()
+SHOPIFY_CLIENT_ID = os.getenv("SHOPIFY_CLIENT_ID", "").strip()
+SHOPIFY_CLIENT_SECRET = os.getenv("SHOPIFY_CLIENT_SECRET", "").strip()
+SHOPIFY_REDIRECT_URI = os.getenv("SHOPIFY_REDIRECT_URI", "").strip()
+SHOPIFY_SCOPES = os.getenv(
+    "SHOPIFY_OAUTH_SCOPES",
+    "read_products,write_products,read_orders,write_inventory",
+).strip()
+
+def _shopify_configured() -> bool:
+    return bool(SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET and SHOPIFY_REDIRECT_URI and CONNECTOR_STATE_SECRET)
+
+def _shopify_store(value: str) -> str:
+    store = str(value or "").strip().lower()
+    store = re.sub(r"^https?://", "", store).split("/", 1)[0]
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*\\.myshopify\\.com", store):
+        raise HTTPException(status_code=400, detail="Use your Shopify store domain, for example your-store.myshopify.com")
+    return store
+
+def _shopify_headers(token: str) -> Dict[str, str]:
+    return {"X-Shopify-Access-Token": token, "Content-Type": "application/json", "Accept": "application/json"}
+
+def _shopify_request(store: str, token: str, query: str, variables: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    url = f"https://{store}/admin/api/{SHOPIFY_API_VERSION}/graphql.json"
+    response = requests.post(url, headers=_shopify_headers(token), json={"query": query, "variables": variables or {}}, timeout=25)
+    try:
+        body = response.json()
+    except Exception:
+        body = {}
+    if response.status_code >= 400 or body.get("errors"):
+        raise HTTPException(status_code=502, detail="Shopify API request failed")
+    return body
+
+def _save_shopify_connection(user_id: str, store: str, token: str, scopes: list[str], shop: Dict[str, Any]) -> None:
+    with get_db_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            INSERT INTO web_connected_accounts
+              (user_id, provider, provider_account_id, display_name, scopes,
+               access_token_encrypted, refresh_token_encrypted, token_expires_at, metadata, revoked_at)
+            VALUES (%s, 'shopify', %s, %s, %s::jsonb, %s, NULL, NULL, %s::jsonb, NULL)
+            ON CONFLICT (user_id, provider, provider_account_id)
+            DO UPDATE SET
+              display_name = EXCLUDED.display_name,
+              scopes = EXCLUDED.scopes,
+              access_token_encrypted = EXCLUDED.access_token_encrypted,
+              metadata = EXCLUDED.metadata,
+              revoked_at = NULL,
+              updated_at = NOW()
+            """,
+            (
+                user_id, store, str(shop.get("name") or store), json.dumps(scopes),
+                _encrypt(token), json.dumps({"store": store, "shop": shop}),
+            ),
+        )
+
+def _shopify_token(user_id: str, store: str = "") -> tuple[str, str]:
+    with get_db_cursor(commit=False) as cur:
+        if store:
+            cur.execute(
+                "SELECT provider_account_id, access_token_encrypted FROM web_connected_accounts WHERE user_id=%s AND provider='shopify' AND provider_account_id=%s AND revoked_at IS NULL LIMIT 1",
+                (user_id, store),
+            )
+        else:
+            cur.execute(
+                "SELECT provider_account_id, access_token_encrypted FROM web_connected_accounts WHERE user_id=%s AND provider='shopify' AND revoked_at IS NULL ORDER BY updated_at DESC LIMIT 1",
+                (user_id,),
+            )
+        row=cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=401, detail="Shopify is not connected")
+    store_name=str(_row_value(row, "provider_account_id", 0) or "")
+    token=_decrypt(_row_value(row, "access_token_encrypted", 1))
+    if not store_name or not token:
+        raise HTTPException(status_code=401, detail="Shopify connection is incomplete")
+    return store_name, token
+
+@router.get("/shopify/start")
+async def shopify_start(request: Request, shop: str):
+    user_id = _user_id(request)
+    if not _shopify_configured():
+        raise HTTPException(status_code=503, detail="Shopify connector is not configured on KZ")
+    store = _shopify_store(shop)
+    state = _sign_state({"provider":"shopify","user_id":user_id,"store":store,"nonce":secrets.token_urlsafe(18),"exp":_now()+600})
+    params={"client_id":SHOPIFY_CLIENT_ID,"scope":SHOPIFY_SCOPES,"redirect_uri":SHOPIFY_REDIRECT_URI,"state":state}
+    return RedirectResponse(SHOPIFY_AUTHORIZE.format(shop=store)+"?"+urllib.parse.urlencode(params))
+
+@router.get("/shopify/callback")
+async def shopify_callback(request: Request):
+    if not _shopify_configured():
+        raise HTTPException(status_code=503, detail="Shopify connector is not configured on KZ")
+    error=request.query_params.get("error")
+    if error:
+        return RedirectResponse(f"{FRONTEND_URL}/dashboard?connector_error=shopify_{urllib.parse.quote(error)}")
+    payload=_verify_state(request.query_params.get("state") or "")
+    if payload.get("provider")!="shopify":
+        raise HTTPException(status_code=400, detail="Invalid Shopify connector state")
+    user_id=str(payload.get("user_id") or "").strip()
+    store=_shopify_store(str(payload.get("store") or ""))
+    code=request.query_params.get("code") or ""
+    if not code: raise HTTPException(status_code=400, detail="Shopify authorization code missing")
+    response=requests.post(
+        SHOPIFY_TOKEN.format(shop=store),
+        json={"client_id":SHOPIFY_CLIENT_ID,"client_secret":SHOPIFY_CLIENT_SECRET,"code":code},
+        headers={"Accept":"application/json","Content-Type":"application/json"},
+        timeout=25,
+    )
+    if response.status_code>=400:
+        raise HTTPException(status_code=502, detail="Shopify token exchange failed")
+    data=response.json()
+    token=str(data.get("access_token") or "")
+    if not token: raise HTTPException(status_code=502, detail="Shopify did not return an access token")
+    scopes=[x.strip() for x in str(data.get("scope") or SHOPIFY_SCOPES).split(",") if x.strip()]
+    body=_shopify_request(store, token, "query { shop { id name myshopifyDomain } }")
+    shop_data=((body.get("data") or {}).get("shop") or {})
+    _save_shopify_connection(user_id,store,token,scopes,shop_data)
+    _audit(user_id,"connector_connected",target=store)
+    return RedirectResponse(f"{FRONTEND_URL}/dashboard?connector=shopify&connected=1&name={urllib.parse.quote(str(shop_data.get('name') or store))}")
+
+@router.post("/shopify/action")
+async def shopify_action(request: Request):
+    user_id=_user_id(request)
+    body=await request.json()
+    operation=str((body or {}).get("operation") or "").strip().lower()
+    payload=dict((body or {}).get("payload") or {})
+    store,token=_shopify_token(user_id,str(payload.get("shop") or ""))
+    if operation=="shop":
+        result=_shopify_request(store,token,"query { shop { id name myshopifyDomain } }")
+    elif operation=="products":
+        result=_shopify_request(store,token,"query { products(first: 20) { nodes { id title status handle } } }")
+    elif operation=="orders":
+        result=_shopify_request(store,token,"query { orders(first: 20, sortKey: CREATED_AT, reverse: true) { nodes { id name createdAt displayFinancialStatus displayFulfillmentStatus } } }")
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported Shopify read operation")
+    return {"status":"ok","provider":"shopify","operation":operation,"store":store,"verified":True,"result":result.get("data") or {}}
 
 @router.get("/status")
 async def connector_status(request: Request):
