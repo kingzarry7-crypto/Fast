@@ -2085,29 +2085,11 @@ class AIEngine:
         # first configured key in llm_client.PROVIDERS, so Railway only needs the
         # provider key the owner wants to use. Keep the existing provider methods
         # below as a safe fallback for images and explicit provider commands.
-        if not image and not provider_override:
-            try:
-                from llm_client import ask as ask_llm
-
-                messages = self._build_openai_messages(
-                    prompt_text,
-                    history,
-                    image=None,
-                    persistent_ctx=persistent_ctx,
-                    casual=casual,
-                )
-                resp = ask_llm(messages, max_tokens=2000)
-                if resp:
-                    cleaned = clean_ai_response(resp)
-                    if cleaned:
-                        logger.info("AI provider success: automatic OpenAI-compatible client")
-                        return cleaned
-            except Exception as e:
-                logger.warning(
-                    "Automatic LLM client failed; using existing provider fallback: %s",
-                    _sanitize_exception_message(e),
-                )
-
+        # Use this engine's provider chain directly. The old llm_client fast path
+        # could select a different model (via AI_MODEL) and fail before the
+        # configured GROQ_MODEL/OpenRouter fallback chain had a chance to run.
+        # Keeping one authoritative routing path also makes provider failures
+        # observable and predictable.
         providers = self._get_provider_order(provider_override)
         seen = set()
         finite_providers = []
@@ -2142,7 +2124,8 @@ class AIEngine:
             except Exception as e:
                 last_err = _sanitize_exception_message(e)
                 continue
-        logger.error(f"All providers failed: {last_err}")
+        logger.error("All AI providers failed for this request | provider_order=%s | last_error=%s",
+                      finite_providers, last_err or "no configured provider returned a response")
         return None
 
     def _call_providers(self, prompt_text: str, history, image, persistent_ctx: str, casual: bool = False, provider_override: Optional[str] = None):
