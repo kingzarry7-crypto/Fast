@@ -221,6 +221,9 @@ def _save_github_connection(
         "avatar_url": github_user.get("avatar_url"),
         "html_url": github_user.get("html_url"),
     }
+    expires_at = None
+    if expires_in:
+        expires_at = datetime.fromtimestamp(_now() + int(expires_in), timezone.utc)
     with get_db_cursor(commit=True) as cur:
         cur.execute(
             """
@@ -377,7 +380,7 @@ def _shopify_request(store: str, token: str, query: str, variables: Optional[Dic
         raise HTTPException(status_code=502, detail="Shopify API request failed")
     return body
 
-def _save_shopify_connection(user_id: str, store: str, token: str, scopes: list[str], shop: Dict[str, Any]) -> None:
+def _save_shopify_connection(user_id: str, store: str, token: str, refresh_token: Optional[str], expires_in: Optional[int], scopes: list[str], shop: Dict[str, Any]) -> None:
     with get_db_cursor(commit=True) as cur:
         cur.execute(
             """
@@ -396,7 +399,7 @@ def _save_shopify_connection(user_id: str, store: str, token: str, scopes: list[
             """,
             (
                 user_id, store, str(shop.get("name") or store), json.dumps(scopes),
-                _encrypt(token), json.dumps({"store": store, "shop": shop}),
+                _encrypt(token), _encrypt(refresh_token), expires_at, json.dumps({"store": store, "shop": shop}),
             ),
         )
 
@@ -447,8 +450,8 @@ async def shopify_callback(request: Request):
     if not code: raise HTTPException(status_code=400, detail="Shopify authorization code missing")
     response=requests.post(
         SHOPIFY_TOKEN.format(shop=store),
-        json={"client_id":SHOPIFY_CLIENT_ID,"client_secret":SHOPIFY_CLIENT_SECRET,"code":code},
-        headers={"Accept":"application/json","Content-Type":"application/json"},
+        data={"client_id":SHOPIFY_CLIENT_ID,"client_secret":SHOPIFY_CLIENT_SECRET,"code":code,"expiring":"1"},
+        headers={"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},
         timeout=25,
     )
     if response.status_code>=400:
@@ -459,7 +462,7 @@ async def shopify_callback(request: Request):
     scopes=[x.strip() for x in str(data.get("scope") or SHOPIFY_SCOPES).split(",") if x.strip()]
     body=_shopify_request(store, token, "query { shop { id name myshopifyDomain } }")
     shop_data=((body.get("data") or {}).get("shop") or {})
-    _save_shopify_connection(user_id,store,token,scopes,shop_data)
+    _save_shopify_connection(user_id,store,token,data.get("refresh_token"),data.get("expires_in"),scopes,shop_data)
     _audit(user_id,"connector_connected",target=store)
     return RedirectResponse(f"{FRONTEND_URL}/dashboard?connector=shopify&connected=1&name={urllib.parse.quote(str(shop_data.get('name') or store))}")
 
