@@ -35,7 +35,7 @@ from dotenv import load_dotenv
 load_dotenv()
 print("🔵 BOOT: dotenv OK", flush=True)
 
-from telegram import LabeledPrice
+from telegram import LabeledPrice, InputFile
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -1711,12 +1711,32 @@ def build_signal_chart(data):
 
     # Centralized fresh-analysis fields use entry_low/entry_high; the Telegram
     # formatter uses entry_zone_low/entry_zone_high. Normalize both directions.
-    chart_data["entry_zone_low"] = chart_data.get("entry_zone_low", chart_data.get("entry_low", chart_data.get("price")))
-    chart_data["entry_zone_high"] = chart_data.get("entry_zone_high", chart_data.get("entry_high", chart_data.get("price")))
     chart_data["price"] = float(chart_data.get("price") or candles[-1]["close"])
     chart_data["support"] = float(chart_data.get("support") or min(c["low"] for c in candles))
     chart_data["resistance"] = float(chart_data.get("resistance") or max(c["high"] for c in candles))
     chart_data["atr"] = float(chart_data.get("atr") or max(chart_data["resistance"] - chart_data["support"], 0.000001) / 20.0)
+    # Centralized market snapshots can omit trade levels on WAIT or partial signals.
+    # Always derive safe levels so chart rendering cannot crash on missing keys.
+    chart_data["entry_zone_low"] = float(chart_data.get("entry_zone_low") or chart_data.get("entry_low") or chart_data["price"])
+    chart_data["entry_zone_high"] = float(chart_data.get("entry_zone_high") or chart_data.get("entry_high") or chart_data["price"])
+    if chart_data["entry_zone_low"] > chart_data["entry_zone_high"]:
+        chart_data["entry_zone_low"], chart_data["entry_zone_high"] = chart_data["entry_zone_high"], chart_data["entry_zone_low"]
+    signal_hint = str(chart_data.get("signal") or data.get("mtf_signal") or "WAIT").upper()
+    if signal_hint == "BUY":
+        chart_data.setdefault("stop_loss", chart_data["entry_zone_low"] - chart_data["atr"] * 1.5)
+        chart_data.setdefault("tp1", chart_data["entry_zone_high"] + chart_data["atr"] * 1.0)
+        chart_data.setdefault("tp2", chart_data["entry_zone_high"] + chart_data["atr"] * 2.0)
+        chart_data.setdefault("tp3", chart_data["entry_zone_high"] + chart_data["atr"] * 3.0)
+    elif signal_hint == "SELL":
+        chart_data.setdefault("stop_loss", chart_data["entry_zone_high"] + chart_data["atr"] * 1.5)
+        chart_data.setdefault("tp1", chart_data["entry_zone_low"] - chart_data["atr"] * 1.0)
+        chart_data.setdefault("tp2", chart_data["entry_zone_low"] - chart_data["atr"] * 2.0)
+        chart_data.setdefault("tp3", chart_data["entry_zone_low"] - chart_data["atr"] * 3.0)
+    else:
+        chart_data.setdefault("stop_loss", chart_data["support"])
+        chart_data.setdefault("tp1", chart_data["resistance"])
+        chart_data.setdefault("tp2", chart_data["resistance"])
+        chart_data.setdefault("tp3", chart_data["resistance"])
 
     opens=[float(c["open"]) for c in candles]
     highs=[float(c["high"]) for c in candles]
@@ -3203,7 +3223,8 @@ async def quick_symbol_command(symbol, update, context):
         try:
             chart=await asyncio.to_thread(build_signal_chart, mtf_data)
             caption = build_signal_chart_caption(mtf_data, symbol, news_data)
-            await update.message.reply_photo(photo=chart, caption=caption)
+            chart.seek(0)
+            await update.message.reply_photo(photo=InputFile(chart, filename="king_zarry_signal.png"), caption=caption)
         except Exception as chart_error:
             logger.warning(f"Chart error: {chart_error}")
         try:
