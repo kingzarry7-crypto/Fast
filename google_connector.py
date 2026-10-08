@@ -46,6 +46,13 @@ GOOGLE_DRIVE = "https://www.googleapis.com/drive/v3"
 GOOGLE_CALENDAR = "https://www.googleapis.com/calendar/v3"
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://fast.kingzarry7.workers.dev").rstrip("/")
+# Keep OAuth return handling aligned with the Cloudflare production domain.
+FRONTEND_CUSTOM_DOMAIN = "kingzarry.bid"
+FRONTEND_CUSTOM_ORIGINS = {
+    "https://kingzarry.bid",
+    "https://www.kingzarry.bid",
+    "https://app.kingzarry.bid",
+}
 CONNECTOR_STATE_SECRET = os.getenv("CONNECTOR_STATE_SECRET") or os.getenv("SESSION_SECRET") or ""
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "").strip()
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
@@ -116,14 +123,30 @@ def _row_value(row: Any, key: str, index: int = 0) -> Any:
         return None
 
 
-def _oauth_return_url(request: Request) -> str:
-    """Keep Google OAuth callbacks on the frontend that started the flow."""
-    configured = FRONTEND_URL
-    allowed = {
-        configured,
+def _is_allowed_frontend_origin(value: str) -> bool:
+    origin = str(value or "").strip().rstrip("/")
+    if not origin:
+        return False
+    if origin in {
+        FRONTEND_URL,
         "https://fast-a84x.vercel.app",
         "https://fast.kingzarry7.workers.dev",
-    }
+        *FRONTEND_CUSTOM_ORIGINS,
+    }:
+        return True
+    try:
+        parsed = urllib.parse.urlparse(origin)
+        return parsed.scheme == "https" and (
+            parsed.hostname == FRONTEND_CUSTOM_DOMAIN
+            or bool(parsed.hostname and parsed.hostname.endswith("." + FRONTEND_CUSTOM_DOMAIN))
+        ) and not parsed.path and not parsed.params and not parsed.query and not parsed.fragment
+    except Exception:
+        return False
+
+
+def _oauth_return_url(request: Request) -> str:
+    """Return OAuth to the exact trusted frontend host that started the flow."""
+    configured = FRONTEND_URL
     raw = (request.headers.get("origin") or "").strip().rstrip("/")
     if not raw:
         try:
@@ -131,17 +154,12 @@ def _oauth_return_url(request: Request) -> str:
             raw = f"{parsed.scheme}://{parsed.netloc}".rstrip("/") if parsed.scheme and parsed.netloc else ""
         except Exception:
             raw = ""
-    return raw if raw in allowed else configured
+    return raw if _is_allowed_frontend_origin(raw) else configured
 
 
 def _state_return_url(payload: Dict[str, Any]) -> str:
     value = str(payload.get("return_url") or "").strip().rstrip("/")
-    allowed = {
-        FRONTEND_URL,
-        "https://fast-a84x.vercel.app",
-        "https://fast.kingzarry7.workers.dev",
-    }
-    return value if value in allowed else FRONTEND_URL
+    return value if _is_allowed_frontend_origin(value) else FRONTEND_URL
 
 
 def _configured() -> bool:
@@ -629,24 +647,19 @@ async def google_start(request: Request):
         raise HTTPException(status_code=503, detail="Google connector is not configured on KZ")
     state = _sign_state({"provider": "google", "user_id": user_id, "return_url": _oauth_return_url(request), "nonce": secrets.token_urlsafe(18), "exp": _now() + 600})
 
-    # Carry the KZ account email into Google's OAuth request when available.
-    # This does not authenticate the user or expose a password; Google still
-    # performs the complete authentication/consent flow. It simply lets Google
-    # pre-select the account that belongs to the signed-in KZ user.
-    login_hint = ""
-    try:
-        with get_db_cursor(commit=False) as cur:
-            cur.execute("SELECT email FROM web_users WHERE id=%s LIMIT 1", (user_id,))
-            row = cur.fetchone()
-        login_hint = str(_row_value(row, "email", 0) or "").strip()
-    except Exception:
-        logger.warning("Could not load KZ email for Google login hint")
-
-    params = {"client_id": GOOGLE_CLIENT_ID, "redirect_uri": GOOGLE_REDIRECT_URI,
-              "response_type": "code", "scope": GOOGLE_SCOPES, "access_type": "offline",
-              "prompt": "select_account consent", "include_granted_scopes": "true", "state": state}
-    if login_hint and "@" in login_hint:
-        params["login_hint"] = login_hint
+    # Always let Google show the account chooser. Do not send a login_hint:
+    # users may have multiple Google accounts and should be able to tap the
+    # account they want to connect instead of being forced into one email.
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        "scope": GOOGLE_SCOPES,
+        "access_type": "offline",
+        "prompt": "select_account consent",
+        "include_granted_scopes": "true",
+        "state": state,
+    }
     return RedirectResponse(GOOGLE_AUTHORIZE + "?" + urllib.parse.urlencode(params))
 
 
