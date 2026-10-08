@@ -381,13 +381,16 @@ def _shopify_request(store: str, token: str, query: str, variables: Optional[Dic
     return body
 
 def _save_shopify_connection(user_id: str, store: str, token: str, refresh_token: Optional[str], expires_in: Optional[int], scopes: list[str], shop: Dict[str, Any]) -> None:
+    expires_at = None
+    if expires_in:
+        expires_at = datetime.fromtimestamp(_now() + int(expires_in), timezone.utc)
     with get_db_cursor(commit=True) as cur:
         cur.execute(
             """
             INSERT INTO web_connected_accounts
               (user_id, provider, provider_account_id, display_name, scopes,
                access_token_encrypted, refresh_token_encrypted, token_expires_at, metadata, revoked_at)
-            VALUES (%s, 'shopify', %s, %s, %s::jsonb, %s, NULL, NULL, %s::jsonb, NULL)
+            VALUES (%s, 'shopify', %s, %s, %s::jsonb, %s, %s, %s, %s::jsonb, NULL)
             ON CONFLICT (user_id, provider, provider_account_id)
             DO UPDATE SET
               display_name = EXCLUDED.display_name,
@@ -489,6 +492,12 @@ async def connector_status(request: Request):
     account = _github_account(user_id)
     tiktok_account = _provider_account(user_id, "tiktok")
     return {
+        "shopify": {
+            "configured": _shopify_configured(),
+            "connected": bool(_provider_account(user_id, "shopify")),
+            "account": _provider_account(user_id, "shopify"),
+            "authorization_mode": "oauth",
+        },
         "github": {
             "configured": _github_configured(),
             "connected": bool(account),
