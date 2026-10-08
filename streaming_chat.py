@@ -393,6 +393,10 @@ def install_streaming_chat(
                 return True
             if raw.startswith(("monitor my account", "monitor my gmail", "watch my gmail", "stop monitoring")):
                 return True
+            # Route explicit Shopify/store requests to the connected official
+            # Shopify connector so they do not fall through to generic chat.
+            if re.search(r"\b(shopify|my store|my shop|storefront|products|inventory|stock|orders|sales|purchases)\b", raw):
+                return True
             # Route all explicit email work to the connector, even when
             # the user has not supplied the recipient/content yet. This keeps
             # compose/send requests out of the generic LLM fallback.
