@@ -228,6 +228,39 @@ def _parse_email_request(text: str) -> Optional[dict[str, str]]:
     return {"to": to, "subject": subject[:300], "body": body[:20000]}
 
 
+
+def _gmail_read_intent(text: str) -> Optional[dict[str, str]]:
+    """Recognize safe, read-only Gmail questions without sending them to the LLM."""
+    raw = str(text or "").strip()
+    lower = raw.lower()
+    if not raw or not re.search(r"\b(gmail|email|emails|mail|inbox|message|messages)\b", lower):
+        return None
+    if re.search(r"\b(send|write|compose|draft|reply|forward|delete|remove|archive)\b", lower):
+        return None
+    if re.search(r"\b(how many|how much|count|number of|total)\b", lower):
+        query = "is:unread" if re.search(r"\bunread\b", lower) else ("newer_than:1d" if re.search(r"\btoday|today's\b", lower) else "in:anywhere")
+        kind = "gmail_unread_count" if "unread" in lower else ("gmail_today_count" if re.search(r"\btoday|today's\b", lower) else "gmail_count")
+        return {"query": query, "kind": kind}
+    if re.search(r"\bunread\b", lower) and re.search(r"\b(show|list|check|see|view|what|which|new)\b", lower):
+        return {"query": "is:unread", "kind": "gmail_read"}
+    if re.search(r"\b(today|today's|recent|latest|new)\b", lower) or lower in {"inbox", "my inbox", "my email", "my emails", "my gmail", "my mail"}:
+        return {"query": "newer_than:1d" if re.search(r"\btoday|today's\b", lower) else "in:anywhere", "kind": "gmail_read"}
+    if re.search(r"\b(check|show|list|see|view|read|what)\b", lower):
+        return {"query": "in:anywhere", "kind": "gmail_read"}
+    return None
+
+
+def _format_gmail_count(result: dict[str, Any], kind: str) -> str:
+    estimate = result.get("result_size_estimate")
+    try:
+        count = int(estimate) if estimate is not None else None
+    except (TypeError, ValueError):
+        count = None
+    if count is None:
+        return "📬 Gmail check completed, but Google did not return a message count."
+    label = "unread" if kind == "gmail_unread_count" else "matching"
+    return f"📬 Gmail reports approximately <b>{count}</b> {label} message(s) for that search."
+
 def _format_gmail_result(result: dict[str, Any]) -> str:
     messages = result.get("messages") or []
     if not messages:
@@ -374,7 +407,7 @@ async def handle_telegram_request(update: Any, text: str) -> Optional[dict[str, 
     lower = raw.lower()
 
     approval_match = re.match(
-        r"^(approve|reject|send it|send the email|send the email now)(?:\\s+([0-9a-fA-F-]{36}))?\\s*$",
+        r"^(approve|reject|send it|send the email|send the email now)(?:\s+([0-9a-fA-F-]{36}))?\s*$",
         raw,
         re.I,
     )
@@ -502,15 +535,17 @@ async def handle_telegram_request(update: Any, text: str) -> Optional[dict[str, 
             await update.message.reply_text("\n".join(lines), parse_mode="HTML")
         return {"status": "completed", "kind": "calendar_read", "result": result}
 
-    if lower in {"check my email", "check my gmail", "check my inbox", "check email", "check gmail"}:
+    gmail_intent = _gmail_read_intent(raw)
+    if gmail_intent:
         from google_connector import _account, _execute
         if not _account(user_id):
             await update.message.reply_text("🔌 KZ checked your account connections: Google Gmail is not connected to this KZ account.")
-            return {"status": "not_connected"}
+            return {"status": "not_connected", "kind": gmail_intent["kind"]}
         await update.message.reply_text("🧠 KZ is securely checking the connected Gmail account...")
-        result = await _run_sync(_execute, user_id, "list_gmail", {"query": "in:anywhere", "limit": 10})
-        await update.message.reply_text(_format_gmail_result(result))
-        return {"status": "completed", "kind": "gmail_read", "result": result}
+        result = await _run_sync(_execute, user_id, "list_gmail", {"query": gmail_intent["query"], "limit": 10})
+        reply = _format_gmail_count(result, gmail_intent["kind"]) if gmail_intent["kind"].endswith("count") else _format_gmail_result(result)
+        await update.message.reply_text(reply, parse_mode="HTML" if gmail_intent["kind"].endswith("count") else None)
+        return {"status": "completed", "kind": gmail_intent["kind"], "result": result}
 
     payload = _parse_email_request(raw)
     if payload:
@@ -657,18 +692,19 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
             "reply": "🛑 Account monitoring stopped. KZ will no longer perform background Gmail checks for this account.",
         }
 
-    if lower in {"check my email", "check my gmail", "check my inbox", "check email", "check gmail"}:
+    gmail_intent = _gmail_read_intent(raw)
+    if gmail_intent:
         try:
             from google_connector import _account, _execute
             if not _account(uid):
-                return {"status": "not_connected", "kind": "gmail_read",
+                return {"status": "not_connected", "kind": gmail_intent["kind"],
                         "reply": "🔌 KZ checked the account registry: Gmail is not connected to this KZ account."}
-            result = _execute(uid, "list_gmail", {"query": "in:anywhere", "limit": 10})
-            return {"status": "completed", "kind": "gmail_read",
-                    "reply": _format_gmail_result(result), "result": result}
+            result = _execute(uid, "list_gmail", {"query": gmail_intent["query"], "limit": 10})
+            reply = _format_gmail_count(result, gmail_intent["kind"]) if gmail_intent["kind"].endswith("count") else _format_gmail_result(result)
+            return {"status": "completed", "kind": gmail_intent["kind"], "reply": reply, "result": result}
         except Exception as exc:
             logger.warning("Web Gmail read failed: %s", type(exc).__name__)
-            return {"status": "failed", "kind": "gmail_read",
+            return {"status": "failed", "kind": gmail_intent["kind"],
                     "reply": "❌ KZ could not complete the Gmail check. No success was claimed.", "error": type(exc).__name__}
 
     if lower in {"check my drive", "check drive", "show my drive files"}:
