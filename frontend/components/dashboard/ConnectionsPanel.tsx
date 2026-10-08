@@ -679,7 +679,19 @@ export default function ConnectionsPanel() {
                 </div>
                 <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/[0.03] p-3">
                   <div className="flex items-center justify-between gap-2">
-                    <div><div className="text-sm font-medium text-white">Shopify</div><div className="text-[10px] text-zinc-500">{shopify?.connected ? "CONNECTED · ADMIN API" : shopify?.configured ? "OAuth ready" : ("SERVER SETUP REQUIRED" + (shopify?.missing_configuration?.length ? " · MISSING: " + shopify.missing_configuration.join(", ") : ""))}</div></div>
+                    <div>
+                      <div className="text-sm font-medium text-white">Shopify</div>
+                      <div className="text-[10px] text-zinc-500">
+                        {shopify?.connected
+                          ? "CONNECTED · " + (shopify?.account?.display_name || shopify?.account?.provider_account_id || "ADMIN API")
+                          : shopify?.configured
+                            ? "OAuth ready"
+                            : ("SERVER SETUP REQUIRED" + (shopify?.missing_configuration?.length ? " · MISSING: " + shopify.missing_configuration.join(", ") : ""))}
+                      </div>
+                      {shopify?.connected && shopify?.account?.provider_account_id && (
+                        <div className="mt-1 text-[9px] text-emerald-200/70">{shopify.account.provider_account_id}</div>
+                      )}
+                    </div>
                     {!shopify?.connected && <button onClick={()=>void connectShopify()} disabled={busy || !shopifyStore.trim()} className="rounded border border-emerald-400/30 px-3 py-2 text-[9px] tracking-widest text-emerald-200 disabled:opacity-40">CONNECT</button>}
                   </div>
                   {!shopify?.connected && <input value={shopifyStore} onChange={e=>setShopifyStore(e.target.value)} placeholder="your-store.myshopify.com" className="mt-2 w-full rounded border border-white/10 bg-black/20 p-2 text-xs text-white"/>}
