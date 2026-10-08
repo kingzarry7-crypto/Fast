@@ -1051,14 +1051,14 @@ class KingZarryAI(discord.Client):
             await interaction.followup.send("⚠️ Shared memory linking is temporarily unavailable.", ephemeral=True)
 
     async def on_ready(self):
-        print("\    if not kz_watch_channel_notification_job.is_running():
-        kz_watch_channel_notification_job.start()
-n" + "="*60, flush=True)
+        print("\n" + "="*60, flush=True)
         print("👑 KING ZARRY AI DISCORD IS ONLINE", flush=True)
         print("="*60, flush=True)
         print(f"🤖 Logged in as: {self.user}", flush=True)
         print(f"🆔 Bot ID: {self.user.id}", flush=True)
         print("="*60 + "\n", flush=True)
+        if not kz_watch_channel_notification_job.is_running():
+            kz_watch_channel_notification_job.start()
 
     async def on_message(self, message: discord.Message):
         if message.author.bot: return
