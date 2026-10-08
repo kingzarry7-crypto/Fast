@@ -46,6 +46,9 @@ export function ChatMessage({
   const isUser = normalizedRole === "user";
   const isSystem = normalizedRole === "system";
 
+  // Chat is rendered as plain text, so never expose Markdown emphasis markers.
+  const displayContent = content.replaceAll("**", "").replaceAll("__", "");
+
   const handleCopy = async () => {
     try {
       if (onCopy) onCopy(content);
@@ -151,7 +154,7 @@ export function ChatMessage({
           />
         ) : null}
 
-        <div className="whitespace-pre-wrap break-words">{content}</div>
+        <div className="whitespace-pre-wrap break-words">{displayContent}</div>
 
         {(timestamp || status || isStreaming) && (
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] tracking-wide text-cyan-100/45">
