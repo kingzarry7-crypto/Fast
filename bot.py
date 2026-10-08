@@ -1643,13 +1643,59 @@ def parse_candle_time(value):
     return datetime.now()
 
 def build_signal_chart(data):
+    """Build a Telegram-ready signal chart with a guaranteed candle fetch fallback.
+    
+    The centralized MTF engine may return analysis without embedding candle arrays.
+    Never let that prevent a signal chart from being sent: fetch the primary 15M
+    candles directly from market.py when the MTF payload does not contain them.
+    """
     if "15m" in data:
-        chart_data = data["15m"]
+        chart_data = dict(data["15m"] or {})
         mtf_bias = data.get("mtf_bias", "")
+        symbol = data.get("symbol") or chart_data.get("symbol") or "UNKNOWN"
     else:
-        chart_data = data
+        chart_data = dict(data or {})
         mtf_bias = ""
-    candles=chart_data["candles"][-70:]
+        symbol = chart_data.get("symbol") or "UNKNOWN"
+
+    candles = list(chart_data.get("candles") or [])
+    if len(candles) < 20:
+        try:
+            candles = get_market_candles(symbol, "15m", 100)
+            logger.info("Signal chart candle fallback succeeded for %s: %s candles", symbol, len(candles))
+        except Exception as chart_data_error:
+            logger.exception("Signal chart candle fallback failed for %s: %s", symbol, chart_data_error)
+            raise RuntimeError(f"Unable to build signal chart: no 15M candles for {symbol}") from chart_data_error
+
+    # Keep the chart compatible with both the centralized market engine and
+    # older candle payloads, and reject malformed rows instead of crashing.
+    normalized = []
+    for candle in candles:
+        try:
+            normalized.append({
+                "open": float(candle["open"]),
+                "high": float(candle["high"]),
+                "low": float(candle["low"]),
+                "close": float(candle["close"]),
+                "datetime": candle.get("datetime") or candle.get("date") or candle.get("timestamp") or "",
+            })
+        except (KeyError, TypeError, ValueError):
+            continue
+    if len(normalized) < 20:
+        raise RuntimeError(f"Unable to build signal chart: only {len(normalized)} valid candles for {symbol}")
+    candles = normalized[-70:]
+    chart_data["symbol"] = symbol
+    chart_data["candles"] = candles
+
+    # Centralized fresh-analysis fields use entry_low/entry_high; the Telegram
+    # formatter uses entry_zone_low/entry_zone_high. Normalize both directions.
+    chart_data["entry_zone_low"] = chart_data.get("entry_zone_low", chart_data.get("entry_low", chart_data.get("price")))
+    chart_data["entry_zone_high"] = chart_data.get("entry_zone_high", chart_data.get("entry_high", chart_data.get("price")))
+    chart_data["price"] = float(chart_data.get("price") or candles[-1]["close"])
+    chart_data["support"] = float(chart_data.get("support") or min(c["low"] for c in candles))
+    chart_data["resistance"] = float(chart_data.get("resistance") or max(c["high"] for c in candles))
+    chart_data["atr"] = float(chart_data.get("atr") or max(chart_data["resistance"] - chart_data["support"], 0.000001) / 20.0)
+
     opens=[float(c["open"]) for c in candles]
     highs=[float(c["high"]) for c in candles]
     lows=[float(c["low"]) for c in candles]
