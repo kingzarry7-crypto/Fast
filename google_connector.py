@@ -628,9 +628,25 @@ async def google_start(request: Request):
     if not _configured():
         raise HTTPException(status_code=503, detail="Google connector is not configured on KZ")
     state = _sign_state({"provider": "google", "user_id": user_id, "return_url": _oauth_return_url(request), "nonce": secrets.token_urlsafe(18), "exp": _now() + 600})
+
+    # Carry the KZ account email into Google's OAuth request when available.
+    # This does not authenticate the user or expose a password; Google still
+    # performs the complete authentication/consent flow. It simply lets Google
+    # pre-select the account that belongs to the signed-in KZ user.
+    login_hint = ""
+    try:
+        with get_db_cursor(commit=False) as cur:
+            cur.execute("SELECT email FROM web_users WHERE id=%s LIMIT 1", (user_id,))
+            row = cur.fetchone()
+        login_hint = str(_row_value(row, "email", 0) or "").strip()
+    except Exception:
+        logger.warning("Could not load KZ email for Google login hint")
+
     params = {"client_id": GOOGLE_CLIENT_ID, "redirect_uri": GOOGLE_REDIRECT_URI,
               "response_type": "code", "scope": GOOGLE_SCOPES, "access_type": "offline",
               "prompt": "select_account consent", "include_granted_scopes": "true", "state": state}
+    if login_hint and "@" in login_hint:
+        params["login_hint"] = login_hint
     return RedirectResponse(GOOGLE_AUTHORIZE + "?" + urllib.parse.urlencode(params))
 
 
