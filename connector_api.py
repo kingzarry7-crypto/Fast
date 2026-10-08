@@ -14,6 +14,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import secrets
@@ -30,7 +31,7 @@ from nacl.secret import SecretBox
 
 from database import get_db_cursor
 
-
+logger = logging.getLogger("king_zarry_connector_api")
 router = APIRouter(prefix="/api/connectors", tags=["connectors"])
 
 GITHUB_AUTHORIZE = "https://github.com/login/oauth/authorize"
