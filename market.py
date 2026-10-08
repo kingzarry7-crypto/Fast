@@ -883,6 +883,107 @@ def _binance_get_candles(pair: str, timeframe: str, outputsize: int = 150) -> li
     return candles
 
 
+# ============================================================
+# FREE XAU/GOLD PROVIDERS
+# biquote: live XAUUSD + OHLC, no key
+# XAUS: gold-specific spot, no key
+# Twelve Data remains a final fallback when configured.
+# ============================================================
+GOLD_PRIMARY_URL = _clean_env_str(os.getenv("GOLD_PRIMARY_URL"), "https://biquote.io").rstrip("/")
+GOLD_SECONDARY_URL = _clean_env_str(os.getenv("GOLD_SECONDARY_URL"), "https://xaus.com").rstrip("/")
+_GOLD_PRICE_CACHE: Dict[str, Tuple[float, float, str]] = {}
+_GOLD_CANDLE_CACHE: Dict[Tuple[str, str, int], Tuple[float, list, str]] = {}
+_GOLD_CACHE_TTL_SECONDS = max(5, int(os.getenv("GOLD_CACHE_TTL_SECONDS", "20") or 20))
+
+def _is_gold_symbol(symbol: str) -> bool:
+    return _normalize_symbol_key(symbol) in {"XAU/USD", "XAUUSD", "XAU", "GOLD"}
+
+def _gold_free_get_price(symbol: str) -> float:
+    key = "XAU/USD"
+    now = time.time()
+    cached = _GOLD_PRICE_CACHE.get(key)
+    if cached and now - cached[1] < _GOLD_CACHE_TTL_SECONDS:
+        return cached[0]
+    errors = []
+    try:
+        r = requests.get(f"{GOLD_PRIMARY_URL}/api/XAUUSD", timeout=12)
+        if r.status_code == 200:
+            data = r.json()
+            price = safe_float(data.get("mid"))
+            if price is not None and price > 0:
+                _GOLD_PRICE_CACHE[key] = (price, now, "biquote")
+                return price
+        errors.append(f"biquote:{r.status_code}")
+    except Exception as exc:
+        errors.append(f"biquote:{type(exc).__name__}")
+    try:
+        r = requests.get(f"{GOLD_SECONDARY_URL}/api/v1/spot?compact=1", timeout=12)
+        if r.status_code == 200:
+            data = r.json()
+            price = safe_float(data.get("spot_usd_oz"))
+            if price is not None and price > 0:
+                _GOLD_PRICE_CACHE[key] = (price, now, "xaus")
+                return price
+        errors.append(f"xaus:{r.status_code}")
+    except Exception as exc:
+        errors.append(f"xaus:{type(exc).__name__}")
+    if _get_twelve_api_key():
+        try:
+            return _twelve_get_price(symbol)
+        except Exception as exc:
+            errors.append(f"twelve:{type(exc).__name__}")
+    if cached:
+        logger.warning("Gold providers unavailable; using cached real price")
+        return cached[0]
+    raise RuntimeError("Gold price providers failed: " + "; ".join(errors[:5]))
+
+def _gold_free_get_candles(symbol: str, timeframe: str = "15m", outputsize: int = 150) -> list:
+    tf = str(timeframe).lower().strip()
+    interval = {"1m":"1m","5m":"5m","15m":"15m","30m":"30m","1h":"1h","2h":"1h","4h":"4h","1d":"1d"}.get(tf, "15m")
+    limit = max(15, min(int(outputsize or 150), 1000))
+    cache_key = ("XAU/USD", interval, limit)
+    now = time.time()
+    cached = _GOLD_CANDLE_CACHE.get(cache_key)
+    if cached and now - cached[0] < _GOLD_CACHE_TTL_SECONDS:
+        return cached[1]
+    errors = []
+    try:
+        r = requests.get(
+            f"{GOLD_PRIMARY_URL}/api/XAUUSD/ohlc",
+            params={"interval": interval, "limit": limit},
+            timeout=18,
+        )
+        if r.status_code == 200:
+            data = r.json()
+            bars = data.get("bars") if isinstance(data, dict) else None
+            if isinstance(bars, list) and len(bars) >= 15:
+                candles = []
+                for bar in reversed(bars):
+                    candles.append({
+                        "datetime": str(bar.get("openTime") or ""),
+                        "open": str(bar.get("open")),
+                        "high": str(bar.get("high")),
+                        "low": str(bar.get("low")),
+                        "close": str(bar.get("close")),
+                        "volume": str(bar.get("volume") or bar.get("tickVolume") or "0"),
+                    })
+                _GOLD_CANDLE_CACHE[cache_key] = (now, candles, "biquote")
+                return candles
+        errors.append(f"biquote:{r.status_code}")
+    except Exception as exc:
+        errors.append(f"biquote:{type(exc).__name__}")
+    if _get_twelve_api_key():
+        try:
+            candles = _twelve_get_candles(symbol, timeframe, outputsize)
+            _GOLD_CANDLE_CACHE[cache_key] = (now, candles, "twelve")
+            return candles
+        except Exception as exc:
+            errors.append(f"twelve:{type(exc).__name__}")
+    if cached:
+        logger.warning("Gold candle providers unavailable; using cached real candles")
+        return cached[1]
+    raise RuntimeError("Gold candle providers failed: " + "; ".join(errors[:5]))
+
 def _twelve_get_price(symbol: str) -> float:
     api_key = _get_twelve_api_key()
     if not api_key:
@@ -930,7 +1031,9 @@ def _twelve_get_candles(symbol: str, timeframe: str = "15m", outputsize: int = 1
     return candles
 
 def get_price(symbol):
-    """Live price: Binance first for BTC/ETH/SOL (free), Twelve Data for gold / fallback."""
+    """Live price: free Binance for crypto, free providers for XAU, Twelve as final fallback."""
+    if _is_gold_symbol(symbol):
+        return _gold_free_get_price(symbol)
     pair = binance_pair(symbol)
     if pair:
         try:
@@ -942,7 +1045,9 @@ def get_price(symbol):
     return _twelve_get_price(symbol)
 
 def get_candles(symbol, timeframe="15m", outputsize=150):
-    """OHLC: Binance first for BTC/ETH/SOL (free), Twelve Data for XAU / fallback."""
+    """OHLC: free Binance for crypto, biquote for XAU, Twelve as final fallback."""
+    if _is_gold_symbol(symbol):
+        return _gold_free_get_candles(symbol, timeframe, outputsize)
     pair = binance_pair(symbol)
     if pair:
         try:
