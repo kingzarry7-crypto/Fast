@@ -22,6 +22,7 @@ export default function KZWatchPanel() {
   const [loading, setLoading] = useState(false);
   const [preparing, setPreparing] = useState("");
   const [error, setError] = useState("");
+  const [enabled, setEnabled] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -29,6 +30,7 @@ export default function KZWatchPanel() {
       const d = await r.json();
       if (!r.ok) throw new Error(d?.detail || "Watcher unavailable");
       setItems(d.findings || []);
+      setEnabled(Boolean(d.watcher?.running || d.watcher?.enabled));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Watcher unavailable");
     }
@@ -39,6 +41,19 @@ export default function KZWatchPanel() {
     const timer = window.setInterval(load, 60000);
     return () => window.clearInterval(timer);
   }, [load]);
+
+  async function toggleWatch() {
+    setError("");
+    try {
+      const endpoint = enabled ? "/api/agent/watch/unsubscribe" : "/api/agent/watch/subscribe";
+      const r = await fetch(endpoint, { method: "POST", credentials: "include" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d?.detail || "Could not change watcher");
+      setEnabled(!enabled);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not change watcher");
+    }
+  }
 
   async function scanNow() {
     setLoading(true);
@@ -93,6 +108,10 @@ export default function KZWatchPanel() {
                 <div className="font-mono-tech text-[10px] tracking-widest text-cyan-300">KZ WATCHER</div>
                 <div className="text-[10px] text-zinc-600">Observe → rank → report → prepare approval</div>
               </div>
+              <button type="button" onClick={toggleWatch}
+                className="rounded border border-emerald-400/30 px-2 py-1 font-mono-tech text-[9px] text-emerald-300">
+                {enabled ? "WATCHING ON" : "ENABLE WATCH"}
+              </button>
               <button type="button" onClick={scanNow} disabled={loading}
                 className="rounded border border-cyan-400/30 px-2 py-1 font-mono-tech text-[9px] text-cyan-300 disabled:opacity-50">
                 {loading ? "WATCHING…" : "SCAN NOW"}
@@ -129,7 +148,7 @@ export default function KZWatchPanel() {
               ))}
             </div>
             <div className="mt-3 border-t border-white/5 pt-2 text-[9px] text-zinc-600">
-              KZ Watcher is read-only. It never sends, submits, trades, spends money, or changes your systems by itself.
+              {enabled ? "KZ is watching in the background for new signals." : "Enable Watch to let KZ monitor safely in the background."} It never sends, submits, trades, spends money, or changes your systems by itself.
             </div>
           </div>
         </>
