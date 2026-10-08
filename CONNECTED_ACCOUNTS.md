@@ -41,3 +41,30 @@ KZ treats a connected website as a browser session, not as a stored credential r
 9. Verification checks destination/provider evidence before KZ reports an external action as verified.
 
 The connection state is deliberately conservative. A website can expose unusual login UI, SSO, or custom authentication, so the explicit user confirmation button remains the source of truth after the login page no longer appears to require authentication.
+
+
+## Commerce connections
+
+### Shopify
+Shopify uses the official Admin API OAuth connector. Configure these Railway backend variables:
+
+- `SHOPIFY_CLIENT_ID`
+- `SHOPIFY_CLIENT_SECRET`
+- `SHOPIFY_REDIRECT_URI` — the Railway callback URL: `https://<your-railway-host>/api/connectors/shopify/callback`
+- `SHOPIFY_OAUTH_SCOPES` — defaults to `read_products,write_products,read_orders,write_inventory`
+- `SHOPIFY_API_VERSION` — defaults to `2026-07`
+
+The dashboard asks for the store's `.myshopify.com` domain and sends the user through Shopify authorization. Tokens are encrypted before storage. Shopify write operations must remain behind KZ approval.
+
+### AutoDS
+AutoDS is connected through the existing isolated browser account flow. KZ does not collect or store the AutoDS password. AutoDS should be connected to the Shopify store through AutoDS itself; KZ then uses the authenticated AutoDS session for permitted research/work. Do not add guessed AutoDS API endpoints or secrets.
+
+### Fiverr
+Fiverr is connected through the existing isolated browser account flow because KZ does not currently rely on an official public Fiverr API integration. KZ can monitor and prepare work through the browser, but messages, offers, submissions, and deliveries remain approval-gated.
+
+### Safety boundary
+The intended commerce chain is:
+
+Shopify read → AutoDS research → KZ opportunity → approval → Shopify/AutoDS/Fiverr action → evidence verification → learning.
+
+No Shopify product publication, AutoDS import/publish/fulfillment, or Fiverr external submission should be silently performed by the watcher.
