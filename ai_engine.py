@@ -102,7 +102,7 @@ OPENAI_MODEL = clean_env_str(os.getenv("OPENAI_MODEL"), "gpt-5.4-nano")
 OPENAI_URL = clean_env_str(os.getenv("OPENAI_URL"), "https://api.openai.com/v1/chat/completions")
 
 # Keep normal chat responsive: fail over quickly instead of repeated long waits.
-AI_PROVIDER_TIMEOUT = max(8, int(clean_env_str(os.getenv("AI_PROVIDER_TIMEOUT"), "18")))
+AI_PROVIDER_TIMEOUT = max(8, int(clean_env_str(os.getenv("AI_PROVIDER_TIMEOUT"), "12")))
 AI_PROVIDER_RETRIES = max(0, int(clean_env_str(os.getenv("AI_PROVIDER_RETRIES"), "0")))
 
 XAI_API_KEY = clean_env_str(os.getenv("XAI_API_KEY") or os.getenv("GROQ_API_KEY"))
@@ -2127,9 +2127,26 @@ class AIEngine:
                         return cleaned
             except Exception as e:
                 last_err = _sanitize_exception_message(e)
+                logger.warning(
+                    "AI provider failed | provider=%s | model=%s | error=%s",
+                    provider,
+                    {"openai": OPENAI_MODEL, "groq": GROQ_MODEL, "openrouter": OPENROUTER_MODEL,
+                     "chutes": CHUTES_MODEL, "gemini": GEMINI_MODEL}.get(provider, "unknown"),
+                    last_err,
+                )
                 continue
-        logger.error("All AI providers failed for this request | provider_order=%s | last_error=%s",
-                      finite_providers, last_err or "no configured provider returned a response")
+        logger.error(
+            "All AI providers failed for this request | provider_order=%s | last_error=%s | configured=%s",
+            finite_providers,
+            last_err or "no configured provider returned a response",
+            [p for p in finite_providers if (
+                (p == "openai" and OPENAI_API_KEY) or
+                (p == "groq" and GROQ_API_KEY) or
+                (p == "openrouter" and OPENROUTER_API_KEY) or
+                (p == "chutes" and CHUTES_API_KEY) or
+                (p == "gemini" and GEMINI_API_KEY)
+            )],
+        )
         return None
 
     def _call_providers(self, prompt_text: str, history, image, persistent_ctx: str, casual: bool = False, provider_override: Optional[str] = None):
@@ -2685,8 +2702,17 @@ class AIEngine:
             return None
         messages = self._build_openai_messages(prompt, history, image, persistent_ctx, casual=casual)
         headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
-        payload = {"model": OPENAI_MODEL, "messages": messages, "temperature": 0.85 if casual else 0.7, "max_tokens": 2000}
-        resp = self._request_with_retry(OPENAI_URL, headers, payload, "openai", max_retries=AI_PROVIDER_RETRIES, timeout=AI_PROVIDER_TIMEOUT)
+        # Keep normal Telegram chat responsive and control token spend.
+        payload = {
+            "model": OPENAI_MODEL,
+            "messages": messages,
+            "temperature": 0.85 if casual else 0.7,
+            "max_tokens": 700 if casual else 1200,
+        }
+        resp = self._request_with_retry(
+            OPENAI_URL, headers, payload, "openai",
+            max_retries=AI_PROVIDER_RETRIES, timeout=AI_PROVIDER_TIMEOUT,
+        )
         data = resp.json()
         choices = data.get("choices") or []
         if not choices:
