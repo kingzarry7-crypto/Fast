@@ -95,11 +95,8 @@ CHUTES_API_KEY = clean_env_str(os.getenv("CHUTES_API_KEY"))
 CHUTES_MODEL = clean_env_str(os.getenv("CHUTES_MODEL"), "google/gemma-4-31B-turbo-TEE")
 CHUTES_URL = clean_env_str(os.getenv("CHUTES_URL"), "https://llm.chutes.ai/v1/chat/completions")
 
-# Additional OpenAI-compatible fallbacks. These were previously supported by
-# llm_client.py but were skipped by the main AIEngine provider chain.
-DEEPSEEK_API_KEY = clean_env_str(os.getenv("DEEPSEEK_API_KEY"))
-DEEPSEEK_MODEL = clean_env_str(os.getenv("DEEPSEEK_MODEL"), "deepseek-chat")
-DEEPSEEK_URL = clean_env_str(os.getenv("DEEPSEEK_URL"), "https://api.deepseek.com/chat/completions")
+# Paid OpenAI is the authoritative primary AI provider.
+# DeepSeek is intentionally removed from the automatic provider chain.
 OPENAI_API_KEY = clean_env_str(os.getenv("OPENAI_API_KEY"))
 OPENAI_MODEL = clean_env_str(os.getenv("OPENAI_MODEL"), "gpt-5.4-nano")
 OPENAI_URL = clean_env_str(os.getenv("OPENAI_URL"), "https://api.openai.com/v1/chat/completions")
@@ -1841,9 +1838,10 @@ class AIEngine:
     def _get_provider_order(self, provider_override: Optional[str] = None) -> List[str]:
         if provider_override:
             provider = str(provider_override).strip().lower()
-            if provider in {"groq", "openrouter", "chutes", "gemini"}:
-                return [provider] + [p for p in ["groq", "openrouter", "chutes", "gemini", "deepseek", "openai"] if p != provider]
-        return ["groq", "openrouter", "chutes", "gemini", "deepseek", "openai"]
+            if provider in {"openai", "groq", "openrouter", "chutes", "gemini"}:
+                return [provider] + [p for p in ["openai", "groq", "openrouter", "chutes", "gemini"] if p != provider]
+        # Paid OpenAI first, then independent provider fallbacks.
+        return ["openai", "groq", "openrouter", "chutes", "gemini"]
 
     def _should_use_tavily(self, prompt: str) -> bool:
         if not self._tavily_module:
@@ -2117,9 +2115,6 @@ class AIEngine:
                     resp = self._chutes(prompt_text, history, image, persistent_ctx, casual)
                 elif provider == "gemini" and GEMINI_API_KEY:
                     resp = self._gemini(prompt_text, history, image, persistent_ctx, casual)
-                elif provider == "deepseek" and DEEPSEEK_API_KEY:
-                    logger.info("AI provider attempt: deepseek | model=%s", DEEPSEEK_MODEL)
-                    resp = self._deepseek(prompt_text, history, image, persistent_ctx, casual)
                 elif provider == "openai" and OPENAI_API_KEY:
                     logger.info("AI provider attempt: openai | model=%s", OPENAI_MODEL)
                     resp = self._openai_direct(prompt_text, history, image, persistent_ctx, casual)
@@ -2685,21 +2680,6 @@ class AIEngine:
     def _openai(self, prompt: str, history: List[dict], image: Optional[Tuple[str, bytes]], persistent_ctx: str = "", casual: bool = False) -> Optional[str]:
         return self._openrouter(prompt, history, image, persistent_ctx, casual)
 
-    def _deepseek(self, prompt: str, history: List[dict], image: Optional[Tuple[str, bytes]], persistent_ctx: str = "", casual: bool = False) -> Optional[str]:
-        if not DEEPSEEK_API_KEY or image:
-            return None
-        messages = self._build_openai_messages(prompt, history, image, persistent_ctx, casual=casual)
-        headers = {"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"}
-        payload = {"model": DEEPSEEK_MODEL, "messages": messages, "temperature": 0.85 if casual else 0.7, "max_tokens": 2000}
-        resp = self._request_with_retry(DEEPSEEK_URL, headers, payload, "deepseek", max_retries=AI_PROVIDER_RETRIES, timeout=AI_PROVIDER_TIMEOUT)
-        data = resp.json()
-        choices = data.get("choices") or []
-        if not choices:
-            return None
-        message = choices[0].get("message") or {}
-        content = message.get("content")
-        return content if isinstance(content, str) else None
-
     def _openai_direct(self, prompt: str, history: List[dict], image: Optional[Tuple[str, bytes]], persistent_ctx: str = "", casual: bool = False) -> Optional[str]:
         if not OPENAI_API_KEY:
             return None
@@ -2791,7 +2771,6 @@ class AIEngine:
             "gemini": bool(GEMINI_API_KEY),
             "chutes": bool(CHUTES_API_KEY),
             "chutes_model": CHUTES_MODEL,
-            "deepseek": bool(DEEPSEEK_API_KEY),
             "openai": bool(OPENAI_API_KEY),
             "elevenlabs": bool(self.eleven_client),
             "agnes": bool(AGNES_API_KEY),
