@@ -41,7 +41,21 @@ export function useChat(
       .padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
   };
 
-  const extractApproval = (reply: string) => {\n    const match = reply.match(/(?:Approval ID|approval id)\\s*[:=]\\s*([0-9a-f]{8}-[0-9a-f-]{27,36})/i);\n    if (!match) return undefined;\n    const lower = reply.toLowerCase();\n    const operation = lower.includes("calendar") ? "create_calendar_event" : lower.includes("drive") ? "upload_drive_text" : "send_gmail";\n    return { id: match[1], provider: "google" as const, operation };\n  };\n\n  const send = useCallback(
+  const extractApproval = (reply: string) => {
+    const match = reply.match(
+      /(?:Approval ID|approval id)\s*[:=]\s*([0-9a-f]{8}-[0-9a-f-]{27,36})/i,
+    );
+    if (!match) return undefined;
+    const lower = reply.toLowerCase();
+    const operation = lower.includes("calendar")
+      ? "create_calendar_event"
+      : lower.includes("drive")
+        ? "upload_drive_text"
+        : "send_gmail";
+    return { id: match[1], provider: "google" as const, operation };
+  };
+
+  const send = useCallback(
     async (text: string, capability = "AI", image?: SendImage) => {
       const trimmed = text.trim();
       const hasImage = !!(image && image.base64);
