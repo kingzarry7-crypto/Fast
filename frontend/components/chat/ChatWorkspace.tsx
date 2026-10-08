@@ -49,7 +49,7 @@ export default function ChatWorkspace({
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const { messages, setMessages, sending, error, send, stop: stopChat, clear } = useChat(
+  const { messages, setMessages, sending, error, send, decideApproval, stop: stopChat, clear } = useChat(
     user?.id,
     user?.is_subscribed,
     conversationId
@@ -661,6 +661,33 @@ export default function ChatWorkspace({
                   : undefined
               }
             />
+            {m.role === "assistant" && m.approval && (
+              <div className="mt-2 ml-0 max-w-[min(100%,34rem)] rounded-2xl border border-cyan-400/20 bg-[#11161f]/95 p-3 shadow-[0_8px_28px_rgba(0,0,0,.28)]">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-300">✓</span>
+                  <div>
+                    <div className="text-xs font-medium text-white">Allow King Zarry AI to do this?</div>
+                    <div className="mt-0.5 text-[10px] text-zinc-500">
+                      {m.approval.operation === "send_gmail" ? "Send this Gmail message" : m.approval.operation === "create_calendar_event" ? "Create this Calendar event" : "Perform this connected-account action"}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => void decideApproval(m.id, "once")} className="rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-3 py-2 text-[10px] font-medium text-cyan-100 transition hover:bg-cyan-400/20 active:scale-95">
+                    Allow once
+                  </button>
+                  <button type="button" onClick={() => void decideApproval(m.id, "always")} className="rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-3 py-2 text-[10px] font-medium text-emerald-100 transition hover:bg-emerald-400/20 active:scale-95">
+                    Allow always
+                  </button>
+                  <button type="button" onClick={() => void decideApproval(m.id, "reject")} className="rounded-xl border border-red-400/20 bg-red-400/5 px-3 py-2 text-[10px] font-medium text-red-200 transition hover:bg-red-400/10 active:scale-95">
+                    Reject
+                  </button>
+                </div>
+                <div className="mt-2 text-[9px] leading-relaxed text-zinc-600">
+                  Allow once applies only to this exact action. Allow always saves permission for this type of Google action until you revoke it.
+                </div>
+              </div>
+            )}
           ))}
 
           {sending && (() => {
