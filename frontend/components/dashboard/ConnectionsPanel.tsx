@@ -153,10 +153,7 @@ export default function ConnectionsPanel() {
   async function connectShopify() {
     const store = shopifyStore.trim();
     if (!store) { setMessage("Enter your Shopify .myshopify.com store domain first."); return; }
-    if (!shopify?.configured) {
-      setMessage("Shopify is not configured on the KZ server yet. Add SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET, SHOPIFY_REDIRECT_URI, and CONNECTOR_STATE_SECRET in Railway.");
-      return;
-    }
+    setMessage("Opening Shopify authorization…");
     window.location.href = "/api/connectors/shopify/start?shop=" + encodeURIComponent(store);
   }
 
@@ -318,6 +315,14 @@ export default function ConnectionsPanel() {
     if (!open) return;
     void refreshOfficialConnectors();
     const q = new URLSearchParams(window.location.search);
+    if (q.get("connector_error")) {
+      const rawError = q.get("connector_error") || "connector_error";
+      const readable = rawError.replace(/^shopify_/, "Shopify: ").replace(/^google_/, "Google: ").replace(/_/g, " ");
+      setMessage("✕ " + readable);
+      void refreshOfficialConnectors();
+      window.history.replaceState({}, "", window.location.pathname);
+      return;
+    }
     if ((q.get("connector") === "github" || q.get("connector") === "tiktok" || q.get("connector") === "google" || q.get("connector") === "shopify") && q.get("connected") === "1") {
       const connectedProvider = q.get("connector");
       setMessage(
@@ -688,7 +693,7 @@ export default function ConnectionsPanel() {
                   <div className="flex items-center justify-between gap-2">
                     <div>
                       <div className="text-sm font-medium text-white">Google Workspace</div>
-                      <div className="text-[10px] text-zinc-500">{google?.connected ? "AUTHORIZED ACCOUNT CONNECTED" : google?.configured ? "OAuth ready" : "SERVER SETUP REQUIRED"}</div>
+                      <div className="text-[10px] text-zinc-500">{google?.connected ? ("AUTHORIZED · " + (google?.account?.metadata?.email || google?.account?.display_name || "ACCOUNT CONNECTED")) : google?.configured ? "OAuth ready · account chooser enabled" : "SERVER SETUP REQUIRED"}</div>
                     </div>
                     {!google?.connected && <button onClick={connectGoogle} disabled={busy} className="rounded-md border border-blue-400/30 px-3 py-2 text-[9px] tracking-widest text-blue-200 disabled:opacity-40">CONNECT</button>}
                     {google?.connected && (
