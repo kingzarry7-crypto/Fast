@@ -656,7 +656,9 @@ async def google_start(request: Request):
         "response_type": "code",
         "scope": GOOGLE_SCOPES,
         "access_type": "offline",
-        "prompt": "select_account consent",
+        # Always open Google's account picker so the user can tap the account
+        # they want to connect. Do not send login_hint or a prefilled email.
+        "prompt": "select_account",
         "include_granted_scopes": "true",
         "state": state,
     }
