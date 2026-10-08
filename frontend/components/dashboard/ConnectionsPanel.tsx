@@ -687,6 +687,35 @@ export default function ConnectionsPanel() {
                       <div className="text-[10px] text-zinc-500">{google?.connected ? "AUTHORIZED ACCOUNT CONNECTED" : google?.configured ? "OAuth ready" : "SERVER SETUP REQUIRED"}</div>
                     </div>
                     {!google?.connected && <button onClick={connectGoogle} disabled={busy} className="rounded-md border border-blue-400/30 px-3 py-2 text-[9px] tracking-widest text-blue-200 disabled:opacity-40">CONNECT</button>}
+                    {google?.connected && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setBusy(true);
+                          try {
+                            const r = await fetch("/api/connectors/google/disconnect", {
+                              method: "POST",
+                              credentials: "include",
+                              headers: { "Content-Type": "application/json" },
+                            });
+                            const d = await readApiResponse(r);
+                            if (!r.ok) throw new Error(d.detail || "Could not disconnect Google");
+                            setGoogleData(null);
+                            setGoogleApproval(null);
+                            setGoogle({ ...(google || {}), connected: false });
+                            setMessage("✓ Google disconnected. Connect it again to grant Gmail send permission.");
+                          } catch (e) {
+                            setMessage(e instanceof Error ? e.message : "Could not disconnect Google");
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                        disabled={busy}
+                        className="rounded-md border border-red-400/25 px-3 py-2 text-[9px] tracking-widest text-red-200 disabled:opacity-40"
+                      >
+                        DISCONNECT
+                      </button>
+                    )}
                   </div>
                   {google?.connected && <div className="mt-3 space-y-2">
                     <div className="grid grid-cols-3 gap-2">
