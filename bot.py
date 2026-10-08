@@ -1336,56 +1336,71 @@ def analyze_single_timeframe_safe(symbol, interval, outputsize=150):
         return {"symbol": symbol, "interval": interval, "signal": "WAIT", "trend": "NEUTRAL", "error": str(e), "price": 0, "candles": [], "rsi": 50, "ema9":0, "ema21":0, "ema50":0, "atr":0, "support":0, "resistance":0, "strength":0, "confidence":"LOW", "reasons":[f"{interval} data unavailable: {e}"], "exhaustion_advanced": {"exhausted": False, "score":0, "warnings":[]}}
 
 def analyze_multi_timeframe(symbol):
-    tf_4h = analyze_single_timeframe_safe(symbol, "4h", 150)
-    tf_1h = analyze_single_timeframe_safe(symbol, "1h", 150)
-    tf_15m = analyze_single_timeframe_safe(symbol, "15min", 150)
-    tf_5m = analyze_single_timeframe_safe(symbol, "5min", 150)
-    signals = [tf_4h.get("signal"), tf_1h.get("signal"), tf_15m.get("signal"), tf_5m.get("signal")]
-    trends = [tf_4h.get("trend"), tf_1h.get("trend"), tf_15m.get("trend"), tf_5m.get("trend")]
-    bullish_count = sum(1 for s in signals if s == "BUY") + sum(1 for t in trends if t == "BULLISH")
-    bearish_count = sum(1 for s in signals if s == "SELL") + sum(1 for t in trends if t == "BEARISH")
-    regime_4h = tf_4h.get("trend", "NEUTRAL")
-    if tf_4h.get("signal") == "BUY" and tf_4h.get("trend") == "BULLISH":
-        regime_4h = "BULLISH"
-    elif tf_4h.get("signal") == "SELL" and tf_4h.get("trend") == "BEARISH":
-        regime_4h = "BEARISH"
-    confirm_1h = tf_1h.get("trend", "NEUTRAL")
-    if bullish_count >= 5:
-        mtf_bias = "BULLISH"
-        mtf_signal = "BUY"
-    elif bearish_count >= 5:
-        mtf_bias = "BEARISH"
-        mtf_signal = "SELL"
-    elif bullish_count >= 3 and tf_15m.get("signal") == "BUY":
-        mtf_bias = "BULLISH"
-        mtf_signal = "BUY"
-    elif bearish_count >= 3 and tf_15m.get("signal") == "SELL":
-        mtf_bias = "BEARISH"
-        mtf_signal = "SELL"
-    else:
-        mtf_bias = "NEUTRAL"
-        mtf_signal = "WAIT"
-    conflict = False
-    if tf_4h.get("trend") == "BULLISH" and tf_1h.get("trend") == "BEARISH":
-        conflict = True
-    if tf_4h.get("trend") == "BEARISH" and tf_1h.get("trend") == "BULLISH":
-        conflict = True
-    base_strength = tf_15m.get("strength", 0)
-    mtf_strength = base_strength
-    if mtf_bias != "NEUTRAL" and tf_15m.get("signal") == mtf_signal:
-        if tf_4h.get("trend") == tf_15m.get("trend") and tf_1h.get("trend") == tf_15m.get("trend"):
-            mtf_strength = min(100, base_strength + 15)
-        elif tf_4h.get("trend") == tf_15m.get("trend") or tf_1h.get("trend") == tf_15m.get("trend"):
-            mtf_strength = min(100, base_strength + 7)
-    elif conflict:
-        mtf_strength = max(0, base_strength - 20)
-    return {
-        "symbol": symbol, "4h": tf_4h, "1h": tf_1h, "15m": tf_15m, "5m": tf_5m,
-        "mtf_bias": mtf_bias, "mtf_signal": mtf_signal,
-        "bullish_count": bullish_count, "bearish_count": bearish_count,
-        "conflict": conflict, "regime_4h": regime_4h, "confirm_1h": confirm_1h,
-        "mtf_strength": mtf_strength, "primary": tf_15m
+    """Use the same centralized market engine as Discord/web, with one fresh MTF fetch."""
+    from market import get_market_snapshot
+
+    fresh = get_market_snapshot(symbol, "15m")
+    raw_tfs = fresh.get("mtf_timeframes") or {}
+
+    def channel_tf(tf):
+        src = dict(raw_tfs.get(tf) or {})
+        trend = src.get("trend", "NEUTRAL")
+        signal = "BUY" if trend == "BULLISH" else "SELL" if trend == "BEARISH" else "WAIT"
+        src["signal"] = signal
+        src["confidence"] = "HIGH" if signal != "WAIT" and fresh.get("setup_strength", 0) >= 75 else "MEDIUM" if signal != "WAIT" else "LOW"
+        src["strength"] = int(fresh.get("setup_strength", 0) or 0) if tf == "15m" else (70 if signal != "WAIT" else 50)
+        src["candles"] = src.get("candles") or []
+        src["bullish_score"] = int(fresh.get("mtf_score", 50) if signal == "BUY" else 0)
+        src["bearish_score"] = int((100 - (fresh.get("mtf_score", 50) or 50)) if signal == "SELL" else 0)
+        src["exhaustion_advanced"] = src.get("exhaustion_advanced") or {
+            "exhausted": bool((src.get("exhaustion") or {}).get("level") in ("HIGH", "EXTREME")),
+            "score": int((src.get("exhaustion") or {}).get("score", 0) or 0),
+            "warnings": [],
+        }
+        return src
+
+    tf15 = dict(fresh)
+    tf15["interval"] = "15min"
+    tf15["signal"] = fresh.get("signal", "WAIT")
+    tf15["trend"] = fresh.get("trend", "NEUTRAL")
+    tf15["strength"] = int(fresh.get("setup_strength", 0) or 0)
+    tf15["bullish_score"] = int(fresh.get("mtf_score", 50) if fresh.get("trend") == "BULLISH" else 0)
+    tf15["bearish_score"] = int((100 - (fresh.get("mtf_score", 50) or 50)) if fresh.get("trend") == "BEARISH" else 0)
+    tf15["entry_zone_low"] = fresh.get("entry_low", fresh.get("price", 0))
+    tf15["entry_zone_high"] = fresh.get("entry_high", fresh.get("price", 0))
+    tf15["stop_loss"] = fresh.get("stop_loss", fresh.get("price", 0))
+    tf15["tp1"] = fresh.get("tp1", fresh.get("price", 0))
+    tf15["tp2"] = fresh.get("tp2", fresh.get("price", 0))
+    tf15["tp3"] = fresh.get("tp3", fresh.get("price", 0))
+    tf15["rr"] = fresh.get("risk_reward_tp3") or 3.5
+    tf15["exhaustion_advanced"] = {
+        "exhausted": fresh.get("exhaustion") in ("HIGH", "EXTREME"),
+        "score": int(fresh.get("exhaustion_score", 0) or 0),
+        "warnings": [fresh.get("exhaustion_reason")] if fresh.get("exhaustion_reason") else [],
     }
+    tf15["late_entry"] = fresh.get("late_entry", False)
+    tf15["late_entry_data"] = fresh.get("late_entry_data") or {}
+    tf15["success"] = True
+
+    result = {
+        "symbol": symbol,
+        "4h": channel_tf("4h"),
+        "1h": channel_tf("1h"),
+        "15m": tf15,
+        "5m": channel_tf("5m"),
+        "mtf_bias": fresh.get("mtf_bias", "NEUTRAL"),
+        "mtf_strength": int(fresh.get("setup_strength", 0) or 0),
+        "mtf_signal": fresh.get("signal", "WAIT"),
+        "bullish_count": (fresh.get("mtf_data") or {}).get("bullish_count", 0),
+        "bearish_count": (fresh.get("mtf_data") or {}).get("bearish_count", 0),
+        "conflict": (fresh.get("timeframe_alignment") == "MIXED"),
+        "regime_4h": fresh.get("h4_trend", "NEUTRAL"),
+        "confirm_1h": fresh.get("h1_trend", "NEUTRAL"),
+        "ai_verdict": None,
+        "central_market_source": "market.py",
+    }
+    return result
+
 
 def ai_confirm_signal_mtf(mtf_data, news_data=None):
     data_15m = mtf_data.get("15m", {})
