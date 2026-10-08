@@ -580,8 +580,16 @@ def _approval(user_id: str, operation: str, target: str, payload: Dict[str, Any]
 async def google_status(request: Request):
     user_id = _user_id(request)
     account = _account(user_id)
-    return {"configured": _configured(), "connected": bool(account), "account": {k:v for k,v in (account or {}).items() if not k.startswith("_")},
-            "authorization_mode": "oauth", "scopes": GOOGLE_SCOPES.split()}
+    missing = []
+    if not GOOGLE_CLIENT_ID: missing.append("GOOGLE_CLIENT_ID")
+    if not GOOGLE_CLIENT_SECRET: missing.append("GOOGLE_CLIENT_SECRET")
+    if not GOOGLE_REDIRECT_URI: missing.append("GOOGLE_REDIRECT_URI")
+    if not CONNECTOR_STATE_SECRET: missing.append("CONNECTOR_STATE_SECRET")
+    if not os.getenv("KZ_CONNECTOR_ENCRYPTION_KEY", "").strip(): missing.append("KZ_CONNECTOR_ENCRYPTION_KEY")
+    return {"configured": _configured(), "connected": bool(account),
+            "account": {k:v for k,v in (account or {}).items() if not k.startswith("_")},
+            "authorization_mode": "oauth", "scopes": GOOGLE_SCOPES.split(),
+            "missing_configuration": missing}
 
 
 @router.get("/start")
@@ -592,7 +600,7 @@ async def google_start(request: Request):
     state = _sign_state({"provider": "google", "user_id": user_id, "return_url": _oauth_return_url(request), "nonce": secrets.token_urlsafe(18), "exp": _now() + 600})
     params = {"client_id": GOOGLE_CLIENT_ID, "redirect_uri": GOOGLE_REDIRECT_URI,
               "response_type": "code", "scope": GOOGLE_SCOPES, "access_type": "offline",
-              "prompt": "select_account", "include_granted_scopes": "true", "state": state}
+              "prompt": "select_account consent", "include_granted_scopes": "true", "state": state}
     return RedirectResponse(GOOGLE_AUTHORIZE + "?" + urllib.parse.urlencode(params))
 
 
