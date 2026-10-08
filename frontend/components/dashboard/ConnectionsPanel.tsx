@@ -152,9 +152,9 @@ export default function ConnectionsPanel() {
   }
 
   async function connectShopify() {
-    const store = shopifyStore.trim();
-    if (!store) { setMessage("Enter your Shopify .myshopify.com store domain first."); return; }
-    setMessage("Opening Shopify authorization…");
+    const store = shopifyStore.trim() || "kingzarry-store.myshopify.com";
+    setShopifyStore(store);
+    setMessage("Opening Shopify authorization for kingzarry-store.myshopify.com…");
     const returnUrl = window.location.origin.replace(/\/$/, "");
     window.location.href = "/api/connectors/shopify/start?shop=" + encodeURIComponent(store) + "&return_url=" + encodeURIComponent(returnUrl);
   }
