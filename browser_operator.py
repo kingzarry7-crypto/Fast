@@ -47,7 +47,19 @@ def status() -> Dict[str, Any]:
     }
 
 def _profile_root() -> Path:
-    return Path(os.getenv("BROWSER_PROFILE_DIR", "./data/browser_profiles")).resolve()
+    """Return the durable browser-profile root when the runtime provides one.
+
+    Railway's /data mount is the intended persistent location. Falling back to
+    ./data is retained for local development, but the app never silently moves
+    an explicitly configured profile.
+    """
+    configured = str(os.getenv("BROWSER_PROFILE_DIR") or "").strip()
+    if configured:
+        return Path(configured).resolve()
+    durable_root = Path("/data")
+    if durable_root.is_dir() and os.access(str(durable_root), os.W_OK):
+        return (durable_root / "browser_profiles").resolve()
+    return Path("./data/browser_profiles").resolve()
 
 def _account_key(user_id: str, account_id: str | None = None) -> str:
     """Return an isolated session key for one user/account pair."""
@@ -266,30 +278,68 @@ def connection_status(user_id: str, account_id: str | None = None) -> Dict[str, 
         or (auth_cookie_signal and (len(account_matches) >= 1 or len(provider_markers) >= 1))
     )
 
+    # The live browser session is authoritative for authentication, while the
+    # persistent registry remembers that the user explicitly connected this
+    # account. This survives FastAPI/Railway process restarts without storing
+    # passwords, cookies, or tokens in Neon.
+    registry_connected = False
+    registry_record = None
+    try:
+        from browser_account_registry import list_browser_accounts
+        for row in list_browser_accounts(str(user_id)):
+            if str(row.get("account_id") or "") == str(account_id or "default"):
+                registry_record = row
+                registry_connected = (
+                    str(row.get("status") or "").lower() == "connected"
+                    and bool(row.get("verified_at"))
+                )
+                break
+    except Exception:
+        registry_record = None
+
     with _LOCK:
         session = _SESSIONS.get(_account_key(user_id, account_id)) or {}
         previously_confirmed = bool(session.get("account_connected"))
-        # Never let a previous confirmation override current live evidence.
-        if previously_confirmed and not authenticated:
-            session["account_connected"] = False
-            session["disconnected_at"] = datetime.now(timezone.utc).isoformat()
+        connected_before_restart = bool(previously_confirmed or registry_connected)
 
     if verification.get("required"):
         status = "human_verification"
     elif authenticated:
-        status = "connected" if previously_confirmed else "ready_to_confirm"
+        # A fresh process may have no in-memory flag. If the durable registry
+        # says this exact account was previously connected AND the current
+        # browser profile still proves authentication, restore connected state.
+        status = "connected" if connected_before_restart else "ready_to_confirm"
+        with _LOCK:
+            session = _SESSIONS.get(_account_key(user_id, account_id)) or {}
+            session["account_connected"] = True
+            session["connected_at"] = session.get("connected_at") or datetime.now(timezone.utc).isoformat()
+    elif login_signal:
+        # Only strong login-page evidence is allowed to mark a previously
+        # connected account as disconnected. A blank/loading/error page must
+        # not destroy a valid connection record.
+        status = "login_required"
+        with _LOCK:
+            session = _SESSIONS.get(_account_key(user_id, account_id)) or {}
+            session["account_connected"] = False
+            session["disconnected_at"] = datetime.now(timezone.utc).isoformat()
+    elif connected_before_restart:
+        status = "unknown"
     else:
         status = "login_required"
 
     try:
         from browser_account_registry import upsert_browser_account
-        upsert_browser_account(
-            user_id, account_id or "default",
-            display_name=str(session.get("account_name") or session.get("title") or ""),
-            url=str(page.get("url") or ""),
-            status=str(status),
-            verified=bool(status == "connected"),
-        )
+        # Do not overwrite a known-good connection with a transient/ambiguous
+        # browser state. The next successful authenticated check will refresh
+        # last_seen_at and keep the account connected.
+        if status != "unknown":
+            upsert_browser_account(
+                user_id, account_id or "default",
+                display_name=str(session.get("account_name") or session.get("title") or ""),
+                url=str(page.url or ""),
+                status=str(status),
+                verified=bool(status == "connected"),
+            )
     except Exception as exc:
         logger.warning("Browser account registry write failed: %s", type(exc).__name__)
 
