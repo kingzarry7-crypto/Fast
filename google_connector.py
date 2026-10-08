@@ -328,8 +328,60 @@ def _execute(user_id: str, operation: str, payload: Dict[str, Any]) -> Dict[str,
         r = _google_request(user_id, "POST", GOOGLE_GMAIL + "/users/me/messages/send",
                             headers={"Content-Type": "application/json"}, json={"raw": raw})
         data = r.json()
-        return {"verified": bool(data.get("id")), "operation": operation,
-                "message": {"id": data.get("id"), "thread_id": data.get("threadId"), "label_ids": data.get("labelIds") or []}}
+        message_id = str(data.get("id") or "").strip()
+        thread_id = str(data.get("threadId") or "").strip()
+        label_ids = data.get("labelIds") or []
+
+        # A successful POST means Gmail accepted the submission, but KZ must
+        # verify the exact message exists in the user's SENT mailbox before
+        # claiming "email sent". Re-read the returned message and compare the
+        # provider's To/Subject headers with the approved payload.
+        verified = False
+        verified_to = ""
+        verified_subject = ""
+        verified_labels = list(label_ids)
+        if message_id:
+            try:
+                verify_r = _google_request(
+                    user_id,
+                    "GET",
+                    GOOGLE_GMAIL + f"/users/me/messages/{urllib.parse.quote(message_id)}",
+                    params={
+                        "format": "metadata",
+                        "metadataHeaders": ["To", "Subject"],
+                    },
+                )
+                verify_data = verify_r.json()
+                verified_labels = verify_data.get("labelIds") or verified_labels
+                headers = {
+                    str(x.get("name") or "").lower(): str(x.get("value") or "").strip()
+                    for x in (verify_data.get("payload", {}).get("headers") or [])
+                }
+                verified_to = headers.get("to", "")
+                verified_subject = headers.get("subject", "")
+                verified = (
+                    "SENT" in {str(x).upper() for x in verified_labels}
+                    and to.lower() in verified_to.lower()
+                    and subject == verified_subject
+                )
+            except Exception as verify_exc:
+                logger.warning(
+                    "Gmail send verification failed for message %s: %s",
+                    message_id,
+                    type(verify_exc).__name__,
+                )
+
+        return {
+            "verified": verified,
+            "operation": operation,
+            "message": {
+                "id": message_id,
+                "thread_id": thread_id,
+                "label_ids": verified_labels,
+                "to": verified_to,
+                "subject": verified_subject,
+            },
+        }
 
     if operation == "create_calendar_event":
         summary = str(payload.get("summary") or "").strip()[:300]
