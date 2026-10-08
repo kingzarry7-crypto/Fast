@@ -45,7 +45,7 @@ GOOGLE_GMAIL = "https://gmail.googleapis.com/gmail/v1"
 GOOGLE_DRIVE = "https://www.googleapis.com/drive/v3"
 GOOGLE_CALENDAR = "https://www.googleapis.com/calendar/v3"
 
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://fast.kingzarry7.workers.dev").rstrip("/")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://kingzarry.bid").rstrip("/")
 # Keep OAuth return handling aligned with the Cloudflare production domain.
 FRONTEND_CUSTOM_DOMAIN = "kingzarry.bid"
 FRONTEND_CUSTOM_ORIGINS = {
