@@ -293,7 +293,7 @@ export async function streamChatMessage(
     onDelta: (text: string) => void;
     onStart?: (provider?: string) => void;
   }
-): Promise<{ reply: string; conversation_id?: string }> {
+): Promise<{ reply: string; conversation_id?: string; approval?: { id: string; provider: "google"; operation: string; target?: string } }> {
   const trimmed = (message || "").trim();
   if (!trimmed) throw new ApiError({ status: 400, message: "Message required" });
   if (trimmed.length > 4000) throw new ApiError({ status: 400, message: "Message too long" });
@@ -329,6 +329,7 @@ export async function streamChatMessage(
   let reply = "";
   let conversationId: string | undefined;
   let streamError = "";
+  let approval: { id: string; provider: "google"; operation: string; target?: string } | undefined;
 
   const consumeEvent = (raw: string) => {
     const line = raw.split(/\r?\n/).find((value) => value.startsWith("data:"));
@@ -343,6 +344,9 @@ export async function streamChatMessage(
       } else if (event.type === "done") {
         if (typeof event.conversation_id === "string") conversationId = event.conversation_id;
         if (typeof event.text === "string" && event.text) reply = event.text;
+        if (typeof event.approval_id === "string" && event.approval_id && event.provider === "google") {
+          approval = { id: event.approval_id, provider: "google", operation: typeof event.operation === "string" ? event.operation : "send_gmail", target: typeof event.target === "string" ? event.target : undefined };
+        }
       } else if (event.type === "error") {
         streamError = typeof event.message === "string" ? event.message : "Streaming failed";
       }
@@ -370,7 +374,18 @@ export async function streamChatMessage(
     throw new ApiError({ status: 502, message: streamError });
   }
   if (!reply.trim()) throw new ApiError({ status: 502, message: "AI streaming returned no response" });
-  return { reply, conversation_id: conversationId };
+  return { reply, conversation_id: conversationId, approval };
+}
+
+export async function decideGoogleApproval(
+  approvalId: string,
+  decision: "once" | "always" | "reject",
+  signal?: AbortSignal,
+): Promise<{ status?: string; approval_id?: string; verified?: boolean; result?: unknown }> {
+  return request<{ status?: string; approval_id?: string; verified?: boolean; result?: unknown }>(
+    `/api/connectors/google/approve/${encodeURIComponent(approvalId)}`,
+    { method: "POST", body: { approved: decision !== "reject", remember: decision === "always" }, signal },
+  );
 }
 
 export async function generateChatSuggestions(
