@@ -209,7 +209,7 @@ def pending_channel_notifications(user_id: str, limit: int = 20) -> list[dict[st
         return []
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT id,finding_id,title,message,kind FROM kz_watch_notifications WHERE user_id=%s AND delivered=FALSE ORDER BY created_at ASC LIMIT %s", (str(user_id), max(1, min(int(limit), 50))))
+            cur.execute("SELECT id,finding_id,title,message,kind FROM kz_watch_notifications WHERE user_id=%s AND (telegram_delivered=FALSE OR discord_delivered=FALSE) ORDER BY created_at ASC LIMIT %s", (str(user_id), max(1, min(int(limit), 50))))
             return [dict(zip(["id","finding_id","title","message","kind"], row)) for row in cur.fetchall()]
     except Exception:
         return []
@@ -223,7 +223,10 @@ def mark_channel_notification_delivered(notification_id: str, platform: str) -> 
         return False
     try:
         with conn.cursor() as cur:
-            cur.execute("UPDATE kz_watch_notifications SET delivered=TRUE, delivered_platform=%s, delivered_at=NOW() WHERE id=%s AND delivered=FALSE", (str(platform), str(notification_id)))
+            column = "telegram_delivered" if str(platform) == "telegram" else "discord_delivered" if str(platform) == "discord" else ""
+            if not column:
+                return False
+            cur.execute(f"UPDATE kz_watch_notifications SET {column}=TRUE, delivered=TRUE, delivered_platform=%s, delivered_at=NOW() WHERE id=%s", (str(platform), str(notification_id)) )
             ok = cur.rowcount > 0
         conn.commit()
         return ok
