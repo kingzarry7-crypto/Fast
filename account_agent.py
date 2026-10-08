@@ -695,7 +695,7 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
             _audit(uid, "connector_action_verified" if verified else "connector_action_unverified", operation, target, approval_id)
         except Exception as audit_exc:
             logger.exception("Google approval result persistence failed approval=%s: %s", approval_id, type(audit_exc).__name__)
-                if verified:
+        if verified:
             evidence = result.get("message") or result.get("event") or result.get("file") or {}
             evidence_id = evidence.get("id") or evidence.get("htmlLink") or "verified"
             return {"status": "completed", "kind": "approval", "approval_id": approval_id,
