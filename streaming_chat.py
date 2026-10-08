@@ -514,6 +514,47 @@ def install_streaming_chat(
                 if not message:
                     return await call_next(request)
 
+                # Route explicit KZ Work missions through the central agent
+                # before ordinary chat. This keeps normal conversation unchanged.
+                try:
+                    from work_intent import parse as parse_work_intent
+                    work_intent = parse_work_intent(message)
+                except Exception:
+                    work_intent = None
+
+                if work_intent and work_intent.get("kind") == "create":
+                    try:
+                        from kz_agent import run as run_kz_agent
+                        agent = await __import__("asyncio").to_thread(
+                            run_kz_agent,
+                            str((await __import__("asyncio").to_thread(require_current_user, request))["id"]),
+                            str(work_intent.get("goal") or message),
+                            account_id=str(payload.get("account_id") or "").strip() or None,
+                            run_now=False,
+                        )
+                        reply = (
+                            "KZ AGENT mission started.\\n\\n"
+                            f"Goal: {agent.get('goal', '')}\\n"
+                            f"Status: {agent.get('status', '').replace('_', ' ')}\\n"
+                            f"Now: {agent.get('activity', '')}\\n"
+                            f"Mission ID: {agent.get('id', '')}\\n\\n"
+                            "I will stop for approval before consequential actions."
+                        )
+                        if request.url.path == "/api/chat/stream":
+                            async def agent_events():
+                                yield _sse({"type": "start", "provider": "kz_agent"})
+                                yield _sse({"type": "agent", "agent": agent})
+                                yield _sse({"type": "delta", "text": reply})
+                                yield _sse({"type": "done", "text": reply, "agent": agent})
+                            return _ConnectorStreamingResponse(
+                                agent_events(), media_type="text/event-stream",
+                                headers={"Cache-Control": "no-cache, no-transform", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+                            )
+                        return JSONResponse({"status": "success", "reply": reply, "agent": agent})
+                    except Exception as exc:
+                        logger.exception("KZ Agent mission creation failed: %s", type(exc).__name__)
+                        return JSONResponse({"detail": "KZ Agent could not start the mission safely."}, status_code=500)
+
                 # Only authenticate/intercept when this is an explicit connector
                 # intent. Ordinary chat keeps its exact existing behavior.
                 intent = _connector_chat_intent(message)
