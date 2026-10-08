@@ -41,7 +41,7 @@ export function useChat(
       .padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
   };
 
-  const send = useCallback(
+  const extractApproval = (reply: string) => {\n    const match = reply.match(/(?:Approval ID|approval id)\\s*[:=]\\s*([0-9a-f]{8}-[0-9a-f-]{27,36})/i);\n    if (!match) return undefined;\n    const lower = reply.toLowerCase();\n    const operation = lower.includes("calendar") ? "create_calendar_event" : lower.includes("drive") ? "upload_drive_text" : "send_gmail";\n    return { id: match[1], provider: "google" as const, operation };\n  };\n\n  const send = useCallback(
     async (text: string, capability = "AI", image?: SendImage) => {
       const trimmed = text.trim();
       const hasImage = !!(image && image.base64);
@@ -152,7 +152,7 @@ export function useChat(
             setMessages((prev) =>
               prev.map((item) =>
                 item.id === aiId
-                  ? { ...item, text: streamed.reply, status: "AI CORE • RESPONSE RECEIVED" }
+                  ? { ...item, text: streamed.reply, status: "AI CORE • RESPONSE RECEIVED", approval: streamed.approval || extractApproval(streamed.reply) }
                   : item
               )
             );
@@ -239,6 +239,34 @@ export function useChat(
     [sending, userId, serverSubscribed]
   );
 
+  const decideApproval = useCallback(async (
+    messageId: string,
+    decision: "once" | "always" | "reject",
+  ) => {
+    const current = messages.find((item) => item.id === messageId);
+    if (!current?.approval) return;
+    try {
+      const result = await api.decideGoogleApproval(current.approval.id, decision);
+      setMessages((prev) => prev.map((item) =>
+        item.id === messageId
+          ? {
+              ...item,
+              approval: undefined,
+              status: result.status === "completed" ? "AI CORE • ACTION VERIFIED" : result.status === "rejected" ? "AI CORE • ACTION REJECTED" : "AI CORE • APPROVAL SAVED",
+              text: result.status === "completed"
+                ? `${item.text}\\n\\n✓ Action approved and verified.`
+                : result.status === "rejected"
+                  ? `${item.text}\\n\\nAction rejected. Nothing was sent.`
+                  : `${item.text}\\n\\n✓ Allowed always. This permission was saved and the current action was completed.`,
+            }
+          : item
+      ));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Approval failed";
+      setError(message);
+    }
+  }, [messages]);
+
   const stop = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
@@ -260,5 +288,5 @@ export function useChat(
     setSending(false);
   }, []);
 
-  return { messages, setMessages, sending, error, send, stop, clear };
+  return { messages, setMessages, sending, error, send, decideApproval, stop, clear };
 }
