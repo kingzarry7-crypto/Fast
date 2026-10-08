@@ -50,6 +50,8 @@ export default function ConnectionsPanel() {
   const [tiktok, setTiktok] = useState<any>(null);
   const [tiktokQr, setTiktokQr] = useState<any>(null);
   const [google, setGoogle] = useState<any>(null);
+  const [shopify, setShopify] = useState<any>(null);
+  const [shopifyStore, setShopifyStore] = useState("");
   const [googleData, setGoogleData] = useState<any>(null);
   const [googleApproval, setGoogleApproval] = useState<any>(null);
   const [googleTo, setGoogleTo] = useState("");
@@ -130,6 +132,7 @@ export default function ConnectionsPanel() {
       if (!r.ok) throw new Error(d.detail || "Could not load connector status");
       setGithub(d.github || null);
       setTiktok(d.tiktok || null);
+      setShopify(d.shopify || null);
       try {
         const gr = await fetch("/api/connectors/google/status", { credentials: "include", cache: "no-store" });
         const gd = await readApiResponse(gr);
@@ -144,6 +147,18 @@ export default function ConnectionsPanel() {
       setTiktok((current: any) => current || { configured: true, connected: false });
       setGoogle((current: any) => current || { configured: true, connected: false });
     }
+  }
+
+  async function connectShopify() {
+    const store = shopifyStore.trim();
+    if (!store) { setMessage("Enter your Shopify .myshopify.com store domain first."); return; }
+    window.location.href = "/api/connectors/shopify/start?shop=" + encodeURIComponent(store);
+  }
+
+  function openCommerceBrowser(service: "fiverr" | "autods") {
+    setUrl(service === "fiverr" ? "https://auth.fiverr.com/login" : "https://www.autods.com/");
+    setAccountName(service === "fiverr" ? "Fiverr Account" : "AutoDS Account");
+    setMessage("Sign in yourself in the isolated browser. KZ only marks the account connected after authenticated evidence is detected.");
   }
 
   async function connectGoogle() {
@@ -296,12 +311,14 @@ export default function ConnectionsPanel() {
     if (!open) return;
     void refreshOfficialConnectors();
     const q = new URLSearchParams(window.location.search);
-    if ((q.get("connector") === "github" || q.get("connector") === "tiktok" || q.get("connector") === "google") && q.get("connected") === "1") {
+    if ((q.get("connector") === "github" || q.get("connector") === "tiktok" || q.get("connector") === "google" || q.get("connector") === "shopify") && q.get("connected") === "1") {
       const connectedProvider = q.get("connector");
       setMessage(
         connectedProvider === "tiktok"
           ? "✓ TikTok connected through official authorization."
-          : connectedProvider === "google"
+          : connectedProvider === "shopify"
+            ? "✓ Shopify connected through the official Admin API."
+            : connectedProvider === "google"
             ? "✓ Google connected. KZ can use the authorized Google account without your Google password."
             : "✓ GitHub connected. KZ can use the authorized account without your GitHub password."
       );
@@ -643,6 +660,21 @@ export default function ConnectionsPanel() {
                     </div>
                     {!github?.connected && <button onClick={connectGitHub} disabled={busy} className="rounded-md border border-cyan-400/30 px-3 py-2 text-[9px] tracking-widest text-cyan-200 disabled:opacity-40">CONNECT</button>}
                   </div>
+                </div>
+                <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/[0.03] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div><div className="text-sm font-medium text-white">Shopify</div><div className="text-[10px] text-zinc-500">{shopify?.connected ? "CONNECTED · ADMIN API" : shopify?.configured ? "OAuth ready" : "SERVER SETUP REQUIRED"}</div></div>
+                    {!shopify?.connected && <button onClick={()=>void connectShopify()} disabled={busy || !shopify?.configured || !shopifyStore.trim()} className="rounded border border-emerald-400/30 px-3 py-2 text-[9px] tracking-widest text-emerald-200 disabled:opacity-40">CONNECT</button>}
+                  </div>
+                  {!shopify?.connected && <input value={shopifyStore} onChange={e=>setShopifyStore(e.target.value)} placeholder="your-store.myshopify.com" className="mt-2 w-full rounded border border-white/10 bg-black/20 p-2 text-xs text-white"/>}
+                </div>
+                <div className="rounded-lg border border-orange-400/20 bg-orange-400/[0.03] p-3">
+                  <div className="flex items-center justify-between gap-2"><div><div className="text-sm font-medium text-white">AutoDS</div><div className="text-[10px] text-zinc-500">Isolated browser connection</div></div><button onClick={()=>openCommerceBrowser("autods")} className="rounded border border-orange-400/30 px-3 py-2 text-[9px] tracking-widest text-orange-200">OPEN</button></div>
+                  <div className="mt-2 text-[10px] text-zinc-500">AutoDS already integrates with Shopify; KZ will use your authenticated browser session for AutoDS actions.</div>
+                </div>
+                <div className="rounded-lg border border-violet-400/20 bg-violet-400/[0.03] p-3">
+                  <div className="flex items-center justify-between gap-2"><div><div className="text-sm font-medium text-white">Fiverr</div><div className="text-[10px] text-zinc-500">Isolated browser connection</div></div><button onClick={()=>openCommerceBrowser("fiverr")} className="rounded border border-violet-400/30 px-3 py-2 text-[9px] tracking-widest text-violet-200">OPEN</button></div>
+                  <div className="mt-2 text-[10px] text-zinc-500">Messages, offers and deliveries remain approval-gated.</div>
                 </div>
                 <div className="rounded-lg border border-blue-400/20 bg-blue-400/[0.03] p-3">
                   <div className="flex items-center justify-between gap-2">
