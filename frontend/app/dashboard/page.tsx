@@ -69,8 +69,8 @@ export default function DashboardPage() {
           <div className="absolute inset-0 opacity-[0.35]" style={{ backgroundImage: "linear-gradient(rgba(0,200,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,200,255,0.03) 1px, transparent 1px)", backgroundSize: "48px 48px" }} />
         </div>
 
-        <header className="relative z-30 shrink-0 border-b border-white/5 bg-[#05080f]/95">
-          <div className="flex items-center gap-2 px-3 sm:px-4 py-2">
+        <header className="relative z-30 shrink-0 overflow-hidden border-b border-white/5 bg-[#05080f]/95">
+          <div className="flex min-w-max items-center gap-2 overflow-x-auto px-3 py-2 sm:px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <Link href="/dashboard" className="flex items-center gap-2.5 shrink-0 mr-1">
               <RobotHead size={36} />
               <span className="hidden sm:block">
