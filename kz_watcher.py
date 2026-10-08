@@ -89,6 +89,12 @@ def init() -> bool:
                 );
                 CREATE INDEX IF NOT EXISTS idx_kz_watch_runs_user
                     ON kz_watch_runs(user_id, started_at DESC);
+                CREATE TABLE IF NOT EXISTS kz_watch_subscriptions (
+                    user_id TEXT PRIMARY KEY,
+                    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
                 """)
             conn.commit()
             _READY = True
@@ -349,12 +355,58 @@ def prepare(user_id: str, finding_id: str) -> dict[str, Any]:
 
 def configured_user_ids() -> list[str]:
     raw = os.getenv("KZ_WATCH_USER_IDS", "")
-    return [x.strip() for x in raw.split(",") if x.strip()]
+    env_ids = [x.strip() for x in raw.split(",") if x.strip()]
+    conn = _conn()
+    if conn is None or not init():
+        return env_ids
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT user_id FROM kz_watch_subscriptions WHERE enabled=TRUE")
+            db_ids = [str(row[0]) for row in cur.fetchall()]
+        return list(dict.fromkeys(env_ids + db_ids))
+    except Exception:
+        return env_ids
+    finally:
+        conn.close()
+
+
+def subscribe(user_id: str) -> dict[str, Any]:
+    user_id = str(user_id or "").strip()
+    if not user_id:
+        raise ValueError("user_id is required")
+    conn = _conn()
+    if conn is None or not init():
+        raise RuntimeError("watch storage unavailable")
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+              INSERT INTO kz_watch_subscriptions(user_id,enabled)
+              VALUES (%s,TRUE)
+              ON CONFLICT(user_id) DO UPDATE SET enabled=TRUE,updated_at=NOW()
+            """, (user_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    started = start()
+    return {"enabled": True, "user_id": user_id, "watcher": started}
+
+
+def unsubscribe(user_id: str) -> dict[str, Any]:
+    conn = _conn()
+    if conn is None or not init():
+        raise RuntimeError("watch storage unavailable")
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE kz_watch_subscriptions SET enabled=FALSE,updated_at=NOW() WHERE user_id=%s", (str(user_id),))
+        conn.commit()
+    finally:
+        conn.close()
+    return {"enabled": False, "user_id": str(user_id), "watcher": status()}
 
 
 def status() -> dict[str, Any]:
     return {
-        "enabled": os.getenv("KZ_WATCH_ENABLED", "false").lower() in {"1","true","yes","on"},
+        "enabled": os.getenv("KZ_WATCH_ENABLED", "true").lower() in {"1","true","yes","on"},
         "interval_sec": max(300, int(os.getenv("KZ_WATCH_INTERVAL_SEC", "900") or 900)),
         "configured_user_count": len(configured_user_ids()),
         "running": bool(_THREAD and _THREAD.is_alive()),
