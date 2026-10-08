@@ -1642,6 +1642,28 @@ def parse_candle_time(value):
             pass
     return datetime.now()
 
+
+def build_signal_chart_caption(mtf_data, symbol, news_data=None):
+    """Create a safe caption so a valid chart is never lost to a formatting error."""
+    primary = mtf_data.get("15m") or {}
+    sig = mtf_data.get("mtf_signal") or primary.get("signal") or "WAIT"
+    sig_icon = "🟢" if sig == "BUY" else "🔴" if sig == "SELL" else "⏳"
+    caption = (
+        f"👑 KING ZARRY AI\n"
+        f"{sig_icon} {sig} • {symbol} • 15M MTF {mtf_data.get('mtf_bias','')}\n"
+    )
+    if sig != "WAIT":
+        caption += (
+            f"Entry: {float(primary.get('entry_zone_low', primary.get('entry_low', primary.get('price', 0))) or 0):,.2f} - "
+            f"{float(primary.get('entry_zone_high', primary.get('entry_high', primary.get('price', 0))) or 0):,.2f}\n"
+            f"SL: {float(primary.get('stop_loss', primary.get('price', 0)) or 0):,.2f}\n"
+            f"TP3: {float(primary.get('tp3', primary.get('price', 0)) or 0):,.2f}\n"
+            f"News: {(news_data or {}).get('risk','LOW')} risk"
+        )
+    else:
+        caption += "WAIT / NO TRADE"
+    return caption
+
 def build_signal_chart(data):
     """Build a Telegram-ready signal chart with a guaranteed candle fetch fallback.
     
@@ -3180,10 +3202,8 @@ async def quick_symbol_command(symbol, update, context):
         await send_long_message(update.message, format_signal_mtf(mtf_data, news_data), is_raw_html=True)
         try:
             chart=await asyncio.to_thread(build_signal_chart, mtf_data)
-            sig = mtf_data.get("mtf_signal", mtf_data["15m"]["signal"])
-            sig_icon=("🟢" if sig=="BUY" else "🔴" if sig=="SELL" else "⏳")
-            caption=(f"👑 KING ZARRY AI\n{sig_icon} {sig} • {symbol} • 15M MTF {mtf_data.get('mtf_bias','')}\nEntry: {mtf_data['15m']['entry_zone_low']:,.2f} - {mtf_data['15m']['entry_zone_high']:,.2f}\nSL: {mtf_data['15m']['stop_loss']:,.2f}\nTP3: {mtf_data['15m']['tp3']:,.2f}\nNews: {news_data.get('risk','LOW')} risk") if sig!="WAIT" else (f"👑 KING ZARRY AI\n⏳ WAIT / NO TRADE • {symbol} • 15M MTF")
-            await update.message.reply_photo(photo=chart,caption=caption)
+            caption = build_signal_chart_caption(mtf_data, symbol, news_data)
+            await update.message.reply_photo(photo=chart, caption=caption)
         except Exception as chart_error:
             logger.warning(f"Chart error: {chart_error}")
         try:
@@ -3224,10 +3244,8 @@ async def signal_command(update, context):
         await send_long_message(update.message, format_signal_mtf(mtf_data, news_data), is_raw_html=True)
         try:
             chart=await asyncio.to_thread(build_signal_chart, mtf_data)
-            sig = mtf_data.get("mtf_signal", mtf_data["15m"]["signal"])
-            sig_icon=("🟢" if sig=="BUY" else "🔴" if sig=="SELL" else "⏳")
-            caption=(f"👑 KING ZARRY AI\n{sig_icon} {sig} • {symbol} • 15M • MTF {mtf_data.get('mtf_bias','')}\nEntry: {mtf_data['15m']['entry_zone_low']:,.2f} - {mtf_data['15m']['entry_zone_high']:,.2f}\nSL: {mtf_data['15m']['stop_loss']:,.2f}\nTP3: {mtf_data['15m']['tp3']:,.2f}") if sig!="WAIT" else (f"👑 KING ZARRY AI\n⏳ WAIT • {symbol} • 15M")
-            await update.message.reply_photo(photo=chart,caption=caption)
+            caption = build_signal_chart_caption(mtf_data, symbol)
+            await update.message.reply_photo(photo=chart, caption=caption)
         except Exception as chart_error:
             logger.warning(f"Chart generation error: {chart_error}")
         try:
