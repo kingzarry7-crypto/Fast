@@ -490,7 +490,7 @@ def _shopify_token(user_id: str, store: str = "") -> tuple[str, str]:
 
 @router.get("/shopify/start")
 async def shopify_start(request: Request, shop: str):
-    user_id = _user_id(request)
+    user_id = _connector_user_id(request)
     if not _shopify_configured():
         raise HTTPException(status_code=503, detail="Shopify connector is not configured on KZ")
     store = _shopify_store(shop)
@@ -566,7 +566,7 @@ async def shopify_callback(request: Request):
 
 @router.post("/shopify/action")
 async def shopify_action(request: Request):
-    user_id=_user_id(request)
+    user_id=_connector_user_id(request)
     body=await request.json()
     operation=str((body or {}).get("operation") or "").strip().lower()
     payload=dict((body or {}).get("payload") or {})
@@ -583,7 +583,7 @@ async def shopify_action(request: Request):
 
 @router.get("/status")
 async def connector_status(request: Request):
-    user_id = _user_id(request)
+    user_id = _connector_user_id(request)
     account = _github_account(user_id)
     tiktok_account = _provider_account(user_id, "tiktok")
 
@@ -645,7 +645,7 @@ def _provider_account(user_id: str, provider: str) -> Optional[Dict[str, Any]]:
 
 @router.get("/accounts")
 async def connector_accounts(request: Request):
-    user_id = _user_id(request)
+    user_id = _connector_user_id(request)
     with get_db_cursor(commit=False) as cur:
         cur.execute(
             """
@@ -674,7 +674,7 @@ async def connector_accounts(request: Request):
 
 @router.get("/github/start")
 async def github_start(request: Request):
-    user_id = _user_id(request)
+    user_id = _connector_user_id(request)
     if not _github_configured():
         raise HTTPException(status_code=503, detail="GitHub connector is not configured on KZ")
     state = _sign_state({"provider": "github", "user_id": user_id, "nonce": secrets.token_urlsafe(18), "exp": _now() + 600})
@@ -845,7 +845,7 @@ def _tiktok_exchange(code: str, user_id: str) -> Dict[str, Any]:
 
 @router.get("/tiktok/start")
 async def tiktok_start(request: Request):
-    user_id = _user_id(request)
+    user_id = _connector_user_id(request)
     if not _tiktok_configured():
         raise HTTPException(status_code=503, detail="TikTok connector is not configured on KZ")
     state = _sign_state({"provider": "tiktok", "user_id": user_id, "nonce": secrets.token_urlsafe(18), "exp": _now() + 600})
@@ -869,7 +869,7 @@ async def tiktok_callback(request: Request):
     payload = _verify_state(request.query_params.get("state") or "")
     if payload.get("provider") != "tiktok":
         raise HTTPException(status_code=400, detail="Invalid TikTok connector state")
-    user_id = _user_id(request)
+    user_id = _connector_user_id(request)
     if str(payload.get("user_id")) != user_id:
         raise HTTPException(status_code=403, detail="TikTok authorization belongs to a different KZ session")
     code = request.query_params.get("code") or ""
@@ -881,7 +881,7 @@ async def tiktok_callback(request: Request):
 
 @router.post("/tiktok/qr/start")
 async def tiktok_qr_start(request: Request):
-    user_id = _user_id(request)
+    user_id = _connector_user_id(request)
     if not _tiktok_configured():
         raise HTTPException(status_code=503, detail="TikTok connector is not configured on KZ")
     client_ticket = secrets.token_urlsafe(18)
@@ -913,7 +913,7 @@ async def tiktok_qr_start(request: Request):
 
 @router.post("/tiktok/qr/status")
 async def tiktok_qr_status(request: Request):
-    user_id = _user_id(request)
+    user_id = _connector_user_id(request)
     body = await request.json()
     session_id = str(body.get("session_id") or "").strip()
     session = _TIKTOK_QR_SESSIONS.get(session_id)
@@ -950,7 +950,7 @@ async def tiktok_qr_status(request: Request):
 
 @router.post("/github/disconnect")
 async def github_disconnect(request: Request):
-    user_id = _user_id(request)
+    user_id = _connector_user_id(request)
     with get_db_cursor(commit=True) as cur:
         cur.execute(
             """
@@ -966,7 +966,7 @@ async def github_disconnect(request: Request):
 
 @router.post("/github/action")
 async def github_action(request: Request):
-    user_id = _user_id(request)
+    user_id = _connector_user_id(request)
     body = await request.json()
     operation = str(body.get("operation") or "").strip().lower()
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
@@ -1009,7 +1009,7 @@ async def github_action(request: Request):
 
 @router.post("/github/approve/{approval_id}")
 async def github_approve(approval_id: str, request: Request):
-    user_id = _user_id(request)
+    user_id = _connector_user_id(request)
     body = await request.json()
     approved = bool(body.get("approved"))
     with get_db_cursor(commit=False) as cur:
