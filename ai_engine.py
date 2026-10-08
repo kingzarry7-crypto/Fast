@@ -299,6 +299,10 @@ def clean_ai_response(text: str) -> str:
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<think>.*$", "", text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<\|.*?\|>", "", text)
+    # The chat clients render plain text, so do not leak Markdown emphasis
+    # markers such as **Label:** or __Label__ into user-facing replies.
+    text = re.sub(r"\*\*([^\n]+?)\*\*", r"\1", text)
+    text = re.sub(r"__([^\n]+?)__", r"\1", text)
     return text.strip()
 
 # =========================================================
