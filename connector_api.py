@@ -45,6 +45,36 @@ GITHUB_REDIRECT_URI = os.getenv("GITHUB_REDIRECT_URI", "").strip()
 GITHUB_SCOPES = os.getenv("GITHUB_OAUTH_SCOPES", "read:user repo").strip()
 
 
+def _connector_user_id(request: Request) -> str:
+    """Resolve the logged-in KZ web user from the same session cookie as /api/auth/me.
+
+    OAuth start endpoints must use the authenticated web session. Do not accept
+    a user id from query/body parameters because that would let one account
+    start an OAuth flow for another account.
+    """
+    raw_token = request.cookies.get("king_zarry_web_session")
+    if not raw_token or len(raw_token) > 500:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    with get_db_cursor(commit=False) as cur:
+        cur.execute(
+            """SELECT s.user_id
+               FROM web_sessions s
+               JOIN web_users u ON u.id = s.user_id
+               WHERE s.token_hash = %s
+                 AND s.revoked_at IS NULL
+                 AND s.expires_at > NOW()
+                 AND u.account_status = 'active'
+               LIMIT 1""",
+            (token_hash,),
+        )
+        row = cur.fetchone()
+    user_id = str(_row_value(row, "user_id", 0) or "").strip()
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return user_id
+
+
 def _now() -> int:
     return int(time.time())
 
