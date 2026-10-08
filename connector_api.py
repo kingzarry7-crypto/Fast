@@ -362,7 +362,7 @@ def _shopify_configured() -> bool:
 def _shopify_store(value: str) -> str:
     store = str(value or "").strip().lower()
     store = re.sub(r"^https?://", "", store).split("/", 1)[0]
-    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*\\.myshopify\\.com", store):
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*\.myshopify\.com", store):
         raise HTTPException(status_code=400, detail="Use your Shopify store domain, for example your-store.myshopify.com")
     return store
 
