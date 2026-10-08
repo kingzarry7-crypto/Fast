@@ -370,6 +370,21 @@ def configured_user_ids() -> list[str]:
         conn.close()
 
 
+def is_subscribed(user_id: str) -> bool:
+    conn = _conn()
+    if conn is None or not init():
+        return False
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT enabled FROM kz_watch_subscriptions WHERE user_id=%s", (str(user_id),))
+            row = cur.fetchone()
+        return bool(row and row[0])
+    except Exception:
+        return False
+    finally:
+        conn.close()
+
+
 def subscribe(user_id: str) -> dict[str, Any]:
     user_id = str(user_id or "").strip()
     if not user_id:
