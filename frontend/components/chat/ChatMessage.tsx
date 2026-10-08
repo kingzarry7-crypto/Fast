@@ -47,7 +47,7 @@ export function ChatMessage({
   const isSystem = normalizedRole === "system";
 
   // Chat is rendered as plain text, so never expose Markdown emphasis markers.
-  const displayContent = content.replaceAll("**", "").replaceAll("__", "");
+  const displayContent = content.replaceAll("***", "").replaceAll("**", "").replaceAll("__", "");
 
   const handleCopy = async () => {
     try {
