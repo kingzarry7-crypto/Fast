@@ -140,6 +140,59 @@ def install_workflow_api(app, require_current_user, row_value=None):
         return {'status': 'ok', 'agent': list_recent(user_id, limit)}
 
 
+    # ------------------------------------------------------------------
+    # KZ WATCHER — read-only signal discovery and approval preparation.
+    # ------------------------------------------------------------------
+    @app.get('/api/agent/watch')
+    def kz_watch_status_route(request: Request, limit: int = 30, status: str = ''):
+        row = require_current_user(request); user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        from kz_watcher import list_findings, status as watch_status
+        return {
+            'status': 'ok',
+            'watcher': watch_status(),
+            'findings': list_findings(user_id, limit, status.strip()),
+        }
+
+    @app.post('/api/agent/watch/run')
+    async def kz_watch_run_route(request: Request):
+        row = require_current_user(request); user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        body = await request.json()
+        categories = (body or {}).get('categories')
+        if categories is not None and not isinstance(categories, list):
+            raise HTTPException(status_code=400, detail='categories must be a list')
+        from kz_watcher import scan_user
+        return {'status': 'ok', 'watch': scan_user(user_id, categories=categories)}
+
+    @app.post('/api/agent/watch/{finding_id}/prepare')
+    def kz_watch_prepare_route(finding_id: str, request: Request):
+        row = require_current_user(request); user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        from kz_watcher import prepare
+        try:
+            return prepare(user_id, finding_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.post('/api/agent/watch/{finding_id}/status')
+    async def kz_watch_finding_status_route(finding_id: str, request: Request):
+        row = require_current_user(request); user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        body = await request.json()
+        value = str((body or {}).get('status') or '').strip().lower()
+        from kz_watcher import mark_status
+        try:
+            return {'status': 'ok', 'finding': mark_status(user_id, finding_id, value)}
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+
+
 
     @app.post('/api/workflows')
     async def create_workflow_route(request: Request):
@@ -424,4 +477,10 @@ def install_workflow_api(app, require_current_user, row_value=None):
         start()
     except Exception as exc:
         print('KZ_WORKFLOW_SCHEDULER_FAILED', type(exc).__name__, flush=True)
+    try:
+        from kz_watcher import init as init_kz_watcher, start as start_kz_watcher
+        init_kz_watcher()
+        print('KZ_WATCHER_STATUS', start_kz_watcher(), flush=True)
+    except Exception as exc:
+        print('KZ_WATCHER_START_FAILED', type(exc).__name__, flush=True)
     print('KZ_WORKFLOW_API_INSTALLED', flush=True)
