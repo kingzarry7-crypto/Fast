@@ -12,6 +12,19 @@ export PORT="${PORT:-8000}"
 export PLAYWRIGHT_BROWSERS_PATH="/app/.playwright"
 echo "   → Runtime PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH}"
 
+# Keep authenticated browser profiles on Railway persistent volume when it
+# exists. An explicit BROWSER_PROFILE_DIR always wins; local/dev environments
+# continue using the browser_operator.py fallback path.
+if [ -z "${BROWSER_PROFILE_DIR:-}" ] && [ -d "/data" ] && [ -w "/data" ]; then
+  export BROWSER_PROFILE_DIR="/data/browser_profiles"
+fi
+if [ -n "${BROWSER_PROFILE_DIR:-}" ]; then
+  mkdir -p "${BROWSER_PROFILE_DIR}"
+  echo "   → Browser profile persistence: ${BROWSER_PROFILE_DIR}"
+else
+  echo "   ⚠️ No persistent browser volume detected; authenticated website sessions may be lost when the container is replaced."
+fi
+
 # ------------------------------------------------------------------
 # 0) Browser runtime check.
 #    Prefer an explicitly configured/system browser, otherwise verify
