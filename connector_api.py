@@ -615,14 +615,6 @@ async def shopify_start(request: Request, shop: str = "", return_url: str = ""):
 
     # Direct store-specific OAuth remains available for backend/API callers that
     # explicitly supply a validated shop. The dashboard never uses this branch.
-    if not shop:
-        state = _sign_state({
-            "provider": "shopify_install",
-            "user_id": user_id,
-            "return_url": callback_frontend,
-            "nonce": secrets.token_urlsafe(18),
-            "exp": _now() + 600,
-        })
     store = _shopify_store(shop)
 
     state = _sign_state({"provider":"shopify","user_id":user_id,"store":store,"return_url":callback_frontend,"nonce":secrets.token_urlsafe(18),"exp":_now()+600})
