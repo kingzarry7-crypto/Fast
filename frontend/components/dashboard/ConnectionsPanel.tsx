@@ -154,7 +154,7 @@ export default function ConnectionsPanel() {
     // Shopify chooses the authenticated merchant/store inside its own
     // authorization surface. KZ no longer asks the user to paste a
     // myshopify.com domain into the dashboard.
-    setMessage("Opening Shopify authorization…");
+    setMessage("Opening Shopify store picker…");
     const returnUrl = window.location.origin.replace(/\/$/, "");
     window.location.href = "/api/connectors/shopify/start?return_url=" + encodeURIComponent(returnUrl);
   }
@@ -715,7 +715,7 @@ export default function ConnectionsPanel() {
                     </div>
                     {!shopify?.connected && <button onClick={()=>void connectShopify()} disabled={busy} className="rounded border border-emerald-400/30 px-3 py-2 text-[9px] tracking-widest text-emerald-200 disabled:opacity-40">CONNECT</button>}
                   </div>
-                  {!shopify?.connected && <div className="mt-2 text-[10px] leading-relaxed text-zinc-500">Shopify will handle the account/store selection and permission approval. KZ saves the authorized store after Shopify returns.</div>}
+                  {!shopify?.connected && <div className="mt-2 text-[10px] leading-relaxed text-zinc-500">{shopify?.install_url_configured ? "Shopify will show its official store picker and permission approval. KZ saves the selected store after Shopify returns." : "Shopify store-picker mode is ready once SHOPIFY_INSTALL_URL is set on Railway. KZ no longer asks for a store domain in this dashboard."}</div>}
                 </div>
                 <div className="rounded-lg border border-orange-400/20 bg-orange-400/[0.03] p-3">
                   <div className="flex items-center justify-between gap-2"><div><div className="text-sm font-medium text-white">AutoDS</div><div className="text-[10px] text-zinc-500">Isolated browser connection</div></div><button onClick={()=>openCommerceBrowser("autods")} className="rounded border border-orange-400/30 px-3 py-2 text-[9px] tracking-widest text-orange-200">OPEN</button></div>
