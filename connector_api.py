@@ -37,7 +37,7 @@ router = APIRouter(prefix="/api/connectors", tags=["connectors"])
 GITHUB_AUTHORIZE = "https://github.com/login/oauth/authorize"
 GITHUB_TOKEN = "https://github.com/login/oauth/access_token"
 GITHUB_API = "https://api.github.com"
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://fast.kingzarry7.workers.dev").rstrip("/")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://kingzarry.bid").rstrip("/")
 # Production frontend origins. The custom domain is now supported alongside the
 # existing workers.dev/Vercel hosts so OAuth can return to whichever host
 # actually started the flow.
