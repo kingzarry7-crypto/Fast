@@ -30,6 +30,10 @@ def _env(name: str) -> str:
 
 # provider -> (display name, env keys, capabilities, adapter status, integration hint)
 KNOWN_PROVIDERS = {
+    "shopify": ("Shopify", ["SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET"], ["store_products", "store_orders", "inventory", "store_management"], "native", "Official Shopify Admin API connector with scoped OAuth; write actions must remain approval-gated."),
+    "autods": ("AutoDS", ["AUTODS_API_KEY", "AUTODS_MCP_URL"], ["product_research", "product_import", "price_monitoring", "inventory_monitoring", "fulfillment"], "browser_or_mcp", "Use the authenticated AutoDS browser session or an explicitly configured official connector; do not guess an API endpoint."),
+    "fiverr": ("Fiverr", ["FIVERR_API_KEY"], ["opportunity_monitoring", "messages", "offers", "delivery"], "browser", "Use the existing isolated Browser Operator for Fiverr. Consequential messages/offers/deliveries require approval."),
+
     "groq": ("Groq", ["GROQ_API_KEY"], ["text_ai", "vision_ai"], "native", "Already wired into AIEngine."),
     "openrouter": ("OpenRouter", ["OPENROUTER_API_KEY"], ["text_ai", "model_routing"], "native", "Already wired into AIEngine."),
     "chutes": ("Chutes", ["CHUTES_API_KEY"], ["text_ai", "model_routing"], "native", "OpenAI-compatible text fallback is wired into AIEngine; model is controlled by CHUTES_MODEL."),
