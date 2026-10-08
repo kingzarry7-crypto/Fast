@@ -56,7 +56,8 @@ export default function KZWatchPanel() {
     }
   }
 
-  async function scanNow() {\n    setNewCount(0);
+  async function scanNow() {
+    setNewCount(0);
     setLoading(true);
     setError("");
     try {
@@ -86,7 +87,7 @@ export default function KZWatchPanel() {
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d?.detail || "Could not prepare mission");
-      setItems((current) => current.map((x) => x.id === id ? { ...x, status: "actioned" } : x));
+      setItems((current) => current.map((x) => x.id === id ? { ...x, status: "prepared" } : x));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not prepare mission");
     } finally {
@@ -144,7 +145,7 @@ export default function KZWatchPanel() {
                   <div className="mt-2 text-[9px] leading-relaxed text-zinc-600">{item.suggested_action || "Research and verify before acting."}</div>
                   <div className="mt-2 flex gap-2">
                     {item.url && <a href={item.url} target="_blank" rel="noreferrer" className="rounded border border-cyan-400/20 px-2 py-1 font-mono-tech text-[9px] text-cyan-300">SOURCE</a>}
-                    {item.category !== "news" && item.status !== "actioned" && (
+                    {item.category !== "news" && item.status !== "prepared" && (
                       <button type="button" onClick={() => prepare(item.id)} disabled={preparing === item.id}
                         className="rounded border border-emerald-400/25 px-2 py-1 font-mono-tech text-[9px] text-emerald-300 disabled:opacity-50">
                         {preparing === item.id ? "PREPARING…" : "PREPARE FOR APPROVAL"}
