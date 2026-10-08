@@ -128,12 +128,36 @@ def _row_value(row: Any, key: str, index: int = 0) -> Any:
         return None
 
 
-def _user_id(request: Request) -> str:
-    # api.py exposes the authenticated-user helper; importing it here would
-    # create a circular import, so resolve it only when the endpoint runs.
-    import api
-    row = api._require_current_user(request)
-    return str(api._row_value(row, "id", 0))
+def _oauth_return_url(request: Request) -> str:
+    """Keep OAuth callbacks on the frontend that actually started the flow.
+
+    Railway can receive the provider callback directly, so a stale FRONTEND_URL
+    must not strand the user on an old deployment. Only known KZ frontend
+    origins are accepted.
+    """
+    configured = FRONTEND_URL
+    allowed = {
+        configured,
+        "https://fast-a84x.vercel.app",
+        "https://fast.kingzarry7.workers.dev",
+    }
+    raw = (request.headers.get("origin") or "").strip().rstrip("/")
+    if not raw:
+        try:
+            raw = urllib.parse.urlparse(request.headers.get("referer") or "").scheme + "://" + urllib.parse.urlparse(request.headers.get("referer") or "").netloc
+        except Exception:
+            raw = ""
+    return raw if raw in allowed else configured
+
+
+def _state_return_url(payload: Dict[str, Any]) -> str:
+    value = str(payload.get("return_url") or "").strip().rstrip("/")
+    allowed = {
+        FRONTEND_URL,
+        "https://fast-a84x.vercel.app",
+        "https://fast.kingzarry7.workers.dev",
+    }
+    return value if value in allowed else FRONTEND_URL
 
 
 def _github_configured() -> bool:
@@ -437,21 +461,27 @@ async def shopify_start(request: Request, shop: str):
     if not _shopify_configured():
         raise HTTPException(status_code=503, detail="Shopify connector is not configured on KZ")
     store = _shopify_store(shop)
-    state = _sign_state({"provider":"shopify","user_id":user_id,"store":store,"nonce":secrets.token_urlsafe(18),"exp":_now()+600})
+    state = _sign_state({"provider":"shopify","user_id":user_id,"store":store,"return_url":_oauth_return_url(request),"nonce":secrets.token_urlsafe(18),"exp":_now()+600})
     params={"client_id":SHOPIFY_CLIENT_ID,"scope":SHOPIFY_SCOPES,"redirect_uri":SHOPIFY_REDIRECT_URI,"state":state}
     return RedirectResponse(SHOPIFY_AUTHORIZE.format(shop=store)+"?"+urllib.parse.urlencode(params))
 
 @router.get("/shopify/callback")
 async def shopify_callback(request: Request):
-    # Return OAuth failures to the dashboard instead of leaving the user with no response.
+    # Return OAuth failures to the exact KZ frontend that started the flow.
+    state_value = request.query_params.get("state") or ""
+    try:
+        callback_frontend = _state_return_url(_verify_state(state_value))
+    except Exception:
+        callback_frontend = FRONTEND_URL
     if not _shopify_configured():
-        return RedirectResponse(f"{FRONTEND_URL}/dashboard?connector_error=shopify_not_configured")
+        return RedirectResponse(f"{callback_frontend}/dashboard?connector_error=shopify_not_configured")
     error=request.query_params.get("error")
     if error:
         detail=request.query_params.get("error_description") or error
-        return RedirectResponse(f"{FRONTEND_URL}/dashboard?connector_error=shopify_{urllib.parse.quote(str(detail)[:300])}")
+        return RedirectResponse(f"{callback_frontend}/dashboard?connector_error=shopify_{urllib.parse.quote(str(detail)[:300])}")
     try:
-        payload=_verify_state(request.query_params.get("state") or "")
+        payload=_verify_state(state_value)
+        callback_frontend = _state_return_url(payload)
         if payload.get("provider")!="shopify":
             raise HTTPException(status_code=400, detail="Invalid Shopify connector state")
         user_id=str(payload.get("user_id") or "").strip()
@@ -494,12 +524,12 @@ async def shopify_callback(request: Request):
         shop_data=((body.get("data") or {}).get("shop") or {})
         _save_shopify_connection(user_id,store,token,data.get("refresh_token"),data.get("expires_in"),scopes,shop_data)
         _audit(user_id,"connector_connected",target=store)
-        return RedirectResponse(f"{FRONTEND_URL}/dashboard?connector=shopify&connected=1&name={urllib.parse.quote(str(shop_data.get('name') or store))}")
+        return RedirectResponse(f"{callback_frontend}/dashboard?connector=shopify&connected=1&name={urllib.parse.quote(str(shop_data.get('name') or store))}")
     except HTTPException as exc:
-        return RedirectResponse(f"{FRONTEND_URL}/dashboard?connector_error=shopify_{urllib.parse.quote(str(exc.detail or 'authorization_failed')[:300])}")
+        return RedirectResponse(f"{callback_frontend}/dashboard?connector_error=shopify_{urllib.parse.quote(str(exc.detail or 'authorization_failed')[:300])}")
     except Exception as exc:
         logger.exception("Shopify callback failed: %s", type(exc).__name__)
-        return RedirectResponse(f"{FRONTEND_URL}/dashboard?connector_error=shopify_callback_failed")
+        return RedirectResponse(f"{callback_frontend}/dashboard?connector_error=shopify_callback_failed")
 
 @router.post("/shopify/action")
 async def shopify_action(request: Request):
