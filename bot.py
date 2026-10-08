@@ -2786,7 +2786,7 @@ async def kz_watch_channel_notification_job(context: ContextTypes.DEFAULT_TYPE):
                 telegram_ids = channels.get("telegram") or []
                 if not telegram_ids:
                     continue
-                for item in pending_channel_notifications(user_id, 10):
+                for item in pending_channel_notifications(user_id, "telegram", 10):
                     text = (
                         "👀 <b>KZ WATCH FOUND SOMETHING</b>\n\n"
                         + "<b>" + escape_html(str(item.get("title") or "New finding")) + "</b>\n"
