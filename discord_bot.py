@@ -950,6 +950,8 @@ async def send_ai_response(message: discord.Message, text: str):
     display = text
     display = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", display)
     display = re.sub(r"\*\*Direct link:\*\*\s*https?://[^\s\n]+", "", display)
+    # Keep Discord AI replies as normal plain messages; never expose Markdown markers.
+    display = display.replace("***", "").replace("**", "").replace("__", "")
     display = re.sub(r"\n{3,}", "\n\n", display).strip()
 
     # --- Images ---
