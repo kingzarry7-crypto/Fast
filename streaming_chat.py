@@ -221,6 +221,10 @@ def _build_stream_generator(
                 "connector": True,
                 "status": connector_result.get("status"),
                 "kind": connector_result.get("kind"),
+                "approval_id": connector_result.get("approval_id"),
+                "provider": connector_result.get("provider"),
+                "operation": connector_result.get("operation"),
+                "target": connector_result.get("target"),
             })
             return
 
