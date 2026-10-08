@@ -4452,7 +4452,8 @@ def main():
 
     try:
         if application.job_queue:
-            application.job_queue.run_repeating(notification_job, interval=60, first=60)\n            application.job_queue.run_repeating(kz_watch_channel_notification_job, interval=60, first=45, name="kz-watch-telegram-notifications")
+            application.job_queue.run_repeating(notification_job, interval=60, first=60)
+            application.job_queue.run_repeating(kz_watch_channel_notification_job, interval=60, first=45, name="kz-watch-telegram-notifications")
             application.job_queue.run_repeating(
                 provider_registry_watch_job,
                 interval=max(30, env_int("PROVIDER_WATCH_INTERVAL", 60)),
