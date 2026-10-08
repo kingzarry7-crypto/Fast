@@ -83,10 +83,32 @@ def _row_value(row: Any, key: str, index: int = 0) -> Any:
         return None
 
 
-def _user_id(request: Request) -> str:
-    import api
-    row = api._require_current_user(request)
-    return str(api._row_value(row, "id", 0))
+def _oauth_return_url(request: Request) -> str:
+    """Keep Google OAuth callbacks on the frontend that started the flow."""
+    configured = FRONTEND_URL
+    allowed = {
+        configured,
+        "https://fast-a84x.vercel.app",
+        "https://fast.kingzarry7.workers.dev",
+    }
+    raw = (request.headers.get("origin") or "").strip().rstrip("/")
+    if not raw:
+        try:
+            parsed = urllib.parse.urlparse(request.headers.get("referer") or "")
+            raw = f"{parsed.scheme}://{parsed.netloc}".rstrip("/") if parsed.scheme and parsed.netloc else ""
+        except Exception:
+            raw = ""
+    return raw if raw in allowed else configured
+
+
+def _state_return_url(payload: Dict[str, Any]) -> str:
+    value = str(payload.get("return_url") or "").strip().rstrip("/")
+    allowed = {
+        FRONTEND_URL,
+        "https://fast-a84x.vercel.app",
+        "https://fast.kingzarry7.workers.dev",
+    }
+    return value if value in allowed else FRONTEND_URL
 
 
 def _configured() -> bool:
@@ -564,7 +586,7 @@ async def google_start(request: Request):
     user_id = _user_id(request)
     if not _configured():
         raise HTTPException(status_code=503, detail="Google connector is not configured on KZ")
-    state = _sign_state({"provider": "google", "user_id": user_id, "nonce": secrets.token_urlsafe(18), "exp": _now() + 600})
+    state = _sign_state({"provider": "google", "user_id": user_id, "return_url": _oauth_return_url(request), "nonce": secrets.token_urlsafe(18), "exp": _now() + 600})
     params = {"client_id": GOOGLE_CLIENT_ID, "redirect_uri": GOOGLE_REDIRECT_URI,
               "response_type": "code", "scope": GOOGLE_SCOPES, "access_type": "offline",
               "prompt": "select_account consent", "include_granted_scopes": "true", "state": state}
@@ -573,11 +595,16 @@ async def google_start(request: Request):
 
 @router.get("/callback")
 async def google_callback(request: Request):
+    state_value = request.query_params.get("state") or ""
+    try:
+        callback_frontend = _state_return_url(_verify_state(state_value))
+    except Exception:
+        callback_frontend = FRONTEND_URL
     if not _configured():
         raise HTTPException(status_code=503, detail="Google connector is not configured on KZ")
     error = request.query_params.get("error")
     if error:
-        return RedirectResponse(f"{FRONTEND_URL}/dashboard?connector_error=google_{urllib.parse.quote(error)}")
+        return RedirectResponse(f"{callback_frontend}/dashboard?connector_error=google_{urllib.parse.quote(error)}")
     # The OAuth callback lands directly on Railway. The KZ login cookie may
     # have been issued on the Vercel frontend host (the normal /api proxy
     # path), so requiring _user_id(request) here can reject a valid OAuth
@@ -585,7 +612,8 @@ async def google_callback(request: Request):
     # The state is HMAC-signed by KZ, short-lived, and carries the user id;
     # use that authenticated state to finish the one-time authorization-code
     # exchange instead of requiring the frontend cookie on the callback host.
-    payload = _verify_state(request.query_params.get("state") or "")
+    payload = _verify_state(state_value)
+    callback_frontend = _state_return_url(payload)
     user_id = str(payload.get("user_id") or "").strip()
     if not user_id:
         raise HTTPException(status_code=403, detail="Google authorization state has no KZ user")
@@ -613,7 +641,7 @@ async def google_callback(request: Request):
     scopes = [x for x in str(token.get("scope") or GOOGLE_SCOPES).split() if x]
     _save_account(user_id, profile, token, scopes)
     _audit(user_id, "connector_connected", target=str(profile.get("email") or profile.get("sub") or "google"))
-    return RedirectResponse(f"{FRONTEND_URL}/dashboard?connector=google&connected=1")
+    return RedirectResponse(f"{callback_frontend}/dashboard?connector=google&connected=1")
 
 
 @router.post("/disconnect")
