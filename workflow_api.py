@@ -155,6 +155,28 @@ def install_workflow_api(app, require_current_user, row_value=None):
             'findings': list_findings(user_id, limit, status.strip()),
         }
 
+    @app.post('/api/agent/watch/subscribe')
+    def kz_watch_subscribe_route(request: Request):
+        row = require_current_user(request); user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        from kz_watcher import subscribe
+        try:
+            return {'status': 'ok', 'watcher': subscribe(user_id)}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
+
+    @app.post('/api/agent/watch/unsubscribe')
+    def kz_watch_unsubscribe_route(request: Request):
+        row = require_current_user(request); user_id = uid(row)
+        if not user_id:
+            raise HTTPException(status_code=401, detail='Authenticated user required')
+        from kz_watcher import unsubscribe
+        try:
+            return {'status': 'ok', 'watcher': unsubscribe(user_id)}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
+
     @app.post('/api/agent/watch/run')
     async def kz_watch_run_route(request: Request):
         row = require_current_user(request); user_id = uid(row)
