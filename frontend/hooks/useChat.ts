@@ -257,7 +257,7 @@ export function useChat(
                 ? `${item.text}\n\n✓ Action approved and verified.`
                 : result.status === "rejected"
                   ? `${item.text}\n\nAction rejected. Nothing was sent.`
-                  : `${item.text}\n\n✓ Allowed always. This permission was saved and the current action was completed.`,
+                  : `${item.text}\n\n✓ Allowed always. The current action was completed${result.permission_saved === false ? ", but the saved permission could not be stored." : " and this permission was saved."}`,
             }
           : item
       ));
