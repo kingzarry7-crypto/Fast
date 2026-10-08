@@ -938,9 +938,11 @@ def _gold_free_get_price(symbol: str) -> float:
     raise RuntimeError("Gold price providers failed: " + "; ".join(errors[:5]))
 
 def _gold_xaus_get_candles(timeframe: str, outputsize: int) -> list:
-    """Build real Gold candles from XAUS's 2-minute recorded XAU series."""
+    """Build real Gold candles from XAUS's recorded 2-minute XAU series."""
     tf = str(timeframe).lower().strip()
-    minutes = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60}.get(tf)
+    # XAUS retains up to 48 hours of 2-minute observations.  Supporting
+    # 2h/4h here matters because the shared MTF engine asks for 4h as well.
+    minutes = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "2h": 120, "4h": 240}.get(tf)
     if minutes is None:
         return []
     hours = min(48, max(2, int((minutes * max(outputsize, 15) * 2) / 60) + 2))
@@ -983,7 +985,12 @@ def _gold_xaus_get_candles(timeframe: str, outputsize: int) -> list:
             b["low"] = min(b["low"], price)
             b["close"] = price
     candles = list(buckets.values())
-    return candles[-max(15, min(int(outputsize or 150), 1000)):]
+    # Four-hour bars can only produce 12 candles from XAUS's 48-hour window.
+    # Keep those real bars instead of rejecting them and falsely reporting no data.
+    minimum = 10 if tf in ("2h", "4h") else 15
+    if len(candles) < minimum:
+        return []
+    return candles[-max(minimum, min(int(outputsize or 150), 1000)):]
 
 
 def _gold_free_get_candles(symbol: str, timeframe: str = "15m", outputsize: int = 150) -> list:
@@ -1018,16 +1025,18 @@ def _gold_free_get_candles(symbol: str, timeframe: str = "15m", outputsize: int 
                     })
                 _GOLD_CANDLE_CACHE[cache_key] = (now, candles, "biquote")
                 return candles
-        errors.append(f"biquote:{r.status_code}")
+        errors.append(f"biquote:{r.status_code}:{str(data)[:120] if 'data' in locals() else ''}")
     except Exception as exc:
-        errors.append(f"biquote:{type(exc).__name__}")
+        errors.append(f"biquote:{type(exc).__name__}:{str(exc)[:120]}")
     try:
         candles = _gold_xaus_get_candles(tf, limit)
-        if len(candles) >= 15:
+        minimum = 10 if tf in ("2h", "4h") else 15
+        if len(candles) >= minimum:
             _GOLD_CANDLE_CACHE[cache_key] = (now, candles, "xaus_intraday")
             return candles
+        errors.append(f"xaus:insufficient_candles:{len(candles)}")
     except Exception as exc:
-        errors.append(f"xaus:{type(exc).__name__}")
+        errors.append(f"xaus:{type(exc).__name__}:{str(exc)[:120]}")
     if _get_twelve_api_key():
         try:
             candles = _twelve_get_candles(symbol, timeframe, outputsize)
