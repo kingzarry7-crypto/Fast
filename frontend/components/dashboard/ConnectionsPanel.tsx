@@ -142,6 +142,7 @@ export default function ConnectionsPanel() {
         setGoogle((current: any) => current || { configured: false, connected: false });
       }
     } catch (e) {
+      // Never erase an OAuth connection that was just verified by the callback.
       setMessage(e instanceof Error ? e.message : "Could not load official connector status");
       setGithub((current: any) => current || { configured: true, connected: false });
       setTiktok((current: any) => current || { configured: true, connected: false });
