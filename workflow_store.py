@@ -229,6 +229,43 @@ def add_event(workflow_id: str, user_id: str, event_type: str, payload: Dict[str
         conn.close()
 
 
+def list_events(workflow_id: str, user_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+    """Return user-scoped workflow events for live agent progress/evidence."""
+    limit = max(1, min(int(limit), 200))
+    conn = _conn()
+    if conn is None or not init_workflow_store():
+        return []
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT id,workflow_id,user_id,event_type,payload_json,created_at
+                   FROM kz_workflow_events
+                   WHERE workflow_id=%s AND user_id=%s
+                   ORDER BY created_at ASC LIMIT %s""",
+                (str(workflow_id), str(user_id), limit),
+            )
+            rows = cur.fetchall()
+            out = []
+            for row in rows:
+                payload = row[4]
+                if isinstance(payload, str):
+                    payload = json.loads(payload or "{}")
+                out.append({
+                    "id": str(row[0]),
+                    "workflow_id": str(row[1]),
+                    "user_id": str(row[2]),
+                    "event_type": str(row[3]),
+                    "payload": payload or {},
+                    "created_at": row[5].isoformat() if hasattr(row[5], "isoformat") else str(row[5]),
+                })
+            return out
+    except Exception:
+        return []
+    finally:
+        conn.close()
+
+
+
 def create_approval(workflow_id: str, step_id: str, user_id: str, preview: Dict[str, Any]) -> str:
     approval_id = str(uuid.uuid4())
     conn = _conn()
