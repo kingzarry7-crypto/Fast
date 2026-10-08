@@ -156,9 +156,11 @@ export default function ConnectionsPanel() {
   }
 
   function openCommerceBrowser(service: "fiverr" | "autods") {
-    setUrl(service === "fiverr" ? "https://auth.fiverr.com/login" : "https://www.autods.com/");
+    const target = service === "fiverr" ? "https://auth.fiverr.com/login" : "https://www.autods.com/";
+    setUrl(target);
     setAccountName(service === "fiverr" ? "Fiverr Account" : "AutoDS Account");
     setMessage("Sign in yourself in the isolated browser. KZ only marks the account connected after authenticated evidence is detected.");
+    void start(target);
   }
 
   async function connectGoogle() {
@@ -327,14 +329,15 @@ export default function ConnectionsPanel() {
     }
   }, [open]);
 
-  async function start() {
-    if (!url.trim()) return;
+  async function start(targetUrl?: string) {
+    const destination = (targetUrl || url).trim();
+    if (!destination) return;
     setBusy(true);
     setMessage("");
     try {
       const r = await fetch("/api/browser/connect/start", {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url.trim(), account_id: accountId }),
+        body: JSON.stringify({ url: destination, account_id: accountId }),
       });
       const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Could not open account");
