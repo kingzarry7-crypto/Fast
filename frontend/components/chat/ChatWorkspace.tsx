@@ -637,7 +637,8 @@ export default function ChatWorkspace({
           )}
 
           {visibleMessages.map((m) => (
-            <ChatMessage
+            <React.Fragment key={m.id}>
+              <ChatMessage
               key={m.id}
               id={m.id}
               role={m.role}
@@ -688,6 +689,7 @@ export default function ChatWorkspace({
                 </div>
               </div>
             )}
+            </React.Fragment>
           ))}
 
           {sending && (() => {
