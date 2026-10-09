@@ -329,7 +329,7 @@ export default function ChatWorkspace({
     setAttachError(null);
   };
 
-  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = e.clipboardData?.items;
     if (!items) return;
     for (const item of items) {
