@@ -56,6 +56,7 @@ export default function ChatWorkspace({
   );
   const [membership, setMembership] = useState<MembershipSnapshot | null>(null);
   const [input, setInput] = useState("");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [capability] = useState("AI");
   const [attached, setAttached] = useState<AttachedImage | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
@@ -547,13 +548,9 @@ export default function ChatWorkspace({
     ?.text?.trim()
     .slice(0, 64);
 
-  // Prevent accidental duplicate connector/approval messages from being shown twice.
-  const visibleMessages = messages.filter((message, index, list) => {
-    const key = `${message.role}::${String(message.text || "").trim()}`;
-    return list.findIndex((candidate) =>
-      `${candidate.role}::${String(candidate.text || "").trim()}` === key
-    ) === index;
-  });
+  // Preserve repeated messages: identical consecutive questions or answers are valid conversation history.
+  const visibleMessages = messages;
+  const lastAssistantId = [...messages].reverse().find((message) => message.role === "assistant")?.id;
 
   return (
     <div
@@ -675,6 +672,7 @@ export default function ChatWorkspace({
               timestamp={m.timestamp}
               status={m.status}
               isError={String(m.id || "").startsWith("error")}
+              isStreaming={sending && m.role === "assistant" && m.id === lastAssistantId}
               imagePreviewUrl={m.imagePreviewUrl}
               suggestions={m.suggestions}
               onSpeak={
@@ -819,14 +817,26 @@ export default function ChatWorkspace({
             </button>
             <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInputChange} />
 
-            <input
-              type="text"
+            <textarea
+              ref={inputRef}
+              rows={1}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value);
+                e.currentTarget.style.height = "auto";
+                e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 144)}px`;
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  e.currentTarget.form?.requestSubmit();
+                }
+              }}
               onPaste={handlePaste}
               placeholder="Message King Zarry AI…"
               disabled={sending || callMode}
-              className="min-w-0 flex-1 bg-transparent px-1 py-1.5 text-sm text-white placeholder-zinc-500 outline-none disabled:opacity-50"
+              aria-label="Message King Zarry AI"
+              className="max-h-36 min-w-0 flex-1 resize-none bg-transparent px-1 py-1.5 text-sm leading-6 text-white placeholder-zinc-500 outline-none disabled:opacity-50"
             />
 
             {voiceSupported && (
