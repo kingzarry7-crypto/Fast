@@ -17,6 +17,7 @@ type PluginResponse = {
   plugin_system?: string;
   connection_status_note?: string;
   tools?: PluginTool[];
+  providers?: Record<string, { connected?: boolean }>;
   detail?: string;
 };
 
