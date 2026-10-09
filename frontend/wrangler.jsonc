@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "king-zarry-ai-frontend",
+  "name": "fast",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-10-08",
   "compatibility_flags": ["nodejs_compat"],
