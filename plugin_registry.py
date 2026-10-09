@@ -202,6 +202,55 @@ class ToolCallRequest(BaseModel):
     tool: str = Field(min_length=3, max_length=100)
     arguments: Dict[str, Any] = Field(default_factory=dict)
 
+def _provider_configured(provider: str) -> bool:
+    state_secret = (os.getenv("CONNECTOR_STATE_SECRET") or os.getenv("SESSION_SECRET") or "").strip()
+    encryption_key = (os.getenv("KZ_CONNECTOR_ENCRYPTION_KEY") or "").strip()
+    if len(state_secret) < 32 or len(encryption_key) < 32:
+        return False
+    if provider == "github":
+        return bool(os.getenv("GITHUB_CLIENT_ID") and os.getenv("GITHUB_CLIENT_SECRET") and os.getenv("GITHUB_REDIRECT_URI"))
+    if provider == "google":
+        return bool(os.getenv("GOOGLE_CLIENT_ID") and os.getenv("GOOGLE_CLIENT_SECRET"))
+    if provider == "shopify":
+        return bool(os.getenv("SHOPIFY_CLIENT_ID") and os.getenv("SHOPIFY_CLIENT_SECRET"))
+    return False
+
+
+def tools_for_ai(user_id: str) -> list[Dict[str, Any]]:
+    """Return only read-only tools for providers linked to this user's account."""
+    connected = _connected_providers(user_id)
+    output = []
+    for tool in sorted(_TOOLS.values(), key=lambda item: item.name):
+        if tool.risk != "read_only" or tool.provider not in connected or not _provider_configured(tool.provider):
+            continue
+        output.append({
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": tool.parameters,
+        })
+    return output
+
+
+def execute_for_ai(user_id: str, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute a single registered read-only tool on behalf of a verified app user."""
+    tool = _TOOLS.get(str(name or ""))
+    if not tool:
+        raise ValueError("Unknown plugin tool")
+    if tool.risk != "read_only":
+        raise PermissionError("This action requires the provider approval workflow")
+    if not _provider_configured(tool.provider):
+        raise RuntimeError(f"{tool.provider} is not configured")
+    if tool.provider not in _connected_providers(user_id):
+        raise RuntimeError(f"{tool.provider} is not connected to this account")
+    if not isinstance(arguments, dict):
+        raise ValueError("Tool arguments must be an object")
+    _validate_arguments(tool.parameters, arguments)
+    result = tool.handler(user_id, arguments)
+    if not isinstance(result, dict):
+        raise RuntimeError("Tool returned an invalid result")
+    return {"tool": tool.name, "provider": tool.provider, "result": result}
+
+
 def _validate_arguments(schema: Dict[str, Any], arguments: Dict[str, Any]) -> None:
     props = schema.get("properties") or {}
     unknown = set(arguments) - set(props)
