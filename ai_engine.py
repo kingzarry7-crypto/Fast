@@ -2268,6 +2268,29 @@ class AIEngine:
         except Exception as e:
             logger.debug("Connected account context injection skipped: %s", e)
 
+        # --- Registered connector plugin tools ---
+        # Only tools for linked providers with required server configuration are shown.
+        # Tool calls are model-selected but executed by the server-side allowlisted registry.
+        plugin_tools = []
+        try:
+            from plugin_registry import tools_for_ai
+            plugin_tools = tools_for_ai(user_id)
+            if plugin_tools:
+                plugin_catalog = json.dumps(plugin_tools, ensure_ascii=False, separators=(",", ":"))
+                persistent_ctx = (
+                    persistent_ctx
+                    + "\n\n--- AVAILABLE CONNECTOR PLUGIN TOOLS (READ-ONLY) ---\n"
+                    + plugin_catalog
+                    + "\nIf one listed tool directly answers the user's request, request exactly one call using "
+                    + '<plugin_tool_call>{"name":"EXACT_TOOL_NAME","arguments":{}}</plugin_tool_call>. '
+                    + "Use only listed tool names and schema-valid arguments. Never invent results. "
+                    + "Do not use this mechanism for sending, writing, purchasing, publishing, or deleting. "
+                    + "After a tool result is supplied, answer using that result only.\n"
+                    + "--- END CONNECTOR PLUGIN TOOLS ---"
+                ).strip()
+        except Exception as e:
+            logger.debug("Connector plugin catalog skipped: %s", type(e).__name__)
+
         # --- Owner/Admin identity context ---
         # This is derived from configured admin IDs; no secret credentials are sent to the model.
         try:
@@ -2419,6 +2442,49 @@ class AIEngine:
                 "I'm having trouble reaching my AI providers right now. "
                 "The connection is being retried automatically — please send that message again in a few seconds."
             )
+
+        # --- Registered connector plugin execution ---
+        # Limit to one read-only tool per user turn; writes remain in approval-gated workflows.
+        try:
+            plugin_match = re.search(
+                r"<plugin_tool_call>\s*(\{.*?\})\s*</plugin_tool_call>",
+                first_response,
+                re.IGNORECASE | re.DOTALL,
+            )
+            if plugin_match:
+                request_obj = json.loads(plugin_match.group(1))
+                tool_name = str(request_obj.get("name") or "").strip()
+                tool_arguments = request_obj.get("arguments")
+                if not isinstance(tool_arguments, dict):
+                    tool_arguments = {}
+                from plugin_registry import execute_for_ai
+                tool_result = execute_for_ai(user_id, tool_name, tool_arguments)
+                result_json = json.dumps(tool_result, ensure_ascii=False, default=str)
+                second_prompt = (
+                    f"User request: {original_prompt}\n\n"
+                    f"Verified plugin execution result for {tool_name}:\n{result_json}\n\n"
+                    "Respond naturally and accurately using only the result above. "
+                    "If it contains an error or empty data, explain that honestly. "
+                    "Do not claim actions beyond this read-only tool occurred. "
+                    "Do not request or emit another tool call. Never reveal credentials, tokens, or internal implementation details."
+                )
+                second_resp = self._call_providers(second_prompt, history, None, persistent_ctx)
+                if second_resp:
+                    # Prevent an accidental second tool execution in the same turn.
+                    if re.search(r"<plugin_tool_call>|<universal_tool_call>", second_resp, re.IGNORECASE):
+                        second_resp = "I retrieved the requested data, but couldn't safely format the result. Please try again."
+                    final_clean = clean_ai_response(_sanitize_final_response(second_resp))
+                    if final_clean:
+                        self._save_memory(user_id, original_prompt, final_clean)
+                        logger.info("Plugin tool executed successfully: %s", tool_name)
+                        return final_clean
+                safe_result = json.dumps(tool_result.get("result", {}), ensure_ascii=False, default=str)
+                self._save_memory(user_id, original_prompt, safe_result)
+                return safe_result
+        except Exception as plugin_exc:
+            logger.warning("Connector plugin call blocked/failed: %s", type(plugin_exc).__name__)
+            # Do not fall through to a fabricated answer after the model requested a tool.
+            return "I couldn't complete that connected-app lookup. Please check that the account is connected and authorized, then try again."
 
         if _detect_forbidden_tool_attempts(first_response):
             logger.warning(f"Forbidden tool attempt blocked for user {user_id[:3]}***")
