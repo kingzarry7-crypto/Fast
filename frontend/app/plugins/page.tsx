@@ -93,15 +93,33 @@ export default function PluginsPage() {
 
           {data && <>
             <section className="grid gap-3 sm:grid-cols-3">
-              {Object.entries(data.providers || {}).map(([provider, state]) => (
-                <article key={provider} className="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.035] p-4">
-                  <p className="text-xs text-zinc-400">PROVIDER</p>
-                  <h2 className="mt-2 text-lg font-semibold">{labels[provider] || provider}</h2>
-                  <p className={"mt-2 text-[10px] font-mono-tech tracking-widest " + (state.connected ? "text-amber-200" : "text-zinc-500")}>
-                    {state.connected ? "LINK RECORD FOUND · NOT VERIFIED" : "NOT LINKED"}
-                  </p>
-                </article>
-              ))}
+              {(["google", "github", "shopify"] as const).map((provider) => {
+                const state = data.providers?.[provider];
+                const connected = Boolean(state?.connected);
+                const connectPath = provider === "google"
+                  ? "/api/connectors/google/start"
+                  : provider === "github"
+                    ? "/api/connectors/github/start"
+                    : "/api/connectors/shopify/start";
+                return (
+                  <article key={provider} className="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.035] p-4">
+                    <p className="text-xs text-zinc-400">PROVIDER</p>
+                    <h2 className="mt-2 text-lg font-semibold">{labels[provider]}</h2>
+                    <p className={"mt-2 text-[10px] font-mono-tech tracking-widest " + (connected ? "text-amber-200" : "text-zinc-500")}>
+                      {connected ? "LINK RECORD · VERIFY ACCESS" : "NOT CONNECTED"}
+                    </p>
+                    <a
+                      href={connectPath}
+                      className="mt-4 inline-flex w-full items-center justify-center rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-400/20"
+                    >
+                      {connected ? "RECONNECT / AUTHORIZE" : "CONNECT ACCOUNT"}
+                    </a>
+                    <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">
+                      {provider === "shopify" ? "Connect your Shopify store through the configured Shopify authorization flow." : provider === "google" ? "Choose and authorize your Google account." : "Authorize GitHub access for repositories."}
+                    </p>
+                  </article>
+                );
+              })}
             </section>
 
             <section className="space-y-3">
