@@ -581,18 +581,11 @@ async def shopify_start(request: Request, shop: str = "", return_url: str = ""):
     requested_return = str(return_url or "").strip().rstrip("/")
     callback_frontend = requested_return if _is_allowed_frontend_origin(requested_return) else _oauth_return_url(request)
 
-    # Preferred path: use Shopify's generated Dev Dashboard installation link.
-    # Shopify owns the account/store picker and permission screen; KZ never asks
-    # the merchant to paste a myshopify.com domain.
-    if not shop:
-        if not SHOPIFY_INSTALL_URL:
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "Shopify store picker is not configured. Set SHOPIFY_INSTALL_URL "
-                    "to the Shopify Dev Dashboard install link for this app."
-                ),
-            )
+    # Preferred path: if a Shopify Dev Dashboard install link is configured,
+    # let Shopify show its native store picker. Otherwise use the explicitly
+    # configured owner store (default: kingzarry-store.myshopify.com), so the
+    # merchant can connect without needing a separate install-link setting.
+    if not shop and SHOPIFY_INSTALL_URL:
         state = _sign_state({
             "provider": "shopify_install",
             "user_id": user_id,
@@ -613,9 +606,9 @@ async def shopify_start(request: Request, shop: str = "", return_url: str = ""):
         logger.info("SHOPIFY_MANAGED_INSTALL_START return=%s install_url_configured=true", callback_frontend)
         return response
 
-    # Direct store-specific OAuth remains available for backend/API callers that
-    # explicitly supply a validated shop. The dashboard never uses this branch.
-    store = _shopify_store(shop)
+    # Direct OAuth fallback is intentionally bound to SHOPIFY_STORE_DOMAIN when
+    # the dashboard does not supply a store. _shopify_store validates the host.
+    store = _shopify_store(shop or SHOPIFY_STORE_DOMAIN)
 
     state = _sign_state({"provider":"shopify","user_id":user_id,"store":store,"return_url":callback_frontend,"nonce":secrets.token_urlsafe(18),"exp":_now()+600})
     params={
