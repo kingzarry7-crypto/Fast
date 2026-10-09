@@ -1,6 +1,6 @@
 """KING ZARRY AI browser/computer operator."""
 from __future__ import annotations
-import json, os, re, threading, time
+import json, logging, os, re, threading, time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,6 +10,7 @@ try:
 except Exception:
     sync_playwright = None
     Page = Any
+logger = logging.getLogger(__name__)
 _LOCK = threading.RLock()
 _SESSIONS: Dict[str, Dict[str, Any]] = {}
 _PLAYWRIGHT = None
