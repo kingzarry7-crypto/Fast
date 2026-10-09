@@ -7,6 +7,7 @@ generic endpoint; consequential writes remain behind each connector's approval f
 from __future__ import annotations
 
 import hashlib
+import uuid
 import logging
 import os
 import re
@@ -73,6 +74,10 @@ def _user_id(request: Request) -> str:
     return value
 
 def _connected_providers(user_id: str) -> set[str]:
+    try:
+        uuid.UUID(str(user_id or '').strip())
+    except (ValueError, TypeError, AttributeError):
+        return set()
     with get_db_cursor(commit=False) as cur:
         cur.execute(
             """SELECT DISTINCT provider FROM web_connected_accounts
