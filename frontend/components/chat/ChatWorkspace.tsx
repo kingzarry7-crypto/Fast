@@ -112,18 +112,44 @@ export default function ChatWorkspace({
     }
   };
 
+  // Keep the latest send callback without tying the one-time dashboard handoff
+  // to its identity. useChat.send changes as sending/messages state changes; the
+  // old [send] effect could cancel its timer after consuming sessionStorage,
+  // causing the user's prompt to disappear without ever reaching the API.
+  const sendRef = useRef(send);
+  useEffect(() => {
+    sendRef.current = send;
+  }, [send]);
+
   useEffect(() => {
     const prompt = sessionStorage.getItem("kz-dashboard-prompt");
     if (!prompt) return;
     sessionStorage.removeItem("kz-dashboard-prompt");
     setInput(prompt);
     const timer = window.setTimeout(() => {
-      void send(prompt);
+      window.dispatchEvent(new CustomEvent("kz-core-state", {
+        detail: { state: "thinking", title: "Sending request", detail: prompt.slice(0, 90) },
+      }));
+      void sendRef.current(prompt).then((result) => {
+        const failed = !result;
+        window.dispatchEvent(new CustomEvent("kz-core-state", {
+          detail: {
+            state: failed ? "error" : "idle",
+            title: failed ? "Request needs attention" : "Response received",
+            detail: failed ? "Open chat to see the error and retry." : "King Zarry AI finished responding.",
+          },
+        }));
+      }).catch(() => {
+        window.dispatchEvent(new CustomEvent("kz-core-state", {
+          detail: { state: "error", title: "Request failed", detail: "Open chat to see the error and retry." },
+        }));
+      });
       setInput("");
-      window.dispatchEvent(new CustomEvent("kz-core-state", { detail: { state: "thinking", title: "Request sent", detail: prompt.slice(0, 90) } }));
     }, 120);
     return () => window.clearTimeout(timer);
-  }, [send]);
+    // This handoff must run once per ChatWorkspace mount, not whenever send changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const refresh = () =>
