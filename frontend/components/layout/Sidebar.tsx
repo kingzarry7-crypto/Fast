@@ -13,6 +13,7 @@ const baseNavItems = [
   { label: "Dashboard", href: "/dashboard", icon: "◆" },
   { label: "Chat", href: "/chat", icon: "◆" },
   { label: "Agent", href: "/agent", icon: "◆" },
+  { label: "Plugins", href: "/plugins", icon: "◇" },
   { label: "Admin", href: "/admin", icon: "◆" },
   { label: "Markets", href: "/markets", icon: "◆" },
   { label: "Signals", href: "/signals", icon: "◆" },
