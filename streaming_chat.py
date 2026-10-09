@@ -292,10 +292,14 @@ def _build_stream_generator(
             last_error = "empty_stream"
         except Exception as exc:
             last_error = f"{provider_name}:{type(exc).__name__}"
+            # Log the real, sanitized provider error so HTTP status/auth/route
+            # failures can be diagnosed from Railway without exposing API tokens.
+            safe_error = ai_engine._redact_secrets(str(exc))[:350]
             logger.warning(
-                "Streaming provider failed | provider=%s error=%s",
+                "Streaming provider failed | provider=%s error_type=%s detail=%s",
                 provider_name,
                 type(exc).__name__,
+                safe_error,
             )
             # Never append a second provider's full response after partial
             # output: that would duplicate text in the UI. The frontend can
@@ -317,9 +321,33 @@ def _build_stream_generator(
             })
             continue
 
+    # Streaming endpoints are not supported by every provider and can fail
+    # independently of normal chat. Make one final attempt through AIEngine's
+    # standard non-streaming provider router before reporting an error.
+    try:
+        logger.warning("Streaming providers exhausted; trying AIEngine fallback")
+        fallback_text = str(engine.ask(user_id, message) or "").strip()
+        if fallback_text:
+            cleaned = ai_engine.clean_ai_response(fallback_text).strip()
+            if cleaned:
+                engine._save_memory(user_id, message, cleaned)
+                yield _sse({"type": "start", "provider": "ai_engine_fallback"})
+                yield _sse({"type": "delta", "text": cleaned})
+                yield _sse({
+                    "type": "done",
+                    "conversation_id": conversation_id,
+                    "text": cleaned,
+                    "fallback": True,
+                    "provider": "ai_engine_fallback",
+                })
+                return
+    except Exception as exc:
+        safe_error = ai_engine._redact_secrets(str(exc))[:350]
+        logger.exception("AIEngine final fallback failed: %s", safe_error)
+
     yield _sse({
         "type": "error",
-        "message": "Streaming provider unavailable",
+        "message": "AI providers are temporarily unavailable. Please try again shortly.",
         "fallback": True,
         "provider": started_provider,
         "detail": last_error,
