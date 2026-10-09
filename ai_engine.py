@@ -2109,7 +2109,7 @@ class AIEngine:
             try:
                 resp = None
                 if provider == "cloudflare" and CLOUDFLARE_AI_TOKEN and not image:
-                    logger.info("AI provider attempt: cloudflare-workers-ai | model=@cf/meta/llama-3.1-8b-instruct")
+                    logger.info("AI provider attempt: cloudflare-workers-ai | model=@cf/meta/llama-3.1-8b-instruct-fast")
                     resp = self._cloudflare(prompt_text, history, image, persistent_ctx, casual)
                 elif provider == "openrouter" and OPENROUTER_API_KEY:
                     logger.info("AI provider attempt: openrouter | model=%s", OPENROUTER_MODEL)
@@ -2137,7 +2137,7 @@ class AIEngine:
                 logger.warning(
                     "AI provider failed | provider=%s | model=%s | error=%s",
                     provider,
-                    {"cloudflare": "@cf/meta/llama-3.1-8b-instruct", "openai": OPENAI_MODEL, "groq": GROQ_MODEL, "openrouter": OPENROUTER_MODEL,
+                    {"cloudflare": "@cf/meta/llama-3.1-8b-instruct-fast", "openai": OPENAI_MODEL, "groq": GROQ_MODEL, "openrouter": OPENROUTER_MODEL,
                      "chutes": CHUTES_MODEL, "gemini": GEMINI_MODEL}.get(provider, "unknown"),
                     last_err,
                 )
@@ -2822,7 +2822,7 @@ class AIEngine:
             return None
         messages = self._build_openai_messages(prompt, history, None, persistent_ctx, casual=casual)
         headers = {"Authorization": f"Bearer {CLOUDFLARE_AI_TOKEN}", "Content-Type": "application/json"}
-        payload = {"model": "@cf/meta/llama-3.1-8b-instruct", "messages": messages,
+        payload = {"model": "@cf/meta/llama-3.1-8b-instruct-fast", "messages": messages,
                    "temperature": 0.85 if casual else 0.7, "max_tokens": 1200 if not casual else 700}
         resp = self._request_with_retry(CLOUDFLARE_AI_URL, headers, payload, "cloudflare", max_retries=0, timeout=AI_PROVIDER_TIMEOUT)
         data = resp.json()
@@ -2905,7 +2905,7 @@ class AIEngine:
         return {
             "chain": self._get_provider_order(),
             "cloudflare_workers_ai": bool(CLOUDFLARE_AI_TOKEN),
-            "cloudflare_model": "@cf/meta/llama-3.1-8b-instruct",
+            "cloudflare_model": "@cf/meta/llama-3.1-8b-instruct-fast",
             "openrouter": bool(OPENROUTER_API_KEY),
             "groq": bool(GROQ_API_KEY),
             "gemini": bool(GEMINI_API_KEY),
