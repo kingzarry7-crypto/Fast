@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
 type PluginTool = {
@@ -41,7 +41,7 @@ export default function PluginsPanel() {
   const [data, setData] = useState<PluginResponse | null>(null);
   const [error, setError] = useState("");
 
-  async function loadPlugins() {
+  const loadPlugins = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -64,11 +64,11 @@ export default function PluginsPanel() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
-    if (open && !data && !loading) void loadPlugins();
-  }, [open]);
+    if (open && !data && !loading && !error) void loadPlugins();
+  }, [open, data, loading, error, loadPlugins]);
 
   return (
     <div className="relative shrink-0">
