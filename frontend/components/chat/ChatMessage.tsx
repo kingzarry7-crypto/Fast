@@ -154,13 +154,13 @@ export function ChatMessage({
           />
         ) : null}
 
-        <div className="whitespace-pre-wrap break-words">{displayContent}</div>
+        <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{displayContent}{isStreaming ? <span aria-hidden="true" className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-pulse rounded-full bg-cyan-300 align-baseline" /> : null}</div>
 
         {(timestamp || status || isStreaming) && (
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] tracking-wide text-cyan-100/45">
             {timestamp ? <span>{timestamp}</span> : null}
             {status ? <span>{status}</span> : null}
-            {isStreaming ? <span className="animate-pulse">streaming…</span> : null}
+            {isStreaming ? <span className="animate-pulse">generating</span> : null}
           </div>
         )}
 
