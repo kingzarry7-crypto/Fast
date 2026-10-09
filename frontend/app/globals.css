@@ -247,37 +247,3 @@ body:has(.kz-command-shell) {
 @media(max-width:900px){.kz-venture-layout{display:block}.kz-venture-sidebar{display:none}.kz-venture-main{display:flex;flex-direction:column;overflow:visible;min-height:auto}.kz-orbit-stage{height:660px;min-height:660px;flex:0 0 auto}.kz-venture-right{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.kz-provider-card{grid-column:1/-1}.kz-bottom-prompt{width:100%;order:2;margin:0 auto 10px}.kz-brand{min-width:0}.kz-brand b{font-size:10px}.kz-brand small{font-size:8px}.kz-venture-top{gap:12px;padding:0 12px}.kz-orbit-card{width:165px}.kz-core-anchor{transform:translate(-50%,-50%) scale(.9)}}
 @media(max-width:620px){.kz-venture-top{height:60px}.kz-brand-mark{width:34px;height:34px}.kz-brand b{font-size:9px}.kz-brand small{display:none}.kz-quick-search{height:38px;padding:0 10px;gap:6px}.kz-quick-search input{font-size:11px}.kz-top-actions{display:none}.kz-venture-main{padding:4px}.kz-orbit-stage{height:600px;min-height:600px;overflow:hidden}.kz-orbit{top:47%}.kz-core-anchor{top:47%;transform:translate(-50%,-50%) scale(.68)}.kz-orbit-card{width:135px;min-height:65px;padding:7px;gap:6px;border-radius:14px}.kz-module-icon{width:28px;height:28px;flex-basis:28px;font-size:14px}.kz-module-copy b{font-size:10px}.kz-module-copy small{font-size:7px;max-width:83px;overflow:hidden;text-overflow:ellipsis}.kz-module-copy em{font-size:6px;max-width:78px}.kz-module-arrow{font-size:15px}.kz-venture-right{display:flex;padding:0 5px}.kz-bottom-prompt{gap:7px;padding:8px}.kz-bottom-prompt input{font-size:11px}.kz-bottom-prompt a{font-size:8px;padding:0}.kz-info-card{padding:13px}.kz-info-row{gap:6px}.kz-info-row label{font-size:10px}}
 @media(prefers-reduced-motion:reduce){.kz-venture *, .kz-venture *:before,.kz-venture *:after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
-
-/* Slow ambient rotation around the central AI head. Keep the face itself still. */
-.kz-orbit-stage::before{
-  content:"";
-  position:absolute;
-  width:min(72%,680px);
-  aspect-ratio:1;
-  left:50%;
-  top:49%;
-  transform:translate(-50%,-50%);
-  border-radius:50%;
-  pointer-events:none;
-  z-index:-1;
-  background:conic-gradient(from 0deg,transparent 0deg,rgba(0,205,255,.02) 35deg,rgba(0,205,255,.2) 78deg,rgba(35,95,255,.04) 118deg,transparent 160deg,rgba(0,220,255,.16) 228deg,rgba(35,95,255,.03) 270deg,transparent 320deg);
-  filter:blur(24px);
-  animation:kz-head-ambience-rotate 52s linear infinite;
-}
-.kz-orbit-stage::after{
-  content:"";
-  position:absolute;
-  width:min(66%,620px);
-  aspect-ratio:1;
-  left:50%;
-  top:49%;
-  transform:translate(-50%,-50%);
-  border:1px solid rgba(0,208,255,.1);
-  border-radius:50%;
-  box-shadow:0 0 45px rgba(0,136,255,.06),inset 0 0 45px rgba(0,136,255,.04);
-  pointer-events:none;
-  z-index:-1;
-  animation:kz-head-ambience-rotate 78s linear infinite reverse;
-}
-@keyframes kz-head-ambience-rotate{from{rotate:0deg}to{rotate:360deg}}
-@media(prefers-reduced-motion:reduce){.kz-orbit-stage::before,.kz-orbit-stage::after{animation:none}}
