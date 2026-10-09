@@ -19,7 +19,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.7",
-    "@types/node": "22.10.7",
+    "@types/node": "26.6.4",
     "@types/react": "19.0.7",
     "@types/react-dom": "19.0.3",
     "eslint": "^9.0.0",
