@@ -160,7 +160,16 @@ export default function ConnectionsPanel() {
       const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Could not check Shopify connector");
       setShopify(d.shopify || null);
-      if (!d.shopify?.configured) throw new Error("Shopify connector is not configured on KZ.");
+      if (!d.shopify?.configured) {
+        const missing = Array.isArray(d.shopify?.missing_configuration)
+          ? d.shopify.missing_configuration.filter((x: unknown) => typeof x === "string")
+          : [];
+        throw new Error(
+          missing.length
+            ? "Shopify is not ready. Add these missing Railway variables: " + missing.join(", ")
+            : "Shopify is not configured on the Railway backend."
+        );
+      }
       // If SHOPIFY_INSTALL_URL exists, the backend opens Shopify's native
       // store picker. Otherwise it securely falls back to SHOPIFY_STORE_DOMAIN,
       // which defaults to kingzarry-store.myshopify.com.
