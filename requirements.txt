@@ -17,5 +17,5 @@ fastapi==0.142.2
 uvicorn[standard]==0.32.1
 python-multipart==0.0.31
 email-validator==2.2.0
-stripe==11.4.1
+stripe==16.0.0
 playwright==1.49.1
