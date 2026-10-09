@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 type PluginTool = {
   name: string;
@@ -131,6 +132,9 @@ export default function PluginsPanel() {
                   ))}
                   {!loading && !(data.tools || []).length && <p className="py-4 text-center text-xs text-zinc-500">No registered plugins were returned by the server.</p>}
                 </div>
+                <Link href="/plugins" className="mt-3 flex items-center justify-center rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-2.5 text-xs font-semibold text-cyan-100 hover:bg-cyan-400/20">
+                  CONNECT / MANAGE PLUGINS →
+                </Link>
                 <p className="mt-3 rounded-lg border border-amber-400/15 bg-amber-400/[0.035] p-3 text-[10px] leading-relaxed text-amber-100/65">
                   {data.connection_status_note || "A linked record alone does not prove the provider is authorized. Verify a real tool request before relying on its data."}
                 </p>
