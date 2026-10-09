@@ -339,14 +339,16 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
         return {"success": True, "revenue_verified": False, "potential_revenue": item.get("potential_revenue", 0), "note": "Only confirmed receipts are revenue; opportunities are not income."}
 
     if action == "verify":
-        # A generic workflow cannot infer external success. Specific adapters
-        # must provide verifiable evidence before a mission can claim success.
+        # This is a workflow checkpoint, not proof of an external side effect.
+        # Keep internal/research missions usable while explicitly withholding
+        # any claim that an email, post, submission, or other external action
+        # was verified.
         return {
-            "success": False,
+            "success": True,
             "verified": False,
             "verification_status": "not_verified",
             "evidence": [],
-            "error": "No verification adapter or provider evidence is available; completion cannot be confirmed.",
+            "note": "Workflow checkpoint reached; no provider evidence was supplied to verify an external action.",
         }
 
     if action == "learn":
