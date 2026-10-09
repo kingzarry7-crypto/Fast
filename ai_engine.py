@@ -101,6 +101,10 @@ OPENAI_API_KEY = clean_env_str(os.getenv("OPENAI_API_KEY"))
 OPENAI_MODEL = clean_env_str(os.getenv("OPENAI_MODEL"), "gpt-5.4-nano")
 OPENAI_URL = clean_env_str(os.getenv("OPENAI_URL"), "https://api.openai.com/v1/chat/completions")
 
+# Cloudflare Workers AI is the free-tier primary; provider chain fails over when quota is exhausted.
+CLOUDFLARE_AI_URL = clean_env_str(os.getenv("CLOUDFLARE_AI_URL"), "https://kingzarry-ai-inference.kingzarry7.workers.dev/v1/chat/completions")
+CLOUDFLARE_AI_TOKEN = clean_env_str(os.getenv("CLOUDFLARE_AI_TOKEN"))
+
 # Keep normal chat responsive: fail over quickly instead of repeated long waits.
 AI_PROVIDER_TIMEOUT = max(8, int(clean_env_str(os.getenv("AI_PROVIDER_TIMEOUT"), "12")))
 AI_PROVIDER_RETRIES = max(0, int(clean_env_str(os.getenv("AI_PROVIDER_RETRIES"), "0")))
@@ -1838,10 +1842,10 @@ class AIEngine:
     def _get_provider_order(self, provider_override: Optional[str] = None) -> List[str]:
         if provider_override:
             provider = str(provider_override).strip().lower()
-            if provider in {"openai", "groq", "openrouter", "chutes", "gemini"}:
-                return [provider] + [p for p in ["openai", "groq", "openrouter", "chutes", "gemini"] if p != provider]
-        # Paid OpenAI first, then independent provider fallbacks.
-        return ["openai", "groq", "openrouter", "chutes", "gemini"]
+            if provider in {"cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"}:
+                return [provider] + [p for p in ["cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"] if p != provider]
+        # Free Cloudflare Workers AI first; daily quota/errors fall through to configured providers.
+        return ["cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"]
 
     def _should_use_tavily(self, prompt: str) -> bool:
         if not self._tavily_module:
@@ -2104,7 +2108,10 @@ class AIEngine:
         for provider in finite_providers:
             try:
                 resp = None
-                if provider == "openrouter" and OPENROUTER_API_KEY:
+                if provider == "cloudflare" and CLOUDFLARE_AI_TOKEN and not image:
+                    logger.info("AI provider attempt: cloudflare-workers-ai | model=@cf/meta/llama-3.1-8b-instruct")
+                    resp = self._cloudflare(prompt_text, history, image, persistent_ctx, casual)
+                elif provider == "openrouter" and OPENROUTER_API_KEY:
                     logger.info("AI provider attempt: openrouter | model=%s", OPENROUTER_MODEL)
                     resp = self._openrouter(prompt_text, history, image, persistent_ctx, casual)
                 elif provider == "groq" and GROQ_API_KEY:
@@ -2130,7 +2137,7 @@ class AIEngine:
                 logger.warning(
                     "AI provider failed | provider=%s | model=%s | error=%s",
                     provider,
-                    {"openai": OPENAI_MODEL, "groq": GROQ_MODEL, "openrouter": OPENROUTER_MODEL,
+                    {"cloudflare": "@cf/meta/llama-3.1-8b-instruct", "openai": OPENAI_MODEL, "groq": GROQ_MODEL, "openrouter": OPENROUTER_MODEL,
                      "chutes": CHUTES_MODEL, "gemini": GEMINI_MODEL}.get(provider, "unknown"),
                     last_err,
                 )
@@ -2140,6 +2147,7 @@ class AIEngine:
             finite_providers,
             last_err or "no configured provider returned a response",
             [p for p in finite_providers if (
+                (p == "cloudflare" and CLOUDFLARE_AI_TOKEN) or
                 (p == "openai" and OPENAI_API_KEY) or
                 (p == "groq" and GROQ_API_KEY) or
                 (p == "openrouter" and OPENROUTER_API_KEY) or
@@ -2808,6 +2816,23 @@ class AIEngine:
         logger.warning("OpenAI returned an empty message | choice_keys=%s", list(message.keys())[:20])
         return None
 
+    def _cloudflare(self, prompt: str, history: List[dict], image: Optional[Tuple[str, bytes]], persistent_ctx: str = "", casual: bool = False) -> Optional[str]:
+        # Workers AI currently handles text chat here; images fall through to vision-capable providers.
+        if not CLOUDFLARE_AI_TOKEN or image:
+            return None
+        messages = self._build_openai_messages(prompt, history, None, persistent_ctx, casual=casual)
+        headers = {"Authorization": f"Bearer {CLOUDFLARE_AI_TOKEN}", "Content-Type": "application/json"}
+        payload = {"model": "@cf/meta/llama-3.1-8b-instruct", "messages": messages,
+                   "temperature": 0.85 if casual else 0.7, "max_tokens": 1200 if not casual else 700}
+        resp = self._request_with_retry(CLOUDFLARE_AI_URL, headers, payload, "cloudflare", max_retries=0, timeout=AI_PROVIDER_TIMEOUT)
+        data = resp.json()
+        choices = data.get("choices") or []
+        if not choices:
+            return None
+        message = choices[0].get("message") or {}
+        content = message.get("content")
+        return content if isinstance(content, str) and content.strip() else None
+
     def _gemini(self, prompt: str, history: List[dict], image: Optional[Tuple[str, bytes]], persistent_ctx: str = "", casual: bool = False) -> Optional[str]:
         if not GEMINI_API_KEY:
             return None
@@ -2879,6 +2904,8 @@ class AIEngine:
         """Return a summary of configured providers. No secrets exposed."""
         return {
             "chain": self._get_provider_order(),
+            "cloudflare_workers_ai": bool(CLOUDFLARE_AI_TOKEN),
+            "cloudflare_model": "@cf/meta/llama-3.1-8b-instruct",
             "openrouter": bool(OPENROUTER_API_KEY),
             "groq": bool(GROQ_API_KEY),
             "gemini": bool(GEMINI_API_KEY),
