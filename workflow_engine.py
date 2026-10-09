@@ -323,16 +323,31 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
         return {"success": True, "risk_review": "Existing Risk Guardian remains authoritative.", "markets_reviewed": len(markets)}
 
     if action == "external_action":
-        # We never invent an external execution adapter. Supported actions are
-        # handed to the existing Action Gateway after approval.
+        # Never mark a mission step as successful merely because an action was
+        # prepared. workflow_api may replace this handler with the existing
+        # Action Gateway adapter; without that adapter, report a blocked action
+        # instead of letting the mission appear completed.
         preview = step.get("output") or item.get("result", {}).get("approval_preview") or {}
-        return {"success": True, "awaiting_execution_adapter": True, "approval_preview": preview}
+        return {
+            "success": False,
+            "error": "No verified execution adapter is available for this action. Nothing was sent or changed.",
+            "execution_status": "blocked_no_adapter",
+            "approval_preview": preview,
+        }
 
     if action == "verify_revenue":
         return {"success": True, "revenue_verified": False, "potential_revenue": item.get("potential_revenue", 0), "note": "Only confirmed receipts are revenue; opportunities are not income."}
 
     if action == "verify":
-        return {"success": True, "verified": True}
+        # A generic workflow cannot infer external success. Specific adapters
+        # must provide verifiable evidence before a mission can claim success.
+        return {
+            "success": False,
+            "verified": False,
+            "verification_status": "not_verified",
+            "evidence": [],
+            "error": "No verification adapter or provider evidence is available; completion cannot be confirmed.",
+        }
 
     if action == "learn":
         summary = {
