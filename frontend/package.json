@@ -14,7 +14,7 @@
     "cf:deploy": "opennextjs-cloudflare build && wrangler deploy"
   },
   "dependencies": {
-    "next": "15.5.27",
+    "next": "16.4.0",
     "react": "19.0.0",
     "react-dom": "19.0.0"
   },
