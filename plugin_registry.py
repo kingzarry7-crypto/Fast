@@ -255,9 +255,9 @@ def list_plugins(request: Request) -> Dict[str, Any]:
             "parameters": tool.parameters,
             "risk": tool.risk,
             "available": configured and tool.provider in connected,
-            "connection_status": "connected" if tool.provider in connected else ("not_configured" if not configured else "disconnected"),
+            "connection_status": "linked_unverified" if tool.provider in connected else ("not_configured" if not configured else "disconnected"),
         })
-    return {"status": "success", "plugin_system": "registry-v1", "tools": tools,
+    return {"status": "success", "plugin_system": "registry-v1", "connection_status_note": "linked_unverified means a token record exists; provider authentication is verified only when a real tool call succeeds.", "tools": tools,
             "providers": {name: {"connected": name in connected} for name in sorted({x.provider for x in _TOOLS.values()})}}
 
 @router.post("/execute")
