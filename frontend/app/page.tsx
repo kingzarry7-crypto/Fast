@@ -1,74 +1,116 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AICore from "@/components/AICore";
 import { useAuth } from "@/hooks/useAuth";
 
+const FEATURES = [
+  ["AI WORKFLOWS", "Prepare tasks and review them before execution"],
+  ["LIVE INTELLIGENCE", "Market context, signals and news in one place"],
+  ["SHARED MEMORY", "A consistent assistant experience across channels"],
+  ["CONNECTED SERVICES", "Manage authorized services from your dashboard"],
+];
+
 export default function LandingPage() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
+  const [introDone, setIntroDone] = useState(false);
 
-  // Logged-in users skip landing → dashboard
   useEffect(() => {
-    if (!isLoading && user) {
-      router.replace("/dashboard");
-    }
+    if (!isLoading && user) router.replace("/dashboard");
   }, [isLoading, user, router]);
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#020914]">
-        <p className="font-mono-tech text-[10px] tracking-[0.35em] text-cyan-400/50">
-          INITIALIZING…
-        </p>
-      </div>
-    );
-  }
+  useEffect(() => {
+    const timer = window.setTimeout(() => setIntroDone(true), 900);
+    return () => window.clearTimeout(timer);
+  }, []);
 
-  if (user) {
+  if (isLoading || user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#020914]">
-        <p className="font-mono-tech text-[10px] tracking-[0.35em] text-cyan-400/50">
-          ENTERING COMMAND CENTRE…
-        </p>
+      <div className="flex min-h-[100dvh] items-center justify-center overflow-hidden bg-[#040b1a]">
+        <div className="text-center">
+          <AICore state="thinking" size={150} />
+          <p className="mt-5 font-mono-tech text-[10px] tracking-[0.35em] text-cyan-200/60">
+            {user ? "ENTERING COMMAND CENTRE…" : "INITIALIZING KING ZARRY AI…"}
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[#020914] px-6 py-16">
-      <div className="w-full max-w-3xl text-center">
-        <AICore state="idle" size={200} />
-        <p className="mt-8 font-mono-tech text-[10px] tracking-[0.4em] text-cyan-400/50">
-          COMMAND CENTRE
-        </p>
-        <h1 className="mt-3 font-display text-4xl font-bold tracking-wider text-white md:text-6xl">
-          KING ZARRY <span className="text-cyan-400">AI</span>
-        </h1>
-        <p className="mt-6 text-base leading-relaxed text-cyan-200/70 md:text-lg">
-          Multi-timeframe signals, persistent memory, live news, and generative
-          media — your trading intelligence command centre.
-        </p>
-        <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-          <Link
-            href="/login"
-            className="rounded-lg bg-cyan-400 px-8 py-3 font-display text-sm font-bold tracking-[0.2em] text-black transition-all hover:bg-cyan-300"
-          >
-            ENTER COMMAND CENTRE
-          </Link>
-          <Link
-            href="/register"
-            className="rounded-lg border border-cyan-500/30 px-8 py-3 font-mono-tech text-sm tracking-widest text-cyan-300 transition-all hover:bg-cyan-950/40"
-          >
-            CREATE ACCOUNT
-          </Link>
-        </div>
-        <p className="mt-8 font-mono-tech text-[10px] tracking-widest text-cyan-400/30">
-          Already signed in? You will be redirected to the dashboard.
-        </p>
+    <main className="relative isolate flex min-h-[100dvh] items-center justify-center overflow-hidden bg-[#040b1a] px-5 py-12 text-[#dff7ff]">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+        <div className="absolute -inset-[20%] animate-[kz-aurora_18s_ease-in-out_infinite_alternate] bg-[radial-gradient(ellipse_at_25%_30%,rgba(56,214,255,.23),transparent_32%),radial-gradient(ellipse_at_75%_65%,rgba(242,199,107,.14),transparent_32%),radial-gradient(ellipse_at_60%_20%,rgba(120,90,255,.16),transparent_35%)]" />
+        <div className="absolute inset-0 opacity-35" style={{ backgroundImage: "radial-gradient(rgba(223,247,255,.7) .7px,transparent .7px)", backgroundSize: "34px 34px" }} />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_15%,rgba(2,6,16,.78)_100%)]" />
       </div>
-    </div>
+
+      <div className={"relative z-10 mx-auto w-full max-w-5xl transition-all duration-1000 " + (introDone ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0")}>
+        <div className="grid items-center gap-10 md:grid-cols-[1.05fr_.95fr] md:gap-12">
+          <section className="text-center md:text-left">
+            <div className="mx-auto mb-5 w-fit rounded-full border border-cyan-200/20 bg-[#08162f]/60 px-4 py-2 font-mono-tech text-[9px] tracking-[0.3em] text-cyan-100/70 backdrop-blur md:mx-0">
+              PERSONAL AI · COMMAND CENTRE
+            </div>
+            <div className="mx-auto max-w-[220px] md:mx-0">
+              <AICore state="idle" size={210} />
+            </div>
+            <h1 className="mt-4 font-display text-4xl font-bold tracking-[0.08em] text-white drop-shadow-[0_0_30px_rgba(56,214,255,.25)] sm:text-5xl lg:text-6xl">
+              KING ZARRY <span className="text-[#f2c76b]">AI</span>
+            </h1>
+            <p className="mt-5 max-w-xl text-sm leading-7 text-cyan-50/65 sm:text-base">
+              Your trading and intelligence assistant — bringing conversations, market context, news, connected services and approved workflows together in one command centre.
+            </p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row md:justify-start">
+              <Link href="/login" className="rounded-xl bg-[linear-gradient(110deg,#38d6ff,#63a7ff)] px-7 py-3.5 text-center font-display text-xs font-bold tracking-[0.2em] text-[#021024] shadow-[0_0_30px_rgba(56,214,255,.18)] transition hover:brightness-110">
+                ENTER COMMAND CENTRE
+              </Link>
+              <Link href="/register" className="rounded-xl border border-cyan-100/20 bg-[#08162f]/50 px-7 py-3.5 text-center font-mono-tech text-xs tracking-[0.18em] text-cyan-100/85 transition hover:border-cyan-200/50 hover:bg-cyan-300/10">
+                CREATE ACCOUNT
+              </Link>
+            </div>
+            <p className="mt-5 font-mono-tech text-[9px] tracking-widest text-cyan-100/30">SECURE SIGN-IN · YOUR ACCOUNT · YOUR APPROVALS</p>
+          </section>
+
+          <section className="rounded-[24px] border border-cyan-300/15 bg-[linear-gradient(145deg,rgba(8,22,47,.78),rgba(4,11,26,.72))] p-5 shadow-[0_24px_90px_rgba(0,0,0,.35)] backdrop-blur-2xl sm:p-7">
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-display text-sm font-bold tracking-[0.18em] text-white">BUILT FOR YOUR WORKFLOW</h2>
+                <p className="mt-1 text-xs text-cyan-100/45">A single place to manage your AI tools</p>
+              </div>
+              <span className="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_14px_rgba(56,214,255,.8)]" />
+            </div>
+            <div className="space-y-3">
+              {FEATURES.map(([title, detail], index) => (
+                <div key={title} className="flex gap-4 rounded-2xl border border-cyan-100/10 bg-[#040b1a]/45 p-4 transition hover:border-cyan-200/25 hover:bg-cyan-300/[0.04]">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-cyan-200/15 bg-cyan-300/[0.07] font-mono-tech text-xs text-[#f2c76b]">
+                    0{index + 1}
+                  </span>
+                  <div>
+                    <h3 className="font-display text-[11px] font-bold tracking-[0.14em] text-cyan-50">{title}</h3>
+                    <p className="mt-1 text-xs leading-5 text-cyan-50/50">{detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-5 text-[10px] leading-5 text-cyan-100/35">
+              Service status is shown inside the app based on available connection evidence — not decorative demo labels.
+            </p>
+          </section>
+        </div>
+      </div>
+      <style jsx global>{`
+        @keyframes kz-aurora {
+          0% { transform: translate3d(-1%, -1%, 0) rotate(-2deg) scale(1); }
+          100% { transform: translate3d(3%, 2%, 0) rotate(5deg) scale(1.08); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .animate-\\[kz-aurora_18s_ease-in-out_infinite_alternate\\] { animation: none !important; }
+          * { scroll-behavior: auto !important; }
+        }
+      `}</style>
+    </main>
   );
 }
