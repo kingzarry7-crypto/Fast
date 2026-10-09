@@ -109,15 +109,18 @@ class SharedMemory:
         return getattr(self.legacy, method)(str(user_id), *args, **kwargs)
 
     def register_user(self, user_id, **kwargs):
+        # Callers may pass a platform explicitly. Avoid forwarding it twice.
+        platform = str(kwargs.pop("platform", None) or self.platform or "unknown")
         if self.shared:
             self._migrate_user(user_id)
             try:
-                return self.shared.register_user(self._key(user_id), platform=self.platform, **kwargs)
-            except Exception:
-                pass
-        return self.legacy.register_user(str(user_id), platform=self.platform, **kwargs)
+                return self.shared.register_user(self._key(user_id), platform=platform, **kwargs)
+            except Exception as exc:
+                logger.warning("Shared memory register_user failed; using SQLite fallback: %s", type(exc).__name__)
+        return self.legacy.register_user(str(user_id), platform=platform, **kwargs)
 
     def update_user_profile(self, user_id, **kwargs):
+        kwargs.pop("platform", None)
         return self._use("update_user_profile", user_id, platform=self.platform, **kwargs)
 
     def get_user_profile(self, user_id):
