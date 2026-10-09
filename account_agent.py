@@ -23,6 +23,15 @@ _SLEEP_START = os.getenv("KZ_SLEEP_START", "23:00")
 _SLEEP_END = os.getenv("KZ_SLEEP_END", "07:00")
 
 
+def _is_web_user_uuid(value: Any) -> bool:
+    """Only web-user UUIDs may be used against UUID-scoped connector tables."""
+    try:
+        uuid.UUID(str(value or "").strip())
+        return True
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
 def channel_user_id(platform: str, external_id: str) -> str:
     """Return the shared workflow identity for any channel."""
     resolved = web_user_id(platform, external_id)
