@@ -56,7 +56,6 @@ export default function ChatWorkspace({
   );
   const [membership, setMembership] = useState<MembershipSnapshot | null>(null);
   const [input, setInput] = useState("");
-  const [activityTick, setActivityTick] = useState(0);
   const [capability] = useState("AI");
   const [attached, setAttached] = useState<AttachedImage | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
@@ -205,15 +204,6 @@ export default function ChatWorkspace({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, sending, autoSpeak]);
-
-  useEffect(() => {
-    if (!sending) {
-      setActivityTick(0);
-      return;
-    }
-    const timer = window.setInterval(() => setActivityTick((value) => value + 1), 1800);
-    return () => window.clearInterval(timer);
-  }, [sending]);
 
   useEffect(() => {
     if (!callMode || !callStartedAt) {
@@ -732,16 +722,11 @@ export default function ChatWorkspace({
           ))}
 
           {sending && (() => {
-            const lastUserText = [...messages].reverse().find((message) => message.role === "user")?.text || "";
-            const lower = lastUserText.toLowerCase();
-            const webWork = /\b(search|research|browse|browser|look up|latest|today|news|website|web|google)\b/.test(lower);
-            const accountWork = /\b(gmail|email|mail|drive|calendar|account|send|compose|draft)\b/.test(lower);
-            const phases = webWork
-              ? ["Searching the web…", "Reading sources…", "Checking the latest information…", "Preparing the answer…"]
-              : accountWork
-                ? ["Checking your connected account…", "Preparing the requested action…", "Verifying the details…", "Preparing the answer…"]
-                : ["Thinking…", "Working on it…", "Preparing the answer…"];
-            const label = phases[activityTick % phases.length];
+            const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant" && message.status);
+            const rawStatus = latestAssistant?.status || "";
+            const label = rawStatus.startsWith("KZ AGENT •")
+              ? `King Zarry AI agent: ${rawStatus.slice("KZ AGENT •".length).trim()}`
+              : "King Zarry AI is processing your message…";
             return (
               <div className="flex items-center gap-3 px-1 py-3" aria-live="polite">
                 <div className="flex min-w-0 flex-1 items-center gap-2.5">
