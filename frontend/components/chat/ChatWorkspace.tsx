@@ -113,6 +113,19 @@ export default function ChatWorkspace({
   };
 
   useEffect(() => {
+    const prompt = sessionStorage.getItem("kz-dashboard-prompt");
+    if (!prompt) return;
+    sessionStorage.removeItem("kz-dashboard-prompt");
+    setInput(prompt);
+    const timer = window.setTimeout(() => {
+      void send(prompt);
+      setInput("");
+      window.dispatchEvent(new CustomEvent("kz-core-state", { detail: { state: "thinking", title: "Request sent", detail: prompt.slice(0, 90) } }));
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [send]);
+
+  useEffect(() => {
     const refresh = () =>
       setMembership(getMembershipSnapshot(user?.id, user?.is_subscribed));
     refresh();
