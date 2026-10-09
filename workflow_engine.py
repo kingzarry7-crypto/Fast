@@ -378,6 +378,37 @@ def run_workflow(workflow_id: str, user_id: str) -> Dict[str, Any]:
         if item["status"] in {WorkflowStatus.COMPLETED.value, WorkflowStatus.FAILED.value}:
             return item
 
+        # Crash recovery must be conservative. A RUNNING step may have
+        # completed an external side effect immediately before the process died.
+        # Never replay it automatically: doing so could send duplicate emails,
+        # submit duplicate applications, or repeat a browser action. Mark the
+        # workflow for review and require an explicit new attempt after checking
+        # provider/browser evidence.
+        interrupted = next(
+            (s for s in item.get("plan", [])
+             if s.get("status") == StepStatus.RUNNING.value),
+            None,
+        )
+        if interrupted:
+            interrupted["status"] = StepStatus.FAILED.value
+            interrupted["error"] = (
+                "Execution was interrupted while this step was running. "
+                "It was not retried automatically because the external result "
+                "may already have occurred. Check provider/browser evidence before retrying."
+            )
+            item.setdefault("result", {})["recovery_required"] = {
+                "step_id": interrupted.get("id"),
+                "action": interrupted.get("action"),
+                "reason": "interrupted_execution_not_replayed",
+            }
+            _update(item, WorkflowStatus.FAILED.value)
+            add_event(
+                item["id"], item["user_id"], "recovery_required",
+                {"step_id": interrupted.get("id"), "action": interrupted.get("action"),
+                 "reason": "interrupted_execution_not_replayed"},
+            )
+            return item
+
         _update(item, WorkflowStatus.RESEARCHING.value)
         for step in item.get("plan", []):
             if step.get("status") in {StepStatus.COMPLETED.value, StepStatus.SKIPPED.value}:
