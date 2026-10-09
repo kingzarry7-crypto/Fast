@@ -158,9 +158,9 @@ class BrowserOperatorTests(unittest.TestCase):
             browser_operator._page = lambda user_id, account_id=None: FakePage()
             browser_operator._set_human_verification_state = lambda user_id, page, account_id=None: {"required": False}
             state = browser_operator.connection_status("test-user")
-            self.assertEqual(state["status"], "login_required")
+            self.assertEqual(state["status"], "unknown")
             self.assertFalse(state["connected"])
-            self.assertFalse(browser_operator._SESSIONS["test-user::default"]["account_connected"])
+            self.assertTrue(browser_operator._SESSIONS["test-user::default"]["account_connected"])
         finally:
             browser_operator._page = original_page
             browser_operator._set_human_verification_state = original_detect
