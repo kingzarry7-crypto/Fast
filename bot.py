@@ -78,6 +78,67 @@ def env_int(name, default=0):
         return default
 
 TELEGRAM_BOT_TOKEN = clean_env_str(os.getenv("TELEGRAM_BOT_TOKEN"))
+
+# Telegram getUpdates allows only one active poller per bot token. Railway can
+# briefly overlap replicas during deploys, so use the existing Neon database
+# as a distributed singleton lock when available. The lock is session-scoped
+# and is released automatically if this process dies or the DB connection closes.
+_TELEGRAM_POLL_LOCK_CONN = None
+
+
+def acquire_telegram_poll_lock():
+    global _TELEGRAM_POLL_LOCK_CONN
+    database_url = clean_env_str(os.getenv("DATABASE_URL"))
+    if not database_url:
+        logger.warning("⚠️ TELEGRAM_POLL_LOCK: DATABASE_URL unavailable; using Telegram's own conflict detection.")
+        return True
+
+    try:
+        import hashlib
+        import psycopg2
+
+        digest = hashlib.sha256(TELEGRAM_BOT_TOKEN.encode("utf-8")).digest()
+        # Stable signed 63-bit advisory-lock key derived from the bot token.
+        lock_id = int.from_bytes(digest[:8], "big", signed=False) & 0x7FFFFFFFFFFFFFFF
+
+        conn = psycopg2.connect(database_url, connect_timeout=8)
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute("SELECT pg_try_advisory_lock(%s)", (lock_id,))
+            acquired = bool(cur.fetchone()[0])
+
+        if not acquired:
+            conn.close()
+            print("🛑 TELEGRAM POLLER LOCK BUSY: another KZ instance is already running Telegram polling.", flush=True)
+            print("➡️ Stop the duplicate Railway deployment/replica before starting this one.", flush=True)
+            return False
+
+        _TELEGRAM_POLL_LOCK_CONN = conn
+        print("🔐 TELEGRAM POLLER LOCK ACQUIRED: single active KZ poller.", flush=True)
+        return True
+    except Exception as exc:
+        # Do not make a database outage take down an otherwise healthy Telegram bot.
+        logger.warning("⚠️ TELEGRAM_POLL_LOCK unavailable (%s); continuing with Telegram conflict protection.", exc)
+        return True
+
+
+def release_telegram_poll_lock():
+    global _TELEGRAM_POLL_LOCK_CONN
+    conn = _TELEGRAM_POLL_LOCK_CONN
+    _TELEGRAM_POLL_LOCK_CONN = None
+    if conn is None:
+        return
+    try:
+        with conn.cursor() as cur:
+            # Closing the session also releases the advisory lock.
+            cur.execute("SELECT pg_advisory_unlock_all()")
+    except Exception:
+        pass
+    try:
+        conn.close()
+    except Exception:
+        pass
+
 XAI_API_KEY = clean_env_str(os.getenv("XAI_API_KEY") or os.getenv("GROK_API_KEY"))
 XAI_BASE_URL = clean_env_str(os.getenv("XAI_BASE_URL"), "https://api.x.ai/v1")
 XAI_MODEL = clean_env_str(os.getenv("XAI_MODEL") or os.getenv("GROK_MODEL"), "grok-4")
@@ -4686,6 +4747,9 @@ def main():
     print("🔵 MAIN: about to call run_polling() — Telegram should now be LIVE", flush=True)
     print("👑 King Zarry AI Telegram Bot is online - MTF + News + Late Entry + Exhaustion + Planner + Agnes Media", flush=True)
 
+    if not acquire_telegram_poll_lock():
+        raise SystemExit(2)
+
     try:
         application.run_polling(drop_pending_updates=True, allowed_updates=["message", "pre_checkout_query"])
     except Conflict as e:
@@ -4717,6 +4781,8 @@ def main():
     except Exception as e:
         print(f"❌ run_polling() crashed: {type(e).__name__}: {e}", flush=True)
         raise
+    finally:
+        release_telegram_poll_lock()
 
 if __name__ == "__main__":
     try:
