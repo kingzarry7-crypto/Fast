@@ -17,16 +17,39 @@ This follows the same core pattern as modern connected-app systems: provider aut
 
 ## Railway environment variables
 
-Set these on the backend:
+Set these on the backend service in Railway. Never commit secret values.
+
+### Shared connector security
+
+- `CONNECTOR_STATE_SECRET` — long random secret, at least 32 characters
+- `KZ_CONNECTOR_ENCRYPTION_KEY` — a different long random secret, at least 32 characters
+- `FRONTEND_URL` — the production KZ frontend origin, e.g. `https://kingzarry.bid`
+
+### GitHub
 
 - `GITHUB_CLIENT_ID`
 - `GITHUB_CLIENT_SECRET`
-- `GITHUB_REDIRECT_URI` — for example `https://YOUR-BACKEND-DOMAIN/api/connectors/github/callback`
-- `CONNECTOR_STATE_SECRET` — long random secret, 32+ characters
-- `KZ_CONNECTOR_ENCRYPTION_KEY` — long random secret, 32+ characters
-- `FRONTEND_URL` — existing KZ frontend URL
+- `GITHUB_REDIRECT_URI` — `https://fast-production-0eba.up.railway.app/api/connectors/github/callback` (must exactly match the GitHub OAuth app callback)
 
-Do not commit any of these values.
+### Shopify
+
+- `SHOPIFY_CLIENT_ID`
+- `SHOPIFY_CLIENT_SECRET`
+- `SHOPIFY_REDIRECT_URI` — `https://fast-production-0eba.up.railway.app/api/connectors/shopify/callback` (must be registered in the Shopify app)
+- `SHOPIFY_STORE_DOMAIN` — set to `kingzarry-store.myshopify.com`
+- `SHOPIFY_OAUTH_SCOPES` — `read_products,write_products,read_orders,write_inventory` (add only scopes the app actually needs)
+- `SHOPIFY_INSTALL_URL` — optional. If set, Shopify's managed store picker is used. If unset, KZ connects directly to the configured `SHOPIFY_STORE_DOMAIN`.
+
+If you use the Shopify managed install link, set the Shopify app's Application URL to `https://fast-production-0eba.up.railway.app/api/connectors/shopify/install-return` and configure that URL in the Shopify Dev Dashboard. For direct store OAuth, register the callback above and make sure the Shopify app's allowed redirect URLs include it.
+
+### Google / Gmail
+
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_REDIRECT_URI` — `https://fast-production-0eba.up.railway.app/api/connectors/google/callback` (must exactly match an authorized redirect URI in Google Cloud)
+- `GOOGLE_OAUTH_SCOPES` — optional; the default requests account identity, Gmail read/send, Drive metadata/file, and Calendar read/event scopes.
+
+The Google authorization request uses `prompt=select_account` so Google can show its normal account chooser. It can only list Google accounts currently signed into that browser profile; KZ cannot invent or fetch an account list before the user authorizes access.
 
 ## GitHub OAuth app
 
