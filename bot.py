@@ -2858,15 +2858,36 @@ async def provider_registry_watch_job(context: ContextTypes.DEFAULT_TYPE):
         first_run = _provider_watch_signature is None
         _provider_watch_signature = sig
         report = provider_registry.format_admin_report(snapshot, first_run=first_run)
+        # Telegram limits a message to 4096 characters. Split on complete lines
+        # so HTML tags are not cut in the middle and every chunk remains parseable.
+        chunks = []
+        current = []
+        current_size = 0
+        for line in report.splitlines():
+            line_size = len(line) + (1 if current else 0)
+            if current and current_size + line_size > 3500:
+                chunks.append("\n".join(current))
+                current = []
+                current_size = 0
+                line_size = len(line)
+            if len(line) > 3500:
+                line = line[:3400] + "…"
+                line_size = len(line) + (1 if current else 0)
+            current.append(line)
+            current_size += line_size
+        if current:
+            chunks.append("\n".join(current))
         for uid in ADMIN_IDS:
             try:
-                await context.bot.send_message(
-                    chat_id=uid,
-                    text=report,
-                    parse_mode="HTML",
-                    disable_web_page_preview=True,
-                )
-                logger.info("🔌 Provider registry report sent to admin %s", uid)
+                for index, chunk in enumerate(chunks, start=1):
+                    suffix = f" ({index}/{len(chunks)})" if len(chunks) > 1 else ""
+                    await context.bot.send_message(
+                        chat_id=uid,
+                        text=chunk + suffix,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
+                logger.info("🔌 Provider registry report sent to admin %s in %s part(s)", uid, len(chunks))
             except Exception as e:
                 logger.warning("Provider registry admin report failed %s: %s", uid, e)
     except Exception as e:
