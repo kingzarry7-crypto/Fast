@@ -52,6 +52,14 @@ except Exception as _google_connector_import_error:
     )
 
 try:
+    from plugin_registry import router as plugin_registry_router
+except Exception as _plugin_registry_import_error:
+    plugin_registry_router = None
+    logging.getLogger("king_zarry_api").exception(
+        "Plugin registry unavailable: %s", type(_plugin_registry_import_error).__name__
+    )
+
+try:
     from fiverr_api import router as fiverr_api_router
 except Exception as _fiverr_api_import_error:
     fiverr_api_router = None
@@ -154,6 +162,9 @@ if connector_api_router is not None:
 
 if google_connector_router is not None:
     app.include_router(google_connector_router)
+
+if plugin_registry_router is not None:
+    app.include_router(plugin_registry_router)
 
 app.add_middleware(
     CORSMiddleware,
