@@ -113,6 +113,33 @@ def _google_tool(operation: str) -> Callable[..., Dict[str, Any]]:
         return {"status": "success", **result}
     return run
 
+def _shopify_tool(operation: str) -> Callable[..., Dict[str, Any]]:
+    def run(user_id: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        import connector_api
+        store, token = connector_api._shopify_token(user_id)
+        limit = max(1, min(int(arguments.get("limit") or 10), 25))
+        if operation == "list_products":
+            query = """query KZPluginProducts($first: Int!) {
+              products(first: $first, sortKey: UPDATED_AT, reverse: true) {
+                edges { node { id title handle status updatedAt onlineStoreUrl } }
+              }
+            }"""
+            body = connector_api._shopify_request(store, token, query, {"first": limit})
+            edges = (((body.get("data") or {}).get("products") or {}).get("edges") or [])
+            return {"status": "success", "verified": True, "operation": operation, "store": store,
+                    "products": [edge.get("node") or {} for edge in edges]}
+        query = """query KZPluginOrders($first: Int!) {
+          orders(first: $first, sortKey: CREATED_AT, reverse: true) {
+            edges { node { id name createdAt displayFinancialStatus displayFulfillmentStatus
+              totalPriceSet { shopMoney { amount currencyCode } } } }
+          }
+        }"""
+        body = connector_api._shopify_request(store, token, query, {"first": limit})
+        edges = (((body.get("data") or {}).get("orders") or {}).get("edges") or [])
+        return {"status": "success", "verified": True, "operation": operation, "store": store,
+                "orders": [edge.get("node") or {} for edge in edges]}
+    return run
+
 register_tool(ToolDefinition(
     "github.list_repositories", "github",
     "List repositories accessible to the authenticated GitHub account.",
@@ -153,6 +180,22 @@ register_tool(ToolDefinition(
         "limit": {"type": "integer", "minimum": 1, "maximum": 25}},
      "additionalProperties": False},
     _google_tool("list_calendar"),
+))
+register_tool(ToolDefinition(
+    "shopify.list_products", "shopify",
+    "Read recent Shopify products and their metadata; does not change products.",
+    {"type": "object", "properties": {
+        "limit": {"type": "integer", "minimum": 1, "maximum": 25}},
+     "additionalProperties": False},
+    _shopify_tool("list_products"),
+))
+register_tool(ToolDefinition(
+    "shopify.list_orders", "shopify",
+    "Read recent Shopify orders and financial/fulfillment status; does not modify orders.",
+    {"type": "object", "properties": {
+        "limit": {"type": "integer", "minimum": 1, "maximum": 25}},
+     "additionalProperties": False},
+    _shopify_tool("list_orders"),
 ))
 
 class ToolCallRequest(BaseModel):
@@ -199,6 +242,10 @@ def list_plugins(request: Request) -> Dict[str, Any]:
                               and len((os.getenv("KZ_CONNECTOR_ENCRYPTION_KEY") or "").strip()) >= 32)
         elif tool.provider == "google":
             configured = bool(os.getenv("GOOGLE_CLIENT_ID") and os.getenv("GOOGLE_CLIENT_SECRET")
+                              and len((os.getenv("CONNECTOR_STATE_SECRET") or os.getenv("SESSION_SECRET") or "").strip()) >= 32
+                              and len((os.getenv("KZ_CONNECTOR_ENCRYPTION_KEY") or "").strip()) >= 32)
+        elif tool.provider == "shopify":
+            configured = bool(os.getenv("SHOPIFY_CLIENT_ID") and os.getenv("SHOPIFY_CLIENT_SECRET")
                               and len((os.getenv("CONNECTOR_STATE_SECRET") or os.getenv("SESSION_SECRET") or "").strip()) >= 32
                               and len((os.getenv("KZ_CONNECTOR_ENCRYPTION_KEY") or "").strip()) >= 32)
         tools.append({
