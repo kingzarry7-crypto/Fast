@@ -141,28 +141,44 @@ def _automatic_provider_stream(messages: list):
             continue
 
 
-def _provider_streams(messages: list):
-    # Primary path: the centralized provider selector (Groq -> Gemini ->
-    # DeepSeek -> OpenRouter -> OpenAI). Existing direct streams remain as
-    # compatibility fallbacks if the selected provider cannot stream.
-    try:
-        from llm_client import get_client
-        client, _ = get_client()
-        provider_name = "automatic"
-        for env_name, name in (
-            ("GROQ_API_KEY", "groq"),
-            ("GEMINI_API_KEY", "gemini"),
-            ("DEEPSEEK_API_KEY", "deepseek"),
-            ("OPENROUTER_API_KEY", "openrouter"),
-            ("OPENAI_API_KEY", "openai"),
-        ):
-            if os.getenv(env_name):
-                provider_name = name
-                break
-        yield provider_name, _automatic_provider_stream(messages)
-    except Exception:
-        pass
+def _stream_cloudflare(messages: list):
+    """Call the Cloudflare Worker chat endpoint; it returns a JSON completion, not SSE."""
+    token = ai_engine.CLOUDFLARE_AI_TOKEN
+    url = ai_engine.CLOUDFLARE_AI_URL
+    if not token:
+        raise RuntimeError("cloudflare_not_configured")
+    response = requests.post(
+        url,
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        json={"model": "@cf/meta/llama-3.1-8b-instruct", "messages": messages,
+              "temperature": 0.7, "max_tokens": 1200},
+        timeout=(10, _TIMEOUT),
+    )
+    if response.status_code >= 400:
+        raise RuntimeError(f"cloudflare_http_{response.status_code}: {response.text[:300]}")
+    data = response.json()
+    choices = data.get("choices") or []
+    if not choices:
+        raise RuntimeError("cloudflare_empty_completion")
+    text = (choices[0].get("message") or {}).get("content")
+    if not isinstance(text, str) or not text.strip():
+        raise RuntimeError("cloudflare_empty_completion")
+    yield text
 
+
+def _provider_streams(messages: list):
+    # Keep streaming chat aligned with ai_engine's Cloudflare-first provider
+    # order. Cloudflare's Worker returns a complete JSON answer, so emit it as
+    # one SSE token; the frontend still receives the same stream event format.
+    if ai_engine.CLOUDFLARE_AI_TOKEN:
+        yield "cloudflare", _stream_cloudflare(messages)
+    if ai_engine.OPENAI_API_KEY:
+        yield "openai", _stream_openai_compatible(
+            url=ai_engine.OPENAI_URL,
+            key=ai_engine.OPENAI_API_KEY,
+            model=ai_engine.OPENAI_MODEL,
+            messages=messages,
+        )
     if _GROQ_KEY:
         yield "groq", _stream_openai_compatible(
             url=_GROQ_URL,
