@@ -22,6 +22,7 @@ import { api, type ConversationItem, type MarketSnapshot } from "@/lib/api";
 const NAV = [
   { href: "/dashboard", label: "Chat" }, { href: "/markets", label: "Markets" },
   { href: "/signals", label: "Signals" }, { href: "/agent", label: "Agent" },
+  { href: "/plugins", label: "Plugins" },
   { href: "/news", label: "News" }, { href: "/pricing", label: "Pricing" },
   { href: "/settings", label: "Settings" },
 ];
