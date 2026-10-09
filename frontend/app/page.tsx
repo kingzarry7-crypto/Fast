@@ -17,15 +17,51 @@ export default function LandingPage() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
   const [introDone, setIntroDone] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(false);
 
   useEffect(() => {
     if (!isLoading && user) router.replace("/dashboard");
   }, [isLoading, user, router]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setIntroDone(true), 900);
+    const timer = window.setTimeout(() => setIntroDone(true), 2800);
     return () => window.clearTimeout(timer);
   }, []);
+
+  const playIntroSound = () => {
+    try {
+      const AudioContextClass = window.AudioContext;
+      if (!AudioContextClass) return;
+      const audio = new AudioContextClass();
+      const now = audio.currentTime;
+      const master = audio.createGain();
+      master.gain.setValueAtTime(0.0001, now);
+      master.gain.exponentialRampToValueAtTime(0.16, now + 0.08);
+      master.gain.exponentialRampToValueAtTime(0.0001, now + 1.35);
+      master.connect(audio.destination);
+      [
+        { frequency: 440, start: 0.02, duration: 0.55 },
+        { frequency: 660, start: 0.18, duration: 0.72 },
+        { frequency: 880, start: 0.42, duration: 0.8 },
+      ].forEach(({ frequency, start, duration }) => {
+        const oscillator = audio.createOscillator();
+        const tone = audio.createGain();
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(frequency, now + start);
+        tone.gain.setValueAtTime(0.0001, now + start);
+        tone.gain.exponentialRampToValueAtTime(0.65, now + start + 0.05);
+        tone.gain.exponentialRampToValueAtTime(0.0001, now + start + duration);
+        oscillator.connect(tone);
+        tone.connect(master);
+        oscillator.start(now + start);
+        oscillator.stop(now + start + duration + 0.03);
+      });
+      setSoundEnabled(true);
+      window.setTimeout(() => void audio.close(), 1700);
+    } catch {
+      // Browsers can block audio until the user interacts with the page.
+    }
+  };
 
   if (isLoading || user) {
     return (
@@ -42,6 +78,34 @@ export default function LandingPage() {
 
   return (
     <main className="relative isolate flex min-h-[100dvh] items-center justify-center overflow-hidden bg-[#040b1a] px-5 py-12 text-[#dff7ff]">
+      {!introDone && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden bg-[#020711]">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(56,214,255,.18),transparent_48%)] animate-pulse" />
+          <div className="relative animate-[kz-intro-core_2.4s_ease-out_both]">
+            <AICore state="thinking" size={190} />
+          </div>
+          <p className="relative mt-7 animate-[kz-intro-text_1.1s_.35s_both] font-mono-tech text-[10px] tracking-[0.42em] text-cyan-100/70">
+            INITIALIZING KING ZARRY AI
+          </p>
+          <h1 className="relative mt-4 animate-[kz-intro-text_1.1s_.65s_both] font-display text-3xl font-black tracking-[0.16em] text-white sm:text-5xl">
+            KING ZARRY <span className="text-[#f2c76b]">AI</span>
+          </h1>
+          <div className="relative mt-7 h-px w-48 overflow-hidden bg-cyan-100/15">
+            <div className="h-full w-full origin-left animate-[kz-intro-bar_2.2s_ease-out_both] bg-cyan-300 shadow-[0_0_12px_rgba(56,214,255,.9)]" />
+          </div>
+          <button
+            type="button"
+            onClick={playIntroSound}
+            className="relative mt-8 rounded-full border border-cyan-100/25 bg-cyan-200/[0.07] px-4 py-2 font-mono-tech text-[10px] tracking-[0.15em] text-cyan-50/80 transition hover:bg-cyan-200/[0.14]"
+            aria-label="Play intro sound"
+          >
+            {soundEnabled ? "INTRO SOUND PLAYED ✓" : "▶ TAP TO PLAY INTRO SOUND"}
+          </button>
+          <p className="relative mt-3 font-mono-tech text-[9px] tracking-widest text-cyan-100/35">
+            {soundEnabled ? "AUDIO ENABLED" : "SOUND REQUIRES A TAP ON THIS DEVICE"}
+          </p>
+        </div>
+      )}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute -inset-[20%] animate-[kz-aurora_18s_ease-in-out_infinite_alternate] bg-[radial-gradient(ellipse_at_25%_30%,rgba(56,214,255,.23),transparent_32%),radial-gradient(ellipse_at_75%_65%,rgba(242,199,107,.14),transparent_32%),radial-gradient(ellipse_at_60%_20%,rgba(120,90,255,.16),transparent_35%)]" />
         <div className="absolute inset-0 opacity-35" style={{ backgroundImage: "radial-gradient(rgba(223,247,255,.7) .7px,transparent .7px)", backgroundSize: "34px 34px" }} />
@@ -102,6 +166,20 @@ export default function LandingPage() {
         </div>
       </div>
       <style jsx global>{`
+        @keyframes kz-intro-core {
+          0% { transform: scale(.55); opacity: 0; filter: blur(12px); }
+          35% { transform: scale(1.06); opacity: 1; filter: blur(0); }
+          75% { transform: scale(1); opacity: 1; }
+          100% { transform: scale(.96); opacity: 0; }
+        }
+        @keyframes kz-intro-text {
+          from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes kz-intro-bar {
+          from { transform: scaleX(0); }
+          to { transform: scaleX(1); }
+        }
         @keyframes kz-aurora {
           0% { transform: translate3d(-1%, -1%, 0) rotate(-2deg) scale(1); }
           100% { transform: translate3d(3%, 2%, 0) rotate(5deg) scale(1.08); }
