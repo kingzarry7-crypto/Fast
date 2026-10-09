@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -46,7 +47,7 @@ def web_user_id(platform: str, external_id: str) -> Optional[str]:
         if value.startswith("web:"):
             value = value[4:]
         value = value.strip()
-        if value:
+        if _is_web_user_uuid(value):
             try:
                 with get_db_cursor(commit=False) as cur:
                     cur.execute(
@@ -121,6 +122,12 @@ def _ensure_monitor_table() -> None:
 
 
 def connected_accounts(user_id: str) -> list[dict[str, Any]]:
+    # Telegram/Discord IDs and internal agent names are not web-user UUIDs.
+    # Never send them to PostgreSQL UUID columns; resolve/link the channel first.
+    if not _is_web_user_uuid(user_id):
+        logger.info("Skipping UUID-scoped account lookup for unlinked identity")
+        return []
+
     with get_db_cursor(commit=False) as cur:
         cur.execute(
             """SELECT id, provider, provider_account_id, display_name, scopes,
@@ -425,6 +432,9 @@ def _format_accounts(snapshot: dict[str, Any]) -> str:
 
 
 def _monitor_upsert(user_id: str, provider: str = "google", monitor_type: str = "gmail") -> None:
+    if not _is_web_user_uuid(user_id):
+        logger.warning("Skipping account monitor setup for unlinked identity")
+        return
     _ensure_monitor_table()
     with get_db_cursor(commit=True) as cur:
         cur.execute(
@@ -437,6 +447,9 @@ def _monitor_upsert(user_id: str, provider: str = "google", monitor_type: str = 
 
 
 def _monitor_disable(user_id: str, provider: str = "google", monitor_type: str = "gmail") -> None:
+    if not _is_web_user_uuid(user_id):
+        logger.warning("Skipping account monitor update for unlinked identity")
+        return
     _ensure_monitor_table()
     with get_db_cursor(commit=True) as cur:
         cur.execute(
