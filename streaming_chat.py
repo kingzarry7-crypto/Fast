@@ -70,6 +70,7 @@ def _stream_openai_compatible(
     key: str,
     model: str,
     messages: list,
+    token_parameter: str = "max_tokens",
 ) -> Generator[str, None, None]:
     if not key:
         raise RuntimeError("provider_not_configured")
@@ -78,7 +79,7 @@ def _stream_openai_compatible(
         "model": model,
         "messages": messages,
         "temperature": 0.85,
-        "max_tokens": 2000,
+        token_parameter: 2000,
         "stream": True,
     }
     headers = {
@@ -150,7 +151,7 @@ def _stream_cloudflare(messages: list):
     response = requests.post(
         url,
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-        json={"model": "@cf/meta/llama-3.1-8b-instruct", "messages": messages,
+        json={"model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast", "messages": messages,
               "temperature": 0.7, "max_tokens": 1200},
         timeout=(10, _TIMEOUT),
     )
@@ -178,6 +179,7 @@ def _provider_streams(messages: list):
             key=ai_engine.OPENAI_API_KEY,
             model=ai_engine.OPENAI_MODEL,
             messages=messages,
+            token_parameter="max_completion_tokens",
         )
     if _GROQ_KEY:
         yield "groq", _stream_openai_compatible(
