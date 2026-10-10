@@ -231,6 +231,7 @@ def _build_stream_generator(
         reply = str(connector_result.get("reply") or "").strip()
         if reply:
             engine._save_memory(user_id, message, reply)
+            yield _sse({"type": "activity", "stage": "responding", "label": "Preparing connected-account response", "done": False})
             yield _sse({"type": "start", "provider": "account_agent"})
             yield _sse({"type": "delta", "text": reply})
             yield _sse({
@@ -299,7 +300,7 @@ def _build_stream_generator(
                 })
                 research_context = web_research.format_for_ai(research_result)
                 if research_context:
-                    persistent_ctx = (persistent_ctx + "\\n\\n" + research_context).strip()
+                    persistent_ctx = (persistent_ctx + "\n\n" + research_context).strip()
                     research_footer = web_research.sources_footer(research_result.get("sources") or [])
     except Exception as exc:
         logger.warning("Streaming web research failed: %s", type(exc).__name__)
@@ -308,8 +309,6 @@ def _build_stream_generator(
             "stage": "searching",
             "label": "Web research failed; continuing without search results",
             "done": True,
-            "searches": 0,
-            "sources": 0,
         })
 
     messages = engine._build_openai_messages(
