@@ -90,6 +90,7 @@ export default function ChatWorkspace({
     listen,
     listenContinuous,
     stopListening,
+    error: voiceError,
     supported: voiceSupported,
     style: voiceStyle,
     setVoiceStyle,
@@ -727,8 +728,11 @@ export default function ChatWorkspace({
         <div className="mx-auto w-full max-w-2xl space-y-2.5 py-4 pb-28">
           {messages.length === 0 && !historyLoading && (
             <div className="flex flex-col items-center justify-center min-h-[200px] text-center py-8">
-              <div className="flex h-[100px] w-[100px] items-center justify-center rounded-full border border-cyan-400/15 bg-cyan-400/[0.03]" aria-hidden="true">
-                <span className="h-3 w-3 rounded-full bg-cyan-300/80 shadow-[0_0_18px_rgba(0,240,255,.55)]" />
+              <div className="relative flex h-[124px] w-[124px] items-center justify-center" aria-hidden="true">
+                <div className="absolute inset-2 rounded-full border border-cyan-300/20 bg-cyan-400/[0.025] shadow-[0_0_32px_rgba(0,190,255,.12)] animate-[kz-cosmic-ai-wave_5.2s_ease-in-out_infinite]" />
+                <div className="absolute inset-0 rounded-full border border-cyan-300/10" />
+                {/* Reuse the same King Zarry AI head portrait as the dashboard AI core. */}
+                <img src="/human-ai-core.webp" alt="" className="relative z-10 h-[112px] w-[112px] object-contain drop-shadow-[0_0_16px_rgba(0,210,255,.35)]" draggable={false} />
               </div>
               <p className="mt-4 text-lg font-medium tracking-tight text-slate-100">What can I help you with?</p>
               <p className="mt-1 max-w-sm text-sm leading-6 text-slate-400">Ask a question or choose a starting point.</p>
@@ -884,6 +888,9 @@ export default function ChatWorkspace({
               <span className="truncate text-xs text-zinc-300">{attached.name}</span>
               <button type="button" onClick={clearAttachment} className="ml-auto text-zinc-400 hover:text-white text-sm">×</button>
             </div>
+          )}
+          {voiceError && (
+            <p role="status" className="mb-2 px-2 text-xs leading-5 text-amber-200/90">{voiceError}</p>
           )}
 
 
