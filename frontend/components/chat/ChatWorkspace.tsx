@@ -654,6 +654,7 @@ export default function ChatWorkspace({
           </aside>
         )}
         <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div aria-hidden="true" className="kz-chat-cosmic-backdrop" />
       <div className="relative inset-x-0 z-10 shrink-0">
         {!isVip && membership && (
           <div className="border-b border-white/5 bg-[#05080f]/90 px-3 py-1.5 flex items-center justify-between gap-2">
@@ -721,7 +722,7 @@ export default function ChatWorkspace({
 
       <div
         ref={listRef}
-        className="relative min-h-0 flex-1 overflow-y-auto overscroll-y-none kz-scroll px-3 sm:px-4"
+        className="relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-y-none kz-scroll px-3 sm:px-4"
       >
         <div className="mx-auto w-full max-w-2xl space-y-2.5 py-4 pb-28">
           {messages.length === 0 && !historyLoading && (
