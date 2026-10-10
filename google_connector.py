@@ -628,24 +628,43 @@ def _approval(user_id: str, operation: str, target: str, payload: Dict[str, Any]
 async def google_status(request: Request):
     user_id = _connector_user_id(request)
     account = _account(user_id)
+    reconnect_required = False
+    if account:
+        try:
+            access_token = _token(user_id)
+            probe = requests.get(
+                GOOGLE_USERINFO,
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=12,
+            )
+            if probe.status_code == 401:
+                reconnect_required = True
+            elif probe.status_code >= 400:
+                logger.warning("Google status probe returned HTTP %s", probe.status_code)
+        except Exception as exc:
+            reconnect_required = True
+            logger.info("Google account needs reauthorization: %s", type(exc).__name__)
     missing = []
     if not GOOGLE_CLIENT_ID: missing.append("GOOGLE_CLIENT_ID")
     if not GOOGLE_CLIENT_SECRET: missing.append("GOOGLE_CLIENT_SECRET")
     if not GOOGLE_REDIRECT_URI: missing.append("GOOGLE_REDIRECT_URI")
     if not CONNECTOR_STATE_SECRET: missing.append("CONNECTOR_STATE_SECRET")
     if not os.getenv("KZ_CONNECTOR_ENCRYPTION_KEY", "").strip(): missing.append("KZ_CONNECTOR_ENCRYPTION_KEY")
-    return {"configured": _configured(), "connected": bool(account),
+    return {"configured": _configured(), "connected": bool(account) and not reconnect_required,
+            "reconnect_required": reconnect_required,
             "account": {k:v for k,v in (account or {}).items() if not k.startswith("_")},
             "authorization_mode": "oauth", "scopes": GOOGLE_SCOPES.split(),
             "missing_configuration": missing}
 
 
 @router.get("/start")
-async def google_start(request: Request):
+async def google_start(request: Request, return_url: str = ""):
     user_id = _connector_user_id(request)
     if not _configured():
         raise HTTPException(status_code=503, detail="Google connector is not configured on KZ")
-    state = _sign_state({"provider": "google", "user_id": user_id, "return_url": _oauth_return_url(request), "nonce": secrets.token_urlsafe(18), "exp": _now() + 600})
+    requested_return = str(return_url or "").strip().rstrip("/")
+    callback_frontend = requested_return if _is_allowed_frontend_origin(requested_return) else _oauth_return_url(request)
+    state = _sign_state({"provider": "google", "user_id": user_id, "return_url": callback_frontend, "nonce": secrets.token_urlsafe(18), "exp": _now() + 600})
 
     # Always let Google show the account chooser. Do not send a login_hint:
     # users may have multiple Google accounts and should be able to tap the
@@ -658,7 +677,9 @@ async def google_start(request: Request):
         "access_type": "offline",
         # Always open Google's account picker so the user can tap the account
         # they want to connect. Do not send login_hint or a prefilled email.
-        "prompt": "select_account",
+        # Consent prompts Google to issue a refresh token again when the
+        # user previously granted access but that grant was removed/revoked.
+        "prompt": "select_account consent",
         "include_granted_scopes": "true",
         "state": state,
     }
