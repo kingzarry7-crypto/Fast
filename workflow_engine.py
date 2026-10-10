@@ -60,11 +60,11 @@ def _classify_goal(goal: str) -> Dict[str, Any]:
         "submit proposal", "send proposal", "apply to this job", "apply for this job",
         "job application", "marketplace application",
     )):
-        return {"kind": "marketplace_application", "revenue": 180.0}
+        return {"kind": "marketplace_application", "revenue": 0.0}
     if any(x in low for x in ("freelance", "client", "website client", "gig")):
-        return {"kind": "revenue_freelance", "revenue": 180.0}
+        return {"kind": "revenue_freelance", "revenue": 0.0}
     if any(x in low for x in ("make money", "make $", "earn", "revenue", "income", "money this week")):
-        return {"kind": "revenue_research", "revenue": 200.0}
+        return {"kind": "revenue_research", "revenue": 0.0}
     if any(x in low for x in ("market", "trade", "btc", "eth", "sol", "gold", "xau")):
         return {"kind": "market", "revenue": 0.0}
     if any(x in low for x in ("open website", "open the website", "edit my website", "edit website", "update my website", "update website", "post on", "publish on", "upload to", "fill the form", "fill out the form", "click on", "browser", "website")):
