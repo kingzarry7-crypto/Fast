@@ -267,17 +267,11 @@ def _build_stream_generator(
     research_footer = ""
     try:
         import web_research_engine as web_research
-        if web_research.should_research(message):
-            if not web_research.is_configured():
-                yield _sse({
-                    "type": "activity",
-                    "stage": "searching",
-                    "label": "Web search unavailable — no search provider is configured",
-                    "done": True,
-                    "searches": 0,
-                    "sources": 0,
-                })
-            else:
+        import tavily_search
+        wants_research = web_research.should_research(message)
+        wants_tavily = tavily_search.should_trigger_tavily(message)
+        if wants_research or wants_tavily:
+            if web_research.is_configured():
                 yield _sse({
                     "type": "activity",
                     "stage": "searching",
@@ -289,7 +283,12 @@ def _build_stream_generator(
                     deep=any(term in message.lower() for term in ("deep research", "comprehensive", "thorough", "in-depth")),
                 )
                 search_count = int(research_result.get("searches") or 0)
-                source_count = len(research_result.get("sources") or [])
+                source_list = research_result.get("sources") or []
+                source_count = len(source_list)
+                research_context = web_research.format_for_ai(research_result)
+                if research_context:
+                    persistent_ctx = (persistent_ctx + "\n\n" + research_context).strip()
+                    research_footer = web_research.sources_footer(source_list)
                 yield _sse({
                     "type": "activity",
                     "stage": "searching",
@@ -298,10 +297,38 @@ def _build_stream_generator(
                     "searches": search_count,
                     "sources": source_count,
                 })
-                research_context = web_research.format_for_ai(research_result)
+            elif tavily_search.is_tavily_configured() and wants_tavily:
+                yield _sse({
+                    "type": "activity",
+                    "stage": "searching",
+                    "label": "Searching the web with Tavily",
+                    "done": False,
+                })
+                tavily_result = tavily_search.search_web(message, max_results=5, search_depth="basic", include_answer=True)
+                source_list = tavily_result.get("sources") or []
+                source_count = len(source_list)
+                search_count = 1
+                research_context = tavily_search.format_for_ai(tavily_result)
                 if research_context:
                     persistent_ctx = (persistent_ctx + "\n\n" + research_context).strip()
-                    research_footer = web_research.sources_footer(research_result.get("sources") or [])
+                    research_footer = web_research.sources_footer(source_list)
+                yield _sse({
+                    "type": "activity",
+                    "stage": "searching",
+                    "label": f"Web searches: {search_count} · sources found: {source_count}",
+                    "done": True,
+                    "searches": search_count,
+                    "sources": source_count,
+                })
+            else:
+                yield _sse({
+                    "type": "activity",
+                    "stage": "searching",
+                    "label": "Web search unavailable — no configured search provider can handle this request",
+                    "done": True,
+                    "searches": 0,
+                    "sources": 0,
+                })
     except Exception as exc:
         logger.warning("Streaming web research failed: %s", type(exc).__name__)
         yield _sse({
