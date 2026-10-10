@@ -60,10 +60,12 @@ export default function AICore({
   state = "idle",
   size = 220,
   bootSound = false,
+  compact = false,
 }: {
   state?: CoreState;
   size?: number;
   bootSound?: boolean;
+  compact?: boolean;
 }) {
   const hasPlayed = useRef(false);
 
@@ -115,7 +117,7 @@ export default function AICore({
         <div aria-hidden="true" className="kz-portrait-shine absolute inset-0" />
       </div>
 
-      {modules.map((item, index) => (
+      {!compact && modules.map((item, index) => (
         <Link key={item.label} href={item.href}
           className={`kz-core-module absolute z-20 ${item.position} flex flex-col rounded-lg border px-2 py-1.5 font-mono-tech transition duration-200 hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2`}
           style={{
@@ -138,7 +140,7 @@ export default function AICore({
         </Link>
       ))}
 
-      {detailed && (
+      {!compact && detailed && (
         <>
           <div className="absolute left-1/2 top-[5%] z-20 -translate-x-1/2 whitespace-nowrap rounded-full border px-2.5 py-1 font-mono-tech text-[7px] tracking-[0.2em]"
             style={{ borderColor: `${color}60`, color, background: "rgba(2,8,19,.72)", boxShadow: `0 0 18px ${color}20` }}>
@@ -165,7 +167,7 @@ export default function AICore({
         </>
       )}
 
-      {!detailed && (
+      {!compact && !detailed && (
         <div className="absolute -bottom-3 left-1/2 -translate-x-1/2">
           <span className="whitespace-nowrap font-mono-tech text-[10px] uppercase tracking-[0.3em]"
             style={{ color, textShadow: `0 0 10px ${color}, 0 0 22px ${color}99` }}>
