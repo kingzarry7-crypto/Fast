@@ -270,3 +270,64 @@ body:has(.kz-command-shell) {
   background-image:
     radial-gradient(ellipse 48% 46% at 50% 42%, rgba(0, 75, 155, .09), transparent 72%);
 }
+
+
+/* Global visual atmosphere adapted from the supplied King Zarry intro:
+   midnight abyss, cyan aurora, restrained gold light and soft glass surfaces.
+   This is intentionally background-only; the live app UI and auth stay intact. */
+.kz-bg-grid {
+  background-color: #040b1a;
+  background-image:
+    linear-gradient(rgba(56, 214, 255, .022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 214, 255, .022) 1px, transparent 1px),
+    radial-gradient(40% 35% at 25% 30%, rgba(56, 214, 255, .13), transparent 70%),
+    radial-gradient(35% 40% at 75% 65%, rgba(242, 199, 107, .075), transparent 70%),
+    radial-gradient(45% 35% at 60% 20%, rgba(120, 90, 255, .09), transparent 70%);
+  background-size: 64px 64px, 64px 64px, auto, auto, auto;
+}
+.kz-bg-radial {
+  background-color: transparent;
+  background-image:
+    radial-gradient(ellipse at center, transparent 38%, rgba(2, 6, 16, .48) 100%),
+    radial-gradient(ellipse 48% 44% at 50% 44%, rgba(14, 42, 82, .12), transparent 74%);
+  overflow: hidden;
+}
+.kz-bg-radial::before,
+.kz-bg-radial::after {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+.kz-bg-radial::before {
+  opacity: .45;
+  background:
+    radial-gradient(40% 35% at 25% 30%, rgba(56, 214, 255, .16), transparent 70%),
+    radial-gradient(35% 40% at 75% 65%, rgba(242, 199, 107, .10), transparent 70%),
+    radial-gradient(45% 35% at 60% 20%, rgba(120, 90, 255, .12), transparent 70%);
+  animation: kz-aurora-drift 18s ease-in-out infinite alternate;
+}
+.kz-bg-radial::after {
+  inset: 0;
+  opacity: .28;
+  background-image:
+    radial-gradient(circle at 18% 22%, rgba(223,247,255,.72) 0 1px, transparent 1.8px),
+    radial-gradient(circle at 72% 30%, rgba(255,255,255,.48) 0 1px, transparent 1.8px),
+    radial-gradient(circle at 38% 72%, rgba(56,214,255,.55) 0 1px, transparent 1.8px),
+    radial-gradient(circle at 84% 78%, rgba(242,199,107,.42) 0 1px, transparent 1.8px);
+  background-size: 180px 180px, 240px 240px, 210px 210px, 260px 260px;
+  animation: kz-atmosphere-twinkle 6s ease-in-out infinite;
+}
+@keyframes kz-aurora-drift {
+  from { transform: translate3d(-1%, -1%, 0) rotate(-2deg) scale(1); }
+  to { transform: translate3d(2%, 1%, 0) rotate(3deg) scale(1.08); }
+}
+@keyframes kz-atmosphere-twinkle {
+  0%, 100% { opacity: .18; }
+  50% { opacity: .36; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kz-bg-radial::before,
+  .kz-bg-radial::after { animation: none; }
+}
