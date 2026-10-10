@@ -15,8 +15,8 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: "portrait-primary",
     prefer_related_applications: false,
     icons: [
-      { src: "/icon.svg", sizes: "192x192", type: "image/svg+xml", purpose: "any" },
-      { src: "/icon.svg", sizes: "512x512", type: "image/svg+xml", purpose: "maskable" },
+      { src: "/human-ai-core.webp", sizes: "192x192", type: "image/webp", purpose: "any" },
+      { src: "/human-ai-core.webp", sizes: "512x512", type: "image/webp", purpose: "maskable" },
     ],
   };
 }
