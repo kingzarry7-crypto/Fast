@@ -906,12 +906,22 @@ export default function ChatWorkspace({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xl text-zinc-400 transition hover:bg-white/[0.08] hover:text-white"
-              title="Attach"
+              className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/[0.08] text-zinc-300 transition hover:border-cyan-300/40 hover:bg-cyan-300/[0.08] hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300"
+              title="Upload an image"
+              aria-label="Upload an image"
             >
-              +
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m12.5 6.5-6.8 6.8a4 4 0 0 0 5.7 5.7l7.1-7.1a5.5 5.5 0 0 0-7.8-7.8l-7.1 7.1" />
+              </svg>
             </button>
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInputChange} />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileInputChange}
+              aria-label="Choose an image to upload"
+            />
 
             <textarea
               ref={inputRef}
@@ -937,7 +947,25 @@ export default function ChatWorkspace({
 
             {voiceSupported && (
               <>
-                {!callMode && <button type="button" onClick={() => (listening ? stopListening() : listen((t) => setInput(t)))} className={"hidden sm:flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] " + (listening ? "text-red-300" : "text-zinc-500 hover:text-cyan-300")} title="Mic">{listening ? "■" : "🎤"}</button>}
+                {!callMode && (
+                  <button
+                    type="button"
+                    onClick={() => (listening ? stopListening() : listen((t) => setInput(t)))}
+                    className={"flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300 " + (listening ? "border-red-400/40 bg-red-400/10 text-red-300 shadow-[0_0_16px_rgba(248,113,113,.15)]" : "border-white/[0.08] text-zinc-300 hover:border-cyan-300/40 hover:bg-cyan-300/[0.08] hover:text-cyan-100")}
+                    title={listening ? "Stop recording" : "Record a voice message"}
+                    aria-label={listening ? "Stop recording" : "Record a voice message"}
+                    aria-pressed={listening}
+                  >
+                    {listening ? (
+                      <span className="h-3.5 w-3.5 rounded-[3px] bg-current" aria-hidden="true" />
+                    ) : (
+                      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="3" width="6" height="12" rx="3" />
+                        <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 18v3m-4 0h8" />
+                      </svg>
+                    )}
+                  </button>
+                )}
                 <button type="button" onClick={() => setVoicePanelOpen((v) => !v)} className="hidden sm:flex h-8 shrink-0 items-center justify-center rounded-full px-2 text-[9px] tracking-widest text-zinc-500 hover:text-cyan-300" title="Voice">VOICE</button>
               </>
             )}
@@ -950,10 +978,9 @@ export default function ChatWorkspace({
                 title="Stop King Zarry AI"
                 className="flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/10 bg-[#1d1d1f] px-3 text-[10px] font-medium text-white shadow-[0_4px_14px_rgba(0,0,0,.28)] transition hover:bg-[#29292c] active:scale-95"
               >
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500 shadow-[0_0_12px_rgba(34,211,238,.28)]">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500 shadow-[0_0_12px_rgba(34,211,238,.28)]" aria-hidden="true">
                   <span className="h-2 w-2 rounded-[2px] bg-white" />
                 </span>
-                <span className="hidden sm:inline">Stop</span>
               </button>
             ) : (
               <button
