@@ -56,6 +56,7 @@ export default function ChatWorkspace({
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [thinkingExpanded, setThinkingExpanded] = useState(true);
   const { messages, setMessages, sending, error, send, decideApproval, stop: stopChat, clear } = useChat(
     user?.id,
     user?.is_subscribed,
@@ -208,6 +209,10 @@ export default function ChatWorkspace({
   useEffect(() => {
     if (!input && inputRef.current) inputRef.current.style.height = "auto";
   }, [input]);
+
+  useEffect(() => {
+    if (sending) setThinkingExpanded(true);
+  }, [sending]);
 
   useEffect(() => {
     if (!autoSpeak || realtimeActive || sending || !messages.length) return;
@@ -812,16 +817,24 @@ export default function ChatWorkspace({
               !String(latestAssistant?.id || "").startsWith("error");
             if (hasStartedReply && !agentActivity) return null;
             return (
-              <div className="my-2 flex items-center gap-3 rounded-2xl border border-cyan-300/10 bg-white/[0.018] px-4 py-3.5" aria-live="polite">
+              <div className={"my-2 flex items-center gap-3 rounded-2xl border border-cyan-300/10 bg-white/[0.018] px-4 py-3.5 " + (thinkingExpanded ? "" : "py-2.5")} aria-live="polite">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <span className="relative flex h-5 w-5 shrink-0 items-center justify-center" aria-hidden="true">
                     <span className="absolute h-5 w-5 animate-spin rounded-full border-2 border-cyan-200/15 border-t-cyan-200" />
                     <span className="h-1.5 w-1.5 rounded-full bg-cyan-200/80" />
                   </span>
                   <span className="text-sm text-slate-300">
-                    {agentActivity ? `King Zarry AI · ${agentActivity}` : "Thinking"}
+                    {agentActivity ? `King Zarry AI · ${agentActivity}` : thinkingExpanded ? "Thinking through your request" : "Thinking"}
                   </span>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setThinkingExpanded((expanded) => !expanded)}
+                  className="shrink-0 rounded-lg px-2 py-1 text-xs text-slate-400 transition hover:bg-white/[0.05] hover:text-white"
+                  aria-expanded={thinkingExpanded}
+                >
+                  {thinkingExpanded ? "Hide" : "Show"}
+                </button>
                 <button
                   type="button"
                   onClick={stopChat}
