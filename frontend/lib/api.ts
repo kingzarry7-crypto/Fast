@@ -292,6 +292,7 @@ export async function streamChatMessage(
     signal?: AbortSignal;
     onDelta: (text: string) => void;
     onStart?: (provider?: string) => void;
+    onActivity?: (activity: { stage?: string; label: string; done: boolean; searches?: number; sources?: number }) => void;
     onAgent?: (agent: { id?: string; status?: string; activity?: string }) => void;
   }
 ): Promise<{ reply: string; conversation_id?: string; approval?: { id: string; provider: "google"; operation: string; target?: string }; agent?: { id?: string; status?: string; activity?: string } }> {
@@ -340,6 +341,14 @@ export async function streamChatMessage(
       const event = JSON.parse(line.slice(5).trim()) as Record<string, unknown>;
       if (event.type === "start") {
         options.onStart?.(typeof event.provider === "string" ? event.provider : undefined);
+      } else if (event.type === "activity" && typeof event.label === "string") {
+        options.onActivity?.({
+          stage: typeof event.stage === "string" ? event.stage : undefined,
+          label: event.label,
+          done: event.done === true,
+          searches: typeof event.searches === "number" ? event.searches : undefined,
+          sources: typeof event.sources === "number" ? event.sources : undefined,
+        });
       } else if (event.type === "agent" && event.agent && typeof event.agent === "object") {
         const value = event.agent as Record<string, unknown>;
         agent = {
