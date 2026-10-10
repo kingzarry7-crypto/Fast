@@ -863,16 +863,51 @@ export default function ChatWorkspace({
           )}
 
           {!callMode && (
-          <div className="flex items-end gap-2 rounded-[26px] border border-white/[0.12] bg-[#1b1b1d] px-3 py-2 shadow-[0_8px_30px_rgba(0,0,0,0.22)] transition-colors focus-within:border-white/20">
-            {sending && (
-              <div className="mb-0.5 flex shrink-0 items-center gap-2 pl-1 text-xs text-zinc-400" role="status" aria-live="polite" title="King Zarry AI is processing your message">
-                <span className="relative flex h-4 w-4 items-center justify-center" aria-hidden="true">
-                  <span className="absolute h-4 w-4 animate-spin rounded-full border-2 border-white/15 border-t-white/80" />
-                  <span className="h-1 w-1 rounded-full bg-white/80" />
-                </span>
-                <span className="hidden sm:inline">{(() => { const latest = [...messages].reverse().find((message) => message.role === "assistant"); const activity = latest?.status?.startsWith("KZ AGENT •") ? latest.status.slice("KZ AGENT •".length).trim() : ""; return activity || "Thinking…"; })()}</span>
-              </div>
-            )}
+          <div className="rounded-[26px] border border-white/[0.12] bg-[#1b1b1d] px-3 py-2 shadow-[0_8px_30px_rgba(0,0,0,0.22)] transition-colors focus-within:border-white/20">
+            {sending && (() => {
+              const latest = [...messages].reverse().find((message) => message.role === "assistant");
+              const steps = latest?.activitySteps || [];
+              const hasStartedReply = Boolean(latest?.text?.trim());
+              const showWriting = hasStartedReply;
+              const visibleSteps = steps.slice(-4);
+              return (
+                <div className="mb-2 max-h-28 overflow-y-auto px-1 pt-0.5" role="status" aria-live="polite" aria-label="King Zarry AI activity timeline">
+                  <div className="mb-1.5 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-500">
+                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_8px_rgba(103,232,249,.5)]" />
+                    Activity
+                  </div>
+                  <div className="space-y-1.5">
+                    {visibleSteps.map((step, index) => {
+                      const done = step.done || showWriting;
+                      return (
+                        <div key={step.label + index} className="flex min-w-0 items-center gap-2 text-xs text-zinc-300">
+                          <span className={"flex h-4 w-4 shrink-0 items-center justify-center rounded-full " + (done ? "text-emerald-300" : "text-cyan-200")} aria-hidden="true">
+                            {done ? (
+                              <span className="text-[12px] leading-none">✓</span>
+                            ) : (
+                              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/15 border-t-cyan-200" />
+                            )}
+                          </span>
+                          <span className={"min-w-0 truncate " + (done ? "text-zinc-500" : "text-zinc-200")}>{step.label}</span>
+                        </div>
+                      );
+                    })}
+                    {showWriting ? (
+                      <div className="flex items-center gap-2 text-xs text-zinc-200">
+                        <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-white/15 border-t-cyan-200" aria-hidden="true" />
+                        <span>Writing response</span>
+                      </div>
+                    ) : visibleSteps.length === 0 ? (
+                      <div className="flex items-center gap-2 text-xs text-zinc-300">
+                        <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-white/15 border-t-cyan-200" aria-hidden="true" />
+                        <span>{(() => { const activity = latest?.status?.startsWith("KZ AGENT •") ? latest.status.slice("KZ AGENT •".length).trim() : ""; return activity || "Thinking through your request"; })()}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })()}
+            <div className="flex items-end gap-2">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
@@ -937,6 +972,7 @@ export default function ChatWorkspace({
                 </svg>
               </button>
             )}
+            </div>
           </div>
           )}
         </div>
