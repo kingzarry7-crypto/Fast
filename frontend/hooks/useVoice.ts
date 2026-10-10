@@ -100,6 +100,16 @@ export function useVoice() {
   }, []);
 
   useEffect(() => {
+    return () => {
+      try { recognitionRef.current?.abort(); } catch { /* ignore */ }
+      try {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop();
+      } catch { /* ignore */ }
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  useEffect(() => {
     try {
       const saved = localStorage.getItem("kz_voice_style") as VoiceStyle | null;
       if (saved && RATE_MAP[saved] != null) setStyle(saved);
