@@ -24,6 +24,7 @@ export interface ChatMessage {
   text: string;
   timestamp: string;
   status?: string;
+  activitySteps?: Array<{ label: string; done: boolean }>;
   capability?: string;
   suggestions?: string[];
   imagePreviewUrl?: string;
