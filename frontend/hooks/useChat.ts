@@ -307,12 +307,20 @@ export function useChat(
           ? {
               ...item,
               approval: undefined,
-              status: result.status === "completed" ? "AI CORE • ACTION VERIFIED" : result.status === "rejected" ? "AI CORE • ACTION REJECTED" : "AI CORE • APPROVAL SAVED",
-              text: result.status === "completed"
-                ? `${item.text}\n\n✓ Action approved and verified.`
-                : result.status === "rejected"
-                  ? `${item.text}\n\nAction rejected. Nothing was sent.`
-                  : `${item.text}\n\n✓ Allowed always. The current action was completed${result.permission_saved === false ? ", but the saved permission could not be stored." : " and this permission was saved."}`,
+              status: result.status === "completed" && result.verified === true
+                ? "AI CORE • ACTION VERIFIED"
+                : result.status === "completed"
+                  ? "AI CORE • ACTION COMPLETED (UNVERIFIED)"
+                  : result.status === "rejected"
+                    ? "AI CORE • ACTION REJECTED"
+                    : "AI CORE • APPROVAL SAVED",
+              text: result.status === "completed" && result.verified === true
+                ? `${item.text}\n\n✓ Action completed and verification evidence was received.`
+                : result.status === "completed"
+                  ? `${item.text}\n\nThe backend reported completion, but did not return verification evidence. Check the destination before relying on this result.`
+                  : result.status === "rejected"
+                    ? `${item.text}\n\nAction rejected. Nothing was sent.`
+                    : `${item.text}\n\n✓ Allowed always. The current action was completed${result.permission_saved === false ? ", but the saved permission could not be stored." : " and this permission was saved."}`,
             }
           : item
       ));
