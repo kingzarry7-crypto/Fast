@@ -395,10 +395,12 @@ body:has(.kz-command-shell) {
 
 /* One shared liquid-cosmos motion language across the app, chat, and AI core.
    The star field glides diagonally while the nebula flows slowly like water. */
-.kz-bg-radial::before,
-.kz-chat-cosmic-backdrop {
-  background-size: auto, auto, 145% 135%, 135% 145%, 150% 130%;
+.kz-bg-radial::before {
   animation: kz-cosmic-water-flow 26s ease-in-out infinite alternate;
+}
+.kz-chat-cosmic-backdrop {
+  background-size: 145% 135%, 135% 145%, 150% 130%, 145% 135%, 100% 100%;
+  animation: kz-cosmic-background-current 26s ease-in-out infinite alternate;
 }
 .kz-bg-radial::after,
 .kz-chat-cosmic-backdrop::before {
@@ -433,9 +435,14 @@ body:has(.kz-command-shell) {
   animation-duration: 3.2s;
 }
 @keyframes kz-cosmic-water-flow {
-  0% { transform: translate3d(-1.5%, -1%, 0) rotate(-1deg) scale(1); background-position: 0% 0%, 0% 0%, 0% 35%, 100% 65%, 35% 0%; }
-  50% { background-position: 0% 0%, 0% 0%, 55% 70%, 35% 25%, 80% 50%; }
-  100% { transform: translate3d(1.5%, 1%, 0) rotate(1.5deg) scale(1.06); background-position: 0% 0%, 0% 0%, 100% 65%, 0% 45%, 20% 100%; }
+  0% { transform: translate3d(-1.5%, -1%, 0) rotate(-1deg) scale(1); }
+  50% { transform: translate3d(.5%, .5%, 0) rotate(.5deg) scale(1.03); }
+  100% { transform: translate3d(1.5%, 1%, 0) rotate(1.5deg) scale(1.06); }
+}
+@keyframes kz-cosmic-background-current {
+  0% { background-position: 0% 35%, 100% 65%, 35% 0%, 0% 0%, 0% 0%; }
+  50% { background-position: 55% 70%, 35% 25%, 80% 50%, 0% 0%, 0% 0%; }
+  100% { background-position: 100% 65%, 0% 45%, 20% 100%, 0% 0%, 0% 0%; }
 }
 @keyframes kz-cosmic-star-current {
   0% { transform: translate3d(0, 0, 0); }
