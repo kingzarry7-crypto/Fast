@@ -359,17 +359,32 @@ def _format_gmail_count(result: dict[str, Any], kind: str) -> str:
     return f"📬 Gmail reports approximately <b>{count}</b> {label} message(s) for that search."
 
 def _format_gmail_result(result: dict[str, Any]) -> str:
+    """Render Gmail results as readable, separated message cards in plain chat."""
     messages = result.get("messages") or []
     if not messages:
         return "📭 Gmail check complete — no matching messages found."
-    lines = [f"📬 Gmail check complete — {len(messages)} message(s):", ""]
+
+    blocks = [f"📬 Gmail — {len(messages)} message(s)"]
     for item in messages[:8]:
-        subject = str(item.get("subject") or "(no subject)")
-        sender = str(item.get("from") or "unknown sender")
-        date = str(item.get("date") or "")
-        snippet = str(item.get("snippet") or "").replace("\n", " ")[:180]
-        lines.append(f"• {subject}\n  From: {sender}\n  {date}\n  {snippet}")
-    return "\n".join(lines)
+        def clean(value: Any, limit: int = 240) -> str:
+            text = str(value or "")
+            text = re.sub(r"[\\u200b-\\u200f\\ufeff]", "", text)
+            text = re.sub(r"\\s+", " ", text).strip()
+            return text[:limit]
+
+        subject = clean(item.get("subject")) or "(no subject)"
+        sender = clean(item.get("from")) or "Unknown sender"
+        date = clean(item.get("date"), 100)
+        snippet = clean(item.get("snippet"), 180)
+        block = [f"✉️ {subject}", f"From: {sender}"]
+        if date:
+            block.append(date)
+        if snippet:
+            block.append(snippet)
+        blocks.append("\\n".join(block))
+    if len(messages) > 8:
+        blocks.append(f"Showing the latest 8 of {len(messages)} messages.")
+    return "\\n\\n".join(blocks)
 
 
 def _shopify_read_intent(text: str, snapshot: dict[str, Any]) -> Optional[dict[str, str]]:
@@ -1074,6 +1089,51 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
                 "payload": payload,
             },
         }
+
+    # Explicit action requests should enter the persistent workflow executor,
+    # not receive a purely conversational answer from the general LLM. Keep this
+    # conservative: ordinary questions and vague statements do not start jobs.
+    action_prefix = re.match(
+        r"^(?:please\\s+)?(?:do|execute|run|complete|carry out|take care of|handle|fix|build|deploy|apply|submit|publish|update|create|find and apply|go ahead and)\\b",
+        raw,
+        re.I,
+    )
+    if action_prefix and len(raw.split()) >= 2:
+        try:
+            import workflow_engine
+            workflow = workflow_engine.create_workflow(uid, raw, run_now=True)
+            status = str(workflow.get("status") or "unknown").replace("_", " ").upper()
+            plan = workflow.get("plan") or []
+            lines = [f"⚙️ TASK EXECUTION — {status}", "", f"Task: {raw}", ""]
+            for step in plan[:8]:
+                title = str(step.get("title") or step.get("action") or "Task step")
+                step_status = str(step.get("status") or "pending").replace("_", " ")
+                lines.append(f"• {title} — {step_status}")
+                output = step.get("output") or {}
+                error = step.get("error") or output.get("error")
+                if error:
+                    lines.append(f"  Note: {str(error)[:220]}")
+            if status == "WAITING FOR APPROVAL":
+                lines.extend(["", "This task is paused until you approve the exact proposed action in the workflow/approval panel."])
+            elif status == "FAILED":
+                lines.extend(["", "The workflow failed or was blocked. No unverified action is being reported as complete."])
+            elif status == "COMPLETED":
+                lines.extend(["", "The workflow reached its completion state. Check the step results above for any action that still lacks external verification."])
+            lines.extend(["", f"Workflow ID: {workflow.get('id') or 'unavailable'}"])
+            return {
+                "status": workflow.get("status") or "unknown",
+                "kind": "workflow_execution",
+                "workflow_id": workflow.get("id"),
+                "reply": "\\n".join(lines),
+                "result": workflow,
+            }
+        except Exception as exc:
+            logger.exception("Chat task execution failed: %s", type(exc).__name__)
+            return {
+                "status": "failed",
+                "kind": "workflow_execution",
+                "reply": "❌ I could not start the task executor. No task completion is claimed. Please retry; if it repeats, the backend workflow error needs checking.",
+            }
 
     return None
 
