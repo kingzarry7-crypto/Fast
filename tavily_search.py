@@ -176,7 +176,14 @@ def search_web(query: str, max_results: int = 5, search_depth: str = "basic", in
         err_msg = _redact(str(e))
         logger.warning(f"Tavily search failed for '{query[:60]}': {err_msg}")
         low = err_msg.lower()
-        if "429" in low or "rate limit" in low or "quota" in low or "too many" in low:
+        # Tavily uses 432 for the account's configured plan limit and 433 for
+        # the pay-as-you-go cap. Distinguish these from transient rate limits so
+        # the caller can report the real action needed instead of retrying blindly.
+        if "432" in low or "plan limit exceeded" in low or "usage limit" in low:
+            return {"success": False, "error": "plan_limit_exceeded", "results": [], "answer": "", "query": query, "sources": []}
+        if "433" in low or "pay-as-you-go limit" in low:
+            return {"success": False, "error": "payg_limit_exceeded", "results": [], "answer": "", "query": query, "sources": []}
+        if "429" in low or "rate limit" in low or "too many" in low:
             return {"success": False, "error": "rate_limit", "results": [], "answer": "", "query": query, "sources": []}
         return {"success": False, "error": "search_failed", "results": [], "answer": "", "query": query, "sources": []}
 
