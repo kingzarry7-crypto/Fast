@@ -749,7 +749,7 @@ export default function ChatWorkspace({
 
           {visibleMessages.map((m) => (
             <Fragment key={m.id}>
-              {sending && m.role === "assistant" && m.id === lastAssistantId && (() => {
+              {m.role === "assistant" && m.id === lastAssistantId && (sending || Boolean(m.activitySteps?.length)) && (() => {
                 const steps = m.activitySteps || [];
                 const hasStartedReply = Boolean(m.text?.trim());
                 const visibleSteps = steps.slice(-4);
@@ -760,7 +760,7 @@ export default function ChatWorkspace({
                       <div className="min-w-0 flex-1 pt-1">
                         <div className="mb-1.5 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-500">
                           <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_8px_rgba(103,232,249,.5)]" />
-                          King Zarry AI · {hasStartedReply ? "Responding" : "Thinking"}
+                          King Zarry AI · Live activity
                         </div>
                         <div className="space-y-1.5">
                           {visibleSteps.map((step, index) => {
