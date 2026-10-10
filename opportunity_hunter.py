@@ -84,6 +84,18 @@ def classify_source(url: str, title: str = "", summary: str = "", category: str 
         instruction = "Treat as a job-board listing; prepare an application for the listed role rather than a direct-client sales message."
     return {"kind": kind, "domain": domain, "direct_client": direct, "instruction": instruction}
 
+UPFRONT_COST_RED_FLAGS = (
+    "application fee", "pay to apply", "fee to apply", "registration fee",
+    "upfront fee", "upfront payment", "deposit required", "buy credits",
+    "paid bid", "purchase connects", "training fee", "pay for training",
+    "payment to unlock", "pay to get hired", "processing fee",
+)
+
+def _has_upfront_cost(text: str) -> bool:
+    low = str(text or "").lower()
+    return any(flag in low for flag in UPFRONT_COST_RED_FLAGS)
+
+
 def _score(item: Dict[str, Any], category: str) -> Dict[str, Any]:
     text = (_clean(item.get("title")) + " " + _clean(item.get("content") or item.get("page_text"), 1400)).lower()
     score, reasons = 0, []
@@ -150,6 +162,9 @@ def hunt(user_id: str, category: str = "clients", query: str = "", max_results: 
             continue
         title = _clean(item.get("title") or "Opportunity", 300)
         snippet = _clean(item.get("content") or item.get("page_text"), 1000)
+        # Never recommend listings that explicitly ask the worker to pay first.
+        if _has_upfront_cost(f"{title} {snippet} {url}"):
+            continue
         scoring = _score(item, category)
         if scoring["score"] < 25:
             continue
@@ -163,7 +178,11 @@ def hunt(user_id: str, category: str = "clients", query: str = "", max_results: 
             "summary": snippet, **scoring,
             "source_kind": source["kind"], "direct_client": source["direct_client"],
             "source_instruction": source["instruction"],
-            "estimated_value": _estimate_value(category, scoring["score"]),
+            # Do not invent a contract price or imply a listing is free when its
+            # terms have not been inspected. A fee-free application must be verified.
+            "estimated_value": 0.0,
+            "upfront_cost_status": "no_explicit_fee_detected_not_verified",
+            "estimated_value_note": "Listing budget not verified; this is a lead, not revenue.",
             "next_action": source["instruction"],
             "discovered_at": int(time.time()),
         })
@@ -181,10 +200,8 @@ def hunt(user_id: str, category: str = "clients", query: str = "", max_results: 
     }
 
 def _estimate_value(category: str, score: int) -> float:
-    if category == "news": return 0.0
-    if category == "clients": return 80.0 if score < 60 else 180.0 if score < 80 else 350.0
-    if category == "jobs": return 150.0 if score < 60 else 300.0 if score < 80 else 750.0
-    return 100.0 if score < 60 else 250.0 if score < 80 else 500.0
+    """Never turn a lead score into fictional revenue; require a verified budget."""
+    return 0.0
 
 def create_work_for_opportunity(user_id: str, opportunity: Dict[str, Any]) -> Dict[str, Any]:
     from workflow_engine import create_workflow

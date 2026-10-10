@@ -27,7 +27,7 @@ _READY = False
 _THREAD: threading.Thread | None = None
 _STOP = threading.Event()
 
-CATEGORIES = ("clients", "jobs", "news", "website_health")
+CATEGORIES = ("clients", "jobs", "news", "website_health", "shopify_inventory")
 
 
 def _now() -> str:
@@ -296,13 +296,40 @@ def scan_user(user_id: str, categories: list[str] | None = None, max_results: in
     user_id = str(user_id or "").strip()
     if not user_id:
         raise ValueError("user_id is required")
-    wanted = [c for c in (categories or ["clients", "jobs", "news", "website_health"]) if c in CATEGORIES]
+    wanted = [c for c in (categories or ["clients", "jobs", "news", "website_health", "shopify_inventory"]) if c in CATEGORIES]
     found: list[dict[str, Any]] = []
     new: list[dict[str, Any]] = []
     errors: list[str] = []
 
     for category in wanted:
         try:
+            if category == "shopify_inventory":
+                from shopify_inventory import inventory_snapshot
+                inventory = inventory_snapshot(user_id)
+                low_items = inventory.get("items") or []
+                if low_items:
+                    out_count = int(inventory.get("out_of_stock_count") or 0)
+                    examples = [
+                        f"{str(row.get('product') or 'Product')} / {str(row.get('variant') or 'Default')}: {row.get('quantity', 0)} left"
+                        for row in low_items[:8]
+                    ]
+                    item = {
+                        "category": "shopify_inventory",
+                        "title": ("Shopify has out-of-stock products" if out_count else "Shopify stock is running low"),
+                        "summary": f"{out_count} variant(s) out of stock; {int(inventory.get('low_stock_count') or 0)} low-stock variant(s). " + "; ".join(examples),
+                        "url": f"https://{str(inventory.get('store') or '').strip('/')}/admin/products" if inventory.get("store") else "",
+                        "score": 98 if out_count else 82,
+                        "confidence": "high",
+                        "estimated_value": 0,
+                        "source_kind": "shopify_inventory",
+                        "suggested_action": "Prepare a replenishment list and compare supplier costs. Ask for approval before any purchase or inventory adjustment; no order has been placed.",
+                        "payload": inventory,
+                    }
+                    saved, is_new = _save_finding(user_id, item)
+                    found.append(saved)
+                    if is_new:
+                        new.append(saved)
+                continue
             if category == "website_health":
                 item = _health_finding(user_id)
                 if item:

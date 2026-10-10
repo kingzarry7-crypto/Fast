@@ -448,7 +448,7 @@ SHOPIFY_REDIRECT_URI = (
 )
 SHOPIFY_SCOPES = os.getenv(
     "SHOPIFY_OAUTH_SCOPES",
-    "read_products,write_products,read_orders,write_inventory",
+    "read_products,write_products,read_orders,read_inventory,write_inventory",
 ).strip()
 
 def _shopify_missing_configuration() -> list[str]:

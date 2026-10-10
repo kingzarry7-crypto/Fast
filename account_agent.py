@@ -253,6 +253,8 @@ def account_context_for_ai(user_id: str) -> str:
                         scope_names.append("shopify.products.write")
                     elif "read_orders" in s:
                         scope_names.append("shopify.orders.read")
+                    elif "read_inventory" in s:
+                        scope_names.append("shopify.inventory.read")
                     elif "write_inventory" in s:
                         scope_names.append("shopify.inventory.write")
                 lines.append(
@@ -388,11 +390,15 @@ def _format_gmail_result(result: dict[str, Any]) -> str:
 
 
 def _shopify_read_intent(text: str, snapshot: dict[str, Any]) -> Optional[dict[str, str]]:
-    """Recognize safe Shopify read requests and route them to the official connector."""
+    """Recognize safe Shopify reads and low-stock monitoring requests."""
     raw = str(text or "").strip()
     lower = raw.lower()
     if not raw:
         return None
+
+    inventory_request = bool(re.search(r"\b(stock|inventory|restock|out of stock|low stock|running out|replenish)\b", lower))
+    if inventory_request and re.search(r"\b(watch|monitor|check|show|list|stock|inventory|restock|replenish|running out|out of stock|low stock)\b", lower):
+        return {"operation": "inventory", "kind": "shopify_inventory"}
 
     if re.search(r"\b(shopify|my store|my shop|storefront)\b", lower):
         if re.search(r"\b(order|orders|sales|purchases)\b", lower):
@@ -408,7 +414,6 @@ def _shopify_read_intent(text: str, snapshot: dict[str, Any]) -> Optional[dict[s
     if re.search(r"\b(orders|sales|purchases)\b", lower):
         return {"operation": "orders", "kind": "shopify_orders"}
     return None
-
 
 def _format_shopify_result(result: dict[str, Any], kind: str) -> str:
     if kind == "shopify_store":
@@ -429,6 +434,9 @@ def _format_shopify_result(result: dict[str, Any], kind: str) -> str:
                 f"{item.get('status') or 'unknown'} — {item.get('handle') or ''}"
             )
         return "\n".join(lines)
+    if kind == "shopify_inventory":
+        from shopify_inventory import format_inventory_snapshot
+        return format_inventory_snapshot(result)
     if kind == "shopify_orders":
         orders = ((result.get("orders") or {}).get("nodes") or [])
         if not orders:
@@ -710,6 +718,64 @@ async def handle_telegram_request(update: Any, text: str) -> Optional[dict[str, 
             await update.message.reply_text("\n".join(lines), parse_mode="HTML")
         return {"status": "completed", "kind": "calendar_read", "result": result}
 
+    # Direct chat integration for the existing Fiverr drafting agent.
+    if re.search(r"\bfiverr\b", lower) and re.search(r"\b(gig|profile|description|tags|seo|faq|package|packages|optimi[sz]e|improve|create|write|draft)\b", lower):
+        try:
+            from ai_engine import AIEngine
+            import fiverr_agent
+            prompt = (
+                f"{fiverr_agent.agent_system_instructions()}\n\n"
+                "Prepare a complete Fiverr draft appropriate to the user's request. "
+                "For a Gig include a truthful title, category, search tags, tiered packages, "
+                "description, FAQs, buyer requirements, and a gallery checklist where relevant. "
+                "Do not invent portfolio proof, reviews, certifications, or guaranteed results. "
+                "Do not publish anything; return a reviewable draft and any missing questions.\n\n"
+                f"USER REQUEST:\n{raw}"
+            )
+            draft = AIEngine(memory=None).ask(user_id=f"fiverr-agent:{uid}", prompt=prompt, image=None)
+            if not draft:
+                raise RuntimeError("empty Fiverr draft")
+            policy = fiverr_agent.policy_check(str(draft))
+            task = fiverr_agent.create_task(uid, "ai_draft", "Fiverr Agent draft", {
+                "instruction": raw, "draft": str(draft), "policy": policy
+            })
+            return {
+                "status": "draft_ready" if policy.get("ok") else "manual_review_required",
+                "kind": "fiverr_draft",
+                "reply": "🧑‍💻 FIVERR DRAFT PREPARED\n\n" + str(draft)[:12000]
+                         + "\n\n🛡️ This is a draft only; nothing was published. Review the copy and pricing before approving any external change.",
+                "result": {"task": task, "policy": policy},
+            }
+        except Exception as exc:
+            logger.warning("Fiverr draft integration failed: %s", type(exc).__name__)
+            return {"status": "failed", "kind": "fiverr_draft",
+                    "reply": "❌ I could not prepare the Fiverr draft. Nothing was published. Check the backend AI provider and Fiverr Agent storage."}
+
+    if re.search(r"\b(find|look for|search for|discover)\b", lower) and re.search(r"\b(jobs?|work|clients?|freelance|projects?|opportunities)\b", lower):
+        try:
+            import opportunity_hunter
+            category = "jobs" if re.search(r"\b(job|jobs|freelance|projects?)\b", lower) else "clients"
+            hunt = opportunity_hunter.hunt(uid, category=category, max_results=8)
+            leads = hunt.get("opportunities") or []
+            if not leads:
+                return {"status": "no_results", "kind": "job_discovery",
+                        "reply": "🔎 I could not find a sufficiently relevant lead in this scan. I will not invent a job or claim income. Try again later or ask me to scan clients instead.",
+                        "result": hunt}
+            chosen = leads[0]
+            lines = ["🎯 TOP MATCH FOUND", "", str(chosen.get("title") or "Opportunity"),
+                     str(chosen.get("url") or ""), "",
+                     f"Match score: {chosen.get('score', 0)}/100",
+                     f"Source type: {chosen.get('source_kind') or 'unclassified'}",
+                     str(chosen.get("summary") or "")[:900], "",
+                     "Cost check: no explicit pay-to-apply fee was detected in the available listing text, but the full terms still need verification. Do not pay application fees, deposits, bid credits, or subscriptions.",
+                     "Income is not guaranteed. Say PREPARE THIS OPPORTUNITY if you want me to inspect requirements and prepare a tailored application for your approval."]
+            return {"status": "completed", "kind": "job_discovery", "reply": "\n".join(lines),
+                    "result": {"selected": chosen, "other_matches": leads[1:4], "disclaimer": hunt.get("disclaimer")}}
+        except Exception as exc:
+            logger.warning("Job discovery failed: %s", type(exc).__name__)
+            return {"status": "failed", "kind": "job_discovery",
+                    "reply": "❌ Job discovery failed because the configured research service did not return a usable result. No application was submitted."}
+
     shopify_intent = _shopify_read_intent(raw, snapshot)
     if shopify_intent:
         try:
@@ -725,6 +791,14 @@ async def handle_telegram_request(update: Any, text: str) -> Optional[dict[str, 
 
             store, token = _shopify_token(uid, "")
             operation = shopify_intent["operation"]
+            if operation == "inventory":
+                from shopify_inventory import inventory_snapshot, format_inventory_snapshot
+                result = inventory_snapshot(uid)
+                reply = format_inventory_snapshot(result)
+                await update.message.reply_text(reply)
+                return {"status": result.get("status") or "completed", "kind": "shopify_inventory",
+                        "provider": "shopify", "operation": "inventory", "target": store,
+                        "reply": reply, "result": result}
             if operation == "shop":
                 result = _shopify_request(
                     store, token,
@@ -925,6 +999,37 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
         return {"status": "unverified", "kind": "approval", "approval_id": approval_id,
                 "reply": "⚠️ Google responded, but KZ could not verify the resulting resource. It is marked unverified."}
 
+    if lower in {"1", "2", "3", "option 1", "option 2", "option 3", "professional", "friendly", "warm", "warm and friendly", "concise", "short", "short and direct", "choose professional"}:
+        try:
+            from email_draft_manager import choose_pending
+            selected = choose_pending(uid, raw)
+            if selected:
+                payload = selected["payload"]
+                result = _send_gmail_preview(uid, payload)
+                if result.get("status") != "waiting_for_approval":
+                    return {"status": "failed", "kind": "send_gmail", "reply": "❌ I could not create the Gmail approval. Nothing was sent."}
+                return {
+                    "status": "waiting_for_approval",
+                    "kind": "send_gmail",
+                    "approval_id": result["approval_id"],
+                    "provider": "google",
+                    "operation": "send_gmail",
+                    "target": payload["to"],
+                    "reply": (
+                        "✉️ FINAL EMAIL — " + selected["tone"] + "\n\n"
+                        f"To: {payload['to']}\nSubject: {payload['subject']}\n\n{payload['body']}\n\n"
+                        f"Approval ID: {result['approval_id']}\n"
+                        "Nothing has been sent yet. Approve this exact message in the approval panel to send it."
+                    ),
+                    "connector_action": {"provider": "google", "operation": "send_gmail",
+                                         "status": "waiting_for_approval", "approval_id": result["approval_id"],
+                                         "target": payload["to"], "payload": payload},
+                }
+        except Exception as exc:
+            logger.warning("Email tone choice failed: %s", type(exc).__name__)
+            return {"status": "failed", "kind": "send_gmail",
+                    "reply": "❌ I could not retrieve the pending email draft choice. Nothing was sent."}
+
     if lower in {
         "account status", "check connected accounts", "what accounts are connected",
         "show connected accounts", "check my connections", "monitor account status",
@@ -984,6 +1089,12 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
                 }
             store, token = _shopify_token(uid, "")
             operation = shopify_intent["operation"]
+            if operation == "inventory":
+                from shopify_inventory import inventory_snapshot, format_inventory_snapshot
+                result = inventory_snapshot(uid)
+                return {"status": result.get("status") or "completed", "kind": "shopify_inventory",
+                        "provider": "shopify", "operation": "inventory", "target": store,
+                        "reply": format_inventory_snapshot(result), "result": result}
             queries = {
                 "shop": "query { shop { id name myshopifyDomain } }",
                 "products": "query { products(first: 20) { nodes { id title status handle } } }",
@@ -1063,32 +1174,26 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
 
     payload = _parse_email_request(raw)
     if payload:
-        result = _send_gmail_preview(uid, payload)
-        if result.get("status") == "not_connected":
+        try:
+            from google_connector import _account
+            if not _account(uid):
+                return {"status": "not_connected", "kind": "send_gmail",
+                        "reply": "🔌 Gmail is not connected to this KZ account."}
+            from email_draft_manager import create_choices, render_choices
+            session = create_choices(uid, payload["to"], payload["subject"], payload["body"])
             return {
-                "status": "not_connected", "kind": "send_gmail",
-                "reply": "🔌 KZ checked the account registry: Gmail is not connected to this KZ account."
+                "status": "draft_choices",
+                "kind": "send_gmail",
+                "draft_session_id": session["id"],
+                "reply": render_choices(session),
+                "result": {"recipient": session["recipient"], "choices": [
+                    {"id": x["id"], "tone": x["tone"], "subject": x["subject"]} for x in session["options"]
+                ]},
             }
-        return {
-            **result,
-            "kind": "send_gmail",
-            "reply": (
-                "✉️ EMAIL PREPARED\n\n"
-                f"To: {payload['to']}\n"
-                f"Subject: {payload['subject']}\n"
-                f"Message: {payload['body']}\n\n"
-                f"🛡️ Permission required before sending. Approval ID: {result['approval_id']}. "
-                "Approve this exact action; KZ will then send it through Google and report verified evidence."
-            ),
-            "connector_action": {
-                "provider": "google",
-                "operation": "send_gmail",
-                "status": "waiting_for_approval",
-                "approval_id": result["approval_id"],
-                "target": payload["to"],
-                "payload": payload,
-            },
-        }
+        except Exception as exc:
+            logger.warning("Professional email draft preparation failed: %s", type(exc).__name__)
+            return {"status": "failed", "kind": "send_gmail",
+                    "reply": "❌ I could not prepare the professional email options. Nothing was sent. You can retry with the recipient and what you want to say."}
 
     # Explicit action requests should enter the persistent workflow executor,
     # not receive a purely conversational answer from the general LLM. Keep this
