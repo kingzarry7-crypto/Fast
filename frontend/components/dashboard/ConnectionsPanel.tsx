@@ -192,7 +192,7 @@ export default function ConnectionsPanel() {
   async function connectGoogle() {
     setBusy(true);
     setMessage("Opening Google's secure sign-in and account chooser…");
-    const returnUrl = window.location.origin.replace(/\\/$/, "");
+    const returnUrl = window.location.origin;
     // Carry the exact active frontend origin through Railway's OAuth callback;
     // this avoids returning users to a stale domain and hitting a 404.
     window.location.href = "/api/connectors/google/start?return_url=" + encodeURIComponent(returnUrl);
@@ -289,7 +289,7 @@ export default function ConnectionsPanel() {
   async function connectGitHub() {
     setBusy(true);
     setMessage("Opening GitHub's secure authorization…");
-    const returnUrl = window.location.origin.replace(/\\/$/, "");
+    const returnUrl = window.location.origin;
     window.location.href = "/api/connectors/github/start?return_url=" + encodeURIComponent(returnUrl);
   }
 
