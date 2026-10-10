@@ -226,9 +226,8 @@ export default function AICore({
         @keyframes kz-dot-pulse { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
         @keyframes kz-glitch-cyan { 0%,87%,90%,100% { opacity: 0; transform: translateX(0); clip-path: inset(0 0 0 0); } 88% { opacity: .48; transform: translateX(-4px); clip-path: inset(12% 0 64% 0); } 89% { opacity: .35; transform: translateX(3px); clip-path: inset(43% 0 35% 0); } }
         @keyframes kz-glitch-magenta { 0%,72%,75%,100% { opacity: 0; transform: translateX(0); clip-path: inset(0 0 0 0); } 73% { opacity: .38; transform: translateX(4px); clip-path: inset(28% 0 52% 0); } 74% { opacity: .28; transform: translateX(-3px); clip-path: inset(63% 0 17% 0); } }
-        @media (prefers-reduced-motion: reduce) {
-          .kz-human-core *, .kz-human-core *::before, .kz-human-core *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
-        }
+        /* Keep the new AI core animated on desktop even when the OS requests reduced motion.
+           The core's ambient motion is part of its primary visual feedback. */
       `}</style>
     </div>
   );
