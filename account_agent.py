@@ -736,9 +736,11 @@ async def handle_telegram_request(update: Any, text: str) -> Optional[dict[str, 
             if operation == "inventory":
                 from shopify_inventory import inventory_snapshot, format_inventory_snapshot
                 result = inventory_snapshot(uid)
+                reply = format_inventory_snapshot(result)
+                await update.message.reply_text(reply)
                 return {"status": result.get("status") or "completed", "kind": "shopify_inventory",
                         "provider": "shopify", "operation": "inventory", "target": store,
-                        "reply": format_inventory_snapshot(result), "result": result}
+                        "reply": reply, "result": result}
             if operation == "shop":
                 result = _shopify_request(
                     store, token,
