@@ -1427,6 +1427,29 @@ async def current_user(request: Request):
     return {"status": "success", "user": user}
 
 
+@app.post("/api/voice/transcribe")
+async def transcribe_voice_message(request: Request):
+    # Require the same signed-in web session as chat before accepting audio.
+    await asyncio.to_thread(_require_current_user, request)
+    filename = os.path.basename(request.query_params.get("filename", "voice.webm") or "voice.webm")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", filename):
+        filename = "voice.webm"
+    audio_bytes = await request.body()
+    if not audio_bytes or len(audio_bytes) < 100:
+        raise HTTPException(status_code=400, detail="No usable audio was received. Please record again.")
+    if len(audio_bytes) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Voice recordings must be under 25 MB.")
+    try:
+        import stt_engine
+        transcript = await asyncio.to_thread(stt_engine.transcribe_bytes, audio_bytes, filename)
+    except Exception as exc:
+        logger.warning("Web voice transcription failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Voice transcription is temporarily unavailable. Please type your message.")
+    if not transcript or not transcript.strip():
+        raise HTTPException(status_code=503, detail="I couldn't transcribe that recording. Check the speech-to-text provider keys in Railway and try again.")
+    return {"text": transcript.strip()}
+
+
 @app.post("/api/auth/verify-email")
 async def verify_email(payload: VerifyEmailRequest, request: Request, response: Response):
     email = _normalize_email(payload.email)

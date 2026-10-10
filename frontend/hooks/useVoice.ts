@@ -75,6 +75,10 @@ export function useVoice() {
   const [voiceCharacter, setVoiceCharacter] = useState<TtsVoice>("bella");
   const [provider, setProvider] = useState<"elevenlabs" | "browser">("elevenlabs");
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const mediaChunksRef = useRef<Blob[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const styleRef = useRef<VoiceStyle>("human");
   const voiceRef = useRef<TtsVoice>("bella");
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -93,6 +97,16 @@ export function useVoice() {
       return () =>
         window.speechSynthesis.removeEventListener("voiceschanged", onVoices);
     }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      try { recognitionRef.current?.abort(); } catch { /* ignore */ }
+      try {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop();
+      } catch { /* ignore */ }
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
   }, []);
 
   useEffect(() => {
@@ -224,15 +238,81 @@ export function useVoice() {
     [stop, speakBrowser]
   );
 
+  const startBrowserRecording = useCallback(async (onResult: (text: string) => void) => {
+    if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setError("Voice recording is not supported in this browser. Please type your message or open the site in Safari.");
+      return;
+    }
+
+    setError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      mediaChunksRef.current = [];
+      const preferredType = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+        "audio/ogg;codecs=opus",
+      ].find((type) => MediaRecorder.isTypeSupported?.(type));
+      const recorder = preferredType ? new MediaRecorder(stream, { mimeType: preferredType }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data?.size) mediaChunksRef.current.push(event.data);
+      };
+      recorder.onerror = () => {
+        setError("The microphone recording failed. Check microphone permission and try again.");
+        setListening(false);
+      };
+      recorder.onstop = async () => {
+        const blob = new Blob(mediaChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        mediaChunksRef.current = [];
+        mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+        mediaRecorderRef.current = null;
+        setListening(false);
+        if (blob.size < 100) {
+          setError("I didn't receive any audio. Tap the microphone, allow access, and try speaking again.");
+          return;
+        }
+        try {
+          const extension = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
+          const result = await api.transcribeAudio(blob, `voice.${extension}`);
+          if (!result.text?.trim()) {
+            setError("I couldn't make out that recording. Please try again or type your message.");
+            return;
+          }
+          onResult(result.text.trim());
+        } catch (cause) {
+          setError(cause instanceof Error ? cause.message : "Voice transcription failed. Please try again.");
+        }
+      };
+      recorder.start();
+      setListening(true);
+    } catch (cause) {
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+      setListening(false);
+      const reason = cause instanceof Error ? cause.name : "";
+      setError(reason === "NotAllowedError" || reason === "SecurityError"
+        ? "Microphone access is blocked. Allow microphone access for this site in your browser settings, then tap record again."
+        : "Couldn't start the microphone. Check that no other app is using it and try again.");
+    }
+  }, []);
+
   const listen = useCallback((onResult: (text: string) => void, continuous = false) => {
     if (typeof window === "undefined") return;
+    setError(null);
     const W = window as unknown as {
       SpeechRecognition?: new () => SpeechRecognitionInstance;
       webkitSpeechRecognition?: new () => SpeechRecognitionInstance;
     };
     const SR = W.SpeechRecognition || W.webkitSpeechRecognition;
-    if (!SR) return;
-
+    if (!SR) {
+      // Mobile browsers without Web Speech use the backend's configured STT providers.
+      void startBrowserRecording(onResult);
+      return;
+    }
     try {
       recognitionRef.current?.abort();
     } catch {
@@ -244,10 +324,7 @@ export function useVoice() {
     recognition.lang = "en-US";
     recognition.interimResults = false;
     recognition.continuous = continuous;
-
     recognition.onresult = (e: SpeechRecognitionEvent) => {
-      // In continuous mode, each final result becomes a natural turn.
-      // Do not expose interim speech as typed text.
       const start = continuous ? (e.resultIndex ?? 0) : 0;
       for (let i = start; i < e.results.length; i += 1) {
         const result = e.results[i];
@@ -256,24 +333,34 @@ export function useVoice() {
         if (transcript.trim()) onResult(transcript.trim());
       }
     };
-    recognition.onerror = () => setListening(false);
+    recognition.onerror = (event: unknown) => {
+      setListening(false);
+      const code = event && typeof event === "object" && "error" in event ? String((event as { error?: unknown }).error) : "";
+      setError(code === "not-allowed" || code === "service-not-allowed"
+        ? "Microphone access is blocked. Allow microphone access for this site and try again."
+        : "Voice recognition stopped. Try recording again or type your message.");
+    };
     recognition.onend = () => setListening(false);
-
     setListening(true);
     try {
       recognition.start();
     } catch {
       setListening(false);
+      setError("Couldn't start voice recognition. Tap the microphone again or type your message.");
     }
-  }, []);
+  }, [startBrowserRecording]);
 
   const stopListening = useCallback(() => {
     try {
-      recognitionRef.current?.stop();
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+      } else {
+        recognitionRef.current?.stop();
+        setListening(false);
+      }
     } catch {
-      /* ignore */
+      setListening(false);
     }
-    setListening(false);
   }, []);
 
   return {
@@ -286,6 +373,7 @@ export function useVoice() {
     stopListening,
     listenContinuous: (onResult: (text: string) => void) => listen(onResult, true),
     supported,
+    error,
     style,
     setVoiceStyle,
     voiceCharacter,
