@@ -380,9 +380,7 @@ export async function streamChatMessage(
     reader.releaseLock();
   }
 
-  if (!reply.trim() && streamError) {
-    throw new ApiError({ status: 502, message: streamError });
-  }
+  if (streamError) throw new ApiError({ status: 502, message: streamError });
   if (!reply.trim()) throw new ApiError({ status: 502, message: "AI streaming returned no response" });
   return { reply, conversation_id: conversationId, approval, agent };
 }
