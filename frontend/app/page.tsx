@@ -120,8 +120,8 @@ export default function LandingPage() {
             <div className="mx-auto mb-5 w-fit rounded-full border border-cyan-200/20 bg-[#08162f]/60 px-4 py-2 font-mono-tech text-[9px] tracking-[0.3em] text-cyan-100/70 backdrop-blur md:mx-0">
               PERSONAL AI · COMMAND CENTRE
             </div>
-            <div className="mx-auto max-w-[220px] md:mx-0">
-              <AICore state="idle" size={210} />
+            <div className="mx-auto w-full max-w-[340px] md:mx-0">
+              <AICore state="idle" size={320} />
             </div>
             <h1 className="mt-4 font-display text-4xl font-bold tracking-[0.08em] text-white drop-shadow-[0_0_30px_rgba(56,214,255,.25)] sm:text-5xl lg:text-6xl">
               KING ZARRY <span className="text-[#f2c76b]">AI</span>
