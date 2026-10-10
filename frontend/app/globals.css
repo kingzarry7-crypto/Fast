@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 @theme {
-  --color-kz-bg-base: #03060a;
-  --color-kz-bg-surface: #020914;
-  --color-kz-bg-elevated: #031322;
+  --color-kz-bg-base: #030916;
+  --color-kz-bg-surface: #030b1a;
+  --color-kz-bg-elevated: #06152a;
   --color-kz-cyan: #00f0ff;
   --color-kz-cyan-soft: #2ee6ff;
   --color-kz-blue: #0066ff;
@@ -18,7 +18,7 @@
 }
 
 :root {
-  --kz-glass-bg: rgba(3, 12, 24, 0.55);
+  --kz-glass-bg: rgba(3, 9, 22, 0.82);
   --kz-glass-border: rgba(0, 240, 255, 0.35);
   --kz-glass-border-hover: rgba(0, 240, 255, 0.7);
 }
@@ -44,12 +44,14 @@ body {
   position: fixed;
   inset: 0;
   pointer-events: none;
+  background-color: #030916;
   background-image:
-    linear-gradient(rgba(0, 240, 255, 0.018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 240, 255, 0.018) 1px, transparent 1px);
-  background-size: 60px 60px;
-  -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 40%, black 20%, transparent 80%);
-  mask-image: radial-gradient(ellipse 90% 80% at 50% 40%, black 20%, transparent 80%);
+    linear-gradient(rgba(0, 240, 255, .025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, .025) 1px, transparent 1px),
+    radial-gradient(ellipse 44% 55% at 50% 42%, rgba(0, 92, 190, .16), transparent 74%),
+    radial-gradient(ellipse 36% 34% at 82% 66%, rgba(255, 55, 145, .065), transparent 72%),
+    radial-gradient(ellipse 34% 34% at 17% 76%, rgba(255, 166, 65, .035), transparent 74%);
+  background-size: 64px 64px, 64px 64px, auto, auto, auto;
   z-index: 0;
 }
 
@@ -57,10 +59,10 @@ body {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background:
-    radial-gradient(ellipse 50% 40% at 15% 20%, rgba(0, 240, 255, 0.10), transparent 70%),
-    radial-gradient(ellipse 45% 40% at 85% 75%, rgba(0, 102, 255, 0.10), transparent 70%),
-    radial-gradient(ellipse 60% 55% at 50% 100%, rgba(139, 92, 246, 0.08), transparent 70%);
+  background-color: #030916;
+  background-image:
+    radial-gradient(ellipse 48% 48% at 50% 42%, rgba(0, 78, 170, .12), transparent 72%),
+    radial-gradient(ellipse 30% 36% at 78% 38%, rgba(255, 55, 145, .045), transparent 72%);
   z-index: 0;
 }
 
@@ -80,7 +82,7 @@ body {
 }
 
 .kz-glass {
-  background: rgba(3, 12, 24, 0.4);
+  background: rgba(3, 9, 22, 0.72);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(0, 240, 255, 0.35);
