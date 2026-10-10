@@ -397,7 +397,12 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
         }
         try:
             from learning_loop import learn_from_workflow
-            learning = learn_from_workflow(item)
+            # This is the final planned step; evaluate the learning candidate as
+            # completed, while the learning_loop still requires provider evidence
+            # for any consequential external action.
+            learning_candidate = dict(item)
+            learning_candidate["status"] = WorkflowStatus.COMPLETED.value
+            learning = learn_from_workflow(learning_candidate)
         except Exception:
             learning = {"learned": 0, "stored": 0, "lesson_types": []}
         return {"success": True, "memory_recorded": learning.get("stored", 0) > 0, "learning": learning, "summary": summary}
