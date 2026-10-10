@@ -51,6 +51,18 @@ class WebResearchFallbackTests(unittest.TestCase):
         self.assertEqual(result["provider"], "tavily")
         self.assertTrue(result["results"])
 
+    def test_specialist_search_expands_academic_sources(self):
+        queries = web_research_engine._query_variants("medical research papers", deep=True)
+        self.assertTrue(any("worldcat.org" in q and "mednar.com" in q for q in queries))
+
+    def test_specialist_search_expands_dark_web_reference_sources(self):
+        queries = web_research_engine._query_variants("research the Tor network and dark web", deep=True)
+        self.assertTrue(any("ahmia.fi" in q and "torproject.org" in q for q in queries))
+
+    def test_specialist_search_expands_directory_sources(self):
+        queries = web_research_engine._query_variants("find obscure websites in web directories", deep=True)
+        self.assertTrue(any("Directory Bear" in q and "ternbook" in q for q in queries))
+
     def test_returns_actionable_error_when_both_providers_fail(self):
         self.tavily.search_web = lambda *args, **kwargs: {
             "success": False, "error": "rate_limit", "results": [], "answer": ""
