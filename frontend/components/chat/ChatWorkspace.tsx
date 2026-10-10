@@ -653,10 +653,7 @@ export default function ChatWorkspace({
               <button type="button" onClick={() => setHistoryOpen((v) => !v)} className="w-7 h-7 flex items-center justify-center rounded-md border border-cyan-500/20 text-cyan-300/80 text-xs" title="Chats">
                 ☰
               </button>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="font-mono-tech text-[9px] tracking-[0.2em] text-cyan-300/70">
-                {sending ? "WORKING" : "READY"}
-              </span>
+              
             </div>
             <div className="flex items-center gap-1.5">
               {voiceCallSupported && (
@@ -777,31 +774,33 @@ export default function ChatWorkspace({
           ))}
 
           {sending && (() => {
-            const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant" && message.status);
-            const rawStatus = latestAssistant?.status || "";
-            const label = rawStatus.startsWith("KZ AGENT •")
-              ? `King Zarry AI agent: ${rawStatus.slice("KZ AGENT •".length).trim()}`
-              : "King Zarry AI is processing your message…";
+            const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+            const agentActivity = latestAssistant?.status?.startsWith("KZ AGENT •")
+              ? latestAssistant.status.slice("KZ AGENT •".length).trim()
+              : "";
+            const hasStartedReply = Boolean(latestAssistant?.text?.trim()) &&
+              !String(latestAssistant?.id || "").startsWith("error");
+            if (hasStartedReply && !agentActivity) return null;
             return (
               <div className="flex items-center gap-3 px-1 py-3" aria-live="polite">
-                <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
                   <span className="flex items-center gap-1.5" aria-hidden="true">
-                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-pulse" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-pulse [animation-delay:150ms]" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-pulse [animation-delay:300ms]" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-bounce [animation-delay:-300ms]" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-bounce [animation-delay:-150ms]" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-bounce" />
                   </span>
-                  <span className="truncate text-xs font-medium tracking-wide text-cyan-200/80">{label}</span>
+                  <span className="text-sm text-slate-300">
+                    {agentActivity ? `King Zarry AI · ${agentActivity}` : "King Zarry AI is thinking"}
+                  </span>
                 </div>
                 <button
                   type="button"
                   onClick={stopChat}
-                  className="flex h-9 shrink-0 items-center gap-2 rounded-full border border-white/10 bg-[#1d1d1f] px-3.5 text-xs font-medium text-white shadow-[0_4px_14px_rgba(0,0,0,.28)] transition hover:bg-[#29292c] active:scale-95"
+                  className="flex h-9 shrink-0 items-center gap-2 rounded-full border border-white/10 bg-[#1d1d1f] px-3.5 text-xs font-medium text-white transition hover:bg-[#29292c] active:scale-95"
                   aria-label="Stop King Zarry AI"
                   title="Stop King Zarry AI"
                 >
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500 text-white shadow-[0_0_12px_rgba(34,211,238,.28)]">
-                    <span className="h-2 w-2 rounded-[2px] bg-white" />
-                  </span>
+                  <span className="h-2.5 w-2.5 rounded-[2px] bg-white" />
                   <span>Stop</span>
                 </button>
               </div>
