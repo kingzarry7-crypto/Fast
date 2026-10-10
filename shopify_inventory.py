@@ -104,4 +104,4 @@ def format_inventory_snapshot(result: Dict[str, Any]) -> str:
         "",
         "No stock was purchased or changed. I can prepare a replenishment recommendation for your approval, but an actual purchase requires a connected supplier/fulfillment service.",
     ])
-    return "\\n".join(lines)
+    return "\n".join(lines)
