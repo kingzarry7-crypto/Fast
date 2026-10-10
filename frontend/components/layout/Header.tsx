@@ -47,40 +47,13 @@ export function Header({
         {/* Brand & AI Core Identifier */}
         <div className="flex items-center gap-4">
           <Link href="/dashboard" className="flex items-center gap-3 group focus:outline-none">
-            {/* IQ Bot robot-head badge — matches the selected neon dashboard design. */}
+            {/* Use the same real holographic human-profile image across the app. */
             <div
               className="relative w-11 h-11 shrink-0 rounded-2xl border border-cyan-400/60 bg-[#020b18] flex items-center justify-center overflow-hidden shadow-[0_0_18px_rgba(0,240,255,0.45),inset_0_0_14px_rgba(0,240,255,0.16)] group-hover:border-cyan-300 group-hover:shadow-[0_0_24px_rgba(0,240,255,0.65),inset_0_0_16px_rgba(0,240,255,0.2)] transition-all"
-              aria-label="IQ Bot"
+              aria-label="King Zarry AI human core"
             >
               <span className="absolute inset-0 rounded-2xl border border-cyan-300/20 animate-pulse pointer-events-none" aria-hidden="true" />
-              <svg viewBox="0 0 100 100" className="relative z-10 h-9 w-9" role="img" aria-label="IQ Bot robot head">
-                <defs>
-                  <linearGradient id="headerRobotShell" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stopColor="#f1ffff" />
-                    <stop offset="38%" stopColor="#8cecff" />
-                    <stop offset="72%" stopColor="#12bfe8" />
-                    <stop offset="100%" stopColor="#063247" />
-                  </linearGradient>
-                  <filter id="headerRobotGlow">
-                    <feGaussianBlur stdDeviation="1.8" result="blur" />
-                    <feMerge>
-                      <feMergeNode in="blur" />
-                      <feMergeNode in="SourceGraphic" />
-                    </feMerge>
-                  </filter>
-                </defs>
-                <path d="M50 8v10" stroke="#00f0ff" strokeWidth="3" strokeLinecap="round" />
-                <circle cx="50" cy="6" r="4" fill="#00f0ff" filter="url(#headerRobotGlow)" />
-                <path d="M25 25Q50 10 75 25L84 37v34q-34 20-68 0V37z" fill="url(#headerRobotShell)" fillOpacity=".2" stroke="#00f0ff" strokeWidth="2.2" filter="url(#headerRobotGlow)" />
-                <path d="M29 39Q50 27 71 39v25q-21 12-42 0z" fill="#020b15" stroke="#00dfff" strokeWidth="1.7" />
-                <path d="M36 48h10" stroke="#f3ffff" strokeWidth="5" strokeLinecap="round" filter="url(#headerRobotGlow)" />
-                <path d="M54 48h10" stroke="#f3ffff" strokeWidth="5" strokeLinecap="round" filter="url(#headerRobotGlow)" />
-                <path d="M39 58q11 8 22 0" fill="none" stroke="#00f0ff" strokeWidth="2.2" strokeLinecap="round" />
-                <path d="M24 47h-7M76 47h7" stroke="#00f0ff" strokeWidth="2.5" strokeLinecap="round" />
-                <circle cx="14" cy="47" r="3" fill="#00f0ff" filter="url(#headerRobotGlow)" />
-                <circle cx="86" cy="47" r="3" fill="#00f0ff" filter="url(#headerRobotGlow)" />
-                <path d="M34 73l-5 8M66 73l5 8" stroke="#00f0ff" strokeWidth="2.5" strokeLinecap="round" />
-              </svg>
+              <img src="/human-ai-core.webp" alt="King Zarry AI holographic human profile" className="relative z-10 h-full w-full object-cover" />
             </div>
 
             <div className="flex flex-col">
