@@ -876,7 +876,7 @@ export default function ChatWorkspace({
 
       <form
         onSubmit={handleSubmit}
-        className="relative inset-x-0 z-30 shrink-0 border-t border-white/10 bg-[#05080f]/95 backdrop-blur-md px-3 sm:px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] [transform:translateZ(0)]"
+        className="relative inset-x-0 z-30 shrink-0 border-t border-white/[0.06] bg-[#0b0b0c]/95 px-3 sm:px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] [transform:translateZ(0)]"
       >
         <div className="mx-auto w-full max-w-2xl">
           {attached && (
@@ -904,11 +904,11 @@ export default function ChatWorkspace({
           )}
 
           {!callMode && (
-          <div className="flex items-center gap-2 rounded-full border border-zinc-600/60 bg-zinc-900/90 px-2 py-1.5 shadow-lg shadow-black/40">
+          <div className="flex items-end gap-2 rounded-[26px] border border-white/[0.12] bg-[#1b1b1d] px-3 py-2 shadow-[0_8px_30px_rgba(0,0,0,0.22)] transition-colors focus-within:border-white/20">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white"
+              className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xl text-zinc-400 transition hover:bg-white/[0.08] hover:text-white"
               title="Attach"
             >
               +
@@ -934,7 +934,7 @@ export default function ChatWorkspace({
               placeholder="Message King Zarry AI…"
               disabled={sending || callMode}
               aria-label="Message King Zarry AI"
-              className="max-h-36 min-w-0 flex-1 resize-none bg-transparent px-1 py-1.5 text-sm leading-6 text-white placeholder-zinc-500 outline-none disabled:opacity-50"
+              className="max-h-36 min-w-0 flex-1 resize-none bg-transparent px-1 py-2 text-[15px] leading-6 text-white placeholder-zinc-500 outline-none disabled:opacity-50"
             />
 
             {voiceSupported && (
@@ -961,7 +961,7 @@ export default function ChatWorkspace({
               <button
                 type="submit"
                 disabled={!input.trim() && !attached}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-cyan-400/25 bg-[#07111d] text-cyan-200 shadow-[0_0_14px_rgba(0,240,255,0.08)] hover:bg-cyan-500/10 hover:border-cyan-300/50 disabled:opacity-30 disabled:bg-zinc-800 disabled:text-zinc-500"
+                className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-30 disabled:bg-zinc-600 disabled:text-zinc-300"
                 title="Send"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
