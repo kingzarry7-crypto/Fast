@@ -144,7 +144,7 @@ export function ChatMessage({
       >
         <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100/50">
           {!isUser && (
-            <span className="flex h-5 w-5 items-center justify-center rounded-md border border-cyan-300/20 bg-cyan-300/[0.07] text-[11px] text-cyan-200" aria-hidden="true">✦</span>
+            
           )}
           <span>{isUser ? "You" : "King Zarry AI"}</span>
         </div>
@@ -159,13 +159,7 @@ export function ChatMessage({
 
         <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{displayContent}{isStreaming ? <span aria-hidden="true" className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-pulse rounded-full bg-cyan-300 align-baseline" /> : null}</div>
 
-        {(timestamp || status || isStreaming) && (
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] tracking-wide text-cyan-100/45">
-            {timestamp ? <span>{timestamp}</span> : null}
-            {status ? <span>{status}</span> : null}
-            {isStreaming ? <span className="animate-pulse">generating</span> : null}
-          </div>
-        )}
+        {timestamp ? <div className="mt-2 text-[10px] tracking-wide text-cyan-100/35">{timestamp}</div> : null}
 
         {!isUser && !isError && content && !isStreaming ? (
           <>
