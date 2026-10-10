@@ -752,7 +752,7 @@ export default function ChatWorkspace({
               {m.role === "assistant" && m.id === lastAssistantId && (sending || Boolean(m.activitySteps?.length)) && (() => {
                 const steps = m.activitySteps || [];
                 const hasStartedReply = Boolean(m.text?.trim());
-                const visibleSteps = steps.slice(-4);
+                const visibleSteps = steps.slice(-6);
                 return (
                   <div className="mb-3 max-w-2xl px-0.5 pt-0.5" role="status" aria-live="polite" aria-label="King Zarry AI activity timeline">
                     <div className="flex items-start gap-3">
