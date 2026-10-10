@@ -368,8 +368,8 @@ def _format_gmail_result(result: dict[str, Any]) -> str:
     for item in messages[:8]:
         def clean(value: Any, limit: int = 240) -> str:
             text = str(value or "")
-            text = re.sub(r"[\\u200b-\\u200f\\ufeff]", "", text)
-            text = re.sub(r"\\s+", " ", text).strip()
+            text = re.sub(r"[\u200b-\u200f\ufeff]", "", text)
+            text = re.sub(r"\s+", " ", text).strip()
             return text[:limit]
 
         subject = clean(item.get("subject")) or "(no subject)"
@@ -381,10 +381,10 @@ def _format_gmail_result(result: dict[str, Any]) -> str:
             block.append(date)
         if snippet:
             block.append(snippet)
-        blocks.append("\\n".join(block))
+        blocks.append("\n".join(block))
     if len(messages) > 8:
         blocks.append(f"Showing the latest 8 of {len(messages)} messages.")
-    return "\\n\\n".join(blocks)
+    return "\n\n".join(blocks)
 
 
 def _shopify_read_intent(text: str, snapshot: dict[str, Any]) -> Optional[dict[str, str]]:
@@ -1094,7 +1094,7 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
     # not receive a purely conversational answer from the general LLM. Keep this
     # conservative: ordinary questions and vague statements do not start jobs.
     action_prefix = re.match(
-        r"^(?:please\\s+)?(?:do|execute|run|complete|carry out|take care of|handle|fix|build|deploy|apply|submit|publish|update|create|find and apply|go ahead and)\\b",
+        r"^(?:please\s+)?(?:do|execute|run|complete|carry out|take care of|handle|fix|build|deploy|apply|submit|publish|update|create|find and apply|go ahead and)\b",
         raw,
         re.I,
     )
@@ -1124,7 +1124,7 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
                 "status": workflow.get("status") or "unknown",
                 "kind": "workflow_execution",
                 "workflow_id": workflow.get("id"),
-                "reply": "\\n".join(lines),
+                "reply": "\n".join(lines),
                 "result": workflow,
             }
         except Exception as exc:
