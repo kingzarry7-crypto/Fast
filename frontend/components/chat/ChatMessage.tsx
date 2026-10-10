@@ -134,16 +134,19 @@ export function ChatMessage({
     >
       <div
         className={
-          "relative w-fit max-w-[min(85%,780px)] px-4 py-3 text-sm leading-relaxed " +
+          "relative w-fit max-w-[min(88%,820px)] px-4 py-3 sm:px-5 sm:py-4 text-[14px] leading-7 " +
           (isUser
-            ? "ml-auto rounded-2xl rounded-br-md bg-cyan-500/15 border border-cyan-400/20 text-white shadow-sm"
-            : "mr-auto bg-transparent text-[#c8e6f5]") +
+            ? "ml-auto rounded-2xl rounded-br-md border border-cyan-300/20 bg-gradient-to-br from-cyan-300/[0.12] via-blue-400/[0.07] to-amber-300/[0.035] text-slate-50 shadow-[0_12px_35px_rgba(0,0,0,0.14)]"
+            : "mr-auto rounded-2xl border border-white/[0.035] bg-white/[0.012] text-[#d9eaf4]") +
           " " +
           (isError ? "text-red-100" : "")
         }
       >
-        <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200/45">
-          {isUser ? "You" : "King Zarry AI"}
+        <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100/50">
+          {!isUser && (
+            <span className="flex h-5 w-5 items-center justify-center rounded-md border border-cyan-300/20 bg-cyan-300/[0.07] text-[11px] text-cyan-200" aria-hidden="true">✦</span>
+          )}
+          <span>{isUser ? "You" : "King Zarry AI"}</span>
         </div>
         {imagePreviewUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
