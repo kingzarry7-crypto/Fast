@@ -391,3 +391,80 @@ body:has(.kz-command-shell) {
   .kz-bg-radial::before,
   .kz-bg-radial::after { animation: none; }
 }
+
+
+/* One shared liquid-cosmos motion language across the app, chat, and AI core.
+   The star field glides diagonally while the nebula flows slowly like water. */
+.kz-bg-radial::before {
+  animation: kz-cosmic-water-flow 26s ease-in-out infinite alternate;
+}
+.kz-chat-cosmic-backdrop {
+  background-size: 145% 135%, 135% 145%, 150% 130%, 145% 135%, 100% 100%;
+  animation: kz-cosmic-background-current 26s ease-in-out infinite alternate;
+}
+.kz-bg-radial::after,
+.kz-chat-cosmic-backdrop::before {
+  animation-name: kz-cosmic-star-current, kz-atmosphere-twinkle;
+  animation-duration: 54s, 6s;
+  animation-timing-function: linear, ease-in-out;
+  animation-iteration-count: infinite, infinite;
+  animation-direction: alternate, alternate;
+}
+.kz-chat-cosmic-backdrop::before {
+  animation-name: kz-cosmic-star-current, kz-chat-stars-twinkle;
+  animation-duration: 54s, 6s;
+  animation-timing-function: linear, ease-in-out;
+  animation-iteration-count: infinite, infinite;
+  animation-direction: alternate, alternate;
+}
+/* The AI's halo and orbit respond with the same slow, wave-like pulse. */
+.kz-human-core .kz-core-aura {
+  animation: kz-cosmic-ai-wave 5.2s ease-in-out infinite;
+}
+.kz-human-core .kz-core-ring-one {
+  animation: kz-cosmic-ai-ring 8s ease-in-out infinite;
+}
+.kz-human-core.state-thinking .kz-core-aura,
+.kz-human-core.state-speaking .kz-core-aura,
+.kz-human-core.state-listening .kz-core-aura {
+  animation-duration: 2.2s;
+}
+.kz-human-core.state-thinking .kz-core-ring-one,
+.kz-human-core.state-speaking .kz-core-ring-one,
+.kz-human-core.state-listening .kz-core-ring-one {
+  animation-duration: 3.2s;
+}
+@keyframes kz-cosmic-water-flow {
+  0% { transform: translate3d(-1.5%, -1%, 0) rotate(-1deg) scale(1); }
+  50% { transform: translate3d(.5%, .5%, 0) rotate(.5deg) scale(1.03); }
+  100% { transform: translate3d(1.5%, 1%, 0) rotate(1.5deg) scale(1.06); }
+}
+@keyframes kz-cosmic-background-current {
+  0% { background-position: 0% 35%, 100% 65%, 35% 0%, 0% 0%, 0% 0%; }
+  50% { background-position: 55% 70%, 35% 25%, 80% 50%, 0% 0%, 0% 0%; }
+  100% { background-position: 100% 65%, 0% 45%, 20% 100%, 0% 0%, 0% 0%; }
+}
+@keyframes kz-cosmic-star-current {
+  0% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(-24px, 18px, 0); }
+  100% { transform: translate3d(-48px, 34px, 0); }
+}
+@keyframes kz-cosmic-ai-wave {
+  0%, 100% { opacity: .68; transform: scale(.94); filter: blur(10px); }
+  50% { opacity: 1; transform: scale(1.09); filter: blur(14px); }
+}
+@keyframes kz-cosmic-ai-ring {
+  0%, 100% { opacity: .48; scale: .97; }
+  50% { opacity: .95; scale: 1.045; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kz-bg-radial::before,
+  .kz-bg-radial::after,
+  .kz-chat-cosmic-backdrop,
+  .kz-chat-cosmic-backdrop::before,
+  .kz-chat-cosmic-backdrop::after,
+  .kz-human-core .kz-core-aura,
+  .kz-human-core .kz-core-ring-one {
+    animation: none !important;
+  }
+}
