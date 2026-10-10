@@ -224,5 +224,6 @@ def watch_categories() -> list[dict[str, Any]]:
         {"id": "important_email", "label": "Important email", "tool": "gmail_read"},
         {"id": "calendar_followups", "label": "Calendar follow-ups", "tool": "calendar_read"},
         {"id": "website_health", "label": "Website/deployment issues", "tool": "github_change"},
+        {"id": "shopify_inventory", "label": "Shopify low/out-of-stock alerts", "tool": "shopify_inventory_watch"},
         {"id": "market_watch", "label": "Market developments", "tool": "market_analysis"},
     ]
