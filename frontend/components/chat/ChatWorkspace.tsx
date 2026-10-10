@@ -71,6 +71,7 @@ export default function ChatWorkspace({
   const lastVoiceResponseRef = useRef<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {
     speak,
@@ -198,6 +199,10 @@ export default function ChatWorkspace({
   }, [callMode, callMuted, sending, isSpeaking, listening, messages, listenContinuous]);
 
   useEffect(() => {
+    if (!input && inputRef.current) inputRef.current.style.height = "auto";
+  }, [input]);
+
+  useEffect(() => {
     if (!autoSpeak || realtimeActive || sending || !messages.length) return;
     const last = messages[messages.length - 1];
     if (last?.role === "assistant" && last.text && !String(last.id || "").startsWith("error")) {
@@ -220,6 +225,18 @@ export default function ChatWorkspace({
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
+    const updateScrollIntent = () => {
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      shouldAutoScrollRef.current = distanceFromBottom < 96;
+    };
+    el.addEventListener("scroll", updateScrollIntent, { passive: true });
+    updateScrollIntent();
+    return () => el.removeEventListener("scroll", updateScrollIntent);
+  }, []);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el || !shouldAutoScrollRef.current) return;
     const frame = window.requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight;
     });
