@@ -11,6 +11,7 @@ from typing import Any, Callable
 
 SAFE_TOOLS = {
     "shopify_read": {"description": "Read Shopify store, products, orders, and inventory through the official connector.", "risk": "green"},
+    "shopify_inventory_watch": {"description": "Read tracked Shopify variant quantities and flag low/out-of-stock items; no purchase or quantity changes.", "risk": "green"},
     "autods_research": {"description": "Research AutoDS products, suppliers, margins, and store signals through the approved connection.", "risk": "green"},
     "fiverr_watch": {"description": "Monitor Fiverr opportunities and inspect permitted pages through the isolated browser.", "risk": "green"},
     "web_research": {
@@ -101,6 +102,9 @@ def plan(goal: str) -> dict[str, Any]:
 
     if _has(low, "shopify", "store product", "shopify store"):
         tools.append("shopify_read")
+    if _has(low, "stock", "inventory", "restock", "replenish", "out of stock", "low stock"):
+        tools.append("shopify_inventory_watch")
+        reasoning.append("Check actual tracked stock and prioritize low/out-of-stock items before proposing replenishment.")
         reasoning.append("Shopify store data can be inspected through the official connector.")
         if _has(low, "create", "add", "publish", "update", "change", "delete", "price", "inventory"):
             tools.append("shopify_write")
@@ -189,6 +193,22 @@ def plan(goal: str) -> dict[str, Any]:
         "approval_required": bool(approval_tools),
         "reasoning": reasoning,
         "tool_details": {name: ALL_TOOLS[name] for name in tools},
+        "operating_constraints": {
+            "upfront_spend_limit_usd": 0,
+            "revenue_target_window_days": 7,
+            "income_is_guaranteed": False,
+            "paid_job_application_fees_allowed": False,
+            "subscriptions_or_bids_without_approval_allowed": False,
+            "external_actions_require_approval": True,
+            "verify_before_claiming_complete": True,
+            "learn_only_from_verified_outcomes": True,
+        },
+        "priority_policy": [
+            "Prefer legitimate work with no application fee, deposit, paid bid, or required subscription.",
+            "Prioritize fast-to-deliver services matching the owner's web development and AI integration skills.",
+            "Prepare tailored proposals and a realistic delivery checklist; never claim a job or payment is secured until verified.",
+            "Keep API and tool usage economical, reuse cached research where possible, and never spend money on behalf of the user.",
+        ],
     }
 
 
