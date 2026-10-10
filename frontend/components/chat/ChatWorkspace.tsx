@@ -23,6 +23,13 @@ interface AttachedImage {
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
+const STARTER_SUGGESTIONS = [
+  "Give me a signal",
+  "What is moving today?",
+  "Explain it simply",
+  "Plan my day",
+] as const;
+
 export type ChatWorkspaceProps = {
   fullScreen?: boolean;
   embedMode?: boolean;
@@ -518,6 +525,16 @@ export default function ChatWorkspace({
     }, 120);
   };
 
+  const handleStarterSuggestion = async (suggestion: string) => {
+    if (sending) return;
+    const res = await send(suggestion, capability);
+    if (res && (res as { conversation_id?: string }).conversation_id) {
+      const cid = (res as { conversation_id: string }).conversation_id;
+      setConversationId(cid);
+      void refreshConversations();
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = input.trim();
@@ -711,8 +728,21 @@ export default function ChatWorkspace({
               <div className="flex h-[100px] w-[100px] items-center justify-center rounded-full border border-cyan-400/15 bg-cyan-400/[0.03]" aria-hidden="true">
                 <span className="h-3 w-3 rounded-full bg-cyan-300/80 shadow-[0_0_18px_rgba(0,240,255,.55)]" />
               </div>
-              <p className="mt-4 font-mono-tech text-[10px] tracking-[0.3em] text-cyan-300/70">READY</p>
-              <p className="mt-1 text-xs text-zinc-500">Type a message below</p>
+              <p className="mt-4 text-lg font-medium tracking-tight text-slate-100">What can I help you with?</p>
+              <p className="mt-1 max-w-sm text-sm leading-6 text-slate-400">Ask a question or choose a starting point.</p>
+              <div className="mt-5 flex max-w-xl flex-wrap justify-center gap-2">
+                {STARTER_SUGGESTIONS.map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    onClick={() => void handleStarterSuggestion(suggestion)}
+                    disabled={sending}
+                    className="rounded-full border border-cyan-300/15 bg-white/[0.025] px-3.5 py-2 text-xs text-slate-300 transition hover:border-cyan-300/35 hover:bg-cyan-300/[0.07] hover:text-white disabled:opacity-40"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
@@ -782,15 +812,14 @@ export default function ChatWorkspace({
               !String(latestAssistant?.id || "").startsWith("error");
             if (hasStartedReply && !agentActivity) return null;
             return (
-              <div className="flex items-center gap-3 px-1 py-3" aria-live="polite">
+              <div className="my-2 flex items-center gap-3 rounded-2xl border border-cyan-300/10 bg-white/[0.018] px-4 py-3.5" aria-live="polite">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
-                  <span className="flex items-center gap-1.5" aria-hidden="true">
-                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-bounce [animation-delay:-300ms]" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-bounce [animation-delay:-150ms]" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-bounce" />
+                  <span className="relative flex h-5 w-5 shrink-0 items-center justify-center" aria-hidden="true">
+                    <span className="absolute h-5 w-5 animate-spin rounded-full border-2 border-cyan-200/15 border-t-cyan-200" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-200/80" />
                   </span>
                   <span className="text-sm text-slate-300">
-                    {agentActivity ? `King Zarry AI · ${agentActivity}` : "King Zarry AI is thinking"}
+                    {agentActivity ? `King Zarry AI · ${agentActivity}` : "Thinking"}
                   </span>
                 </div>
                 <button
