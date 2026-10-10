@@ -109,6 +109,8 @@ export default function LandingPage() {
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute -inset-[20%] animate-[kz-aurora_18s_ease-in-out_infinite_alternate] bg-[radial-gradient(ellipse_at_25%_30%,rgba(56,214,255,.23),transparent_32%),radial-gradient(ellipse_at_75%_65%,rgba(242,199,107,.14),transparent_32%),radial-gradient(ellipse_at_60%_20%,rgba(120,90,255,.16),transparent_35%)]" />
         <div className="absolute inset-0 opacity-35" style={{ backgroundImage: "radial-gradient(rgba(223,247,255,.7) .7px,transparent .7px)", backgroundSize: "34px 34px" }} />
+        <div className="absolute inset-0 opacity-45" style={{ backgroundImage: "linear-gradient(90deg,transparent 0 11%,rgba(0,240,255,.18) 11.1%,transparent 11.3% 28%,rgba(255,76,145,.14) 28.1%,transparent 28.3% 62%,rgba(0,240,255,.12) 62.1%,transparent 62.3%),linear-gradient(0deg,transparent 0 19%,rgba(0,240,255,.12) 19.1%,transparent 19.3% 47%,rgba(255,76,145,.12) 47.1%,transparent 47.3% 78%,rgba(255,198,109,.12) 78.1%,transparent 78.3%)", backgroundSize: "100% 100%" }} />
+        <div className="absolute inset-0 opacity-70" style={{ backgroundImage: "radial-gradient(circle at 22% 34%,rgba(0,240,255,.7) 0 1px,transparent 3px),radial-gradient(circle at 78% 27%,rgba(255,76,145,.8) 0 1px,transparent 3px),radial-gradient(circle at 72% 73%,rgba(255,198,109,.8) 0 1px,transparent 3px),radial-gradient(circle at 16% 78%,rgba(0,240,255,.65) 0 1px,transparent 3px)", backgroundSize: "100% 100%" }} />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_15%,rgba(2,6,16,.78)_100%)]" />
       </div>
 
