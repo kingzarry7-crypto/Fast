@@ -364,10 +364,51 @@ def _dedupe(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 def research(query: str, deep: bool = False, max_results: int = None) -> Dict[str, Any]:
     """Run multi-query SearXNG research and fetch the strongest public pages."""
     instances = _env_urls()
-    if not instances:
-        return {"success": False, "configured": False, "results": [], "sources": [], "error": "SEARXNG_URL is not configured"}
-
     limit = max(3, min(int(max_results or _MAX_RESULTS), 20))
+
+    def tavily_fallback(reason: str) -> Dict[str, Any]:
+        # Use the already-supported Tavily provider when SearXNG is absent or
+        # unavailable. Normalize the response to this module's stable schema.
+        try:
+            from tavily_search import search_web
+            raw = search_web(query, max_results=min(limit, 10),
+                             search_depth="advanced" if deep else "basic",
+                             include_answer=True)
+            if raw.get("success"):
+                rows = []
+                for item in (raw.get("results") or [])[:limit]:
+                    url = str(item.get("url") or "").strip()
+                    if not url or urlparse(url).scheme not in ("http", "https"):
+                        continue
+                    rows.append({
+                        "title": str(item.get("title") or "Source").strip(),
+                        "url": url,
+                        "content": str(item.get("content") or item.get("snippet") or "").strip(),
+                        "source": str(item.get("source") or "Tavily"),
+                        "engine": "tavily",
+                    })
+                sources = [{"title": x["title"], "url": x["url"]} for x in rows]
+                if rows or str(raw.get("answer") or "").strip():
+                    return {
+                        "success": True, "configured": True, "provider": "tavily",
+                        "results": rows, "sources": sources, "query": query,
+                        "deep": deep, "sources_found": len(sources),
+                        "answer": str(raw.get("answer") or ""),
+                        "fallback_reason": reason,
+                    }
+            detail = str(raw.get("error") or "Tavily returned no usable results")
+        except Exception as exc:
+            logger.warning("Tavily research fallback failed: %s", type(exc).__name__)
+            detail = "Tavily fallback raised " + type(exc).__name__
+        return {
+            "success": False, "configured": bool(instances),
+            "results": [], "sources": [], "query": query,
+            "error": reason + "; " + detail,
+            "needs_configuration": not bool(instances),
+        }
+
+    if not instances:
+        return tavily_fallback("SearXNG is not configured")
     variants = _query_variants(query, deep)
     rows: List[Dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=min(4, len(instances) * max(1, len(variants)))) as pool:
@@ -383,6 +424,8 @@ def research(query: str, deep: bool = False, max_results: int = None) -> Dict[st
                 pass
 
     rows = _dedupe(rows)[:limit * (2 if deep else 1)]
+    if not rows:
+        return tavily_fallback("SearXNG returned no results from configured instances")
     fetch_targets = rows[:_MAX_PAGES if deep else min(5, _MAX_PAGES)]
     with ThreadPoolExecutor(max_workers=min(6, len(fetch_targets) or 1)) as pool:
         futures = [pool.submit(_fetch_page, item) for item in fetch_targets]
