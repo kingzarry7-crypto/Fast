@@ -307,7 +307,7 @@ def _build_stream_generator(
                 tavily_result = tavily_search.search_web(message, max_results=5, search_depth="basic", include_answer=True)
                 source_list = tavily_result.get("sources") or []
                 source_count = len(source_list)
-                search_count = 1
+                search_count = 0 if tavily_result.get("cached") else 1
                 research_context = tavily_search.format_for_ai(tavily_result)
                 if research_context:
                     persistent_ctx = (persistent_ctx + "\n\n" + research_context).strip()
@@ -315,7 +315,7 @@ def _build_stream_generator(
                 yield _sse({
                     "type": "activity",
                     "stage": "searching",
-                    "label": f"Web searches: {search_count} · sources found: {source_count}",
+                    "label": (f"Cached web results reused · sources found: {source_count}" if tavily_result.get("cached") else f"Web searches: {search_count} · sources found: {source_count}"),
                     "done": True,
                     "searches": search_count,
                     "sources": source_count,
