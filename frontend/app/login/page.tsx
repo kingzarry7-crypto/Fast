@@ -15,7 +15,6 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [booted, setBooted] = useState(false);
-  const [showIntro, setShowIntro] = useState(true);
 
   useEffect(() => {
     const unlock = () => {
@@ -27,12 +26,10 @@ export default function LoginPage() {
     window.addEventListener("click", unlock);
     window.addEventListener("touchstart", unlock);
     window.addEventListener("keydown", unlock);
-    const introTimer = window.setTimeout(() => setShowIntro(false), 3200);
     return () => {
       window.removeEventListener("click", unlock);
       window.removeEventListener("touchstart", unlock);
       window.removeEventListener("keydown", unlock);
-      window.clearTimeout(introTimer);
     };
   }, []);
 
@@ -53,22 +50,10 @@ export default function LoginPage() {
   const verificationRequired = error?.toLowerCase().includes("not verified") ?? false;
 
   return (
-    <main className="relative isolate flex min-h-[100dvh] items-center justify-center overflow-hidden bg-[#040b1a] px-5 py-10 text-[#dff7ff]">
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-        <div className="absolute -inset-[20%] animate-[kz-aurora_18s_ease-in-out_infinite_alternate] bg-[radial-gradient(ellipse_at_25%_30%,rgba(56,214,255,.22),transparent_32%),radial-gradient(ellipse_at_75%_65%,rgba(242,199,107,.12),transparent_32%),radial-gradient(ellipse_at_60%_20%,rgba(120,90,255,.14),transparent_35%)]" />
-        <div className="absolute inset-0 opacity-40" style={{ backgroundImage: "radial-gradient(rgba(223,247,255,.7) .7px,transparent .7px)", backgroundSize: "34px 34px" }} />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_15%,rgba(2,6,16,.75)_100%)]" />
-        <div className="absolute left-1/2 top-1/2 h-[min(75vw,520px)] w-[min(75vw,520px)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-300/25 shadow-[0_0_100px_rgba(56,214,255,.13),inset_0_0_70px_rgba(56,214,255,.08)]" />
-        <div className="absolute left-1/2 top-1/2 h-[min(61vw,410px)] w-[min(61vw,410px)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed border-cyan-200/20 animate-[spin_32s_linear_infinite]" />
-        <div className="absolute left-1/2 top-1/2 h-[min(45vw,300px)] w-[min(45vw,300px)] -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-200/25 animate-[spin_22s_linear_infinite_reverse]" />
-      </div>
+    <main className="relative isolate flex min-h-[100dvh] items-center justify-center overflow-hidden bg-transparent px-5 py-10 text-[#dff7ff]">
+      <div aria-hidden="true" className="kz-auth-cosmic-surface" />
 
       <div className="relative z-10 w-full max-w-[420px]">
-        <div className={"absolute inset-x-0 -top-5 flex justify-center transition-all duration-700 " + (showIntro ? "translate-y-0 opacity-100" : "-translate-y-5 opacity-0 pointer-events-none")}>
-          <span className="rounded-full border border-cyan-300/20 bg-[#08162f]/80 px-4 py-2 font-mono-tech text-[9px] tracking-[0.28em] text-cyan-200/75 backdrop-blur">
-            INITIALIZING COMMAND CENTRE
-          </span>
-        </div>
 
         <div className="flex flex-col items-center text-center">
           <div className="relative">
@@ -146,15 +131,6 @@ export default function LoginPage() {
         <p className="mt-6 text-center font-mono-tech text-[8px] tracking-[0.24em] text-cyan-100/25">KING ZARRY AI · AUTHENTICATED ACCESS ONLY</p>
       </div>
 
-      <style jsx global>{`
-        @keyframes kz-aurora {
-          0% { transform: translate3d(-1%, -1%, 0) rotate(-2deg) scale(1); }
-          100% { transform: translate3d(3%, 2%, 0) rotate(5deg) scale(1.08); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .animate-\\[kz-aurora_18s_ease-in-out_infinite_alternate\\] { animation: none !important; }
-        }
-      `}</style>
     </main>
   );
 }
