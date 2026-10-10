@@ -718,6 +718,64 @@ async def handle_telegram_request(update: Any, text: str) -> Optional[dict[str, 
             await update.message.reply_text("\n".join(lines), parse_mode="HTML")
         return {"status": "completed", "kind": "calendar_read", "result": result}
 
+    # Direct chat integration for the existing Fiverr drafting agent.
+    if re.search(r"\bfiverr\b", lower) and re.search(r"\b(gig|profile|description|tags|seo|faq|package|packages|optimi[sz]e|improve|create|write|draft)\b", lower):
+        try:
+            from ai_engine import AIEngine
+            import fiverr_agent
+            prompt = (
+                f"{fiverr_agent.agent_system_instructions()}\n\n"
+                "Prepare a complete Fiverr draft appropriate to the user's request. "
+                "For a Gig include a truthful title, category, search tags, tiered packages, "
+                "description, FAQs, buyer requirements, and a gallery checklist where relevant. "
+                "Do not invent portfolio proof, reviews, certifications, or guaranteed results. "
+                "Do not publish anything; return a reviewable draft and any missing questions.\n\n"
+                f"USER REQUEST:\n{raw}"
+            )
+            draft = AIEngine(memory=None).ask(user_id=f"fiverr-agent:{uid}", prompt=prompt, image=None)
+            if not draft:
+                raise RuntimeError("empty Fiverr draft")
+            policy = fiverr_agent.policy_check(str(draft))
+            task = fiverr_agent.create_task(uid, "ai_draft", "Fiverr Agent draft", {
+                "instruction": raw, "draft": str(draft), "policy": policy
+            })
+            return {
+                "status": "draft_ready" if policy.get("ok") else "manual_review_required",
+                "kind": "fiverr_draft",
+                "reply": "🧑‍💻 FIVERR DRAFT PREPARED\n\n" + str(draft)[:12000]
+                         + "\n\n🛡️ This is a draft only; nothing was published. Review the copy and pricing before approving any external change.",
+                "result": {"task": task, "policy": policy},
+            }
+        except Exception as exc:
+            logger.warning("Fiverr draft integration failed: %s", type(exc).__name__)
+            return {"status": "failed", "kind": "fiverr_draft",
+                    "reply": "❌ I could not prepare the Fiverr draft. Nothing was published. Check the backend AI provider and Fiverr Agent storage."}
+
+    if re.search(r"\b(find|look for|search for|discover)\b", lower) and re.search(r"\b(jobs?|work|clients?|freelance|projects?|opportunities)\b", lower):
+        try:
+            import opportunity_hunter
+            category = "jobs" if re.search(r"\b(job|jobs|freelance|projects?)\b", lower) else "clients"
+            hunt = opportunity_hunter.hunt(uid, category=category, max_results=8)
+            leads = hunt.get("opportunities") or []
+            if not leads:
+                return {"status": "no_results", "kind": "job_discovery",
+                        "reply": "🔎 I could not find a sufficiently relevant lead in this scan. I will not invent a job or claim income. Try again later or ask me to scan clients instead.",
+                        "result": hunt}
+            chosen = leads[0]
+            lines = ["🎯 TOP MATCH FOUND", "", str(chosen.get("title") or "Opportunity"),
+                     str(chosen.get("url") or ""), "",
+                     f"Match score: {chosen.get('score', 0)}/100",
+                     f"Source type: {chosen.get('source_kind') or 'unclassified'}",
+                     str(chosen.get("summary") or "")[:900], "",
+                     "Cost check: no explicit pay-to-apply fee was detected in the available listing text, but the full terms still need verification. Do not pay application fees, deposits, bid credits, or subscriptions.",
+                     "Income is not guaranteed. Say PREPARE THIS OPPORTUNITY if you want me to inspect requirements and prepare a tailored application for your approval."]
+            return {"status": "completed", "kind": "job_discovery", "reply": "\n".join(lines),
+                    "result": {"selected": chosen, "other_matches": leads[1:4], "disclaimer": hunt.get("disclaimer")}}
+        except Exception as exc:
+            logger.warning("Job discovery failed: %s", type(exc).__name__)
+            return {"status": "failed", "kind": "job_discovery",
+                    "reply": "❌ Job discovery failed because the configured research service did not return a usable result. No application was submitted."}
+
     shopify_intent = _shopify_read_intent(raw, snapshot)
     if shopify_intent:
         try:
