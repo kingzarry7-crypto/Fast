@@ -413,6 +413,9 @@ def research(query: str, deep: bool = False, max_results: int = None) -> Dict[st
         "query": query,
         "deep": deep,
         "instances": len(instances),
+        # One search request is submitted for each configured instance/query variant.
+        "searches": len(instances) * len(variants),
+        "sources_found": len(sources),
     }
 
 

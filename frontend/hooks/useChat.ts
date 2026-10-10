@@ -147,7 +147,7 @@ export function useChat(
                 setMessages((prev) =>
                   prev.map((item) =>
                     item.id === aiId
-                      ? { ...item, text: (item.text || "") + delta, status: "", activitySteps: (item.activitySteps || []).map((step) => ({ ...step, done: true })) }
+                      ? { ...item, text: (item.text || "") + delta, status: "" }
                       : item
                   )
                 );
@@ -165,6 +165,29 @@ export function useChat(
                       activitySteps: steps.some((step) => step.label === label)
                         ? steps
                         : [...steps.map((step) => ({ ...step, done: true })), { label, done: false }],
+                    };
+                  })
+                );
+              },
+              onActivity: (activity) => {
+                const label = activity.label.trim();
+                if (!label) return;
+                setMessages((prev) =>
+                  prev.map((item) => {
+                    if (item.id !== aiId) return item;
+                    const steps = item.activitySteps || [];
+                    const existing = steps.findIndex((step) => step.label === label);
+                    if (existing >= 0) {
+                      return {
+                        ...item,
+                        status: activity.done ? "" : `AI CORE • ${label.toUpperCase()}`,
+                        activitySteps: steps.map((step, index) => index === existing ? { ...step, done: activity.done } : step),
+                      };
+                    }
+                    return {
+                      ...item,
+                      status: activity.done ? "" : `AI CORE • ${label.toUpperCase()}`,
+                      activitySteps: [...steps.map((step) => ({ ...step, done: true })), { label, done: activity.done }],
                     };
                   })
                 );

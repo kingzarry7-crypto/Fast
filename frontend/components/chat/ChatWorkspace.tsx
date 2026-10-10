@@ -749,10 +749,10 @@ export default function ChatWorkspace({
 
           {visibleMessages.map((m) => (
             <Fragment key={m.id}>
-              {sending && m.role === "assistant" && m.id === lastAssistantId && (() => {
+              {m.role === "assistant" && m.id === lastAssistantId && (sending || Boolean(m.activitySteps?.length)) && (() => {
                 const steps = m.activitySteps || [];
                 const hasStartedReply = Boolean(m.text?.trim());
-                const visibleSteps = steps.slice(-4);
+                const visibleSteps = steps.slice(-6);
                 return (
                   <div className="mb-3 max-w-2xl px-0.5 pt-0.5" role="status" aria-live="polite" aria-label="King Zarry AI activity timeline">
                     <div className="flex items-start gap-3">
@@ -760,11 +760,11 @@ export default function ChatWorkspace({
                       <div className="min-w-0 flex-1 pt-1">
                         <div className="mb-1.5 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-500">
                           <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_8px_rgba(103,232,249,.5)]" />
-                          King Zarry AI · {hasStartedReply ? "Responding" : "Thinking"}
+                          King Zarry AI · Live activity
                         </div>
                         <div className="space-y-1.5">
                           {visibleSteps.map((step, index) => {
-                            const done = step.done || hasStartedReply;
+                            const done = step.done;
                             return (
                               <div key={step.label + index} className="flex min-w-0 items-center gap-2 text-xs text-zinc-400">
                                 <span className={"flex h-4 w-4 shrink-0 items-center justify-center " + (done ? "text-emerald-300" : "text-cyan-200")} aria-hidden="true">
@@ -774,12 +774,12 @@ export default function ChatWorkspace({
                               </div>
                             );
                           })}
-                          {hasStartedReply ? (
+                          {hasStartedReply && !visibleSteps.some((step) => step.label.toLowerCase() === "writing response") ? (
                             <div className="flex items-center gap-2 text-xs text-zinc-300">
                               <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-white/15 border-t-cyan-200" aria-hidden="true" />
                               <span>Writing response</span>
                             </div>
-                          ) : visibleSteps.length === 0 ? (
+                          ) : !hasStartedReply && visibleSteps.length === 0 ? (
                             <div className="flex items-center gap-2 text-xs text-zinc-400">
                               <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-white/15 border-t-cyan-200" aria-hidden="true" />
                               <span>{m.status?.startsWith("KZ AGENT •") ? m.status.slice("KZ AGENT •".length).trim() : "Thinking through your request"}</span>
