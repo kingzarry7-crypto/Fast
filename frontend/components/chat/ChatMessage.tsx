@@ -142,9 +142,6 @@ export function ChatMessage({
         }
       >
         <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100/50">
-          {!isUser && (
-            
-          )}
           <span>{isUser ? "You" : "King Zarry AI"}</span>
         </div>
         {imagePreviewUrl ? (
