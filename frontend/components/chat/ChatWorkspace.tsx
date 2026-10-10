@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import ChatMessage from "@/components/chat/ChatMessage";
 import RobotHead from "@/components/RobotHead";
+import AICore from "@/components/AICore";
 import VoiceCallUI from "@/components/chat/VoiceCallUI";
 import { useChat } from "@/hooks/useChat";
 import { useVoice, type VoiceStyle } from "@/hooks/useVoice";
@@ -728,12 +729,11 @@ export default function ChatWorkspace({
         <div className="mx-auto w-full max-w-2xl space-y-2.5 py-4 pb-28">
           {messages.length === 0 && !historyLoading && (
             <div className="flex flex-col items-center justify-center min-h-[200px] text-center py-8">
-              <div className="relative flex h-[124px] w-[124px] items-center justify-center" aria-hidden="true">
-                <div className="absolute inset-2 rounded-full border border-cyan-300/20 bg-cyan-400/[0.025] shadow-[0_0_32px_rgba(0,190,255,.12)] animate-[kz-cosmic-ai-wave_5.2s_ease-in-out_infinite]" />
-                <div className="absolute inset-0 rounded-full border border-cyan-300/10" />
-                {/* Reuse the same King Zarry AI head portrait as the dashboard AI core. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/human-ai-core.webp" alt="" className="relative z-10 h-[112px] w-[112px] object-contain drop-shadow-[0_0_16px_rgba(0,210,255,.35)]" draggable={false} />
+              <div className="flex items-center justify-center" aria-label="King Zarry AI animated core">
+                <AICore
+                  state={sending ? "thinking" : (isSpeaking || realtimeSpeaking) ? "speaking" : (listening || realtimeListening) ? "listening" : "idle"}
+                  size={220}
+                />
               </div>
               <p className="mt-4 text-lg font-medium tracking-tight text-slate-100">What can I help you with?</p>
               <p className="mt-1 max-w-sm text-sm leading-6 text-slate-400">Ask a question or choose a starting point.</p>

@@ -393,6 +393,60 @@ body:has(.kz-command-shell) {
 }
 
 
+/* Shared liquid-cosmos surface for the home intro and sign-in screen.
+   Keep these pages transparent to the root atmosphere and animate the same star field. */
+.kz-auth-cosmic-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background-color: #020711;
+  background-image:
+    linear-gradient(rgba(0, 240, 255, .025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, .025) 1px, transparent 1px),
+    radial-gradient(ellipse 48% 48% at 50% 42%, rgba(0, 78, 170, .18), transparent 72%);
+  background-size: 64px 64px, 64px 64px, auto;
+}
+.kz-auth-cosmic-surface::before {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(40% 35% at 25% 30%, rgba(56, 214, 255, .2), transparent 70%),
+    radial-gradient(35% 40% at 75% 65%, rgba(242, 199, 107, .12), transparent 70%),
+    radial-gradient(45% 35% at 60% 20%, rgba(120, 90, 255, .14), transparent 70%);
+  animation: kz-cosmic-water-flow 26s ease-in-out infinite alternate;
+}
+.kz-auth-cosmic-surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: .48;
+  background-image:
+    radial-gradient(circle at 18% 22%, rgba(223,247,255,.9) 0 1px, transparent 1.8px),
+    radial-gradient(circle at 72% 30%, rgba(255,255,255,.68) 0 1px, transparent 1.8px),
+    radial-gradient(circle at 38% 72%, rgba(56,214,255,.8) 0 1px, transparent 1.8px),
+    radial-gradient(circle at 84% 78%, rgba(242,199,107,.62) 0 1px, transparent 1.8px);
+  background-size: 180px 180px, 240px 240px, 210px 210px, 260px 260px;
+  animation: kz-cosmic-star-current 54s linear infinite alternate, kz-atmosphere-twinkle 6s ease-in-out infinite alternate;
+}
+@keyframes kz-intro-core {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-6px) scale(1.015); }
+}
+@keyframes kz-intro-bar {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kz-auth-cosmic-surface::before,
+  .kz-auth-cosmic-surface::after,
+  .animate-\\[kz-intro-core_3\\.8s_ease-in-out_infinite\\] {
+    animation: none !important;
+  }
+}
+
 /* One shared liquid-cosmos motion language across the app, chat, and AI core.
    The star field glides diagonally while the nebula flows slowly like water. */
 .kz-bg-radial::before {
