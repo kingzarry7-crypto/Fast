@@ -808,47 +808,6 @@ export default function ChatWorkspace({
             </Fragment>
           ))}
 
-          {sending && (() => {
-            const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
-            const agentActivity = latestAssistant?.status?.startsWith("KZ AGENT •")
-              ? latestAssistant.status.slice("KZ AGENT •".length).trim()
-              : "";
-            const hasStartedReply = Boolean(latestAssistant?.text?.trim()) &&
-              !String(latestAssistant?.id || "").startsWith("error");
-            if (hasStartedReply && !agentActivity) return null;
-            return (
-              <div className={"my-2 flex items-center gap-3 rounded-2xl border border-cyan-300/10 bg-white/[0.018] px-4 py-3.5 " + (thinkingExpanded ? "" : "py-2.5")} aria-live="polite">
-                <div className="flex min-w-0 flex-1 items-center gap-3">
-                  <span className="relative flex h-5 w-5 shrink-0 items-center justify-center" aria-hidden="true">
-                    <span className="absolute h-5 w-5 animate-spin rounded-full border-2 border-cyan-200/15 border-t-cyan-200" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-200/80" />
-                  </span>
-                  <span className="text-sm text-slate-300">
-                    {agentActivity ? `King Zarry AI · ${agentActivity}` : thinkingExpanded ? "Thinking through your request" : "Thinking"}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setThinkingExpanded((expanded) => !expanded)}
-                  className="shrink-0 rounded-lg px-2 py-1 text-xs text-slate-400 transition hover:bg-white/[0.05] hover:text-white"
-                  aria-expanded={thinkingExpanded}
-                >
-                  {thinkingExpanded ? "Hide" : "Show"}
-                </button>
-                <button
-                  type="button"
-                  onClick={stopChat}
-                  className="flex h-9 shrink-0 items-center gap-2 rounded-full border border-white/10 bg-[#1d1d1f] px-3.5 text-xs font-medium text-white transition hover:bg-[#29292c] active:scale-95"
-                  aria-label="Stop King Zarry AI"
-                  title="Stop King Zarry AI"
-                >
-                  <span className="h-2.5 w-2.5 rounded-[2px] bg-white" />
-                  <span>Stop</span>
-                </button>
-              </div>
-            );
-          })()}
-
           {historyLoading && <p className="text-xs text-zinc-500">Loading…</p>}
           {error && (
             <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>
@@ -905,6 +864,15 @@ export default function ChatWorkspace({
 
           {!callMode && (
           <div className="flex items-end gap-2 rounded-[26px] border border-white/[0.12] bg-[#1b1b1d] px-3 py-2 shadow-[0_8px_30px_rgba(0,0,0,0.22)] transition-colors focus-within:border-white/20">
+            {sending && (
+              <div className="mb-0.5 flex shrink-0 items-center gap-2 pl-1 text-xs text-zinc-400" role="status" aria-live="polite" title="King Zarry AI is processing your message">
+                <span className="relative flex h-4 w-4 items-center justify-center" aria-hidden="true">
+                  <span className="absolute h-4 w-4 animate-spin rounded-full border-2 border-white/15 border-t-white/80" />
+                  <span className="h-1 w-1 rounded-full bg-white/80" />
+                </span>
+                <span className="hidden sm:inline">{(() => { const latest = [...messages].reverse().find((message) => message.role === "assistant"); const activity = latest?.status?.startsWith("KZ AGENT •") ? latest.status.slice("KZ AGENT •".length).trim() : ""; return activity || "Thinking…"; })()}</span>
+              </div>
+            )}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
