@@ -937,6 +937,34 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
         return {"status": "unverified", "kind": "approval", "approval_id": approval_id,
                 "reply": "⚠️ Google responded, but KZ could not verify the resulting resource. It is marked unverified."}
 
+    if lower in {"1", "2", "3", "option 1", "option 2", "option 3", "professional", "friendly", "warm", "warm and friendly", "concise", "short", "short and direct", "choose professional"}:
+        try:
+            from email_draft_manager import choose_pending
+            selected = choose_pending(uid, raw)
+            if selected:
+                payload = selected["payload"]
+                result = _send_gmail_preview(uid, payload)
+                if result.get("status") != "waiting_for_approval":
+                    return {"status": "failed", "kind": "send_gmail", "reply": "❌ I could not create the Gmail approval. Nothing was sent."}
+                return {
+                    "status": "waiting_for_approval",
+                    "kind": "send_gmail",
+                    "approval_id": result["approval_id"],
+                    "reply": (
+                        "✉️ FINAL EMAIL — " + selected["tone"] + "\n\n"
+                        f"To: {payload['to']}\nSubject: {payload['subject']}\n\n{payload['body']}\n\n"
+                        f"Approval ID: {result['approval_id']}\n"
+                        "Nothing has been sent yet. Approve this exact message in the approval panel to send it."
+                    ),
+                    "connector_action": {"provider": "google", "operation": "send_gmail",
+                                         "status": "waiting_for_approval", "approval_id": result["approval_id"],
+                                         "target": payload["to"], "payload": payload},
+                }
+        except Exception as exc:
+            logger.warning("Email tone choice failed: %s", type(exc).__name__)
+            return {"status": "failed", "kind": "send_gmail",
+                    "reply": "❌ I could not retrieve the pending email draft choice. Nothing was sent."}
+
     if lower in {
         "account status", "check connected accounts", "what accounts are connected",
         "show connected accounts", "check my connections", "monitor account status",
@@ -1081,32 +1109,26 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
 
     payload = _parse_email_request(raw)
     if payload:
-        result = _send_gmail_preview(uid, payload)
-        if result.get("status") == "not_connected":
+        try:
+            from google_connector import _account
+            if not _account(uid):
+                return {"status": "not_connected", "kind": "send_gmail",
+                        "reply": "🔌 Gmail is not connected to this KZ account."}
+            from email_draft_manager import create_choices, render_choices
+            session = create_choices(uid, payload["to"], payload["subject"], payload["body"])
             return {
-                "status": "not_connected", "kind": "send_gmail",
-                "reply": "🔌 KZ checked the account registry: Gmail is not connected to this KZ account."
+                "status": "draft_choices",
+                "kind": "send_gmail",
+                "draft_session_id": session["id"],
+                "reply": render_choices(session),
+                "result": {"recipient": session["recipient"], "choices": [
+                    {"id": x["id"], "tone": x["tone"], "subject": x["subject"]} for x in session["options"]
+                ]},
             }
-        return {
-            **result,
-            "kind": "send_gmail",
-            "reply": (
-                "✉️ EMAIL PREPARED\n\n"
-                f"To: {payload['to']}\n"
-                f"Subject: {payload['subject']}\n"
-                f"Message: {payload['body']}\n\n"
-                f"🛡️ Permission required before sending. Approval ID: {result['approval_id']}. "
-                "Approve this exact action; KZ will then send it through Google and report verified evidence."
-            ),
-            "connector_action": {
-                "provider": "google",
-                "operation": "send_gmail",
-                "status": "waiting_for_approval",
-                "approval_id": result["approval_id"],
-                "target": payload["to"],
-                "payload": payload,
-            },
-        }
+        except Exception as exc:
+            logger.warning("Professional email draft preparation failed: %s", type(exc).__name__)
+            return {"status": "failed", "kind": "send_gmail",
+                    "reply": "❌ I could not prepare the professional email options. Nothing was sent. You can retry with the recipient and what you want to say."}
 
     # Explicit action requests should enter the persistent workflow executor,
     # not receive a purely conversational answer from the general LLM. Keep this
