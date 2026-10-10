@@ -247,3 +247,30 @@ body:has(.kz-command-shell) {
 @media(max-width:900px){.kz-venture-layout{display:block}.kz-venture-sidebar{display:none}.kz-venture-main{display:flex;flex-direction:column;overflow:visible;min-height:auto}.kz-orbit-stage{height:660px;min-height:660px;flex:0 0 auto}.kz-venture-right{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.kz-provider-card{grid-column:1/-1}.kz-bottom-prompt{width:100%;order:2;margin:0 auto 10px}.kz-brand{min-width:0}.kz-brand b{font-size:10px}.kz-brand small{font-size:8px}.kz-venture-top{gap:12px;padding:0 12px}.kz-orbit-card{width:165px}.kz-core-anchor{transform:translate(-50%,-50%) scale(.9)}}
 @media(max-width:620px){.kz-venture-top{height:60px}.kz-brand-mark{width:34px;height:34px}.kz-brand b{font-size:9px}.kz-brand small{display:none}.kz-quick-search{height:38px;padding:0 10px;gap:6px}.kz-quick-search input{font-size:11px}.kz-top-actions{display:none}.kz-venture-main{padding:4px}.kz-orbit-stage{height:600px;min-height:600px;overflow:hidden}.kz-orbit{top:47%}.kz-core-anchor{top:47%;transform:translate(-50%,-50%) scale(.68)}.kz-orbit-card{width:135px;min-height:65px;padding:7px;gap:6px;border-radius:14px}.kz-module-icon{width:28px;height:28px;flex-basis:28px;font-size:14px}.kz-module-copy b{font-size:10px}.kz-module-copy small{font-size:7px;max-width:83px;overflow:hidden;text-overflow:ellipsis}.kz-module-copy em{font-size:6px;max-width:78px}.kz-module-arrow{font-size:15px}.kz-venture-right{display:flex;padding:0 5px}.kz-bottom-prompt{gap:7px;padding:8px}.kz-bottom-prompt input{font-size:11px}.kz-bottom-prompt a{font-size:8px;padding:0}.kz-info-card{padding:13px}.kz-info-row{gap:6px}.kz-info-row label{font-size:10px}}
 @media(prefers-reduced-motion:reduce){.kz-venture *, .kz-venture *:before,.kz-venture *:after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+
+
+/* King Zarry AI reference-inspired circuit atmosphere */
+.kz-bg-grid {
+  background-image:
+    linear-gradient(rgba(0, 240, 255, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, .035) 1px, transparent 1px),
+    repeating-linear-gradient(0deg, transparent 0 54px, rgba(0, 240, 255, .045) 55px, transparent 56px 110px),
+    repeating-linear-gradient(90deg, transparent 0 78px, rgba(255, 76, 145, .035) 79px, transparent 80px 156px);
+  background-size: 60px 60px, 60px 60px, 100% 100%, 100% 100%;
+}
+.kz-bg-radial {
+  background:
+    radial-gradient(ellipse 38% 42% at 50% 42%, rgba(0, 110, 220, .15), transparent 72%),
+    radial-gradient(ellipse 50% 40% at 15% 20%, rgba(0, 240, 255, .09), transparent 70%),
+    radial-gradient(ellipse 45% 40% at 85% 75%, rgba(255, 45, 130, .07), transparent 70%),
+    radial-gradient(ellipse 60% 55% at 50% 100%, rgba(139, 92, 246, .08), transparent 70%);
+}
+.kz-command-shell,
+.kz-venture {
+  background-image:
+    radial-gradient(ellipse at 50% 38%, rgba(0, 100, 190, .13), transparent 54%),
+    radial-gradient(ellipse at 80% 72%, rgba(255, 40, 130, .055), transparent 42%),
+    repeating-linear-gradient(0deg, transparent 0 72px, rgba(0, 240, 255, .022) 73px, transparent 74px 144px),
+    repeating-linear-gradient(90deg, transparent 0 96px, rgba(255, 76, 145, .018) 97px, transparent 98px 192px);
+  background-color: #030916;
+}
