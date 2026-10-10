@@ -53,6 +53,8 @@ def _step(workflow_id: str, position: int, title: str, action: str,
 
 def _classify_goal(goal: str) -> Dict[str, Any]:
     low = goal.lower()
+    if any(x in low for x in ("shopify stock", "shopify inventory", "monitor stock", "watch stock", "restock", "replenish inventory", "low stock", "out of stock")):
+        return {"kind": "shopify_inventory", "revenue": 0.0}
     if any(x in low for x in (
         "fiverr", "upwork", "freelancer.com", "peopleperhour", "guru.com",
         "submit proposal", "send proposal", "apply to this job", "apply for this job",
@@ -79,9 +81,18 @@ def plan_goal(workflow_id: str, user_id: str, goal: str) -> Dict[str, Any]:
 
     # Every workflow gets an audit/research stage first.
     steps.append(_step(workflow_id, 1, "Understand the goal and constraints", "analyze_goal"))
-    steps.append(_step(workflow_id, 2, "Research current information and opportunities", "research_goal"))
+    if kind != "shopify_inventory":
+        steps.append(_step(workflow_id, 2, "Research current information and opportunities", "research_goal"))
 
-    if kind == "marketplace_application":
+    if kind == "shopify_inventory":
+        steps += [
+            _step(workflow_id, 2, "Read live Shopify inventory and flag low/out-of-stock variants", "shopify_inventory_check"),
+            _step(workflow_id, 3, "Prepare a replenishment recommendation without purchasing", "prepare_restock_plan"),
+            _step(workflow_id, 4, "Record the stock findings and next steps", "learn"),
+        ]
+        if any(term in goal.lower() for term in ("buy stock", "purchase stock", "place restock order", "order more stock", "reorder stock")):
+            steps.insert(3, _step(workflow_id, 4, "Request approval for the exact replenishment action", "external_action", RiskLevel.YELLOW, True))
+    elif kind == "marketplace_application":
         steps += [
             _step(workflow_id, 3, "Open the marketplace opportunity and inspect requirements", "browser_prepare"),
             _step(workflow_id, 4, "Prepare the exact application actions", "browser_plan"),
@@ -208,6 +219,32 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
 
     if action == "research_goal":
         return _research(goal)
+
+    if action == "shopify_inventory_check":
+        try:
+            from shopify_inventory import inventory_snapshot
+            result = inventory_snapshot(str(item["user_id"]))
+            if result.get("status") == "not_connected":
+                return {"success": False, "error": "Shopify is not connected to this KZ account."}
+            return {"success": True, **result}
+        except Exception as exc:
+            return {"success": False, "error": f"Shopify inventory check failed: {type(exc).__name__}"}
+
+    if action == "prepare_restock_plan":
+        inventory = item.get("result", {}).get("shopify_inventory_check") or {}
+        items = inventory.get("items") or []
+        return {
+            "success": True,
+            "recommendation": [
+                {"product": x.get("product"), "variant": x.get("variant"), "sku": x.get("sku"),
+                 "quantity_on_hand": x.get("quantity"), "recommended_next_step": "Confirm supplier, lead time, minimum order quantity, and landed cost before reorder."}
+                for x in items[:50]
+            ],
+            "requires_supplier": True,
+            "purchase_executed": False,
+            "inventory_changed": False,
+            "note": "This is a recommendation only. No purchase or stock adjustment was made.",
+        }
 
     if action in {"build_leads", "rank_opportunities"}:
         research = item["result"].get("research") or {}
@@ -365,7 +402,7 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
             learning = {"learned": 0, "stored": 0, "lesson_types": []}
         return {"success": True, "memory_recorded": learning.get("stored", 0) > 0, "learning": learning, "summary": summary}
 
-    return {"success": True, "note": f"No executor registered for {action}; safely prepared."}
+    return {"success": False, "error": f"No executor is registered for action '{action}'. The task was not executed.", "execution_status": "blocked_no_adapter"}
 
 
 def run_workflow(workflow_id: str, user_id: str) -> Dict[str, Any]:
