@@ -213,6 +213,7 @@ def _build_stream_generator(
 ) -> Generator[str, None, None]:
     memory = memory_factory(user_id, conversation_id)
     engine = ai_engine.AIEngine(memory=memory)
+    yield _sse({"type": "activity", "stage": "thinking", "label": "Thinking through your request", "done": False})
 
     # Account/connector actions must never fall through to the general LLM.
     # The streaming endpoint used to bypass account_agent entirely, which made
@@ -262,6 +263,55 @@ def _build_stream_generator(
     except Exception:
         pass
 
+    research_footer = ""
+    try:
+        import web_research_engine as web_research
+        if web_research.should_research(message):
+            if not web_research.is_configured():
+                yield _sse({
+                    "type": "activity",
+                    "stage": "searching",
+                    "label": "Web search unavailable — no search provider is configured",
+                    "done": True,
+                    "searches": 0,
+                    "sources": 0,
+                })
+            else:
+                yield _sse({
+                    "type": "activity",
+                    "stage": "searching",
+                    "label": "Searching the web",
+                    "done": False,
+                })
+                research_result = web_research.research(
+                    message,
+                    deep=any(term in message.lower() for term in ("deep research", "comprehensive", "thorough", "in-depth")),
+                )
+                search_count = int(research_result.get("searches") or 0)
+                source_count = len(research_result.get("sources") or [])
+                yield _sse({
+                    "type": "activity",
+                    "stage": "searching",
+                    "label": f"Web searches: {search_count} · sources found: {source_count}",
+                    "done": True,
+                    "searches": search_count,
+                    "sources": source_count,
+                })
+                research_context = web_research.format_for_ai(research_result)
+                if research_context:
+                    persistent_ctx = (persistent_ctx + "\\n\\n" + research_context).strip()
+                    research_footer = web_research.sources_footer(research_result.get("sources") or [])
+    except Exception as exc:
+        logger.warning("Streaming web research failed: %s", type(exc).__name__)
+        yield _sse({
+            "type": "activity",
+            "stage": "searching",
+            "label": "Web research failed; continuing without search results",
+            "done": True,
+            "searches": 0,
+            "sources": 0,
+        })
+
     messages = engine._build_openai_messages(
         message,
         history,
@@ -277,12 +327,15 @@ def _build_stream_generator(
     for provider_name, stream in _provider_streams(messages):
         try:
             started_provider = provider_name
+            yield _sse({"type": "activity", "stage": "responding", "label": "Writing response", "done": False})
             yield _sse({"type": "start", "provider": provider_name})
             for delta in stream:
                 full_text += delta
                 yield _sse({"type": "delta", "text": delta})
             if full_text.strip():
                 cleaned = ai_engine.clean_ai_response(full_text).strip()
+                if cleaned and research_footer and "**Sources:**" not in cleaned:
+                    cleaned += research_footer
                 if cleaned:
                     engine._save_memory(user_id, message, cleaned)
                 yield _sse({
@@ -308,6 +361,8 @@ def _build_stream_generator(
             # keep the partial response rather than silently corrupting it.
             if full_text.strip():
                 cleaned = ai_engine.clean_ai_response(full_text).strip()
+                if cleaned and research_footer and "**Sources:**" not in cleaned:
+                    cleaned += research_footer
                 if cleaned:
                     engine._save_memory(user_id, message, cleaned)
                 yield _sse({
