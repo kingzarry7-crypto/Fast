@@ -388,11 +388,15 @@ def _format_gmail_result(result: dict[str, Any]) -> str:
 
 
 def _shopify_read_intent(text: str, snapshot: dict[str, Any]) -> Optional[dict[str, str]]:
-    """Recognize safe Shopify read requests and route them to the official connector."""
+    """Recognize safe Shopify reads and low-stock monitoring requests."""
     raw = str(text or "").strip()
     lower = raw.lower()
     if not raw:
         return None
+
+    inventory_request = bool(re.search(r"\b(stock|inventory|restock|out of stock|low stock|running out|replenish)\b", lower))
+    if inventory_request and re.search(r"\b(watch|monitor|check|show|list|stock|inventory|restock|replenish|running out|out of stock|low stock)\b", lower):
+        return {"operation": "inventory", "kind": "shopify_inventory"}
 
     if re.search(r"\b(shopify|my store|my shop|storefront)\b", lower):
         if re.search(r"\b(order|orders|sales|purchases)\b", lower):
@@ -408,7 +412,6 @@ def _shopify_read_intent(text: str, snapshot: dict[str, Any]) -> Optional[dict[s
     if re.search(r"\b(orders|sales|purchases)\b", lower):
         return {"operation": "orders", "kind": "shopify_orders"}
     return None
-
 
 def _format_shopify_result(result: dict[str, Any], kind: str) -> str:
     if kind == "shopify_store":
@@ -429,6 +432,9 @@ def _format_shopify_result(result: dict[str, Any], kind: str) -> str:
                 f"{item.get('status') or 'unknown'} — {item.get('handle') or ''}"
             )
         return "\n".join(lines)
+    if kind == "shopify_inventory":
+        from shopify_inventory import format_inventory_snapshot
+        return format_inventory_snapshot(result)
     if kind == "shopify_orders":
         orders = ((result.get("orders") or {}).get("nodes") or [])
         if not orders:
@@ -725,6 +731,12 @@ async def handle_telegram_request(update: Any, text: str) -> Optional[dict[str, 
 
             store, token = _shopify_token(uid, "")
             operation = shopify_intent["operation"]
+            if operation == "inventory":
+                from shopify_inventory import inventory_snapshot, format_inventory_snapshot
+                result = inventory_snapshot(uid)
+                return {"status": result.get("status") or "completed", "kind": "shopify_inventory",
+                        "provider": "shopify", "operation": "inventory", "target": store,
+                        "reply": format_inventory_snapshot(result), "result": result}
             if operation == "shop":
                 result = _shopify_request(
                     store, token,
@@ -984,6 +996,12 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
                 }
             store, token = _shopify_token(uid, "")
             operation = shopify_intent["operation"]
+            if operation == "inventory":
+                from shopify_inventory import inventory_snapshot, format_inventory_snapshot
+                result = inventory_snapshot(uid)
+                return {"status": result.get("status") or "completed", "kind": "shopify_inventory",
+                        "provider": "shopify", "operation": "inventory", "target": store,
+                        "reply": format_inventory_snapshot(result), "result": result}
             queries = {
                 "shop": "query { shop { id name myshopifyDomain } }",
                 "products": "query { products(first: 20) { nodes { id title status handle } } }",
