@@ -87,31 +87,6 @@ export function ChatInput({
         <div className="kz-hud-corner kz-hud-corner-bl" aria-hidden="true" />
         <div className="kz-hud-corner kz-hud-corner-br" aria-hidden="true" />
 
-        {/* Top Status & AI Core Bar */}
-        <div className="flex items-center justify-between pb-2 mb-2 border-b border-cyan-500/15 text-[10px] font-mono">
-          <div className="flex items-center gap-2">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                isLoading
-                  ? "bg-amber-400 animate-ping"
-                  : isListening
-                  ? "bg-red-400 animate-pulse"
-                  : "bg-cyan-400 animate-pulse"
-              }`}
-              aria-hidden="true"
-            />
-            <span className="text-cyan-300 uppercase tracking-widest font-semibold">
-              KING ZARRY AI CORE
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2 text-cyan-400/70">
-            <span>
-              {isLoading ? "THINKING..." : isListening ? "LISTENING..." : "READY"}
-            </span>
-          </div>
-        </div>
-
         {/* Main Input Field Area */}
         <div className="flex items-end gap-2">
           {/* Attachment / Vision Button */}
