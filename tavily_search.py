@@ -124,7 +124,9 @@ def search_web(query: str, max_results: int = 5, search_depth: str = "basic", in
     cached = _get_cached(query, search_depth, max_results)
     if cached:
         logger.info(f"Tavily cache hit for: {query[:60]}")
-        return cached
+        cached_result = dict(cached)
+        cached_result["cached"] = True
+        return cached_result
 
     client = get_client()
     if not client:
@@ -160,6 +162,7 @@ def search_web(query: str, max_results: int = 5, search_depth: str = "basic", in
 
         output = {
             "success": True,
+            "cached": False,
             "results": normalized,
             "answer": answer[:1500] if answer else "",
             "query": query_used,
