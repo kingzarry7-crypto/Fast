@@ -200,10 +200,8 @@ def hunt(user_id: str, category: str = "clients", query: str = "", max_results: 
     }
 
 def _estimate_value(category: str, score: int) -> float:
-    if category == "news": return 0.0
-    if category == "clients": return 80.0 if score < 60 else 180.0 if score < 80 else 350.0
-    if category == "jobs": return 150.0 if score < 60 else 300.0 if score < 80 else 750.0
-    return 100.0 if score < 60 else 250.0 if score < 80 else 500.0
+    """Never turn a lead score into fictional revenue; require a verified budget."""
+    return 0.0
 
 def create_work_for_opportunity(user_id: str, opportunity: Dict[str, Any]) -> Dict[str, Any]:
     from workflow_engine import create_workflow
