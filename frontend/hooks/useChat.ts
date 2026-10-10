@@ -147,27 +147,44 @@ export function useChat(
                 setMessages((prev) =>
                   prev.map((item) =>
                     item.id === aiId
-                      ? { ...item, text: (item.text || "") + delta, status: "" }
+                      ? { ...item, text: (item.text || "") + delta, status: "", activitySteps: (item.activitySteps || []).map((step) => ({ ...step, done: true })) }
                       : item
                   )
                 );
               },
               onStart: (provider) => {
                 setMessages((prev) =>
-                  prev.map((item) =>
-                    item.id === aiId
-                      ? { ...item, status: provider === "kz_agent" ? "KZ AGENT • STARTING" : "" }
-                      : item
-                  )
+                  prev.map((item) => {
+                    if (item.id !== aiId) return item;
+                    if (provider !== "kz_agent") return { ...item, status: "" };
+                    const label = "Starting agent";
+                    const steps = item.activitySteps || [];
+                    return {
+                      ...item,
+                      status: "KZ AGENT • STARTING",
+                      activitySteps: steps.some((step) => step.label === label)
+                        ? steps
+                        : [...steps.map((step) => ({ ...step, done: true })), { label, done: false }],
+                    };
+                  })
                 );
               },
               onAgent: (agent) => {
+                const label = (agent.activity || "Working").trim();
                 setMessages((prev) =>
-                  prev.map((item) =>
-                    item.id === aiId
-                      ? { ...item, status: agent.activity ? `KZ AGENT • ${agent.activity}` : "KZ AGENT • WORKING" }
-                      : item
-                  )
+                  prev.map((item) => {
+                    if (item.id !== aiId) return item;
+                    const steps = item.activitySteps || [];
+                    const last = steps[steps.length - 1];
+                    if (last?.label === label && !last.done) {
+                      return { ...item, status: `KZ AGENT • ${label}` };
+                    }
+                    return {
+                      ...item,
+                      status: `KZ AGENT • ${label}`,
+                      activitySteps: [...steps.map((step) => ({ ...step, done: true })), { label, done: false }],
+                    };
+                  })
                 );
               },
             });
@@ -179,7 +196,7 @@ export function useChat(
             setMessages((prev) =>
               prev.map((item) =>
                 item.id === aiId
-                  ? { ...item, text: streamed.reply, status: streamed.agent?.id ? "KZ AGENT • WORKING" : "AI CORE • RESPONSE RECEIVED", approval: streamed.approval || extractApproval(streamed.reply) }
+                  ? { ...item, text: streamed.reply, status: streamed.agent?.id ? "KZ AGENT • WORKING" : "AI CORE • RESPONSE RECEIVED", activitySteps: (item.activitySteps || []).map((step) => ({ ...step, done: true })), approval: streamed.approval || extractApproval(streamed.reply) }
                   : item
               )
             );
