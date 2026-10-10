@@ -768,6 +768,22 @@ async def shopify_action(request: Request):
 async def connector_status(request: Request):
     user_id = _connector_user_id(request)
     account = _github_account(user_id)
+    # A database row alone is not proof that the GitHub grant is still valid.
+    # Validate the saved token so a revoked/expired connection can be re-authorized.
+    if account:
+        try:
+            saved_token = _github_token(user_id)
+            probe = requests.get(
+                GITHUB_API + "/user",
+                headers=_github_headers(saved_token),
+                timeout=12,
+            )
+            if probe.status_code == 401:
+                account = None
+            elif probe.status_code >= 400:
+                logger.warning("GitHub status probe returned HTTP %s", probe.status_code)
+        except Exception as exc:
+            logger.warning("GitHub status probe failed: %s", type(exc).__name__)
     tiktok_account = _provider_account(user_id, "tiktok")
 
     shopify_missing = _shopify_missing_configuration()
@@ -854,11 +870,19 @@ async def connector_accounts(request: Request):
 
 
 @router.get("/github/start")
-async def github_start(request: Request):
+async def github_start(request: Request, return_url: str = ""):
     user_id = _connector_user_id(request)
     if not _github_configured():
         raise HTTPException(status_code=503, detail="GitHub connector is not configured on KZ")
-    state = _sign_state({"provider": "github", "user_id": user_id, "nonce": secrets.token_urlsafe(18), "exp": _now() + 600})
+    requested_return = str(return_url or "").strip().rstrip("/")
+    callback_frontend = requested_return if _is_allowed_frontend_origin(requested_return) else _oauth_return_url(request)
+    state = _sign_state({
+        "provider": "github",
+        "user_id": user_id,
+        "return_url": callback_frontend,
+        "nonce": secrets.token_urlsafe(18),
+        "exp": _now() + 600,
+    })
     params = {
         "client_id": GITHUB_CLIENT_ID,
         "redirect_uri": GITHUB_REDIRECT_URI,
@@ -870,50 +894,68 @@ async def github_start(request: Request):
 
 @router.get("/github/callback")
 async def github_callback(request: Request):
-    if not _github_configured():
-        raise HTTPException(status_code=503, detail="GitHub connector is not configured on KZ")
-    error = request.query_params.get("error")
-    if error:
-        return RedirectResponse(f"{FRONTEND_URL}/dashboard?connector_error={urllib.parse.quote(error)}")
-    # OAuth returns directly to Railway, while the login cookie may live on
-    # the Vercel frontend host behind the /api proxy. The signed, short-lived
-    # state already binds this authorization request to the logged-in KZ user,
-    # so do not require the frontend cookie on the provider callback host.
-    payload = _verify_state(request.query_params.get("state") or "")
-    user_id = str(payload.get("user_id") or "").strip()
-    if not user_id:
-        raise HTTPException(status_code=403, detail="Connector authorization state has no KZ user")
-    code = request.query_params.get("code") or ""
-    if not code:
-        raise HTTPException(status_code=400, detail="GitHub authorization code missing")
-    response = requests.post(
-        GITHUB_TOKEN,
-        data={
-            "client_id": GITHUB_CLIENT_ID,
-            "client_secret": GITHUB_CLIENT_SECRET,
-            "code": code,
-            "redirect_uri": GITHUB_REDIRECT_URI,
-        },
-        headers={"Accept": "application/json", "User-Agent": "King-Zarry-AI-Connector/1.0"},
-        timeout=25,
-    )
-    if response.status_code >= 400:
-        raise HTTPException(status_code=502, detail="GitHub token exchange failed")
-    token_data = response.json()
-    access_token = str(token_data.get("access_token") or "")
-    if not access_token:
-        raise HTTPException(status_code=502, detail="GitHub did not return an access token")
-    me = _github_request("GET", "/user", access_token).json()
-    _save_github_connection(
-        user_id,
-        me,
-        access_token,
-        token_data.get("refresh_token"),
-        token_data.get("expires_in"),
-        [x for x in str(token_data.get("scope") or GITHUB_SCOPES).replace(",", " ").split() if x],
-    )
-    _audit(user_id, "connector_connected", target=str(me.get("login") or "github"))
-    return RedirectResponse(f"{FRONTEND_URL}/dashboard?connector=github&connected=1")
+    state_value = request.query_params.get("state") or ""
+    callback_frontend = _oauth_return_url(request)
+    try:
+        payload = _verify_state(state_value)
+        callback_frontend = _state_return_url(payload)
+        if payload.get("provider") != "github":
+            raise HTTPException(status_code=400, detail="Invalid GitHub connector state")
+        user_id = str(payload.get("user_id") or "").strip()
+        if not user_id:
+            raise HTTPException(status_code=403, detail="Connector authorization state has no KZ user")
+
+        error = request.query_params.get("error")
+        if error:
+            detail = request.query_params.get("error_description") or error
+            return RedirectResponse(
+                f"{callback_frontend}/dashboard?connector_error=github_{urllib.parse.quote(str(detail)[:250])}"
+            )
+        code = request.query_params.get("code") or ""
+        if not code:
+            raise HTTPException(status_code=400, detail="GitHub authorization code missing")
+
+        response = requests.post(
+            GITHUB_TOKEN,
+            data={
+                "client_id": GITHUB_CLIENT_ID,
+                "client_secret": GITHUB_CLIENT_SECRET,
+                "code": code,
+                "redirect_uri": GITHUB_REDIRECT_URI,
+            },
+            headers={"Accept": "application/json", "User-Agent": "King-Zarry-AI-Connector/1.0"},
+            timeout=25,
+        )
+        if response.status_code >= 400:
+            raise HTTPException(status_code=502, detail="GitHub token exchange failed")
+        token_data = response.json()
+        access_token = str(token_data.get("access_token") or "")
+        if not access_token:
+            detail = str(token_data.get("error_description") or token_data.get("error") or "GitHub did not return an access token")
+            raise HTTPException(status_code=502, detail=detail[:250])
+        me = _github_request("GET", "/user", access_token).json()
+        _save_github_connection(
+            user_id,
+            me,
+            access_token,
+            token_data.get("refresh_token"),
+            token_data.get("expires_in"),
+            [x for x in str(token_data.get("scope") or GITHUB_SCOPES).replace(",", " ").split() if x],
+        )
+        _audit(user_id, "connector_connected", target=str(me.get("login") or "github"))
+        return RedirectResponse(
+            f"{callback_frontend}/dashboard?connector=github&connected=1&name={urllib.parse.quote(str(me.get('login') or 'GitHub'))}"
+        )
+    except HTTPException as exc:
+        logger.warning("GitHub callback rejected: %s", str(exc.detail))
+        return RedirectResponse(
+            f"{callback_frontend}/dashboard?connector_error=github_{urllib.parse.quote(str(exc.detail or 'authorization_failed')[:250])}"
+        )
+    except Exception as exc:
+        logger.exception("GitHub callback failed: %s", type(exc).__name__)
+        return RedirectResponse(
+            f"{callback_frontend}/dashboard?connector_error=github_callback_failed"
+        )
 
 
 
