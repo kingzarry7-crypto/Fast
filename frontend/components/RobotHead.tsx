@@ -1,20 +1,29 @@
 "use client";
 
-/** Shared portrait avatar: always use the uploaded human-style core image, never a robot illustration. */
-export default function RobotHead({ size = 36, className = "" }: { size?: number; className?: string }) {
+import AICore from "@/components/AICore";
+
+/**
+ * Compact animated avatar used anywhere the assistant's former static head appeared.
+ * It reuses the same AICore portrait, aura, rings, scan sweep and state styling.
+ */
+export default function RobotHead({
+  size = 36,
+  className = "",
+  state = "idle",
+}: {
+  size?: number;
+  className?: string;
+  state?: "idle" | "thinking" | "speaking" | "listening" | "error";
+}) {
   return (
     <div
-      className={"relative shrink-0 rounded-xl border border-cyan-400/50 bg-[#020b18] flex items-center justify-center overflow-hidden shadow-[0_0_16px_rgba(0,240,255,0.35)] " + className}
+      className={"relative flex shrink-0 items-center justify-center overflow-hidden rounded-xl border border-cyan-400/50 bg-[#020b18] shadow-[0_0_16px_rgba(0,240,255,0.35)] " + className}
       style={{ width: size, height: size }}
-      aria-label="King Zarry AI human profile"
+      aria-label={`King Zarry AI animated core: ${state}`}
+      role="img"
     >
-      <img
-        src="/human-ai-core.webp"
-        alt="King Zarry AI human profile"
-        className="relative z-10 h-full w-full object-contain object-center"
-        draggable={false}
-      />
-      <span className="absolute inset-0 rounded-xl border border-cyan-300/20 pointer-events-none" aria-hidden="true" />
+      <AICore state={state} size={size} compact />
+      <span className="pointer-events-none absolute inset-0 rounded-[inherit] border border-cyan-300/20" aria-hidden="true" />
     </div>
   );
 }
