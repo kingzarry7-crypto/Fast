@@ -704,6 +704,26 @@ export async function createMemoryLinkCode(signal?: AbortSignal) {
   );
 }
 
+export async function transcribeAudio(blob: Blob, filename = "voice.webm"): Promise<{ text: string }> {
+  const response = await fetch(buildUrl(`/api/voice/transcribe?filename=${encodeURIComponent(filename)}`), {
+    method: "POST",
+    headers: { "Content-Type": blob.type || "audio/webm", Accept: "application/json" },
+    credentials: "include",
+    body: blob,
+  });
+  let data: { text?: string; detail?: string; message?: string } = {};
+  try { data = await response.json(); } catch { /* handled below */ }
+  if (!response.ok) {
+    throw new ApiError({
+      status: response.status,
+      message: data.detail || data.message || "Voice transcription failed. Please try again.",
+      detail: data.detail,
+      raw: data,
+    });
+  }
+  return { text: data.text || "" };
+}
+
 export const api = {
   getBaseUrl, getMe, getCurrentUser, login, register, verifyEmail, resendVerification, forgotPassword, resetPassword, logout,
   listConversations, createConversation, getConversation, getConversationMessages, chat, sendChatMessage, streamChatMessage, decideGoogleApproval, generateChatSuggestions, healthCheck,
@@ -712,7 +732,7 @@ export const api = {
   getMarkets, getMarketDetail, getSignals, getNews,
   getAgentStatus, runAgentGoal, generateMorningBrief, getLatestMorningBrief, listAgentJobs, approveAgentJob,
   getAgentLearning, getAgentV2, getAgentIntelligence, getAgentPreferences, updateAgentPreferences,
-  getAgentActionStatus, listAgentActions, approveAgentAction, getKZAgentStatus,
+  getAgentActionStatus, listAgentActions, approveAgentAction, getKZAgentStatus, transcribeAudio,
 };
 
 export type { AuthUser, AuthResponse, MeResponse, ChatResponse, ApiErrorData } from "@/types";
