@@ -253,6 +253,8 @@ def account_context_for_ai(user_id: str) -> str:
                         scope_names.append("shopify.products.write")
                     elif "read_orders" in s:
                         scope_names.append("shopify.orders.read")
+                    elif "read_inventory" in s:
+                        scope_names.append("shopify.inventory.read")
                     elif "write_inventory" in s:
                         scope_names.append("shopify.inventory.write")
                 lines.append(
@@ -950,6 +952,9 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
                     "status": "waiting_for_approval",
                     "kind": "send_gmail",
                     "approval_id": result["approval_id"],
+                    "provider": "google",
+                    "operation": "send_gmail",
+                    "target": payload["to"],
                     "reply": (
                         "✉️ FINAL EMAIL — " + selected["tone"] + "\n\n"
                         f"To: {payload['to']}\nSubject: {payload['subject']}\n\n{payload['body']}\n\n"
