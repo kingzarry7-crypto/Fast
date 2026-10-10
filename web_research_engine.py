@@ -253,9 +253,11 @@ def should_research(prompt: str) -> bool:
 
 
 def _query_variants(prompt: str, deep: bool) -> List[str]:
+    """Expand research across specialist indexes when the topic calls for them."""
     base = re.sub(r"\s+", " ", str(prompt or "")).strip()[:500]
     if not base:
         return []
+    low = base.lower()
     queries = [base]
     if deep:
         queries.extend([
@@ -263,7 +265,25 @@ def _query_variants(prompt: str, deep: bool) -> List[str]:
             base + " recent news",
             base + " analysis evidence",
         ])
-    return list(dict.fromkeys(q.strip() for q in queries if q.strip()))[:4]
+
+    # Specialist public-web indexes. These searches discover public landing pages;
+    # they do not bypass logins, paywalls, or access controls.
+    specialist_groups = [
+        (("academic", "scholar", "research paper", "scientific", "journal", "medical research", "worldcat", "mednar", "worldwidescience"),
+         'site:worldcat.org OR site:worldwidescience.org OR site:mednar.com'),
+        (("deep web", "dark web", "onion", "tor network", "hidden service", "ahmia", "hidden wiki"),
+         'site:ahmia.fi OR site:torproject.org OR site:duckduckgo.com'),
+        (("zeronet", "zeronetx", "decentralized website", "decentralised website", "peer hosted"),
+         'ZeroNet OR ZeroNetX documentation status'),
+        (("private website", "unsearchable website", "hostless", "private blog", "torserv", "wordpress.net"),
+         'my.WordPress.net OR Torserv OR hostless website GitHub'),
+        (("web directory", "website directory", "obscure websites", "linkmap", "directory bear", "ternbook"),
+         'LinkMap OR Directory Bear OR ternbook website directory'),
+    ]
+    for keywords, suffix in specialist_groups:
+        if any(term in low for term in keywords):
+            queries.append(f"{base} {suffix}")
+    return list(dict.fromkeys(q.strip() for q in queries if q.strip()))[:8]
 
 
 def _search_instance(base_url: str, query: str, max_results: int, time_range: str = "") -> List[Dict[str, Any]]:
