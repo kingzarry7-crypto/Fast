@@ -32,7 +32,7 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100%;
-  background-color: #05080f;
+  background-color: #030916;
   color: #c8e6f5;
   font-family: var(--font-sans);
   color-scheme: dark;
@@ -45,8 +45,8 @@ body {
   inset: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(0, 240, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 240, 255, 0.04) 1px, transparent 1px);
+    linear-gradient(rgba(0, 240, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, 0.018) 1px, transparent 1px);
   background-size: 60px 60px;
   -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 40%, black 20%, transparent 80%);
   mask-image: radial-gradient(ellipse 90% 80% at 50% 40%, black 20%, transparent 80%);
@@ -249,28 +249,22 @@ body:has(.kz-command-shell) {
 @media(prefers-reduced-motion:reduce){.kz-venture *, .kz-venture *:before,.kz-venture *:after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
 
 
-/* King Zarry AI reference-inspired circuit atmosphere */
+/* Reference palette: near-black midnight navy with restrained holographic glow. */
 .kz-bg-grid {
+  background-color: #030916;
   background-image:
-    linear-gradient(rgba(0, 240, 255, .035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 240, 255, .035) 1px, transparent 1px),
-    repeating-linear-gradient(0deg, transparent 0 54px, rgba(0, 240, 255, .045) 55px, transparent 56px 110px),
-    repeating-linear-gradient(90deg, transparent 0 78px, rgba(255, 76, 145, .035) 79px, transparent 80px 156px);
-  background-size: 60px 60px, 60px 60px, 100% 100%, 100% 100%;
+    linear-gradient(rgba(0, 240, 255, .018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, .018) 1px, transparent 1px);
 }
 .kz-bg-radial {
-  background:
-    radial-gradient(ellipse 38% 42% at 50% 42%, rgba(0, 110, 220, .15), transparent 72%),
-    radial-gradient(ellipse 50% 40% at 15% 20%, rgba(0, 240, 255, .09), transparent 70%),
-    radial-gradient(ellipse 45% 40% at 85% 75%, rgba(255, 45, 130, .07), transparent 70%),
-    radial-gradient(ellipse 60% 55% at 50% 100%, rgba(139, 92, 246, .08), transparent 70%);
+  background-color: #030916;
+  background-image:
+    radial-gradient(ellipse 42% 48% at 50% 42%, rgba(0, 92, 190, .10), transparent 72%),
+    radial-gradient(ellipse 36% 34% at 82% 68%, rgba(255, 40, 130, .035), transparent 72%);
 }
 .kz-command-shell,
 .kz-venture {
-  background-image:
-    radial-gradient(ellipse at 50% 38%, rgba(0, 100, 190, .13), transparent 54%),
-    radial-gradient(ellipse at 80% 72%, rgba(255, 40, 130, .055), transparent 42%),
-    repeating-linear-gradient(0deg, transparent 0 72px, rgba(0, 240, 255, .022) 73px, transparent 74px 144px),
-    repeating-linear-gradient(90deg, transparent 0 96px, rgba(255, 76, 145, .018) 97px, transparent 98px 192px);
   background-color: #030916;
+  background-image:
+    radial-gradient(ellipse 48% 46% at 50% 42%, rgba(0, 75, 155, .09), transparent 72%);
 }
