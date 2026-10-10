@@ -53,7 +53,7 @@ export function Header({
               aria-label="King Zarry AI human core"
             >
               <span className="absolute inset-0 rounded-2xl border border-cyan-300/20 animate-pulse pointer-events-none" aria-hidden="true" />
-              <img src="/human-ai-core.webp" alt="King Zarry AI holographic human profile" className="relative z-10 h-full w-full object-cover" />
+              <img src="/human-ai-core.webp" alt="King Zarry AI holographic human profile" className="relative z-10 h-full w-full object-contain" />
             </div>
 
             <div className="flex flex-col">
