@@ -516,9 +516,7 @@ body:has(.kz-command-shell) {
   .kz-bg-radial::after,
   .kz-chat-cosmic-backdrop,
   .kz-chat-cosmic-backdrop::before,
-  .kz-chat-cosmic-backdrop::after,
-  .kz-human-core .kz-core-aura,
-  .kz-human-core .kz-core-ring-one {
+  .kz-chat-cosmic-backdrop::after {
     animation: none !important;
   }
 }
