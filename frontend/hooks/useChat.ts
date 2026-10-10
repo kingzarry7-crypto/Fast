@@ -73,7 +73,10 @@ export function useChat(
         imagePreviewUrl: image?.previewUrl,
         imageName: image?.name,
       };
-      setMessages((prev) => [...prev, userMsg]);
+      setMessages((prev) => [
+        ...prev.map((item) => item.suggestions?.length ? { ...item, suggestions: undefined } : item),
+        userMsg,
+      ]);
       setSending(true);
       setError(null);
 
