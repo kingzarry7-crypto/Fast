@@ -190,7 +190,12 @@ export default function ConnectionsPanel() {
   }
 
   async function connectGoogle() {
-    window.location.href = "/api/connectors/google/start";
+    setBusy(true);
+    setMessage("Opening Google's secure sign-in and account chooser…");
+    const returnUrl = window.location.origin.replace(/\\/$/, "");
+    // Carry the exact active frontend origin through Railway's OAuth callback;
+    // this avoids returning users to a stale domain and hitting a 404.
+    window.location.href = "/api/connectors/google/start?return_url=" + encodeURIComponent(returnUrl);
   }
 
   async function googleRead(operation: string) {
@@ -282,7 +287,10 @@ export default function ConnectionsPanel() {
   }, [tiktokQr?.session_id, open]);
 
   async function connectGitHub() {
-    window.location.href = "/api/connectors/github/start";
+    setBusy(true);
+    setMessage("Opening GitHub's secure authorization…");
+    const returnUrl = window.location.origin.replace(/\\/$/, "");
+    window.location.href = "/api/connectors/github/start?return_url=" + encodeURIComponent(returnUrl);
   }
 
   async function loadGitHubRepos() {
@@ -717,7 +725,7 @@ export default function ConnectionsPanel() {
                       <div className="text-sm font-medium text-white">GitHub</div>
                       <div className="text-[10px] text-zinc-500">{github?.connected ? "AUTHORIZED ACCOUNT CONNECTED" : github?.configured ? "OAuth ready" : "SERVER SETUP REQUIRED"}</div>
                     </div>
-                    {!github?.connected && <button onClick={connectGitHub} disabled={busy} className="rounded-md border border-cyan-400/30 px-3 py-2 text-[9px] tracking-widest text-cyan-200 disabled:opacity-40">CONNECT</button>}
+                    <button onClick={connectGitHub} disabled={busy || !github?.configured} className="rounded-md border border-cyan-400/30 px-3 py-2 text-[9px] tracking-widest text-cyan-200 disabled:opacity-40">{github?.connected ? "RECONNECT / CHANGE ACCOUNT" : "CONNECT"}</button>
                   </div>
                 </div>
                 <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/[0.03] p-3">
@@ -753,7 +761,7 @@ export default function ConnectionsPanel() {
                       <div className="text-sm font-medium text-white">Google Workspace</div>
                       <div className="text-[10px] text-zinc-500">{google?.connected ? ("AUTHORIZED · " + (google?.account?.metadata?.email || google?.account?.display_name || "ACCOUNT CONNECTED")) : google?.configured ? "OAuth ready · account chooser enabled" : ("SERVER SETUP REQUIRED" + (google?.missing_configuration?.length ? " · MISSING: " + google.missing_configuration.join(", ") : ""))}</div>
                     </div>
-                    {!google?.connected && <button onClick={connectGoogle} disabled={busy} className="rounded-md border border-blue-400/30 px-3 py-2 text-[9px] tracking-widest text-blue-200 disabled:opacity-40">CONNECT</button>}
+                    <button onClick={connectGoogle} disabled={busy || !google?.configured} className="rounded-md border border-blue-400/30 px-3 py-2 text-[9px] tracking-widest text-blue-200 disabled:opacity-40">{google?.connected ? "RECONNECT / CHANGE ACCOUNT" : google?.reconnect_required ? "SIGN IN AGAIN" : "CONNECT"}</button>
                     {google?.connected && (
                       <button
                         type="button"
