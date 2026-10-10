@@ -205,8 +205,8 @@ export default function AICore({
             style={{ borderColor: `${color}80` }}>
             <div>MODULES</div>
             <div style={{ color }}>04 LINKED</div>
-            <div className="mt-1">INTERFACE</div>
-            <div style={{ color }}>ONLINE</div>
+            <div className="mt-1">MODE</div>
+            <div style={{ color }}>RENDERED</div>
           </div>
         </>
       )}
