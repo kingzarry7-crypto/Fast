@@ -576,6 +576,66 @@ export default function ChatWorkspace({
         (fullScreen ? "h-[100dvh] max-h-[100dvh]" : "h-full min-h-0")
       }
     >
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+        {showSideHistory && historyOpen && (
+          <button
+            type="button"
+            aria-label="Close chat history"
+            onClick={() => setHistoryOpen(false)}
+            className="absolute inset-0 z-30 bg-black/55 backdrop-blur-[2px] lg:hidden"
+          />
+        )}
+        {showSideHistory && (
+          <aside
+            aria-label="Chat history"
+            className={
+              "absolute inset-y-0 left-0 z-40 flex w-[min(84vw,18rem)] flex-col border-r border-cyan-300/10 bg-[#06101b]/[0.98] shadow-2xl backdrop-blur-xl transition-transform lg:relative lg:inset-auto lg:z-auto lg:w-64 lg:shrink-0 lg:translate-x-0 lg:shadow-none " +
+              (historyOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0")
+            }
+          >
+            <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-cyan-300/20 bg-cyan-300/[0.08] text-lg text-cyan-200 shadow-[0_0_24px_rgba(34,211,238,0.08)]">✦</div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold tracking-wide text-slate-100">King Zarry AI</p>
+                  <p className="mt-0.5 text-[9px] uppercase tracking-[0.2em] text-cyan-200/50">Personal AI workspace</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setHistoryOpen(false)} className="rounded-lg px-2 py-1 text-sm text-slate-400 hover:bg-white/5 hover:text-white lg:hidden" aria-label="Close history">×</button>
+            </div>
+            <button
+              type="button"
+              onClick={() => { void handleNewChat(); setHistoryOpen(false); }}
+              disabled={sending || callMode}
+              className="mx-3 mt-4 flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-3 text-left text-sm text-cyan-50 transition hover:border-cyan-200/40 hover:bg-cyan-300/[0.12] disabled:opacity-40"
+            >
+              <span className="text-lg leading-none">＋</span>
+              <span>New conversation</span>
+            </button>
+            <div className="px-4 pb-2 pt-5 text-[9px] font-semibold uppercase tracking-[0.2em] text-slate-500">Recent conversations</div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
+              {conversations.length ? conversations.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => { void handleOpenConversation(item.id); setHistoryOpen(false); }}
+                  className={
+                    "mb-1 w-full rounded-lg border px-3 py-2.5 text-left transition " +
+                    (item.id === conversationId
+                      ? "border-cyan-300/20 bg-cyan-300/[0.08] text-slate-100"
+                      : "border-transparent text-slate-400 hover:border-white/[0.06] hover:bg-white/[0.035] hover:text-slate-200")
+                  }
+                >
+                  <span className="block truncate text-xs">{item.title || "Untitled conversation"}</span>
+                </button>
+              )) : (
+                <p className="px-3 py-3 text-xs leading-5 text-slate-500">Your saved conversations will appear here.</p>
+              )}
+            </div>
+            <div className="border-t border-white/[0.06] px-4 py-3 text-[9px] uppercase tracking-[0.16em] text-slate-600">Private workspace</div>
+          </aside>
+        )}
+        <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
       <div className="relative inset-x-0 z-10 shrink-0">
         {!isVip && membership && (
           <div className="border-b border-white/5 bg-[#05080f]/90 px-3 py-1.5 flex items-center justify-between gap-2">
@@ -649,26 +709,6 @@ export default function ChatWorkspace({
         className="relative min-h-0 flex-1 overflow-y-auto overscroll-y-none kz-scroll px-3 sm:px-4"
       >
         <div className="mx-auto w-full max-w-2xl space-y-2.5 py-4 pb-28">
-          {showSideHistory && historyOpen && (
-            <div className="mb-3 rounded-xl border border-cyan-500/15 bg-black/40 p-2 max-h-40 overflow-y-auto">
-              {conversations.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => handleOpenConversation(c.id)}
-                  className={
-                    "mb-1 w-full rounded-lg px-2 py-1.5 text-left text-xs " +
-                    (c.id === conversationId
-                      ? "bg-cyan-500/15 text-cyan-100 border border-cyan-500/30"
-                      : "text-zinc-400 hover:bg-white/5 border border-transparent")
-                  }
-                >
-                  <span className="block truncate">{c.title || "Untitled"}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
           {messages.length === 0 && !historyLoading && (
             <div className="flex flex-col items-center justify-center min-h-[200px] text-center py-8">
               <div className="flex h-[100px] w-[100px] items-center justify-center rounded-full border border-cyan-400/15 bg-cyan-400/[0.03]" aria-hidden="true">
@@ -892,6 +932,8 @@ export default function ChatWorkspace({
           )}
         </div>
       </form>
+        </div>
+      </div>
     </div>
   );
 }
