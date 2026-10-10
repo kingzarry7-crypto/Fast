@@ -136,7 +136,7 @@ export function ChatMessage({
           "relative w-fit max-w-[min(88%,820px)] px-4 py-3 sm:px-5 sm:py-4 text-[14px] leading-7 " +
           (isUser
             ? "ml-auto rounded-2xl rounded-br-md border border-cyan-300/20 bg-gradient-to-br from-cyan-300/[0.12] via-blue-400/[0.07] to-amber-300/[0.035] text-slate-50 shadow-[0_12px_35px_rgba(0,0,0,0.14)]"
-            : "mr-auto rounded-2xl border border-white/[0.035] bg-white/[0.012] text-[#d9eaf4]") +
+            : "mr-auto border-0 bg-transparent p-0 text-[#d9eaf4]") +
           " " +
           (isError ? "text-red-100" : "")
         }
