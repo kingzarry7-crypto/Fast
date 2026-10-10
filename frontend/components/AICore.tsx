@@ -92,30 +92,34 @@ export default function AICore({
 
       {/* Human hologram core — a face and shoulders, not the old robot mascot. */}
       <div className="relative z-10 flex items-center justify-center" style={{ width: size * 0.54, height: size * 0.68, filter: `drop-shadow(0 0 12px ${color}77)` }}>
-        <svg viewBox="0 0 160 200" className="h-full w-full" role="img" aria-label="King Zarry AI holographic human core">
+        <svg viewBox="0 0 180 220" className="h-full w-full" role="img" aria-label="King Zarry AI neon circuit human profile">
           <defs>
             <linearGradient id="kzHumanSkin" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="#efffff" />
-              <stop offset="48%" stopColor={color} />
-              <stop offset="100%" stopColor="#087c9a" />
+              <stop offset="0%" stopColor="#baf7ff" />
+              <stop offset="45%" stopColor={color} />
+              <stop offset="100%" stopColor="#075078" />
             </linearGradient>
+            <linearGradient id="kzProfileFill" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#071b32" stopOpacity=".98" />
+              <stop offset="100%" stopColor="#020a19" stopOpacity=".92" />
+            </linearGradient>
+            <clipPath id="kzProfileClip">
+              <path d="M128 203 L88 203 L76 183 L66 166 L47 161 L43 148 L29 140 L22 128 L30 117 L41 108 L47 91 L46 69 Q47 34 81 20 Q118 7 143 36 Q160 57 151 91 L145 111 L151 130 L139 148 L137 174 Z" />
+            </clipPath>
             <filter id="kzHumanGlow"><feGaussianBlur stdDeviation="2.2" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
-            <linearGradient id="kzShoulders" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity=".3" />
-              <stop offset="100%" stopColor="#041b2a" stopOpacity=".06" />
-            </linearGradient>
           </defs>
-          <path d="M25 190 Q29 151 58 143 L65 135 L95 135 L102 143 Q131 151 135 190 Z" fill="url(#kzShoulders)" stroke={color} strokeWidth="2.2" filter="url(#kzHumanGlow)" />
-          <path d="M64 125 L64 145 Q80 160 96 145 L96 125" fill="#062231" stroke={color} strokeWidth="1.8" />
-          <path d="M48 51 Q48 25 80 23 Q112 25 112 56 L108 94 Q104 119 80 128 Q56 119 52 94 Z" fill="#061a29" fillOpacity=".94" stroke="url(#kzHumanSkin)" strokeWidth="2.8" filter="url(#kzHumanGlow)" />
-          <path d="M49 54 Q52 21 80 22 Q107 22 112 53 L101 45 L91 36 Q75 48 53 48 Z" fill={color} fillOpacity=".35" stroke={color} strokeWidth="1.5" />
-          <path d="M57 70 Q66 64 73 70 M87 70 Q95 64 103 70" fill="none" stroke="#eaffff" strokeWidth="2.8" strokeLinecap="round" />
-          <path d="M80 71 L76 88 L83 90" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" />
-          <path d="M69 103 Q80 110 92 102" fill="none" stroke="#dffcff" strokeWidth="2.2" strokeLinecap="round" />
-          <path d="M49 62 L42 78 L47 96 M111 62 L118 78 L113 96" fill="none" stroke={color} strokeOpacity=".75" strokeWidth="1.5" />
-          <path d="M37 167 Q80 184 123 167 M44 177 Q80 191 116 177" fill="none" stroke={color} strokeOpacity=".65" strokeWidth="1.2" />
-          <circle cx="58" cy="83" r="2" fill={color} /><circle cx="102" cy="83" r="2" fill={color} />
-          <path d="M80 7 V17 M75 12 H85" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M128 203 L88 203 L76 183 L66 166 L47 161 L43 148 L29 140 L22 128 L30 117 L41 108 L47 91 L46 69 Q47 34 81 20 Q118 7 143 36 Q160 57 151 91 L145 111 L151 130 L139 148 L137 174 Z" fill="url(#kzProfileFill)" stroke="url(#kzHumanSkin)" strokeWidth="2.6" filter="url(#kzHumanGlow)" />
+          <g clipPath="url(#kzProfileClip)" fill="none" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 55 H71 V43 H112 V59 H158 M15 75 H62 V88 H93 V72 H151 M18 100 H54 V112 H91 V98 H160 M18 127 H57 V137 H105 V121 H151 M37 151 H79 V164 H124 V149 H155 M57 177 H100 V190 H144" stroke={color} strokeWidth="1.5" opacity=".9" />
+            <path d="M72 28 V52 H88 V68 H116 V85 H139 M55 64 V81 H76 V98 H105 V115 H133 M51 118 V132 H73 V146 H101 V160 H125 M83 19 V39 H101 V50 M117 39 V66 H133 V78 M95 92 V110 H116 V128 M70 145 V170 H88 V184" stroke="#ff4c91" strokeWidth="1.2" opacity=".8" />
+            <path d="M42 91 H63 V101 H81 M32 119 H50 V128 H68 M55 151 H73 M90 57 H103 M108 102 H123 M100 137 H117" stroke="#ffc66d" strokeWidth="2" />
+            <path d="M49 66 L61 72 L49 78 M43 86 L55 92 L43 98 M47 109 L59 115 L47 121" stroke="#b9faff" strokeWidth="1.5" />
+            <path d="M61 35 V48 M68 35 V48 M75 35 V48 M124 92 V106 M131 92 V106 M138 92 V106 M82 126 V140 M89 126 V140" stroke={color} strokeWidth="1.2" opacity=".9" />
+            <circle cx="112" cy="59" r="3" fill="#ffc66d" stroke="none" /><circle cx="93" cy="98" r="3" fill="#ff4c91" stroke="none" /><circle cx="124" cy="149" r="3" fill={color} stroke="none" /><circle cx="61" cy="72" r="2" fill="#b9faff" stroke="none" />
+          </g>
+          <path d="M49 80 Q57 74 64 80 M46 98 L56 101 L51 107 M43 123 Q51 129 60 124" fill="none" stroke="#d8fbff" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M68 17 Q104 0 135 27" fill="none" stroke={color} strokeWidth="1.2" opacity=".85" />
+          <circle cx="143" cy="36" r="3" fill="#ff4c91" /><circle cx="151" cy="91" r="2.5" fill="#ffc66d" /><circle cx="22" cy="128" r="2.5" fill={color} />
         </svg>
       </div>
 
