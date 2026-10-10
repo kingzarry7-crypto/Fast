@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 
 type Snapshot = {
   workflows: any[];
@@ -75,6 +76,7 @@ export default function CommandStatusPanel() {
               <div>
                 <div className="font-mono-tech text-xs tracking-[0.22em] text-cyan-200">KZ COMMAND STATUS</div>
                 <div className="mt-1 text-[10px] text-zinc-500">One view of work, approvals, browser, verification and learning.</div>
+                <Link href="/agent" onClick={() => setOpen(false)} className="mt-2 inline-flex rounded-md border border-cyan-300/30 bg-cyan-300/10 px-3 py-1.5 font-mono-tech text-[9px] tracking-widest text-cyan-100 transition hover:bg-cyan-300/20">OPEN AGENT WORKSPACE →</Link>
               </div>
               <button type="button" onClick={() => setOpen(false)} className="rounded-md px-2 py-1 text-zinc-500 hover:bg-white/5">×</button>
             </div>
@@ -110,7 +112,7 @@ export default function CommandStatusPanel() {
               </div>
 
               <div className="mt-3">
-                <div className="mb-2 font-mono-tech text-[9px] tracking-widest text-cyan-300">RECENT WORK</div>
+                <div className="mb-2 flex items-center justify-between gap-2"><div className="font-mono-tech text-[9px] tracking-widest text-cyan-300">RECENT WORK</div><Link href="/agent" onClick={() => setOpen(false)} className="font-mono-tech text-[8px] tracking-widest text-cyan-200 hover:text-white">VIEW ALL →</Link></div>
                 {!workflows.length && <div className="rounded-xl border border-white/5 p-3 text-[10px] text-zinc-600">No workflows yet.</div>}
                 {workflows.slice(0, 8).map((w) => (
                   <div key={w.id} className="mb-2 rounded-lg border border-white/5 bg-white/[0.02] p-3">
