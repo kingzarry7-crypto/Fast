@@ -46,6 +46,13 @@ def _generate_options(recipient: str, subject: str, body: str) -> list[dict[str,
         {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
     ], max_tokens=900)
     raw = str(response or "").strip()
+    fence = chr(96) * 3
+    if raw.startswith(fence):
+        raw = raw[len(fence):].strip()
+        if raw.lower().startswith("json"):
+            raw = raw[4:].strip()
+        if raw.endswith(fence):
+            raw = raw[:-len(fence)].strip()
     parsed = json.loads(raw)
     if not isinstance(parsed, list) or len(parsed) != 3:
         raise ValueError("Email editor did not return three options")
