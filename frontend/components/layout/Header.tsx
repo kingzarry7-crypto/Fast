@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import Link from "next/link";
+import RobotHead from "@/components/RobotHead";
 
 export interface HeaderProps {
   currentPath?: string;
@@ -47,14 +48,11 @@ export function Header({
         {/* Brand & AI Core Identifier */}
         <div className="flex items-center gap-4">
           <Link href="/dashboard" className="flex items-center gap-3 group focus:outline-none">
-            {/* Use the same real holographic human-profile image across the app. */}
-            <div
-              className="relative w-11 h-11 shrink-0 rounded-2xl border border-cyan-400/60 bg-[#020b18] flex items-center justify-center overflow-hidden shadow-[0_0_18px_rgba(0,240,255,0.45),inset_0_0_14px_rgba(0,240,255,0.16)] group-hover:border-cyan-300 group-hover:shadow-[0_0_24px_rgba(0,240,255,0.65),inset_0_0_16px_rgba(0,240,255,0.2)] transition-all"
-              aria-label="King Zarry AI human core"
-            >
-              <span className="absolute inset-0 rounded-2xl border border-cyan-300/20 animate-pulse pointer-events-none" aria-hidden="true" />
-              <img src="/human-ai-core.webp" alt="King Zarry AI holographic human profile" className="relative z-10 h-full w-full object-contain" />
-            </div>
+            {/* Shared animated AI core, matching the intro and chat core. */}
+            <RobotHead
+              size={44}
+              className="rounded-2xl border-cyan-400/60 shadow-[0_0_18px_rgba(0,240,255,0.45),inset_0_0_14px_rgba(0,240,255,0.16)] transition-all group-hover:border-cyan-300 group-hover:shadow-[0_0_24px_rgba(0,240,255,0.65),inset_0_0_16px_rgba(0,240,255,0.2)]"
+            />
 
             <div className="flex flex-col">
               <div className="flex items-center gap-2">
