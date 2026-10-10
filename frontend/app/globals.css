@@ -220,6 +220,66 @@ body {
 .kz-typing-dot:nth-child(2) { animation-delay: 0.2s; }
 .kz-typing-dot:nth-child(3) { animation-delay: 0.4s; }
 
+/* Cosmic chat panel: stars and nebula live on the panel canvas, not inside a separate image card. */
+.kz-chat-cosmic-backdrop {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 38%, rgba(0, 90, 190, .16), transparent 54%),
+    radial-gradient(ellipse at 13% 78%, rgba(0, 240, 255, .075), transparent 36%),
+    radial-gradient(ellipse at 88% 26%, rgba(154, 75, 255, .09), transparent 34%),
+    radial-gradient(ellipse at 72% 86%, rgba(255, 63, 160, .055), transparent 38%),
+    linear-gradient(180deg, rgba(3, 9, 22, .18), rgba(2, 7, 18, .42));
+}
+.kz-chat-cosmic-backdrop::before,
+.kz-chat-cosmic-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: -22%;
+  pointer-events: none;
+}
+.kz-chat-cosmic-backdrop::before {
+  opacity: .7;
+  background-image:
+    radial-gradient(circle at 7% 13%, rgba(195, 245, 255, .9) 0 1px, transparent 1.7px),
+    radial-gradient(circle at 23% 37%, rgba(0, 240, 255, .8) 0 .8px, transparent 1.8px),
+    radial-gradient(circle at 41% 18%, rgba(255, 255, 255, .8) 0 .7px, transparent 1.6px),
+    radial-gradient(circle at 63% 43%, rgba(129, 190, 255, .8) 0 1px, transparent 1.8px),
+    radial-gradient(circle at 81% 23%, rgba(255, 255, 255, .75) 0 .8px, transparent 1.7px),
+    radial-gradient(circle at 92% 67%, rgba(0, 240, 255, .8) 0 .8px, transparent 1.8px),
+    radial-gradient(circle at 34% 76%, rgba(190, 170, 255, .7) 0 .8px, transparent 1.7px),
+    radial-gradient(circle at 71% 88%, rgba(255, 255, 255, .75) 0 .7px, transparent 1.7px);
+  background-size: 173px 191px, 229px 223px, 263px 241px, 307px 289px, 211px 257px, 281px 239px, 241px 277px, 319px 301px;
+  animation: kz-chat-stars-drift 72s linear infinite, kz-chat-stars-twinkle 6s ease-in-out infinite alternate;
+}
+.kz-chat-cosmic-backdrop::after {
+  inset: 8% 12%;
+  border: 1px solid rgba(0, 210, 255, .07);
+  border-radius: 50%;
+  transform: rotate(-18deg) scaleY(.5);
+  box-shadow: 0 0 45px rgba(0, 136, 255, .055), inset 0 0 42px rgba(0, 136, 255, .035);
+  animation: kz-chat-nebula-breathe 9s ease-in-out infinite;
+}
+@keyframes kz-chat-stars-drift {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-42px, 24px, 0); }
+}
+@keyframes kz-chat-stars-twinkle {
+  0%, 100% { opacity: .42; }
+  50% { opacity: .88; }
+}
+@keyframes kz-chat-nebula-breathe {
+  0%, 100% { opacity: .35; scale: .98; }
+  50% { opacity: .8; scale: 1.025; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kz-chat-cosmic-backdrop::before,
+  .kz-chat-cosmic-backdrop::after { animation: none !important; }
+}
+
 /* Command centre — page stays fixed; only message list scrolls */
 .kz-command-shell {
   overscroll-behavior: none;
