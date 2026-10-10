@@ -24,7 +24,6 @@ export function ChatMessage({
   role,
   content,
   timestamp,
-  status,
   isStreaming = false,
   isError = false,
   imagePreviewUrl,
