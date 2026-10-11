@@ -808,6 +808,7 @@ export default function ChatWorkspace({
               isStreaming={sending && m.role === "assistant" && m.id === lastAssistantId}
               imagePreviewUrl={m.imagePreviewUrl}
               suggestions={m.suggestions}
+              webSources={m.webSources}
               onSpeak={
                 m.role === "assistant"
                   ? () => (isSpeaking ? stopSpeaking() : speak(m.text || ""))
