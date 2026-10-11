@@ -3036,7 +3036,7 @@ async def agent_intelligence_endpoint(request: Request):
 async def account_notifications_endpoint(request: Request):
     """List durable account-monitor notifications owned by the signed-in user."""
     user_row = await asyncio.to_thread(_require_current_user, request)
-    user_id = await asyncio.to_thread(_require_web_vip, user_row)
+    user_id = str(_row_value(user_row, "id", 0))
     try:
         from account_notifications import list_web_account_notifications
         items = await asyncio.to_thread(list_web_account_notifications, str(user_id), 30)
@@ -3050,7 +3050,7 @@ async def account_notifications_endpoint(request: Request):
 async def mark_account_notification_read_endpoint(request: Request, notification_id: str):
     """Mark only this user's account notification as read."""
     user_row = await asyncio.to_thread(_require_current_user, request)
-    user_id = await asyncio.to_thread(_require_web_vip, user_row)
+    user_id = str(_row_value(user_row, "id", 0))
     try:
         from account_notifications import mark_web_account_notification_read
         updated = await asyncio.to_thread(
