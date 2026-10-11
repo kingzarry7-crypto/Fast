@@ -1,5 +1,4 @@
 "use client";
-// Vercel build trigger: deploy the verified main branch source.
 
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 
