@@ -37,7 +37,9 @@ router = APIRouter(prefix="/api/connectors", tags=["connectors"])
 GITHUB_AUTHORIZE = "https://github.com/login/oauth/authorize"
 GITHUB_TOKEN = "https://github.com/login/oauth/access_token"
 GITHUB_API = "https://api.github.com"
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://kingzarry.bid").rstrip("/")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://fast.kingzarry7.workers.dev").rstrip("/")
+if ".vercel.app" in FRONTEND_URL.lower():
+    FRONTEND_URL = "https://fast.kingzarry7.workers.dev"
 # Production frontend origins. OAuth returns only to trusted Cloudflare/custom-domain hosts.
 FRONTEND_CUSTOM_DOMAIN = "kingzarry.bid"
 FRONTEND_CUSTOM_ORIGINS = {
