@@ -3,6 +3,11 @@ name: KZ Workflow Engine Check
 on:
   push:
     paths:
+      - "account_agent.py"
+      - "account_notifications.py"
+      - "gmail_intelligence.py"
+      - "test_account_notifications.py"
+      - "test_gmail_intelligence.py"
       - "workflow_*.py"
       - "ai_engine.py"
       - "email_draft_safety.py"
@@ -35,6 +40,11 @@ on:
       - "frontend/**"
   pull_request:
     paths:
+      - "account_agent.py"
+      - "account_notifications.py"
+      - "gmail_intelligence.py"
+      - "test_account_notifications.py"
+      - "test_gmail_intelligence.py"
       - "frontend/**"
       - "web_research_engine.py"
       - "test_web_research_engine.py"
