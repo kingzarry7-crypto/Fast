@@ -9,6 +9,7 @@ import tempfile
 import base64
 import sqlite3
 import logging
+import math
 import html
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
@@ -846,7 +847,11 @@ def build_discord_signal_chart(symbol: str, timeframe: str, market_data: Dict[st
                 if su: lv.append((su, "SUPPORT"))
                 if re_: lv.append((re_, "RESISTANCE"))
             for l_, lb in lv:
-                if l_ is None: continue
+                # Shared market snapshots can include null target levels. Ignore
+                # malformed values instead of aborting the whole chart attachment.
+                l_ = safe_float(l_)
+                if l_ is None or not math.isfinite(l_):
+                    continue
                 ax.axhline(l_, linestyle=":", linewidth=0.7, alpha=0.6)
                 try: ax.text(len(xs)+0.8, l_, f"{lb} {l_:,.2f}", fontsize=8, fontweight="bold")
                 except Exception: pass
