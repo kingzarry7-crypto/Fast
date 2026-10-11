@@ -565,6 +565,7 @@ def monitor_tick() -> list[dict[str, Any]]:
                 state = {}
         try:
             if monitor["provider"] == "google" and monitor["monitor_type"] == "gmail":
+                prior_status = str(state.get("monitoring_status") or "ok")
                 new_state, new_items = _monitor_gmail(user_id, state)
                 now = datetime.now(timezone.utc)
                 with get_db_cursor(commit=True) as cur:
@@ -576,19 +577,56 @@ def monitor_tick() -> list[dict[str, Any]]:
                            WHERE id=%s""",
                         (json.dumps(new_state), bool(new_items), monitor["id"]),
                     )
+                if prior_status != "ok":
+                    events.append({
+                        "user_id": user_id, "provider": "google",
+                        "type": "gmail_monitor_recovered", "count": 0, "items": [],
+                        "sleep_buffered": False, "at": now.isoformat(),
+                    })
                 if new_items:
-                    event = {
-                        "user_id": user_id,
-                        "provider": "google",
-                        "type": "new_gmail",
-                        "count": len(new_items),
-                        "items": new_items[:8],
-                        "sleep_buffered": _sleeping(),
-                        "at": now.isoformat(),
-                    }
-                    events.append(event)
+                    high = [item for item in new_items if item.get("priority") == "high"]
+                    medium = [item for item in new_items if item.get("priority") == "medium"]
+                    low = [item for item in new_items if item.get("priority") == "low"]
+                    events.append({
+                        "user_id": user_id, "provider": "google", "type": "new_gmail",
+                        "count": len(new_items), "high": high, "medium": medium, "low": low,
+                        "items": new_items, "sleep_buffered": _sleeping(), "at": now.isoformat(),
+                    })
         except Exception as exc:
-            logger.warning("Account monitor failed user=%s: %s", user_id, exc)
+            # Avoid logging provider error payloads or credential-bearing URLs.
+            detail = str(getattr(exc, "detail", "") or exc).lower()
+            auth_revoked = any(term in detail for term in ("401", "403", "invalid_grant", "revoked", "unauthorized", "reconnect google", "google is not connected"))
+            failures = int(state.get("consecutive_failures") or 0) + 1
+            prior_status = str(state.get("monitoring_status") or "ok")
+            next_status = "access_revoked" if auth_revoked else "error"
+            updated_state = dict(state)
+            updated_state.update({
+                "consecutive_failures": failures,
+                "monitoring_status": next_status,
+                "failure_alert_sent": bool(state.get("failure_alert_sent")) or auth_revoked or failures >= 3,
+            })
+            try:
+                with get_db_cursor(commit=True) as cur:
+                    cur.execute(
+                        """UPDATE kz_account_monitors
+                           SET state_json=%s::jsonb,last_checked_at=NOW(),updated_at=NOW()
+                           WHERE id=%s""",
+                        (json.dumps(updated_state), monitor["id"]),
+                    )
+            except Exception as persist_exc:
+                logger.warning("Could not persist account monitor failure: %s", type(persist_exc).__name__)
+            should_alert = auth_revoked or (failures >= 3 and not state.get("failure_alert_sent"))
+            if should_alert:
+                events.append({
+                    "user_id": user_id, "provider": "google",
+                    "type": "gmail_access_revoked" if auth_revoked else "gmail_monitor_failed",
+                    "count": failures, "items": [],
+                    "sleep_buffered": False,
+                    "reason": "Gmail access may have expired or been revoked. Reconnect Google to resume monitoring." if auth_revoked else f"Gmail monitoring failed {failures} consecutive times. KZ will retry automatically.",
+                    "at": datetime.now(timezone.utc).isoformat(),
+                })
+            logger.warning("Account monitor failed user=%s failure_count=%s status=%s error_type=%s",
+                           user_id, failures, next_status, type(exc).__name__)
     return events
 
 
