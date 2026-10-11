@@ -417,32 +417,35 @@ def _outcome_verification(item: Dict[str, Any]) -> Dict[str, Any]:
     if not consequential:
         return {"outcome_status": "not_required", "verified": True, "evidence": []}
 
+    evidence = []
     for step in plan:
         output = step.get("output") or {}
         verification = output.get("verification") or {}
         status = str(output.get("verification_status") or verification.get("verification_status") or "").lower()
         proof = output.get("evidence") or verification.get("evidence") or []
-        if (
-            (output.get("verified") is True or verification.get("verified") is True or status in {
-                "verified_sent", "verified_completed", "verified_published"
-            })
-            and isinstance(proof, list)
-            and len(proof) > 0
-        ):
-            return {
-                "outcome_status": "verified",
-                "verified": True,
-                "evidence": proof[:20],
-            }
+        if not isinstance(proof, list):
+            continue
+        meaningful_proof = [
+            entry for entry in proof
+            if (isinstance(entry, str) and bool(entry.strip()))
+            or (isinstance(entry, dict) and bool(entry))
+        ]
+        explicitly_verified = (
+            output.get("verified") is True
+            or verification.get("verified") is True
+            or status in {"verified_sent", "verified_completed", "verified_published"}
+        )
+        if explicitly_verified and meaningful_proof:
+            evidence.extend(meaningful_proof)
 
+    if evidence:
+        return {"outcome_status": "verified", "verified": True, "evidence": evidence[:20]}
     return {
         "outcome_status": "unverified",
         "verified": False,
         "evidence": [],
-        "note": "Workflow steps finished, but external outcome evidence was not available.",
+        "note": "Workflow steps finished, but explicit external-outcome evidence was not available.",
     }
-
-
 def run_workflow(workflow_id: str, user_id: str) -> Dict[str, Any]:
     item = get_workflow(workflow_id, user_id)
     if not item:
