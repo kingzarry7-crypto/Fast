@@ -292,7 +292,7 @@ export async function streamChatMessage(
     signal?: AbortSignal;
     onDelta: (text: string) => void;
     onStart?: (provider?: string) => void;
-    onActivity?: (activity: { stage?: string; label: string; done: boolean; searches?: number; sources?: number }) => void;
+    onActivity?: (activity: { stage?: string; label: string; done: boolean; searches?: number; sources?: number; sourceUrls?: Array<{ title: string; url: string }> }) => void;
     onAgent?: (agent: { id?: string; status?: string; activity?: string }) => void;
   }
 ): Promise<{ reply: string; conversation_id?: string; approval?: { id: string; provider: "google"; operation: string; target?: string }; agent?: { id?: string; status?: string; activity?: string } }> {
