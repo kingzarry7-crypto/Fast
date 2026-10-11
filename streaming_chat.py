@@ -653,6 +653,39 @@ def install_streaming_chat(
                 except Exception:
                     work_intent = None
 
+                if work_intent and work_intent.get("kind") in {"approve", "reject", "status"}:
+                    try:
+                        from kz_agent import approve as approve_kz_agent, get as get_kz_agent
+                        user_row = await __import__("asyncio").to_thread(require_current_user, request)
+                        user_id = str(user_row.get("id") if isinstance(user_row, dict) else user_row[0])
+                        kind = work_intent["kind"]
+                        workflow_id = str(work_intent.get("workflow_id") or "")
+                        if kind == "status":
+                            agent = await __import__("asyncio").to_thread(get_kz_agent, user_id, workflow_id)
+                        else:
+                            agent = await __import__("asyncio").to_thread(approve_kz_agent, user_id, workflow_id, kind == "approve")
+                            if kind == "approve" and agent.get("status") == "approved":
+                                from workflow_engine import run_workflow
+                                await __import__("asyncio").to_thread(run_workflow, workflow_id, user_id)
+                                agent = await __import__("asyncio").to_thread(get_kz_agent, user_id, workflow_id)
+                        if not agent or agent.get("status") == "not_found":
+                            return JSONResponse({"detail": "KZ mission not found for this account. Check the full mission ID."}, status_code=404)
+                        reply = (f"KZ mission {kind} processed.\\n\\nGoal: {agent.get('goal', '')}\\nStatus: {str(agent.get('status', '')).replace('_', ' ')}\\nProgress: {agent.get('completed_steps', 0)}/{agent.get('total_steps', 0)} steps\\nMission ID: {agent.get('id', workflow_id)}\\nNext: {agent.get('activity', '')}")
+                        if request.url.path == "/api/chat/stream":
+                            async def work_events():
+                                yield _sse({"type": "start", "provider": "kz_agent"})
+                                yield _sse({"type": "agent", "agent": agent})
+                                yield _sse({"type": "delta", "text": reply})
+                                yield _sse({"type": "done", "text": reply, "agent": agent})
+                            return _ConnectorStreamingResponse(work_events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache, no-transform", "Connection": "keep-alive", "X-Accel-Buffering": "no"})
+                        return JSONResponse({"status": "success", "reply": reply, "agent": agent})
+                    except ValueError as exc:
+                        msg = str(exc)
+                        return JSONResponse({"detail": msg}, status_code=404 if "not found" in msg.lower() else 400)
+                    except Exception as exc:
+                        logger.exception("KZ Work decision failed: %s", type(exc).__name__)
+                        return JSONResponse({"detail": "KZ Work could not process this decision safely."}, status_code=500)
+
                 if work_intent and work_intent.get("kind") == "create":
                     try:
                         from kz_agent import run as run_kz_agent

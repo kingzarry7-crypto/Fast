@@ -24,6 +24,12 @@ class WorkIntentTests(unittest.TestCase):
         item = parse("show work status 12345678-abcd")
         self.assertEqual(item["kind"], "status")
 
+
+    def test_do_everything_yourself_creates_work(self):
+        item = parse("Fix everything yourself and the job name is web developer")
+        self.assertEqual(item["kind"], "create")
+        self.assertIn("web developer", item["goal"].lower())
+
     def test_normal_chat_is_not_work(self):
         self.assertIsNone(parse("What is Bitcoin?"))
         self.assertIsNone(parse("Can you explain how websites work?"))
