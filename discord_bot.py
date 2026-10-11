@@ -1307,6 +1307,65 @@ async def kz_watch_channel_notification_job():
 from discord.ext import tasks
 
 @tasks.loop(seconds=60)
+async def account_notification_discord_job():
+    """Deliver persisted account-monitor events to linked Discord accounts."""
+    try:
+        from account_notifications import (
+            users_with_pending_account_notifications,
+            pending_account_notifications,
+            mark_account_notification_delivered,
+        )
+        from memory_link_bridge import resolve_user_channels
+        from account_agent import _sleeping
+        if await asyncio.to_thread(_sleeping):
+            return
+        user_ids = await asyncio.to_thread(users_with_pending_account_notifications, "discord", 100)
+        for user_id in user_ids:
+            try:
+                channels = await asyncio.to_thread(resolve_user_channels, user_id)
+                discord_ids = channels.get("discord") or []
+                if not discord_ids:
+                    continue
+                items = await asyncio.to_thread(pending_account_notifications, user_id, "discord", 10)
+                for item in items:
+                    payload = item.get("payload") or {}
+                    event_type = str(item.get("event_type") or payload.get("type") or "")
+                    if event_type in {"gmail_access_revoked", "gmail_monitor_failed", "gmail_monitor_recovered"}:
+                        title = {
+                            "gmail_access_revoked": "🔐 Gmail access needs attention",
+                            "gmail_monitor_failed": "⚠️ Gmail monitoring is failing",
+                            "gmail_monitor_recovered": "✅ Gmail monitoring resumed",
+                        }.get(event_type, "Gmail monitor status")
+                        message_text = title + "\n\n" + str(payload.get("reason") or "Check the King Zarry AI dashboard for details.")
+                    elif event_type == "new_gmail":
+                        from gmail_intelligence import format_email_alert, format_email_digest
+                        high = payload.get("high") or []
+                        medium = payload.get("medium") or []
+                        low = payload.get("low") or []
+                        blocks = [format_email_alert(x) for x in (high + medium)[:3]]
+                        if low:
+                            blocks.append(format_email_digest(low))
+                        message_text = "\n\n".join(blocks)[:1800] or "New Gmail activity detected. Open King Zarry AI to review."
+                    else:
+                        message_text = "King Zarry AI account-monitor update: " + str(event_type or "status update")
+                    sent = False
+                    for external_id in discord_ids:
+                        try:
+                            member = client.get_user(int(external_id)) or await client.fetch_user(int(external_id))
+                            if member:
+                                await member.send(message_text[:1900])
+                                sent = True
+                        except Exception as exc:
+                            logger.warning("Account notification Discord delivery failed: %s", type(exc).__name__)
+                    if sent:
+                        await asyncio.to_thread(mark_account_notification_delivered, item["id"], "discord")
+            except Exception as exc:
+                logger.warning("Account notification Discord cycle failed: %s", type(exc).__name__)
+    except Exception as exc:
+        logger.warning("Account notification Discord watcher failed: %s", type(exc).__name__)
+
+
+@tasks.loop(seconds=60)
 async def discord_price_alert_loop():
     try:
         ga = shared_get_all_active; gp = shared_get_price; ck = shared_check_triggered
