@@ -520,13 +520,38 @@ def _monitor_rows() -> list[dict[str, Any]]:
 
 
 def _monitor_gmail(user_id: str, previous: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Baseline the current Inbox once, then return only newly arrived messages."""
     from google_connector import _execute
-    result = _execute(user_id, "list_gmail", {"query": "is:unread newer_than:1d", "limit": 20})
+    from gmail_intelligence import enrich_email
+
+    result = _execute(user_id, "list_gmail", {"query": "in:inbox", "limit": 50})
     messages = result.get("messages") or []
-    previous_ids = set(previous.get("message_ids") or [])
-    current_ids = [str(x.get("id") or "") for x in messages if x.get("id")]
-    new_items = [x for x in messages if str(x.get("id") or "") not in previous_ids]
-    return {"message_ids": current_ids[:50]}, new_items
+    current_ids = [str(item.get("id") or "") for item in messages if item.get("id")]
+    prior_ids = [str(value) for value in (previous.get("message_ids") or []) if value]
+    prior_set = set(prior_ids)
+
+    # A fresh monitor must not treat existing unread mail as new arrivals.
+    if not previous.get("baseline_initialized"):
+        return {
+            "baseline_initialized": True,
+            "message_ids": current_ids[:500],
+            "consecutive_failures": 0,
+            "monitoring_status": "ok",
+            "failure_alert_sent": False,
+        }, []
+
+    new_items = [
+        enrich_email(item) for item in messages
+        if item.get("id") and str(item.get("id")) not in prior_set
+    ]
+    merged_ids = list(dict.fromkeys(current_ids + prior_ids))[:500]
+    return {
+        "baseline_initialized": True,
+        "message_ids": merged_ids,
+        "consecutive_failures": 0,
+        "monitoring_status": "ok",
+        "failure_alert_sent": False,
+    }, new_items
 
 
 def monitor_tick() -> list[dict[str, Any]]:
@@ -542,6 +567,7 @@ def monitor_tick() -> list[dict[str, Any]]:
                 state = {}
         try:
             if monitor["provider"] == "google" and monitor["monitor_type"] == "gmail":
+                prior_status = str(state.get("monitoring_status") or "ok")
                 new_state, new_items = _monitor_gmail(user_id, state)
                 now = datetime.now(timezone.utc)
                 with get_db_cursor(commit=True) as cur:
@@ -553,19 +579,78 @@ def monitor_tick() -> list[dict[str, Any]]:
                            WHERE id=%s""",
                         (json.dumps(new_state), bool(new_items), monitor["id"]),
                     )
+                if prior_status != "ok":
+                    events.append({
+                        "user_id": user_id, "provider": "google",
+                        "type": "gmail_monitor_recovered", "count": 0, "items": [],
+                        "sleep_buffered": False, "at": now.isoformat(),
+                    })
                 if new_items:
-                    event = {
-                        "user_id": user_id,
-                        "provider": "google",
-                        "type": "new_gmail",
-                        "count": len(new_items),
-                        "items": new_items[:8],
-                        "sleep_buffered": _sleeping(),
-                        "at": now.isoformat(),
-                    }
-                    events.append(event)
+                    high = [item for item in new_items if item.get("priority") == "high"]
+                    medium = [item for item in new_items if item.get("priority") == "medium"]
+                    low = [item for item in new_items if item.get("priority") == "low"]
+                    events.append({
+                        "user_id": user_id, "provider": "google", "type": "new_gmail",
+                        "count": len(new_items), "high": high, "medium": medium, "low": low,
+                        "items": new_items, "sleep_buffered": _sleeping(), "at": now.isoformat(),
+                    })
         except Exception as exc:
-            logger.warning("Account monitor failed user=%s: %s", user_id, exc)
+            # Avoid logging provider error payloads or credential-bearing URLs.
+            detail = str(getattr(exc, "detail", "") or exc).lower()
+            auth_revoked = any(term in detail for term in ("401", "403", "invalid_grant", "revoked", "unauthorized", "reconnect google", "google is not connected"))
+            failures = int(state.get("consecutive_failures") or 0) + 1
+            prior_status = str(state.get("monitoring_status") or "ok")
+            next_status = "access_revoked" if auth_revoked else "error"
+            updated_state = dict(state)
+            updated_state.update({
+                "consecutive_failures": failures,
+                "monitoring_status": next_status,
+                "failure_alert_sent": bool(state.get("failure_alert_sent")) or auth_revoked or failures >= 3,
+            })
+            try:
+                with get_db_cursor(commit=True) as cur:
+                    cur.execute(
+                        """UPDATE kz_account_monitors
+                           SET state_json=%s::jsonb,last_checked_at=NOW(),updated_at=NOW()
+                           WHERE id=%s""",
+                        (json.dumps(updated_state), monitor["id"]),
+                    )
+            except Exception as persist_exc:
+                logger.warning("Could not persist account monitor failure: %s", type(persist_exc).__name__)
+            should_alert = not state.get("failure_alert_sent") and (auth_revoked or failures >= 3)
+            if should_alert:
+                events.append({
+                    "user_id": user_id, "provider": "google",
+                    "type": "gmail_access_revoked" if auth_revoked else "gmail_monitor_failed",
+                    "count": failures, "items": [],
+                    "sleep_buffered": False,
+                    "reason": "Gmail access may have expired or been revoked. Reconnect Google to resume monitoring." if auth_revoked else f"Gmail monitoring failed {failures} consecutive times. KZ will retry automatically.",
+                    "at": datetime.now(timezone.utc).isoformat(),
+                })
+            logger.warning("Account monitor failed user=%s failure_count=%s status=%s error_type=%s",
+                           user_id, failures, next_status, type(exc).__name__)
+    # Persist monitor events for web and linked channels. Delivery failure must
+    # never cause an external action to be retried.
+    for event in events:
+        try:
+            from account_notifications import queue_account_notification
+            item_ids = [str(item.get("id")) for item in (event.get("items") or []) if item.get("id")]
+            dedupe_key = "|".join([
+                str(event.get("user_id") or ""),
+                str(event.get("type") or ""),
+                ",".join(sorted(item_ids)) or str(event.get("count") or 0),
+            ])
+            notification_id = queue_account_notification(
+                str(event.get("user_id") or ""),
+                str(event.get("provider") or "google"),
+                str(event.get("type") or "account_monitor"),
+                event,
+                dedupe_key=dedupe_key,
+            )
+            if notification_id:
+                event["notification_id"] = notification_id
+        except Exception as exc:
+            logger.warning("Account notification queue unavailable: %s", type(exc).__name__)
     return events
 
 
@@ -1341,44 +1426,87 @@ async def morning_telegram_digest(bot: Any) -> dict[str, int]:
 
 
 async def account_monitor_job(context: Any) -> None:
-    """Background account watcher: immediate daytime feedback, morning buffering during sleep."""
+    """Persist account events and retry channel delivery from the durable queue."""
     try:
-        events = await _run_sync(monitor_tick)
-        if not events:
+        await _run_sync(monitor_tick)
+        if _sleeping():
             return
+
         from neon_memory import NeonMemory
+        from account_notifications import (
+            pending_account_notifications,
+            mark_account_notification_delivered,
+        )
         mem = NeonMemory()
         with mem.lock:
             conn = mem._connect()
             try:
                 cur = conn.cursor()
-                cur.execute("SELECT platform,external_id,user_id FROM kz_memory_identities WHERE platform='telegram'")
+                cur.execute(
+                    "SELECT external_id,user_id FROM kz_memory_identities WHERE platform='telegram'"
+                )
                 identities = cur.fetchall() or []
             finally:
                 conn.close()
-        targets = {}
+
+        targets: dict[str, list[str]] = {}
         for row in identities:
-            raw_user = str(row[2] or "")
-            if raw_user.startswith("web:"):
-                raw_user = raw_user[4:]
-            targets[raw_user] = str(row[1])
-        for event in events:
-            if event.get("sleep_buffered"):
-                continue
-            chat_id = targets.get(str(event.get("user_id") or ""))
-            if not chat_id:
-                continue
-            items = event.get("items") or []
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text="👁️ <b>KZ ACCOUNT MONITOR</b>\n\n"
-                     f"Google Gmail: {len(items)} new unread message(s) detected.\n"
-                     "KZ has not replied, sent, deleted, or modified anything.\n"
-                     "Say <code>CHECK MY EMAIL</code> to inspect them.",
-                parse_mode="HTML",
-            )
+            external_id = str(row[0] or "")
+            user_id = str(row[1] or "")
+            if user_id.startswith("web:"):
+                user_id = user_id[4:]
+            if user_id and external_id:
+                targets.setdefault(user_id, []).append(external_id)
+
+        for user_id, chat_ids in targets.items():
+            items = await _run_sync(pending_account_notifications, user_id, "telegram", 10)
+            for item in items:
+                payload = item.get("payload") or {}
+                event_type = str(item.get("event_type") or payload.get("type") or "")
+                if event_type in {
+                    "gmail_access_revoked", "gmail_monitor_failed", "gmail_monitor_recovered"
+                }:
+                    title = {
+                        "gmail_access_revoked": "🔐 GMAIL ACCESS NEEDS ATTENTION",
+                        "gmail_monitor_failed": "⚠️ GMAIL MONITORING IS FAILING",
+                        "gmail_monitor_recovered": "✅ GMAIL MONITORING RESUMED",
+                    }.get(event_type, "GMAIL MONITOR STATUS")
+                    message_text = title + "\n\n" + str(
+                        payload.get("reason") or "Check King Zarry AI for the latest account status."
+                    )
+                elif event_type == "new_gmail":
+                    from gmail_intelligence import format_email_alert, format_email_digest
+                    high = payload.get("high") or []
+                    medium = payload.get("medium") or []
+                    low = payload.get("low") or []
+                    blocks = [format_email_alert(x) for x in (high + medium)[:5]]
+                    if low:
+                        blocks.append(format_email_digest(low))
+                    message_text = "\n\n".join(blocks) or (
+                        f"KZ detected {int(payload.get('count') or 0)} new Gmail message(s). "
+                        "Open King Zarry AI to review."
+                    )
+                else:
+                    message_text = "King Zarry AI account-monitor update: " + (event_type or "status update")
+
+                delivered = False
+                for chat_id in chat_ids:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=chat_id, text=message_text[:3900]
+                        )
+                        delivered = True
+                    except Exception as exc:
+                        logger.warning(
+                            "Account notification Telegram delivery failed: %s",
+                            type(exc).__name__,
+                        )
+                if delivered:
+                    await _run_sync(
+                        mark_account_notification_delivered, str(item["id"]), "telegram"
+                    )
     except Exception as exc:
-        logger.warning("Account monitor job failed: %s", exc)
+        logger.warning("Account monitor job failed: %s", type(exc).__name__)
 
 
 

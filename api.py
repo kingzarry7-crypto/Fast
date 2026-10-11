@@ -3032,6 +3032,40 @@ async def agent_intelligence_endpoint(request: Request):
         raise HTTPException(status_code=500, detail="Market Intelligence Agent unavailable")
 
 
+@app.get("/api/account/notifications")
+async def account_notifications_endpoint(request: Request):
+    """List durable account-monitor notifications owned by the signed-in user."""
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    user_id = str(_row_value(user_row, "id", 0))
+    try:
+        from account_notifications import list_web_account_notifications
+        items = await asyncio.to_thread(list_web_account_notifications, str(user_id), 30)
+        return {"status": "success", "notifications": items}
+    except Exception as exc:
+        logger.error("account notifications list failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Could not load account notifications")
+
+
+@app.post("/api/account/notifications/{notification_id}/read")
+async def mark_account_notification_read_endpoint(request: Request, notification_id: str):
+    """Mark only this user's account notification as read."""
+    user_row = await asyncio.to_thread(_require_current_user, request)
+    user_id = str(_row_value(user_row, "id", 0))
+    try:
+        from account_notifications import mark_web_account_notification_read
+        updated = await asyncio.to_thread(
+            mark_web_account_notification_read, str(user_id), notification_id
+        )
+        if not updated:
+            raise HTTPException(status_code=404, detail="Account notification not found")
+        return {"status": "success", "read": True}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("account notification read update failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Could not update account notification")
+
+
 @app.get("/api/agent/actions/status")
 async def agent_action_status_endpoint(request: Request):
     """Connector readiness + hard safety limits for the Agent Action Gateway."""
