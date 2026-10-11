@@ -880,7 +880,7 @@ export default function ChatWorkspace({
 
       <form
         onSubmit={handleSubmit}
-        className="relative inset-x-0 z-30 shrink-0 border-t border-white/[0.06] bg-[#0b0b0c]/95 px-3 sm:px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] [transform:translateZ(0)]"
+        className="relative inset-x-0 z-30 shrink-0 border-t border-white/[0.06] bg-[#0b0b0c]/95 px-3 sm:px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
       >
         <div className="mx-auto w-full max-w-2xl">
           {attached && (
@@ -950,7 +950,6 @@ export default function ChatWorkspace({
               }}
               onPaste={handlePaste}
               placeholder="Message King Zarry AI…"
-              disabled={sending || callMode}
               aria-label="Message King Zarry AI"
               className="max-h-36 min-w-0 flex-1 resize-none bg-transparent px-1 py-2 text-[15px] leading-6 text-white placeholder-zinc-500 outline-none disabled:opacity-50"
             />
