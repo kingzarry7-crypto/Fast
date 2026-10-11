@@ -147,7 +147,6 @@ for _origin in (
     "https://www.kingzarry.bid",
     "https://app.kingzarry.bid",
     "https://fast.kingzarry7.workers.dev",
-    "https://fast-a84x.vercel.app",
 ):
     if _origin not in allowed_origins:
         allowed_origins.append(_origin)
@@ -170,7 +169,6 @@ if plugin_registry_router is not None:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=[
         "GET",
@@ -1594,6 +1592,27 @@ async def chat_endpoint(request: Request, chat: ChatRequest):
                     "kind": connector_result.get("kind"),
                     "approval_id": connector_result.get("approval_id"),
                 }
+
+        # Route explicit market-analysis and capability/access questions to the
+        # existing specialist agent before falling back to general AI. This router
+        # never places trades or bypasses connector approvals.
+        try:
+            from agent_router import route_agent_request
+            agent_result = await asyncio.to_thread(route_agent_request, message, user_id)
+        except Exception as agent_exc:
+            logger.warning("Agent intent router unavailable: %s", type(agent_exc).__name__)
+            agent_result = None
+
+        if agent_result is not None and str(agent_result.get("reply") or "").strip():
+            return {
+                "status": agent_result.get("status") or "completed",
+                "reply": str(agent_result["reply"])[:8000],
+                "conversation_id": conversation_id,
+                "connector": True,
+                "provider": agent_result.get("provider"),
+                "operation": agent_result.get("operation"),
+                "target": agent_result.get("target"),
+            }
 
         # NOTE: Do NOT call _save_web_message here. The AIEngine's WebMemoryAdapter
         # now handles saving both user and assistant messages to web_messages.
