@@ -377,7 +377,7 @@ def _gmail_plain_text(payload: Dict[str, Any]) -> str:
 
 def _normalize_email_body(value: str) -> str:
     # Gmail/MIME may normalize line endings and append one final newline.
-    return str(value or "").replace("\\r\\n", "\\n").replace("\\r", "\\n").rstrip("\\n")
+    return str(value or "").replace("\r\n", "\n").replace("\r", "\n").rstrip("\n")
 
 
 def _execute(user_id: str, operation: str, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -878,10 +878,26 @@ async def google_approve(approval_id: str, request: Request):
     verified = bool(result.get("verified"))
     with get_db_cursor(commit=True) as cur:
         cur.execute("UPDATE web_approvals SET status=%s,executed_at=NOW() WHERE id=%s AND status='approved'",
-                    ("executed" if verified else "expired", approval_id))
+                    ("executed" if verified else "unverified", approval_id))
     _audit(user_id, "connector_action_verified" if verified else "connector_action_unverified", operation, target, approval_id)
     if not verified:
-        raise HTTPException(status_code=502, detail="Google accepted the request but KZ could not verify the resulting resource")
+        # Google may have accepted a send even if read-after-send verification
+        # failed. Return a structured, non-retryable outcome instead of a generic
+        # server error that could prompt the user to send the same email again.
+        message = (
+            "Google accepted the send request, but KZ could not verify the exact message in Sent. "
+            "It may already have been sent. Do not send it again until you check Gmail Sent."
+            if operation == "send_gmail" else
+            "Google accepted the request, but KZ could not verify the resulting resource."
+        )
+        return {
+            "status": "unverified",
+            "verified": False,
+            "may_have_been_sent": operation == "send_gmail",
+            "message": message,
+            "approval_id": approval_id,
+            "result": result,
+        }
     if remember:
         try:
             _grant_automatic_permission(user_id, operation)
