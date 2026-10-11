@@ -627,6 +627,28 @@ def monitor_tick() -> list[dict[str, Any]]:
                 })
             logger.warning("Account monitor failed user=%s failure_count=%s status=%s error_type=%s",
                            user_id, failures, next_status, type(exc).__name__)
+    # Persist monitor events for web and linked channels. Delivery failure must
+    # never cause an external action to be retried.
+    for event in events:
+        try:
+            from account_notifications import queue_account_notification
+            item_ids = [str(item.get("id")) for item in (event.get("items") or []) if item.get("id")]
+            dedupe_key = "|".join([
+                str(event.get("user_id") or ""),
+                str(event.get("type") or ""),
+                ",".join(sorted(item_ids)) or str(event.get("count") or 0),
+            ])
+            notification_id = queue_account_notification(
+                str(event.get("user_id") or ""),
+                str(event.get("provider") or "google"),
+                str(event.get("type") or "account_monitor"),
+                event,
+                dedupe_key=dedupe_key,
+            )
+            if notification_id:
+                event["notification_id"] = notification_id
+        except Exception as exc:
+            logger.warning("Account notification queue unavailable: %s", type(exc).__name__)
     return events
 
 
