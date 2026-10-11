@@ -1738,6 +1738,42 @@ def build_signal_chart(data):
         chart_data.setdefault("tp2", chart_data["resistance"])
         chart_data.setdefault("tp3", chart_data["resistance"])
 
+    # A key can exist with None from the shared market engine; setdefault does
+    # not replace that. Normalize every chart level before Matplotlib/min/max.
+    def _chart_number(key, fallback):
+        value = chart_data.get(key)
+        try:
+            value = float(value)
+            if not math.isfinite(value):
+                raise ValueError("non-finite chart level")
+            return value
+        except (TypeError, ValueError, OverflowError):
+            return float(fallback)
+
+    chart_data["price"] = _chart_number("price", candles[-1]["close"])
+    chart_data["support"] = _chart_number("support", min(c["low"] for c in candles))
+    chart_data["resistance"] = _chart_number("resistance", max(c["high"] for c in candles))
+    chart_data["atr"] = max(_chart_number("atr", max(chart_data["resistance"] - chart_data["support"], 0.000001) / 20.0), 0.000001)
+    chart_data["entry_zone_low"] = _chart_number("entry_zone_low", chart_data["price"])
+    chart_data["entry_zone_high"] = _chart_number("entry_zone_high", chart_data["price"])
+    if chart_data["entry_zone_low"] > chart_data["entry_zone_high"]:
+        chart_data["entry_zone_low"], chart_data["entry_zone_high"] = chart_data["entry_zone_high"], chart_data["entry_zone_low"]
+    if signal_hint == "BUY":
+        defaults = {"stop_loss": chart_data["entry_zone_low"] - chart_data["atr"] * 1.5,
+                    "tp1": chart_data["entry_zone_high"] + chart_data["atr"],
+                    "tp2": chart_data["entry_zone_high"] + chart_data["atr"] * 2,
+                    "tp3": chart_data["entry_zone_high"] + chart_data["atr"] * 3}
+    elif signal_hint == "SELL":
+        defaults = {"stop_loss": chart_data["entry_zone_high"] + chart_data["atr"] * 1.5,
+                    "tp1": chart_data["entry_zone_low"] - chart_data["atr"],
+                    "tp2": chart_data["entry_zone_low"] - chart_data["atr"] * 2,
+                    "tp3": chart_data["entry_zone_low"] - chart_data["atr"] * 3}
+    else:
+        defaults = {"stop_loss": chart_data["support"], "tp1": chart_data["resistance"],
+                    "tp2": chart_data["resistance"], "tp3": chart_data["resistance"]}
+    for key, fallback in defaults.items():
+        chart_data[key] = _chart_number(key, fallback)
+
     opens=[float(c["open"]) for c in candles]
     highs=[float(c["high"]) for c in candles]
     lows=[float(c["low"]) for c in candles]
