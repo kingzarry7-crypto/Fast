@@ -17,7 +17,7 @@
     "next": "15.5.27",
     "react": "19.0.0",
     "react-dom": "19.0.0",
-    "@vercel/connect": "^0.2.10"
+    "@vercel/connect": "^2.4.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.7",
