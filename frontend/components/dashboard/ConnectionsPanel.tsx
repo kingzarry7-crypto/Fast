@@ -238,7 +238,15 @@ export default function ConnectionsPanel() {
       const d = await readApiResponse(r);
       if (!r.ok) throw new Error(d.detail || "Could not process Google approval");
       setGoogleApproval(null);
-      setMessage(d.status === "completed" && d.verified ? "✓ Google action completed and verified." : approved ? "Google action was not verified." : "Google action rejected.");
+      setMessage(
+        d.status === "completed" && d.verified
+          ? "✓ Google action completed and verified."
+          : d.status === "unverified"
+            ? (d.message || (d.may_have_been_sent
+              ? "Google may have sent this email, but KZ could not verify it. Check Gmail Sent before retrying."
+              : "Google accepted the request, but KZ could not verify the result."))
+            : approved ? "Google action was not verified." : "Google action rejected."
+      );
     } catch (e) { setMessage(e instanceof Error ? e.message : "Could not process Google approval"); }
     finally { setBusy(false); }
   }
