@@ -296,6 +296,7 @@ def _build_stream_generator(
                     "done": True,
                     "searches": search_count,
                     "sources": source_count,
+                    "source_urls": [{"title": str(s.get("title") or ""), "url": str(s.get("url") or "")} for s in source_list[:8] if isinstance(s, dict) and str(s.get("url") or "").startswith(("https://", "http://"))],
                 })
             elif tavily_search.is_tavily_configured() and wants_tavily:
                 yield _sse({
@@ -319,6 +320,7 @@ def _build_stream_generator(
                     "done": True,
                     "searches": search_count,
                     "sources": source_count,
+                    "source_urls": [{"title": str(s.get("title") or ""), "url": str(s.get("url") or "")} for s in source_list[:8] if isinstance(s, dict) and str(s.get("url") or "").startswith(("https://", "http://"))],
                 })
             else:
                 yield _sse({
