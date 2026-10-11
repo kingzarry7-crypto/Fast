@@ -32,6 +32,28 @@ function buildUrl(path: string): string {
   return `${base}${p}`;
 }
 
+type SearchSource = { title: string; url: string };
+
+function normalizeSearchSources(value: unknown): SearchSource[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const seen = new Set<string>();
+  const sources: SearchSource[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const source = item as Record<string, unknown>;
+    if (typeof source.url !== "string" || !/^https?:\\/\\//i.test(source.url)) continue;
+    try {
+      const url = new URL(source.url).href;
+      if (seen.has(url)) continue;
+      seen.add(url);
+      sources.push({ title: typeof source.title === "string" ? source.title : "", url });
+    } catch {
+      // Ignore malformed source URLs rather than breaking the chat stream.
+    }
+  }
+  return sources;
+}
+
 export class ApiError extends Error {
   status: number;
   detail?: string;
@@ -356,18 +378,7 @@ export async function streamChatMessage(
           done: event.done === true,
           searches: typeof event.searches === "number" ? event.searches : undefined,
           sources: typeof event.sources === "number" ? event.sources : undefined,
-          sourceUrls: Array.isArray(event.source_urls)
-            ? event.source_urls
-                .filter((item): item is Record<string, unknown> => {
-                  if (!item || typeof item !== "object") return false;
-                  const url = (item as Record<string, unknown>).url;
-                  return typeof url === "string" && /^https?:\/\//i.test(url);
-                })
-                .map((item) => ({
-                  title: typeof item.title === "string" ? item.title : "",
-                  url: String(item.url),
-                }))
-            : undefined,
+          sourceUrls: normalizeSearchSources(event.source_urls),
         });
       } else if (event.type === "agent" && event.agent && typeof event.agent === "object") {
         const value = event.agent as Record<string, unknown>;
