@@ -1,5 +1,5 @@
 const CACHE = "kz-ai-shell-v2";
-const SHELL = ["/", "/dashboard", "/login", "/register", "/icon.svg", "/manifest.webmanifest"];
+const SHELL = ["/", "/dashboard", "/login", "/register", "/icons/kz-ai.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
