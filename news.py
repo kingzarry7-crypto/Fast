@@ -624,7 +624,7 @@ class CurrentsProvider(BaseNewsProvider):
         if _provider_cooldown_active(self.name):
             return []
         try:
-            url = "https://api.currentsapi.services/v1/latest-news"
+            url = "https://api.currentsapi.services/v1/search"
             params = {"keywords": query, "language": "en", "apiKey": CURRENTS_API_KEY}
             resp = requests.get(url, params=params, timeout=12)
             if resp.status_code != 200:
