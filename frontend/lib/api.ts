@@ -1,5 +1,6 @@
 // frontend/lib/api.ts
 // KING ZARRY AI — complete API client (auth, chat, admin, agent, TTS, billing, markets)
+// Cloudflare production uses the same-origin Next.js proxy for authenticated API calls.
 
 import type {
   AuthUser,
