@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, Optional
 
+from system_inventory import format_project_inventory
+
 _ASSETS = (
     (r"\b(?:xau(?:\s*/?\s*usd)?|gold)\b", "XAU/USD"),
     (r"\b(?:btc(?:\s*/?\s*usd)?|bitcoin)\b", "BTC/USD"),
@@ -20,6 +22,14 @@ _MARKET_ACTION = re.compile(
     r"\b(signal|signals|market|price|chart|analy[sz]e|analysis|setup|"
     r"trade setup|entry|support|resistance|trend|technical|mtf|timeframe|"
     r"buy or sell|bullish|bearish|gold forecast)\b",
+    re.IGNORECASE,
+)
+_PROJECT_REPORT = re.compile(
+    r"\b(my files|project files|what files|files do i have|what do i have in my files|"
+    r"how to use (?:them|my files|your files)|project update|my own updates|"
+    r"give me (?:my|a) (?:project )?update|what updates (?:are|do|did)|"
+    r"updates in my (?:project|files|repo|repository)|repository inventory|code inventory|"
+    r"what is in (?:my|the) (?:repo|repository|project)|what have you got in your files)\b",
     re.IGNORECASE,
 )
 _CAPABILITY = re.compile(
@@ -80,6 +90,14 @@ def route_agent_request(message: str, user_id: str) -> Optional[Dict[str, Any]]:
     text = (message or "").strip()
     if not text:
         return None
+
+    if _PROJECT_REPORT.search(text):
+        return {
+            "status": "completed",
+            "reply": format_project_inventory(),
+            "provider": "project_inventory",
+            "operation": "inspect_runtime_components",
+        }
 
     if _CAPABILITY.search(text):
         accounts = _connected_accounts(user_id)
