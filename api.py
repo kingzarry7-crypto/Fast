@@ -1604,9 +1604,14 @@ async def chat_endpoint(request: Request, chat: ChatRequest):
             agent_result = None
 
         if agent_result is not None and str(agent_result.get("reply") or "").strip():
+            agent_reply = str(agent_result["reply"])[:8000]
+            # Specialist-agent replies bypass AIEngine, so persist both turns here
+            # to keep the user's conversation history intact.
+            await asyncio.to_thread(_save_web_message, conversation_id, "user", message)
+            await asyncio.to_thread(_save_web_message, conversation_id, "assistant", agent_reply)
             return {
                 "status": agent_result.get("status") or "completed",
-                "reply": str(agent_result["reply"])[:8000],
+                "reply": agent_reply,
                 "conversation_id": conversation_id,
                 "connector": True,
                 "provider": agent_result.get("provider"),
