@@ -1422,6 +1422,9 @@ async def before_alert_loop():
 _orig_on_ready = client.on_ready
 async def enhanced_on_ready():
     await _orig_on_ready()
+    if not account_notification_discord_job.is_running():
+        account_notification_discord_job.start()
+        print("📬 Account notification task started", flush=True)
     if not discord_price_alert_loop.is_running():
         discord_price_alert_loop.start()
         print("🔔 Alert task started", flush=True)
