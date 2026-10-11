@@ -41,7 +41,7 @@ function normalizeSearchSources(value: unknown): SearchSource[] | undefined {
   for (const item of value) {
     if (!item || typeof item !== "object") continue;
     const source = item as Record<string, unknown>;
-    if (typeof source.url !== "string" || !/^https?:\\/\\//i.test(source.url)) continue;
+    if (typeof source.url !== "string" || !(source.url.startsWith("https://") || source.url.startsWith("http://"))) continue;
     try {
       const url = new URL(source.url).href;
       if (seen.has(url)) continue;
