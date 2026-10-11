@@ -137,3 +137,19 @@ def mark_web_account_notification_read(user_id: str, notification_id: str) -> bo
             return bool(cur.rowcount)
     except Exception:
         return False
+
+def users_with_pending_account_notifications(channel: str, limit: int = 100) -> list[str]:
+    column = {"telegram": "telegram_delivered", "discord": "discord_delivered"}.get(channel)
+    if not column:
+        return []
+    try:
+        _ensure_table()
+        with get_db_cursor(commit=False) as cur:
+            cur.execute(
+                f"SELECT DISTINCT user_id FROM kz_account_notifications WHERE {column}=FALSE ORDER BY user_id LIMIT %s",
+                (max(1, min(int(limit), 500)),),
+            )
+            rows = cur.fetchall() or []
+        return [str(row["user_id"] if hasattr(row, "keys") else row[0]) for row in rows]
+    except Exception:
+        return []
