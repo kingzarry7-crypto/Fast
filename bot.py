@@ -4719,7 +4719,7 @@ def main():
                 application.job_queue.run_once(_agent_boot_ping, when=15)
             else:
                 logger.info("🤖 Agent signal watch disabled (set AGENT_SIGNAL_WATCH=true to enable)")
-            monitor_interval = max(60, env_int("KZ_ACCOUNT_MONITOR_INTERVAL_SEC", 600))
+            monitor_interval = max(60, env_int("KZ_ACCOUNT_MONITOR_INTERVAL_SEC", 300))
             application.job_queue.run_repeating(
                 account_monitor_job,
                 interval=monitor_interval,
