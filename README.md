@@ -3,7 +3,7 @@
 **Advanced Multi-Timeframe Trading & Intelligence Assistant**
 Telegram + Discord + Web | AI Chat + Vision + Voice | Signals + News + Image/Video Generation
 
-King Zarry AI is a private VIP trading assistant built in Python, with a Next.js web frontend deployed on Vercel and a Python backend deployed on Railway. It combines multi-timeframe technical analysis (4H → 1H → 15M → 5M), economic calendar/news risk, strict market validation, and multi-provider AI failover to deliver advanced trading analysis and intelligence across Telegram, Discord, and the web.
+King Zarry AI is a private VIP trading assistant built in Python, with a Next.js web frontend deployed on Cloudflare Workers and a Python backend deployed on Railway. It combines multi-timeframe technical analysis (4H → 1H → 15M → 5M), economic calendar/news risk, strict market validation, and multi-provider AI failover to deliver advanced trading analysis and intelligence across Telegram, Discord, and the web.
 
 ---
 
@@ -59,12 +59,14 @@ King Zarry AI is a private VIP trading assistant built in Python, with a Next.js
 - **Telegram** (`bot.py`): Text, voice, audio, photos (vision), documents
 - **Discord** (`discord_bot.py`): Text, slash commands, voice channel TTS, image/video generation, audio STT
 
-### 🌐 Web Frontend (Next.js on Vercel)
+### 🌐 Web Frontend (Next.js on Cloudflare Workers via OpenNext)
 - Cyberpunk/Jarvis-style UI with animated AI core
 - Public landing page (`/`), login (`/login`), register (`/register`)
 - Protected routes: `/dashboard`, `/chat`, `/markets`, `/signals`, `/news`, `/settings`
 - Voice input (Web Speech API) and AI voice read-out in chat
 - Session auth via HttpOnly cookies
+- Production frontend: `https://fast.kingzarry7.workers.dev/` (Cloudflare Workers)
+- API/backend: `https://fast-production-0eba.up.railway.app` (Railway)
 
 ### 🔌 Web API (`api.py`, FastAPI on Railway)
 - Neon PostgreSQL-backed authentication (scrypt password hashing, hashed session tokens)

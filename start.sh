@@ -102,7 +102,7 @@ except Exception as e:
 PY
 fi
 # ------------------------------------------------------------------
-# 1) FastAPI HTTP server (for Vercel frontend)
+# 1) FastAPI HTTP server (Railway backend API)
 # ------------------------------------------------------------------
 echo "🚀 Starting FastAPI on 0.0.0.0:${PORT}..."
 uvicorn api:app --host 0.0.0.0 --port "${PORT}" --workers 1 &
