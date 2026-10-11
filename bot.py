@@ -4524,8 +4524,8 @@ def _acquire_telegram_single_poller_lock() -> bool:
         or os.getenv("POSTGRES_URL")
     )
     if not database_url:
-        print("⚠️ Telegram single-poller lock unavailable: no PostgreSQL DATABASE_URL configured.", flush=True)
-        return True
+        print("🛑 Telegram poller will NOT start: no PostgreSQL DATABASE_URL configured, so a cross-replica lock cannot be guaranteed.", flush=True)
+        return False
     try:
         import psycopg2
         import hashlib
@@ -4547,8 +4547,24 @@ def _acquire_telegram_single_poller_lock() -> bool:
         print("🔒 Telegram single-poller lock acquired.", flush=True)
         return True
     except Exception as exc:
-        print(f"⚠️ Telegram single-poller lock check failed: {type(exc).__name__}: {str(exc)[:200]}", flush=True)
-        return True
+        print(f"🛑 Telegram poller will NOT start because the single-poller lock could not be verified: {type(exc).__name__}: {str(exc)[:200]}", flush=True)
+        return False
+
+
+def _release_telegram_single_poller_lock() -> None:
+    """Release the PostgreSQL session lock before a controlled poller retry."""
+    global _TELEGRAM_LOCK_CONN
+    conn = _TELEGRAM_LOCK_CONN
+    _TELEGRAM_LOCK_CONN = None
+    if conn is None:
+        return
+    try:
+        if not conn.closed:
+            conn.close()  # Closing the session releases its advisory lock.
+            print("🔓 Telegram single-poller lock released.", flush=True)
+    except Exception as exc:
+        print(f"⚠️ Telegram poller lock release warning: {type(exc).__name__}", flush=True)
+
 
 def main():
     print("🔵 MAIN: entered main()", flush=True)
@@ -4750,20 +4766,28 @@ def main():
         print("⚠️ Another Telegram getUpdates session is active. This can happen briefly during a Railway deployment overlap.", flush=True)
         retry_seconds = max(10, min(60, env_int("TELEGRAM_CONFLICT_RETRY_SECONDS", 20)))
         max_retries = max(0, min(5, env_int("TELEGRAM_CONFLICT_RETRIES", 3)))
+        # A Telegram Conflict means another poller currently owns getUpdates.
+        # Release our DB lock before retrying so only one replica can win the
+        # next attempt. Never keep a stale lock while recursively restarting.
+        _release_telegram_single_poller_lock()
         for attempt in range(1, max_retries + 1):
             print(
                 f"🔁 Telegram conflict retry {attempt}/{max_retries} in {retry_seconds}s...",
                 flush=True,
             )
             time.sleep(retry_seconds)
+            if not _acquire_telegram_single_poller_lock():
+                print("🛑 Another KZ instance owns the Telegram poller lock; this instance is stopping polling.", flush=True)
+                return
             try:
-                # Re-enter main() only after the old Application has exited.
-                # The PostgreSQL advisory lock is held by this process and is
-                # therefore not released during the retry.
+                # Re-enter only after run_polling() has unwound and the lock
+                # has been reacquired exclusively by this process.
                 return main()
             except Conflict:
+                _release_telegram_single_poller_lock()
                 continue
             except SystemExit as retry_exit:
+                _release_telegram_single_poller_lock()
                 if retry_exit.code == 2:
                     continue
                 raise
