@@ -81,7 +81,7 @@ def web_user_id(platform: str, external_id: str) -> Optional[str]:
                    ORDER BY user_id
                    LIMIT 2"""
             )
-            candidates = [str(row[0]) for row in (cur.fetchall() or []) if row and row[0]]
+            candidates = [str(row.get("user_id") if isinstance(row, dict) else row[0]) for row in (cur.fetchall() or []) if row and (row.get("user_id") if isinstance(row, dict) else row[0])]
         # Never guess when more than one web customer has connected accounts.
         if len(candidates) != 1:
             return None
@@ -627,11 +627,12 @@ async def handle_telegram_request(update: Any, text: str) -> Optional[dict[str, 
         if not row:
             await update.message.reply_text("ℹ️ KZ has no pending Google action waiting for approval.")
             return {"status": "no_pending_approval"}
-        approval_id = str(row[0])
-        operation = str(row[1] or "")
-        target = str(row[2] or "")
-        payload = json.loads(str(row[3] or "{}"))
-        fingerprint = str(row[4] or "")
+        # get_db_cursor uses RealDictCursor, so fetch by selected column name.
+        approval_id = str(row.get("id") if isinstance(row, dict) else row[0])
+        operation = str((row.get("operation") if isinstance(row, dict) else row[1]) or "")
+        target = str((row.get("target") if isinstance(row, dict) else row[2]) or "")
+        payload = json.loads(str((row.get("exact_content") if isinstance(row, dict) else row[3]) or "{}"))
+        fingerprint = str((row.get("action_fingerprint") if isinstance(row, dict) else row[4]) or "")
         if _fingerprint(operation, target, payload) != fingerprint:
             await update.message.reply_text("🛑 KZ rejected the action because its approval fingerprint no longer matches.")
             return {"status": "fingerprint_mismatch"}
@@ -954,16 +955,17 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
         if not row:
             return {"status": "no_pending_approval", "kind": "approval",
                     "reply": "ℹ️ KZ has no pending Google action waiting for permission."}
-        approval_id = str(row[0])
-        approval_status = str(row[5] or "").strip().lower()
+        # get_db_cursor uses RealDictCursor; use column names for dict rows.
+        approval_id = str(row.get("id") if isinstance(row, dict) else row[0])
+        approval_status = str((row.get("status") if isinstance(row, dict) else row[5]) or "").strip().lower()
         if approval_status != "pending":
             return {"status": "approval_already_processed", "kind": "approval",
                     "approval_id": approval_id,
                     "reply": f"ℹ️ This approval has already been processed ({approval_status}). KZ will not send the email again."}
-        operation = str(row[1] or "")
-        target = str(row[2] or "")
-        payload = json.loads(str(row[3] or "{}"))
-        fingerprint = str(row[4] or "")
+        operation = str((row.get("operation") if isinstance(row, dict) else row[1]) or "")
+        target = str((row.get("target") if isinstance(row, dict) else row[2]) or "")
+        payload = json.loads(str((row.get("exact_content") if isinstance(row, dict) else row[3]) or "{}"))
+        fingerprint = str((row.get("action_fingerprint") if isinstance(row, dict) else row[4]) or "")
         if _fingerprint(operation, target, payload) != fingerprint:
             return {"status": "fingerprint_mismatch", "kind": "approval",
                     "reply": "🛑 KZ blocked the action because its approved payload no longer matches."}
