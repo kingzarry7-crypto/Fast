@@ -12,6 +12,11 @@ export const metadata: Metadata = {
   description:
     "KING ZARRY AI — intelligent AI command centre. Your intelligence, amplified.",
   applicationName: "KING ZARRY AI",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/icons/kz-ai.svg",
+    apple: "/icons/kz-ai.svg",
+  },
   appleWebApp: {
     capable: true,
     title: "KING ZARRY AI",
