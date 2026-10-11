@@ -1195,6 +1195,36 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
             return {"status": "failed", "kind": "send_gmail",
                     "reply": "❌ I could not prepare the professional email options. Nothing was sent. You can retry with the recipient and what you want to say."}
 
+    # Do not let vague email-send requests fall through to a generic chatbot
+    # response (or return None to the HTTP connector middleware). A send must
+    # be tied to an explicit recipient and exact message before approval.
+    if re.search(r"\\b(send|email|mail|compose|draft|write)\\b", lower) and not payload:
+        try:
+            from google_connector import _account
+            if not _account(uid):
+                return {
+                    "status": "not_connected",
+                    "kind": "send_gmail",
+                    "reply": "🔌 Gmail is not connected to this KZ account. Connect Google Workspace first; nothing was sent.",
+                }
+        except Exception as exc:
+            logger.warning("Gmail connection check failed: %s", type(exc).__name__)
+            return {
+                "status": "failed",
+                "kind": "send_gmail",
+                "reply": "❌ KZ could not verify the Gmail connection. Nothing was sent.",
+            }
+        return {
+            "status": "needs_details",
+            "kind": "send_gmail",
+            "reply": (
+                "✉️ I can prepare this through your connected Gmail, but I don't have the exact "
+                "recipient and proposal text attached to this message. Please send the recipient "
+                "address and paste the proposal (or its exact text). I'll show you the final email "
+                "and ask for approval before sending. Nothing has been sent yet."
+            ),
+        }
+
     # Explicit action requests should enter the persistent workflow executor,
     # not receive a purely conversational answer from the general LLM. Keep this
     # conservative: ordinary questions and vague statements do not start jobs.
