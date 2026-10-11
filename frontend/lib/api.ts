@@ -10,9 +10,16 @@ import type {
 } from "@/types";
 
 function getBaseUrl(): string {
+  // Production must use the same-origin proxy configured in next.config.ts.
+  // Direct browser-to-Railway requests rely on third-party cookies, which
+  // mobile Safari/Chrome may block and which can make every request look logged out.
+  // Local development may explicitly opt out when a separate API is required.
+  const configured = (process.env.NEXT_PUBLIC_API_SAME_ORIGIN || "").trim().toLowerCase();
   const sameOrigin =
-    (process.env.NEXT_PUBLIC_API_SAME_ORIGIN || "true").trim().toLowerCase() === "true" ||
-    (process.env.NEXT_PUBLIC_API_SAME_ORIGIN || "").trim() === "1";
+    process.env.NODE_ENV === "production" ||
+    configured === "true" ||
+    configured === "1" ||
+    configured === "";
   if (sameOrigin) return "";
   const raw = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim().replace(/\/+$/, "");
   return raw;
