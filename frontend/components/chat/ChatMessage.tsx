@@ -33,6 +33,7 @@ export function ChatMessage({
   onSpeak,
   onSuggestion,
   suggestions = [],
+  webSources = [],
   className = "",
 }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
