@@ -187,6 +187,7 @@ export function useChat(
                     }
                     return {
                       ...item,
+                      ...(activity.sourceUrls?.length ? { webSources: activity.sourceUrls } : {}),
                       status: activity.done ? "" : `AI CORE • ${label.toUpperCase()}`,
                       activitySteps: [...steps.map((step) => ({ ...step, done: true })), { label, done: activity.done }],
                     };
