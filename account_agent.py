@@ -289,11 +289,10 @@ def _send_gmail_preview(user_id: str, payload: dict[str, Any]) -> dict[str, Any]
 
 
 def _parse_email_request(text: str) -> Optional[dict[str, str]]:
-    """Parse natural-language Gmail compose/send requests without falling through to the LLM."""
+    """Parse send requests while preserving pasted proposal text after the recipient."""
     raw = str(text or "").strip()
     if not re.search(r"\b(send|email|mail|compose|draft|write)\b", raw, re.I):
         return None
-
     match = re.search(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", raw, re.I)
     if not match:
         return None
@@ -303,29 +302,38 @@ def _parse_email_request(text: str) -> Optional[dict[str, str]]:
         r"\bsubject\s*[:=-]\s*(.+?)(?=\n|\b(?:body|message|saying|tell|say|about|regarding)\b\s*[:=-]?|$)",
         raw, re.I | re.S,
     )
-    bm = re.search(
-        r"\b(?:body|message|saying|say|tell(?:\s+them)?(?:\s+that)?|about|regarding)\b\s*[:=-]?\s*(.+)$",
-        raw, re.I | re.S,
-    )
     subject = sm.group(1).strip() if sm else ""
 
-    body = bm.group(1).strip() if bm else ""
-    if not body:
-        body = raw
-        body = re.sub(r"^.*?\b(?:send|email|mail|compose|draft|write)\b", "", body, flags=re.I).strip()
-        body = re.sub(re.escape(to), "", body, count=1, flags=re.I).strip()
-        body = re.sub(r"^\b(?:an?\s+)?email\b", "", body, flags=re.I).strip()
-        body = re.sub(r"^\b(?:to|for)\b", "", body, flags=re.I).strip()
-        body = re.sub(r"^\b(?:subject)\s*[:=-]\s*[^\n]+", "", body, flags=re.I).strip()
-        body = re.sub(r"^\b(?:saying|say|tell(?:\s+them)?(?:\s+that)?)\b\s*[:=-]?\s*", "", body, flags=re.I).strip()
-        body = re.sub(r"^\b(?:about|regarding)\b\s*[:=-]?\s*", "", body, flags=re.I).strip()
+    # Prefer the actual text after the recipient. This supports messages such as
+    # "Send this to this email someone@example.com Profile: ... Proposal: ...".
+    after_recipient = raw[match.end():].strip()
+    after_recipient = re.sub(r"^[\s,;:—-]*", "", after_recipient)
+    after_recipient = re.sub(
+        r"^(?:(?:this|it|the following|the above)\s+)?"
+        r"(?:(?:to|for)\s+)?(?:this\s+)?(?:email|recipient)?[\s:,-]*",
+        "", after_recipient, flags=re.I,
+    ).strip()
+    after_recipient = re.sub(
+        r"^(?:saying|say|tell(?:\s+them)?(?:\s+that)?)\b\s*[:=-]?\s*",
+        "", after_recipient, flags=re.I,
+    ).strip()
 
-    if not body:
+    # Explicit body/message markers take precedence if provided.
+    bm = re.search(
+        r"\b(?:body|message|saying|say|tell(?:\s+them)?(?:\s+that)?)\b\s*[:=-]\s*(.+)$",
+        raw, re.I | re.S,
+    )
+    body = bm.group(1).strip() if bm else after_recipient
+    body = re.sub(r"^\s*(?:subject\s*[:=-][^\n]*\n?)", "", body, flags=re.I).strip()
+    if not body or body.lower() in {"this", "it", "the above", "the proposal", "the gig"}:
         return None
     if not subject:
-        subject = "Message from King Zarry AI"
+        subject = (
+            "Frontend Web Development Proposal"
+            if re.search(r"\b(profile|headline|bio|proposal|frontend|web developer|gig)\b", body, re.I)
+            else "Message from King Zarry AI"
+        )
     return {"to": to, "subject": subject[:300], "body": body[:20000]}
-
 
 
 def _gmail_read_intent(text: str) -> Optional[dict[str, str]]:
