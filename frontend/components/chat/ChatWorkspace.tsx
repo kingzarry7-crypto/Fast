@@ -52,6 +52,17 @@ export default function ChatWorkspace({
   const conversationId = controlledId !== undefined ? controlledId : internalId;
   const setConversationId = (id: string | null) => {
     if (controlledId === undefined) setInternalId(id);
+    // Persist only the selected conversation ID, never message contents or credentials.
+    // Messages remain in the authenticated server-side conversation store.
+    if (user?.id && typeof window !== "undefined") {
+      try {
+        const key = "kz-last-conversation:" + user.id;
+        if (id) window.localStorage.setItem(key, id);
+        else window.localStorage.removeItem(key);
+      } catch {
+        // Storage may be disabled; server-side history remains available.
+      }
+    }
     onConversationChange?.(id);
   };
 
@@ -294,6 +305,50 @@ export default function ChatWorkspace({
       setHistoryLoading(false);
     }
   };
+
+  // Restore the last selected saved chat after refresh or a new login.
+  // Validate the stored ID against the authenticated server-side list before opening it.
+  const restoredUserRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!user?.id) {
+      restoredUserRef.current = null;
+      return;
+    }
+    if (restoredUserRef.current === user.id) return;
+    restoredUserRef.current = user.id;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const list = await api.listConversations();
+        if (cancelled) return;
+        setConversations(list);
+        onConversationsRefresh?.(list);
+        let preferredId: string | null = null;
+        try {
+          preferredId = window.localStorage.getItem("kz-last-conversation:" + user.id);
+        } catch {
+          // Fall back to the latest saved conversation when browser storage is unavailable.
+        }
+        const selected = preferredId && list.some((item) => item.id === preferredId)
+          ? preferredId
+          : list[0]?.id || null;
+        if (selected) {
+          setConversationId(selected);
+          await handleOpenConversation(selected);
+        } else {
+          setConversationId(null);
+        }
+      } catch {
+        // Do not clear local selection or server data when history is temporarily unavailable.
+        restoredUserRef.current = null;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Restore once per authenticated user; selection changes must not trigger another restore.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   useEffect(() => {
     const onNew = () => {
