@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch
 
 import agent_router
+from system_inventory import format_project_inventory, get_project_inventory
 
 
 class AgentRouterTests(unittest.TestCase):
@@ -37,6 +38,25 @@ class AgentRouterTests(unittest.TestCase):
             result = agent_router.route_agent_request("What access do you have?", "u1")
         self.assertIn("No connected provider accounts were verified", result["reply"])
         self.assertIn("approval", result["reply"].lower())
+
+
+    def test_project_update_request_reports_king_zarry_files(self):
+        result = agent_router.route_agent_request("Give me my own updates and show my files", "u1")
+        self.assertEqual(result["provider"], "project_inventory")
+        self.assertIn("King Zarry AI", result["reply"])
+        self.assertIn("workflow_engine.py", result["reply"])
+        self.assertIn("How to use", result["reply"])
+
+    def test_inventory_does_not_equate_file_presence_with_connected_accounts(self):
+        report = format_project_inventory()
+        self.assertIn("does not mean its API key", report)
+        self.assertIn("will not invent a latest commit", report)
+
+    def test_inventory_checks_paths_in_runtime_checkout(self):
+        inventory = get_project_inventory()
+        self.assertGreater(inventory["component_count"], 0)
+        self.assertEqual(inventory["component_count"], len(inventory["components"]))
+        self.assertTrue(all("present" in item and "path" in item for item in inventory["components"]))
 
 
 if __name__ == "__main__":
