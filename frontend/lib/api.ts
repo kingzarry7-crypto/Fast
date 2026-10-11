@@ -292,7 +292,7 @@ export async function streamChatMessage(
     signal?: AbortSignal;
     onDelta: (text: string) => void;
     onStart?: (provider?: string) => void;
-    onActivity?: (activity: { stage?: string; label: string; done: boolean; searches?: number; sources?: number }) => void;
+    onActivity?: (activity: { stage?: string; label: string; done: boolean; searches?: number; sources?: number; sourceUrls?: Array<{ title: string; url: string }> }) => void;
     onAgent?: (agent: { id?: string; status?: string; activity?: string }) => void;
   }
 ): Promise<{ reply: string; conversation_id?: string; approval?: { id: string; provider: "google"; operation: string; target?: string }; agent?: { id?: string; status?: string; activity?: string } }> {
@@ -348,6 +348,7 @@ export async function streamChatMessage(
           done: event.done === true,
           searches: typeof event.searches === "number" ? event.searches : undefined,
           sources: typeof event.sources === "number" ? event.sources : undefined,
+          sourceUrls: Array.isArray(event.source_urls) ? event.source_urls.filter((item) => Boolean(item && typeof item === "object" && typeof (item as Record<string, unknown>).url === "string" && /^https?:\/\//i.test(String((item as Record<string, unknown>).url))).map((item) => { const value = item as Record<string, unknown>; return { title: typeof value.title === "string" ? value.title : "", url: String(value.url) }; }) : undefined,
         });
       } else if (event.type === "agent" && event.agent && typeof event.agent === "object") {
         const value = event.agent as Record<string, unknown>;

@@ -17,6 +17,7 @@ export interface ChatMessageProps {
   onSpeak?: () => void;
   onSuggestion?: (text: string) => void;
   suggestions?: string[];
+  webSources?: Array<{ title: string; url: string }>;
   className?: string;
 }
 
@@ -32,6 +33,7 @@ export function ChatMessage({
   onSpeak,
   onSuggestion,
   suggestions = [],
+  webSources = [],
   className = "",
 }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
@@ -151,6 +153,24 @@ export function ChatMessage({
             alt="attachment"
             className="mb-2 max-h-48 rounded-lg object-cover"
           />
+        ) : null}
+
+        {webSources.length > 0 && !isUser ? (
+          <div className="mb-3 flex flex-wrap items-center gap-2" aria-label="Web sources used">
+            <span className="text-[10px] uppercase tracking-wider text-cyan-100/45">Sources</span>
+            {webSources.slice(0, 8).map((source, index) => {
+              let hostname = "";
+              try { hostname = new URL(source.url).hostname.replace(/^www\\./, ""); } catch { return null; }
+              const favicon = `https://www.google.com/s2/favicons?domain_url=${encodeURIComponent(source.url)}&sz=32`;
+              return (
+                <a key={`${source.url}-${index}`} href={source.url} target="_blank" rel="noopener noreferrer" title={source.title || hostname} aria-label={`Open source ${hostname}`} className="inline-flex max-w-[170px] items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.035] px-2 py-1 text-[10px] text-slate-300/80 transition hover:border-cyan-300/30 hover:text-cyan-100">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={favicon} alt="" width={16} height={16} loading="lazy" className="h-4 w-4 shrink-0 rounded-sm bg-white/10" />
+                  <span className="truncate">{hostname}</span>
+                </a>
+              );
+            })}
+          </div>
         ) : null}
 
         <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{displayContent}{isStreaming ? <span aria-hidden="true" className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-pulse rounded-full bg-cyan-300 align-baseline" /> : null}</div>

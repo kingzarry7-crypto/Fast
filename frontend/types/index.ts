@@ -25,6 +25,7 @@ export interface ChatMessage {
   timestamp: string;
   status?: string;
   activitySteps?: Array<{ label: string; done: boolean }>;
+  webSources?: Array<{ title: string; url: string }>;
   capability?: string;
   suggestions?: string[];
   imagePreviewUrl?: string;
