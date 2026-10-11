@@ -348,6 +348,36 @@ def _fingerprint(operation: str, target: str, payload: Dict[str, Any]) -> str:
                      sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
+def _gmail_plain_text(payload: Dict[str, Any]) -> str:
+    """Extract decoded text/plain content from a Gmail API full-message payload."""
+    mime_type = str(payload.get("mimeType") or "").lower()
+    body_data = (payload.get("body") or {}).get("data")
+    if mime_type == "text/plain" and body_data:
+        try:
+            encoded = str(body_data)
+            encoded += "=" * (-len(encoded) % 4)
+            return base64.urlsafe_b64decode(encoded.encode("ascii")).decode("utf-8", errors="replace")
+        except Exception:
+            return ""
+    for part in payload.get("parts") or []:
+        found = _gmail_plain_text(part)
+        if found:
+            return found
+    # Some Gmail responses omit mimeType on the root but still expose body.data.
+    if body_data and not payload.get("parts"):
+        try:
+            encoded = str(body_data)
+            encoded += "=" * (-len(encoded) % 4)
+            return base64.urlsafe_b64decode(encoded.encode("ascii")).decode("utf-8", errors="replace")
+        except Exception:
+            return ""
+    return ""
+
+
+def _normalize_email_body(value: str) -> str:
+    # Gmail/MIME may normalize line endings and append one final newline.
+    return str(value or "").replace("\\r\\n", "\\n").replace("\\r", "\\n").rstrip("\\n")
+
 
 def _execute(user_id: str, operation: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     operation = str(operation or "").strip().lower()
@@ -421,31 +451,42 @@ def _execute(user_id: str, operation: str, payload: Dict[str, Any]) -> Dict[str,
         verified = False
         verified_to = ""
         verified_subject = ""
+        body_verified = False
         verified_labels = list(label_ids)
         if message_id:
             try:
+                # Read the complete sent message, not metadata only. Metadata
+                # verification can confirm a truncated email as a successful send.
                 verify_r = _google_request(
                     user_id,
                     "GET",
                     GOOGLE_GMAIL + f"/users/me/messages/{urllib.parse.quote(message_id)}",
-                    params={
-                        "format": "metadata",
-                        "metadataHeaders": ["To", "Subject"],
-                    },
+                    params={"format": "full"},
                 )
                 verify_data = verify_r.json()
                 verified_labels = verify_data.get("labelIds") or verified_labels
+                root_payload = verify_data.get("payload") or {}
                 headers = {
                     str(x.get("name") or "").lower(): str(x.get("value") or "").strip()
-                    for x in (verify_data.get("payload", {}).get("headers") or [])
+                    for x in (root_payload.get("headers") or [])
                 }
                 verified_to = headers.get("to", "")
                 verified_subject = headers.get("subject", "")
+                actual_body = _gmail_plain_text(root_payload)
+                body_verified = bool(actual_body) and (
+                    _normalize_email_body(actual_body) == _normalize_email_body(body)
+                )
                 verified = (
                     "SENT" in {str(x).upper() for x in verified_labels}
                     and to.lower() in verified_to.lower()
                     and subject == verified_subject
+                    and body_verified
                 )
+                if not body_verified:
+                    logger.error(
+                        "Gmail send body verification mismatch for message %s (expected_chars=%s actual_chars=%s)",
+                        message_id, len(body), len(actual_body),
+                    )
             except Exception as verify_exc:
                 logger.warning(
                     "Gmail send verification failed for message %s: %s",
@@ -462,6 +503,8 @@ def _execute(user_id: str, operation: str, payload: Dict[str, Any]) -> Dict[str,
                 "label_ids": verified_labels,
                 "to": verified_to,
                 "subject": verified_subject,
+                "body_verified": body_verified,
+                "expected_body_characters": len(body),
             },
         }
 
