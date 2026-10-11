@@ -411,37 +411,44 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _outcome_verification(item: Dict[str, Any]) -> Dict[str, Any]:
-    """Report evidence confidence separately from workflow step completion."""
+    """Describe evidence separately from workflow step completion."""
     plan = item.get("plan") or []
-    consequential = [step for step in plan if step.get("action") in {"external_action", "browser_execute"}]
+    consequential = [s for s in plan if s.get("action") in {"external_action", "browser_execute"}]
     if not consequential:
         return {"outcome_status": "not_required", "verified": True, "evidence": []}
 
+    evidence = []
     for step in plan:
         output = step.get("output") or {}
         verification = output.get("verification") or {}
-        status = str(output.get("verification_status") or verification.get("verification_status") or "").lower()
-        proof = output.get("evidence") or verification.get("evidence") or []
-        if (
-            (output.get("verified") is True or verification.get("verified") is True or status in {
-                "verified_sent", "verified_completed", "verified_published"
-            })
-            and isinstance(proof, list)
-            and len(proof) > 0
-        ):
-            return {
-                "outcome_status": "verified",
-                "verified": True,
-                "evidence": proof[:20],
-            }
+        status = str(
+            output.get("verification_status")
+            or verification.get("verification_status")
+            or ""
+        ).lower()
+        step_evidence = output.get("evidence") or verification.get("evidence") or []
+        if not isinstance(step_evidence, list):
+            continue
+        has_evidence = any(
+            isinstance(entry, (dict, str)) and bool(entry)
+            for entry in step_evidence
+        )
+        explicitly_verified = (
+            output.get("verified") is True
+            or verification.get("verified") is True
+            or status in {"verified_sent", "verified_completed", "verified_published"}
+        )
+        if explicitly_verified and has_evidence:
+            evidence.extend(step_evidence)
 
+    if evidence:
+        return {"outcome_status": "verified", "verified": True, "evidence": evidence[:20]}
     return {
         "outcome_status": "unverified",
         "verified": False,
         "evidence": [],
-        "note": "Workflow steps finished, but external outcome evidence was not available.",
+        "note": "Workflow steps finished, but explicit external-outcome evidence was not available.",
     }
-
 
 def run_workflow(workflow_id: str, user_id: str) -> Dict[str, Any]:
     item = get_workflow(workflow_id, user_id)
