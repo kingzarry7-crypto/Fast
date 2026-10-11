@@ -55,7 +55,7 @@ class WorkflowOutcomeTests(unittest.TestCase):
         ], 'result': {}}
         result = _outcome_verification(item)
         self.assertEqual(result['outcome_status'], 'unverified')
-        self.assertFalse(result['verified')
+        self.assertFalse(result['verified'])
 
     def test_non_external_workflow_does_not_require_delivery_evidence(self):
         result = _outcome_verification({'plan': [{'action': 'research_goal', 'output': {'success': True}}], 'result': {}})
