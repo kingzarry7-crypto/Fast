@@ -112,8 +112,12 @@ app = FastAPI(
 
 FRONTEND_URL = os.getenv(
     "FRONTEND_URL",
-    os.getenv("FRONTEND_ORIGIN", "http://localhost:3000"),
+    os.getenv("FRONTEND_ORIGIN", "https://fast.kingzarry7.workers.dev"),
 ).strip().rstrip("/")
+# Ignore a stale Vercel URL left in Railway variables: Cloudflare is the
+# production frontend and the backend must not redirect users back to Vercel.
+if ".vercel.app" in FRONTEND_URL.lower():
+    FRONTEND_URL = "https://fast.kingzarry7.workers.dev"
 
 SESSION_COOKIE_NAME = "king_zarry_web_session"
 
