@@ -421,13 +421,18 @@ def _outcome_verification(item: Dict[str, Any]) -> Dict[str, Any]:
         output = step.get("output") or {}
         verification = output.get("verification") or {}
         status = str(output.get("verification_status") or verification.get("verification_status") or "").lower()
-        if output.get("verified") is True or verification.get("verified") is True or status in {
-            "verified_sent", "verified_completed", "verified_published"
-        }:
+        proof = output.get("evidence") or verification.get("evidence") or []
+        if (
+            (output.get("verified") is True or verification.get("verified") is True or status in {
+                "verified_sent", "verified_completed", "verified_published"
+            })
+            and isinstance(proof, list)
+            and len(proof) > 0
+        ):
             return {
                 "outcome_status": "verified",
                 "verified": True,
-                "evidence": (output.get("evidence") or verification.get("evidence") or [])[:20],
+                "evidence": proof[:20],
             }
 
     return {
