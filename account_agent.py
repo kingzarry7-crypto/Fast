@@ -1429,15 +1429,47 @@ async def account_monitor_job(context: Any) -> None:
             chat_id = targets.get(str(event.get("user_id") or ""))
             if not chat_id:
                 continue
-            items = event.get("items") or []
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text="👁️ <b>KZ ACCOUNT MONITOR</b>\n\n"
-                     f"Google Gmail: {len(items)} new unread message(s) detected.\n"
-                     "KZ has not replied, sent, deleted, or modified anything.\n"
-                     "Say <code>CHECK MY EMAIL</code> to inspect them.",
-                parse_mode="HTML",
-            )
+            event_type = str(event.get("type") or "")
+            if event_type in ("gmail_access_revoked", "gmail_monitor_failed", "gmail_monitor_recovered"):
+                title = {
+                    "gmail_access_revoked": "🔐 GMAIL ACCESS NEEDS ATTENTION",
+                    "gmail_monitor_failed": "⚠️ GMAIL MONITORING IS FAILING",
+                    "gmail_monitor_recovered": "✅ GMAIL MONITORING RESUMED",
+                }.get(event_type, "GMAIL MONITOR STATUS")
+                detail = html_escape(event.get("reason") or (
+                    "Monitoring has resumed and a successful check completed."
+                    if event_type == "gmail_monitor_recovered" else
+                    "KZ will retry the next scheduled check."
+                ))
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"<b>{title}</b>\n\n{detail}",
+                    parse_mode="HTML",
+                )
+                continue
+
+            high = event.get("high") or []
+            medium = event.get("medium") or []
+            low = event.get("low") or []
+            from gmail_intelligence import format_email_alert, format_email_digest
+            for item in high:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=html_escape(format_email_alert(item)),
+                    parse_mode="HTML",
+                )
+            for item in medium:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=html_escape(format_email_alert(item)),
+                    parse_mode="HTML",
+                )
+            if low:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=html_escape(format_email_digest(low)),
+                    parse_mode="HTML",
+                )
     except Exception as exc:
         logger.warning("Account monitor job failed: %s", exc)
 
