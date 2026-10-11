@@ -134,7 +134,7 @@ def main():
         print("⚠️ FastAPI + Discord will still start. Only Telegram may fail.", flush=True)
 
     if not os.path.exists("api.py"):
-        print("❌ api.py not found — aborting (FastAPI is required for Vercel)", flush=True)
+        print("❌ api.py not found — aborting (FastAPI is required for the Railway API)", flush=True)
         sys.exit(1)
 
     port = os.environ.get("PORT", "8000")
