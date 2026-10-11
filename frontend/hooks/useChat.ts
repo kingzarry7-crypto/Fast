@@ -180,6 +180,7 @@ export function useChat(
                     if (existing >= 0) {
                       return {
                         ...item,
+                        ...(activity.sourceUrls?.length ? { webSources: activity.sourceUrls } : {}),
                         status: activity.done ? "" : `AI CORE • ${label.toUpperCase()}`,
                         activitySteps: steps.map((step, index) => index === existing ? { ...step, done: activity.done } : step),
                       };
