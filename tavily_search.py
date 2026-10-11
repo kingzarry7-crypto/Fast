@@ -143,7 +143,8 @@ def _try_fallback(query: str, max_results: int, original_error: str) -> Dict[str
     if result.get("success") and result.get("results"):
         _set_cache(query, "fallback", max_results, result)
         return result
-    result["primary_error"] = original_error
+    result["fallback_error"] = result.get("error", "fallback_unavailable")
+    result["error"] = original_error
     return result
 
 
