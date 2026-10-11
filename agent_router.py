@@ -25,7 +25,7 @@ _MARKET_ACTION = re.compile(
 _CAPABILITY = re.compile(
     r"\b(what can you do|what tools|what agents|what access|which accounts|"
     r"connected accounts|what is connected|what's connected|show capabilities|"
-    r"your capabilities|what do you have access to|what do you need access to|"
+    r"your capabilities|what do you have access to|what do you need access to|what can kz do|"
     r"what permissions|agent status|system status)\b",
     re.IGNORECASE,
 )
@@ -101,10 +101,15 @@ def route_agent_request(message: str, user_id: str) -> Optional[Dict[str, Any]]:
             "Web research: use the configured research/search tools only when they are "
             "available and return evidence.\n\n"
             f"Verified connected accounts: {account_names}\n\n"
-            "If a requested job cannot proceed, I should identify the exact missing connector, "
-            "permission, or configuration, explain why it is needed, and give you the next "
-            "connection step. I must not claim an account is connected or a job is complete "
-            "without evidence."
+            "Missing access guidance: Gmail/email requests need a connected Google account with "
+            "the required Gmail scopes; Shopify requests need the Shopify store authorization; "
+            "GitHub work needs GitHub OAuth with the repository scopes for the requested task; "
+            "browser-only sites need an authenticated browser session and may require you to "
+            "complete human verification. Configure provider credentials/secrets on Railway "
+            "only where the official connector requires them. Never paste secrets into chat. "
+            "If a requested job cannot proceed, identify the exact missing connector, permission, "
+            "or configuration and give the next connection step. Never claim connection or "
+            "completion without evidence."
         )
         return {"status": "completed", "reply": reply, "provider": "capability_router"}
 
@@ -159,7 +164,7 @@ def route_agent_request(message: str, user_id: str) -> Optional[Dict[str, Any]]:
             f"Price: {show(analysis.get('price') or analysis.get('current_price'))}",
             f"Entry: {show(analysis.get('entry') or analysis.get('entry_zone') or analysis.get('ideal_entry'))}",
             f"Stop loss: {show(analysis.get('stop_loss') or analysis.get('sl'))}",
-            f"Targets: {show(analysis.get('targets') or analysis.get('take_profits') or analysis.get('tp'))}",
+            f"Targets: {show(analysis.get('targets') or analysis.get('take_profits') or ', '.join(str(analysis.get(k)) for k in ('tp1', 'tp2', 'tp3') if analysis.get(k) is not None))}",
             f"Confidence: {show(analysis.get('confidence'))}",
             f"Trend: {show(analysis.get('trend'))}",
             f"News risk: {show(news_risk.get('risk') or news_risk.get('level') or news_risk.get('status'))}",
