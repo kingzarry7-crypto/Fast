@@ -4208,13 +4208,13 @@ async def _handle_telegram_google_email(update, text: str):
             return True
         verified=bool(result.get("verified"))
         with get_db_cursor(commit=True) as cur:
-            cur.execute("UPDATE web_approvals SET status=%s,executed_at=NOW() WHERE id=%s AND status='approved'",("executed" if verified else "expired",approval_id))
+            cur.execute("UPDATE web_approvals SET status=%s,executed_at=NOW() WHERE id=%s AND status='approved'",("executed" if verified else "unverified",approval_id))
         _audit(canonical,"connector_action_verified" if verified else "connector_action_unverified",operation,target,approval_id)
         if verified:
             msg=result.get("message") or {}
             await update.message.reply_text("✅ <b>EMAIL SENT & VERIFIED</b>\n\nTo: "+html.escape(payload["to"])+"\nSubject: "+html.escape(payload["subject"])+"\nMessage ID: <code>"+html.escape(str(msg.get("id") or "unknown"))+"</code>",parse_mode="HTML")
         else:
-            await update.message.reply_text("⚠️ Gmail responded, but KZ could not verify the sent message. It is marked unverified.")
+            await update.message.reply_text("⚠️ Gmail accepted the send request, but KZ could not verify the exact message in Sent. It may already have been sent. Do not send it again until you check Gmail Sent.")
         return True
     payload=_telegram_email_request(text)
     if not payload:

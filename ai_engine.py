@@ -24,6 +24,12 @@ try:
 except Exception:
     web_research_engine = None
 
+from email_draft_safety import (
+    EMAIL_DRAFT_REVISION_INSTRUCTIONS,
+    is_email_draft_followup,
+    should_suppress_web_research_for_email_draft,
+)
+
 logger = logging.getLogger("ai_engine")
 
 def clean_env_str(v, default=""):
@@ -2237,6 +2243,11 @@ class AIEngine:
                 return media_reply
             logger.info("Media routing returned None - falling back to text provider")
 
+        # Load history before search classification so short follow-ups such as
+        # 'Add specific update details' remain attached to the active email draft.
+        history_for_context = self._load_memory_history(user_id, limit=20)
+        email_draft_context = is_email_draft_followup(original_prompt, history_for_context)
+
         needs_web = False
         needs_research = False
         explicit_urls = []
@@ -2254,11 +2265,16 @@ class AIEngine:
             needs_research = bool(original_prompt) and web_research_engine is not None and web_research_engine.is_configured() and web_research_engine.should_research(original_prompt)
         except Exception:
             needs_research = False
+        if should_suppress_web_research_for_email_draft(email_draft_context):
+            # Vague draft revisions must not trigger broad search or inject
+            # unrelated links into copy intended for an external recipient.
+            tavily_needed = False
+            needs_research = False
         needs_web = bool(tavily_needed or needs_research or has_direct_url)
         casual = _is_casual_chat(original_prompt, has_image=bool(image), needs_web=needs_web)
         logger.info(f"Chat mode: {'CASUAL' if casual else 'TRADING/NEWS'}")
 
-        history = self._load_memory_history(user_id, limit=20 if casual else 15)
+        history = history_for_context[-(20 if casual else 15):]
         persistent_ctx = self._load_persistent_context(user_id)
 
         # --- Connected account context ---
@@ -2410,7 +2426,7 @@ class AIEngine:
         # --- GDELT 2.0 DOC API (free, global news intelligence) ---
         gdelt_context = ""
         try:
-            if original_prompt and not casual and _should_use_gdelt(original_prompt):
+            if original_prompt and not casual and not email_draft_context and _should_use_gdelt(original_prompt):
                 gdelt_result = search_gdelt_doc(
                     query=original_prompt,
                     mode="artlist",
@@ -2428,13 +2444,18 @@ class AIEngine:
         # --- Crypto Vision (free crypto intelligence) ---
         cryptovision_context = ""
         try:
-            if original_prompt and not casual and _should_use_cryptovision(original_prompt):
+            if original_prompt and not casual and not email_draft_context and _should_use_cryptovision(original_prompt):
                 cv_intel = get_crypto_vision_intelligence()
                 cryptovision_context = format_crypto_vision_for_ai(cv_intel, max_items=5)
                 if cryptovision_context:
                     prompt_for_providers = f"{prompt_for_providers}\n\n{cryptovision_context}\n"
         except Exception as e:
             logger.warning(f"Crypto Vision failed: {_redact_secrets(str(e))}")
+
+        if email_draft_context:
+            prompt_for_providers = (
+                f"{prompt_for_providers}\n\n{EMAIL_DRAFT_REVISION_INSTRUCTIONS}\n"
+            )
 
         first_response = self._call_providers(prompt_for_providers, history, image, persistent_ctx, casual, provider_override)
         if not first_response:
@@ -2606,8 +2627,8 @@ class AIEngine:
         combined_sources = []
         combined_sources.extend(research_sources or [])
         combined_sources.extend(tavily_sources or [])
-        if combined_sources:
-            # Prefer the multi-source research list first, then legacy Tavily sources.
+        if combined_sources and not email_draft_context:
+            # Source footers belong to research answers, never inside an email draft.
             seen_urls = set()
             unique_sources = []
             for source in combined_sources:
