@@ -129,7 +129,6 @@ def _is_allowed_frontend_origin(value: str) -> bool:
         return False
     if origin in {
         FRONTEND_URL,
-        "https://fast-a84x.vercel.app",
         "https://fast.kingzarry7.workers.dev",
         *FRONTEND_CUSTOM_ORIGINS,
     }:
