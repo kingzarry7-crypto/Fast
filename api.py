@@ -25,6 +25,7 @@ import secrets
 import asyncio
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any, Tuple
 
@@ -2781,18 +2782,28 @@ def _safe_news(symbol: str) -> Dict[str, Any]:
         return {"news_risk": "UNKNOWN", "error": type(e).__name__}
 
 
+# Market providers are network-bound and the dashboard requests these snapshots
+# together. A shared bounded pool avoids serially waiting on every symbol while
+# also limiting concurrent provider calls across multiple users.
+_MARKET_EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix="kz-market")
+
+
+def _parallel_symbol_map(worker):
+    return list(_MARKET_EXECUTOR.map(worker, DEFAULT_WEB_SYMBOLS))
+
+
 @app.get("/api/markets")
 async def markets_overview(request: Request):
     """Snapshot for BTC/ETH/SOL/XAU — requires login."""
     await asyncio.to_thread(_require_current_user, request)
 
+    def _load_symbol(sym: str):
+        analysis = _safe_analyze(sym, "15m")
+        analysis["news"] = _safe_news(sym)
+        return analysis
+
     def _load():
-        rows = []
-        for sym in DEFAULT_WEB_SYMBOLS:
-            a = _safe_analyze(sym, "15m")
-            n = _safe_news(sym)
-            a["news"] = n
-            rows.append(a)
+        rows = _parallel_symbol_map(_load_symbol)
         return {"status": "success", "symbols": rows, "count": len(rows)}
 
     try:
@@ -2830,29 +2841,28 @@ async def signals_overview(request: Request):
     """Trading signals package (same symbols, signal-focused)."""
     await asyncio.to_thread(_require_current_user, request)
 
+    def _load_signal(sym: str):
+        analysis = _safe_analyze(sym, "15m")
+        return {
+            "symbol": sym,
+            "signal": analysis.get("signal"),
+            "price": analysis.get("price"),
+            "confidence": analysis.get("confidence"),
+            "trend": analysis.get("trend"),
+            "entry": analysis.get("entry"),
+            "stop_loss": analysis.get("stop_loss"),
+            "tp1": analysis.get("tp1"),
+            "tp2": analysis.get("tp2"),
+            "tp3": analysis.get("tp3"),
+            "rsi": analysis.get("rsi"),
+            "support": analysis.get("support"),
+            "resistance": analysis.get("resistance"),
+            "reasons": analysis.get("reasons") or [],
+            "error": analysis.get("error"),
+        }
+
     def _load():
-        signals = []
-        for sym in DEFAULT_WEB_SYMBOLS:
-            a = _safe_analyze(sym, "15m")
-            signals.append(
-                {
-                    "symbol": sym,
-                    "signal": a.get("signal"),
-                    "price": a.get("price"),
-                    "confidence": a.get("confidence"),
-                    "trend": a.get("trend"),
-                    "entry": a.get("entry"),
-                    "stop_loss": a.get("stop_loss"),
-                    "tp1": a.get("tp1"),
-                    "tp2": a.get("tp2"),
-                    "tp3": a.get("tp3"),
-                    "rsi": a.get("rsi"),
-                    "support": a.get("support"),
-                    "resistance": a.get("resistance"),
-                    "reasons": a.get("reasons") or [],
-                    "error": a.get("error"),
-                }
-            )
+        signals = _parallel_symbol_map(_load_signal)
         actionable = [
             s
             for s in signals
@@ -2878,10 +2888,7 @@ async def news_overview(request: Request):
     await asyncio.to_thread(_require_current_user, request)
 
     def _load():
-        items = []
-        for sym in DEFAULT_WEB_SYMBOLS:
-            n = _safe_news(sym)
-            items.append({"symbol": sym, **n})
+        items = _parallel_symbol_map(lambda sym: {"symbol": sym, **_safe_news(sym)})
         # Optional global headlines from news.py
         global_headlines = []
         try:
