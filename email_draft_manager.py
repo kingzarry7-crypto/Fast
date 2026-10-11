@@ -28,7 +28,7 @@ def _ensure_table() -> None:
 
 
 def _generate_options(recipient: str, subject: str, body: str) -> list[dict[str, str]]:
-    """Generate three safe draft choices, with a deterministic fallback if AI output is invalid."""
+    """Generate complete draft choices; never silently send the user's brief as the finished email."""
     expected = {"1": "Professional", "2": "Warm and friendly", "3": "Short and direct"}
     prompt = {
         "recipient": recipient,
@@ -46,7 +46,7 @@ def _generate_options(recipient: str, subject: str, body: str) -> list[dict[str,
                 "id 1 must be Professional; id 2 must be Warm and friendly; id 3 must be Short and direct. Do not send."
             )},
             {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
-        ], max_tokens=900)
+        ], max_tokens=1800)
         raw = str(response or "").strip()
         fence = chr(96) * 3
         if raw.startswith(fence):
@@ -79,28 +79,27 @@ def _generate_options(recipient: str, subject: str, body: str) -> list[dict[str,
                 if key not in expected:
                     continue
                 option_subject = " ".join(str(item.get("subject") or subject or "").split())[:300]
-                option_body = str(item.get("body") or "").strip()[:20000]
+                option_body = str(item.get("body") or "").strip()
                 if not option_subject or not option_body:
                     raise ValueError("incomplete option")
-                options.append({"id": key, "tone": expected[key], "subject": option_subject, "body": option_body})
+                # Reject likely truncation instead of letting a partial generated
+                # draft proceed to the send-approval step.
+                if re.search(r"(?:\\b(?:and|or|with|for|to|because|including|such as|the|a|an)|[,;:—-])\\s*$", option_body, re.I):
+                    raise ValueError("email draft appears truncated")
+                source_body = str(body or "").strip()
+                if len(source_body) >= 500 and len(option_body) < min(int(len(source_body) * 0.65), len(source_body) - 100):
+                    raise ValueError("email draft omitted too much of the supplied content")
+                options.append({"id": key, "tone": expected[key], "subject": option_subject, "body": option_body[:20000]})
             options.sort(key=lambda x: x["id"])
-            if len(options) == 3:
+            if len(options) == 3 and {x["id"] for x in options} == {"1", "2", "3"}:
                 return options
-        except Exception:
-            options = []
+            raise ValueError("incomplete email draft options")
+        except Exception as exc:
+            # Fail closed. Sending the raw prompt/brief as if it were a complete
+            # email is the exact failure this guard is designed to prevent.
+            raise ValueError("KZ could not generate three complete email drafts. Nothing was sent. Please retry or provide the full email text.") from exc
 
-    safe_subject = " ".join(str(subject or "").split())[:300] or "Message from King Zarry AI"
-    safe_body = str(body or "").strip()[:20000]
-    if not safe_body:
-        raise ValueError("Email message content is required")
-    # Keep the user's supplied text intact. Only add a greeting/sign-off where
-    # doing so is harmless; never fabricate facts or alter proposal terms.
-    options = [
-        {"id": "1", "tone": expected["1"], "subject": safe_subject, "body": safe_body},
-        {"id": "2", "tone": expected["2"], "subject": safe_subject, "body": safe_body},
-        {"id": "3", "tone": expected["3"], "subject": safe_subject, "body": safe_body},
-    ]
-    return options
+    raise ValueError("KZ could not generate complete email drafts. Nothing was sent. Please retry or provide the full email text.")
 
 
 def create_choices(user_id: str, recipient: str, subject: str, body: str) -> Dict[str, Any]:
