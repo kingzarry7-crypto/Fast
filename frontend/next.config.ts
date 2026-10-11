@@ -1,11 +1,10 @@
 import type { NextConfig } from "next";
 
 /**
- * Mobile Safari/Chrome block cross-site cookies (Vercel → Railway).
- * Rewrite /api/* to the Railway backend so the browser talks to the SAME
- * origin (vercel.app) and session cookies stick.
+ * Proxy /api/* and /health to Railway so the browser talks to the SAME
+ * Cloudflare frontend origin and session cookies remain first-party.
  *
- * Vercel env (Production):
+ * Cloudflare Worker build variables:
  *   API_UPSTREAM=https://YOUR-service.up.railway.app
  *   NEXT_PUBLIC_API_BASE_URL=   (leave EMPTY)
  *   NEXT_PUBLIC_API_SAME_ORIGIN=true
@@ -15,8 +14,7 @@ const API_UPSTREAM = (
   process.env.BACKEND_URL ||
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   // Safe production fallback so Connected Accounts does not break when the
-  // Vercel environment variable is missing. Override with API_UPSTREAM when
-  // deploying a different backend.
+  // API_UPSTREAM variable is missing. Override it when deploying a different backend.
   "https://fast-production-0eba.up.railway.app"
 )
   .trim()
