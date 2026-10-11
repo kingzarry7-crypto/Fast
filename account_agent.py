@@ -520,13 +520,35 @@ def _monitor_rows() -> list[dict[str, Any]]:
 
 
 def _monitor_gmail(user_id: str, previous: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Baseline the current Inbox once, then return only newly arrived messages."""
     from google_connector import _execute
-    result = _execute(user_id, "list_gmail", {"query": "is:unread newer_than:1d", "limit": 20})
+    from gmail_intelligence import enrich_email
+
+    result = _execute(user_id, "list_gmail", {"query": "in:inbox", "limit": 50})
     messages = result.get("messages") or []
-    previous_ids = set(previous.get("message_ids") or [])
-    current_ids = [str(x.get("id") or "") for x in messages if x.get("id")]
-    new_items = [x for x in messages if str(x.get("id") or "") not in previous_ids]
-    return {"message_ids": current_ids[:50]}, new_items
+    current_ids = [str(item.get("id") or "") for item in messages if item.get("id")]
+    prior_ids = [str(value) for value in (previous.get("message_ids") or []) if value]
+    prior_set = set(prior_ids)
+
+    # Do not announce existing mail as new when monitoring is first enabled.
+    if not previous.get("baseline_initialized"):
+        return {
+            "baseline_initialized": True,
+            "message_ids": current_ids[:500],
+            "monitoring_status": "ok",
+        }, []
+
+    new_items = [
+        enrich_email(item) for item in messages
+        if item.get("id") and str(item.get("id")) not in prior_set
+    ]
+    # Retain known IDs when Gmail's current page no longer contains older mail.
+    merged_ids = list(dict.fromkeys(current_ids + prior_ids))[:500]
+    return {
+        "baseline_initialized": True,
+        "message_ids": merged_ids,
+        "monitoring_status": "ok",
+    }, new_items
 
 
 def monitor_tick() -> list[dict[str, Any]]:
@@ -554,16 +576,21 @@ def monitor_tick() -> list[dict[str, Any]]:
                         (json.dumps(new_state), bool(new_items), monitor["id"]),
                     )
                 if new_items:
-                    event = {
+                    high = [item for item in new_items if item.get("priority") == "high"]
+                    medium = [item for item in new_items if item.get("priority") == "medium"]
+                    low = [item for item in new_items if item.get("priority") == "low"]
+                    events.append({
                         "user_id": user_id,
                         "provider": "google",
                         "type": "new_gmail",
                         "count": len(new_items),
+                        "high": high,
+                        "medium": medium,
+                        "low": low,
                         "items": new_items[:8],
                         "sleep_buffered": _sleeping(),
                         "at": now.isoformat(),
-                    }
-                    events.append(event)
+                    })
         except Exception as exc:
             logger.warning("Account monitor failed user=%s: %s", user_id, exc)
     return events
@@ -1369,14 +1396,20 @@ async def account_monitor_job(context: Any) -> None:
             if not chat_id:
                 continue
             items = event.get("items") or []
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text="👁️ <b>KZ ACCOUNT MONITOR</b>\n\n"
-                     f"Google Gmail: {len(items)} new unread message(s) detected.\n"
-                     "KZ has not replied, sent, deleted, or modified anything.\n"
-                     "Say <code>CHECK MY EMAIL</code> to inspect them.",
-                parse_mode="HTML",
+            high_count = len(event.get("high") or [])
+            medium_count = len(event.get("medium") or [])
+            low_count = len(event.get("low") or [])
+            # Keep the alert bounded and avoid rendering untrusted email fields as HTML.
+            message = (
+                "👁️ KZ GMAIL MONITOR\n\n"
+                f"New messages: {int(event.get('count') or len(items))}\n"
+                f"High priority: {high_count}\n"
+                f"Medium priority: {medium_count}\n"
+                f"Low priority: {low_count}\n\n"
+                "KZ has not replied, sent, deleted, or modified anything.\n"
+                "Say CHECK MY EMAIL to inspect them."
             )
+            await context.bot.send_message(chat_id=chat_id, text=message[:3500])
     except Exception as exc:
         logger.warning("Account monitor job failed: %s", exc)
 
