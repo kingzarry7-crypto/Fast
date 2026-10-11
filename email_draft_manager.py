@@ -84,7 +84,7 @@ def _generate_options(recipient: str, subject: str, body: str) -> list[dict[str,
                     raise ValueError("incomplete option")
                 # Reject likely truncation instead of letting a partial generated
                 # draft proceed to the send-approval step.
-                if re.search(r"(?:\\b(?:and|or|with|for|to|because|including|such as|the|a|an)|[,;:—-])\\s*$", option_body, re.I):
+                if re.search(r"(?:\b(?:and|or|with|for|to|because|including|such as|the|a|an)|[,;:—-])\s*$", option_body, re.I):
                     raise ValueError("email draft appears truncated")
                 source_body = str(body or "").strip()
                 if len(source_body) >= 500 and len(option_body) < min(int(len(source_body) * 0.65), len(source_body) - 100):
