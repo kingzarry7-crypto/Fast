@@ -17,6 +17,7 @@ export interface ChatMessageProps {
   onSpeak?: () => void;
   onSuggestion?: (text: string) => void;
   suggestions?: string[];
+  webSources?: Array<{ title: string; url: string }>;
   className?: string;
 }
 
