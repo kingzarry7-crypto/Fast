@@ -17,7 +17,10 @@ class TavilyLimitClassificationTests(unittest.TestCase):
     def _search_with_error(self, message):
         with patch.object(tavily_search, "is_tavily_configured", return_value=True), patch.object(
             tavily_search, "get_client", return_value=_FailingClient(message)
-        ), patch.object(tavily_search, "_get_cached", return_value=None):
+        ), patch.object(tavily_search, "_get_cached", return_value=None), patch.object(
+            tavily_search, "_fallback_search",
+            return_value={"success": False, "error": "fallback_unavailable", "results": [], "sources": []}
+        ):
             return tavily_search.search_web("test query")
 
     def test_432_is_plan_limit_not_generic_failure(self):
