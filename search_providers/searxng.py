@@ -53,11 +53,11 @@ def search(query: str, max_results: int = 5) -> dict:
             results, seen = [], set()
             for row in rows:
                 url = str(row.get("url") or "").strip()
-                title = re.sub(r"\\s+", " ", str(row.get("title") or "")).strip()
+                title = re.sub(r"\s+", " ", str(row.get("title") or "")).strip()
                 if not url.startswith(("https://", "http://")) or not title or url in seen:
                     continue
                 seen.add(url)
-                results.append({"title": title[:200], "url": url, "content": re.sub(r"\\s+", " ", str(row.get("content") or "")).strip()[:800], "score": 0, "published_date": ""})
+                results.append({"title": title[:200], "url": url, "content": re.sub(r"\s+", " ", str(row.get("content") or "")).strip()[:800], "score": 0, "published_date": ""})
                 if len(results) >= max(1, min(int(max_results), 10)):
                     break
             if results:
