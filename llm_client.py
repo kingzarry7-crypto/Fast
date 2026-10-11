@@ -28,12 +28,18 @@ def _configured_providers():
     configured = []
     for env, base_url, model_env, default_model in PROVIDERS:
         key = os.getenv(env, "").strip()
+        # Recover a legacy Railway variable created with a trailing space.
+        if not key and env == "GROQ_API_KEY":
+            key = os.getenv("GROQ_API_KEY ", "").strip()
         if not key:
             continue
         name = env.removesuffix("_API_KEY").lower()
         if requested not in ("", "AUTO", "AUTOMATIC") and requested != name.upper():
             continue
-        model = os.getenv(model_env, "").strip() or default_model
+        model = os.getenv(model_env, "").strip()
+        if not model and model_env == "GROQ_MODEL":
+            model = os.getenv("GROQ_MODEL ", "").strip()
+        model = model or default_model
         configured.append((name, key, base_url, model))
     # A pinned provider should be honored rather than silently using another
     # provider. AUTO mode tries every configured provider in order.
