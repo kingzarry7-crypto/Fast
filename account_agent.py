@@ -656,7 +656,7 @@ async def handle_telegram_request(update: Any, text: str) -> Optional[dict[str, 
         verified = bool(result.get("verified"))
         with get_db_cursor(commit=True) as cur:
             cur.execute("UPDATE web_approvals SET status=%s,executed_at=NOW() WHERE id=%s AND status='approved'",
-                        ("executed" if verified else "expired", approval_id))
+                        ("executed" if verified else "unverified", approval_id))
         _audit(user_id, "connector_action_verified" if verified else "connector_action_unverified", operation, target, approval_id)
         if verified:
             evidence = result.get("message") or result.get("event") or result.get("file") or {}
@@ -667,7 +667,7 @@ async def handle_telegram_request(update: Any, text: str) -> Optional[dict[str, 
                 parse_mode="HTML",
             )
             return {"status": "completed", "verified": True, "approval_id": approval_id, "result": result}
-        await update.message.reply_text("⚠️ Google responded, but KZ could not verify the result. It is marked unverified.")
+        await update.message.reply_text("⚠️ Google accepted the send request, but KZ could not verify the exact message in Gmail Sent. It may already have been sent. Do not send it again until you check Sent.")
         return {"status": "unverified", "approval_id": approval_id}
 
     if lower in {"account status", "check connected accounts", "what accounts are connected",
