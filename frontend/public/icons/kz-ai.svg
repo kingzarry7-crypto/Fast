@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="King Zarry AI">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#06172b"/>
+      <stop offset="1" stop-color="#020914"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9af7ff"/>
+      <stop offset="1" stop-color="#00b8e6"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="104" fill="url(#bg)"/>
+  <rect x="22" y="22" width="468" height="468" rx="86" fill="none" stroke="#00d9ff" stroke-opacity=".45" stroke-width="5"/>
+  <path d="M132 130h64v105l103-105h81L261 258l127 124h-85l-107-105v105h-64z" fill="url(#cyan)"/>
+  <circle cx="365" cy="132" r="18" fill="#9af7ff"/>
+  <path d="M111 414h290" stroke="#00d9ff" stroke-width="7" stroke-linecap="round" opacity=".8"/>
+</svg>
