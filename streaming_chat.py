@@ -735,12 +735,22 @@ def install_streaming_chat(
                 if not intent:
                     return await call_next(request)
 
-                return await _handle_connector_chat(
+                connector_response = await _handle_connector_chat(
                     request,
                     message,
                     stream=request.url.path == "/api/chat/stream",
                     requested_conversation_id=str(payload.get("conversation_id") or "").strip() or None,
                 )
+                # Starlette requires every HTTP middleware path to return a
+                # Response. A connector intent can be recognized before the
+                # account agent has enough context to act; in that case, let
+                # the normal chat route handle the message instead of returning
+                # None (which crashes the entire ASGI request with
+                # TypeError: 'NoneType' object is not callable).
+                if connector_response is None:
+                    logger.info("Connector intent had no actionable result; falling back to normal chat")
+                    return await call_next(request)
+                return connector_response
             except HTTPException as exc:
                 return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
             except Exception as exc:
