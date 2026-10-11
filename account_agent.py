@@ -1198,7 +1198,7 @@ def handle_web_request(user_id: str, text: str) -> Optional[dict[str, Any]]:
     # Do not let vague email-send requests fall through to a generic chatbot
     # response (or return None to the HTTP connector middleware). A send must
     # be tied to an explicit recipient and exact message before approval.
-    if re.search(r"\\b(send|email|mail|compose|draft|write)\\b", lower) and not payload:
+    if re.search(r"\b(send|email|mail|compose|draft|write)\b", lower) and not payload:
         try:
             from google_connector import _account
             if not _account(uid):
