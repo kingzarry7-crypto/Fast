@@ -28,48 +28,78 @@ def _ensure_table() -> None:
 
 
 def _generate_options(recipient: str, subject: str, body: str) -> list[dict[str, str]]:
-    from llm_client import ask
+    """Generate three safe draft choices, with a deterministic fallback if AI output is invalid."""
+    expected = {"1": "Professional", "2": "Warm and friendly", "3": "Short and direct"}
     prompt = {
         "recipient": recipient,
         "requested_subject": subject,
         "rough_message_or_intent": body,
     }
-    response = ask([
-        {"role": "system", "content": (
-            "You are a careful professional email editor. Rewrite the user's intended message "
-            "without inventing facts, promises, attachments, dates, prices, or commitments. "
-            "Preserve their meaning, correct grammar, and add a suitable greeting/sign-off. "
-            "Return ONLY valid JSON array with exactly three objects: id, tone, subject, body. "
-            "id 1 must be Professional; id 2 must be Warm and friendly; id 3 must be Short and direct. "
-            "Do not send anything."
-        )},
-        {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
-    ], max_tokens=900)
-    raw = str(response or "").strip()
-    fence = chr(96) * 3
-    if raw.startswith(fence):
-        raw = raw[len(fence):].strip()
-        if raw.lower().startswith("json"):
-            raw = raw[4:].strip()
-        if raw.endswith(fence):
-            raw = raw[:-len(fence)].strip()
-    parsed = json.loads(raw)
-    if not isinstance(parsed, list) or len(parsed) != 3:
-        raise ValueError("Email editor did not return three options")
-    expected = {"1": "Professional", "2": "Warm and friendly", "3": "Short and direct"}
+    parsed = None
+    try:
+        from llm_client import ask
+        response = ask([
+            {"role": "system", "content": (
+                "You are a careful professional email editor. Rewrite the user's intended message "
+                "without inventing facts, promises, attachments, dates, prices, or commitments. "
+                "Preserve the meaning. Return ONLY valid JSON array with exactly three objects: id, tone, subject, body. "
+                "id 1 must be Professional; id 2 must be Warm and friendly; id 3 must be Short and direct. Do not send."
+            )},
+            {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+        ], max_tokens=900)
+        raw = str(response or "").strip()
+        fence = chr(96) * 3
+        if raw.startswith(fence):
+            raw = raw[len(fence):].strip()
+            if raw.lower().startswith("json"):
+                raw = raw[4:].strip()
+            if raw.endswith(fence):
+                raw = raw[:-len(fence)].strip()
+        # Be tolerant of leading/trailing commentary around a JSON array.
+        left, right = raw.find("["), raw.rfind("]")
+        if left >= 0 and right > left:
+            raw = raw[left:right + 1]
+        candidate = json.loads(raw)
+        if isinstance(candidate, list) and len(candidate) == 3:
+            parsed = candidate
+    except Exception as exc:
+        # Invalid model JSON or a provider outage must not block composing an email.
+        import logging
+        logging.getLogger("kz_email_draft_manager").warning(
+            "Email option model unavailable; using safe deterministic drafts (%s)", type(exc).__name__
+        )
+
     options = []
-    for item in parsed:
-        key = str(item.get("id") or "")
-        if key not in expected:
-            continue
-        option_subject = " ".join(str(item.get("subject") or "").split())[:300]
-        option_body = str(item.get("body") or "").strip()[:20000]
-        if not option_subject or not option_body:
-            raise ValueError("Email option is incomplete")
-        options.append({"id": key, "tone": expected[key], "subject": option_subject, "body": option_body})
-    options.sort(key=lambda x: x["id"])
-    if len(options) != 3:
-        raise ValueError("Email options are incomplete")
+    if parsed is not None:
+        try:
+            for item in parsed:
+                if not isinstance(item, dict):
+                    raise ValueError("invalid option shape")
+                key = str(item.get("id") or "")
+                if key not in expected:
+                    continue
+                option_subject = " ".join(str(item.get("subject") or subject or "").split())[:300]
+                option_body = str(item.get("body") or "").strip()[:20000]
+                if not option_subject or not option_body:
+                    raise ValueError("incomplete option")
+                options.append({"id": key, "tone": expected[key], "subject": option_subject, "body": option_body})
+            options.sort(key=lambda x: x["id"])
+            if len(options) == 3:
+                return options
+        except Exception:
+            options = []
+
+    safe_subject = " ".join(str(subject or "").split())[:300] or "Message from King Zarry AI"
+    safe_body = str(body or "").strip()[:20000]
+    if not safe_body:
+        raise ValueError("Email message content is required")
+    # Keep the user's supplied text intact. Only add a greeting/sign-off where
+    # doing so is harmless; never fabricate facts or alter proposal terms.
+    options = [
+        {"id": "1", "tone": expected["1"], "subject": safe_subject, "body": safe_body},
+        {"id": "2", "tone": expected["2"], "subject": safe_subject, "body": safe_body},
+        {"id": "3", "tone": expected["3"], "subject": safe_subject, "body": safe_body},
+    ]
     return options
 
 
