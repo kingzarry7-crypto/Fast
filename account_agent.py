@@ -520,13 +520,36 @@ def _monitor_rows() -> list[dict[str, Any]]:
 
 
 def _monitor_gmail(user_id: str, previous: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Baseline the current Inbox once, then return only newly arrived messages."""
     from google_connector import _execute
-    result = _execute(user_id, "list_gmail", {"query": "is:unread newer_than:1d", "limit": 20})
+    from gmail_intelligence import enrich_email
+
+    result = _execute(user_id, "list_gmail", {"query": "in:inbox", "limit": 50})
     messages = result.get("messages") or []
-    previous_ids = set(previous.get("message_ids") or [])
-    current_ids = [str(x.get("id") or "") for x in messages if x.get("id")]
-    new_items = [x for x in messages if str(x.get("id") or "") not in previous_ids]
-    return {"message_ids": current_ids[:50]}, new_items
+    current_ids = [str(item.get("id") or "") for item in messages if item.get("id")]
+    prior_ids = [str(value) for value in (previous.get("message_ids") or []) if value]
+    prior_set = set(prior_ids)
+
+    # A fresh monitor must not treat existing unread mail as new arrivals.
+    if not previous.get("baseline_initialized"):
+        return {
+            "baseline_initialized": True,
+            "message_ids": current_ids[:500],
+            "consecutive_failures": 0,
+            "monitoring_status": "ok",
+        }, []
+
+    new_items = [
+        enrich_email(item) for item in messages
+        if item.get("id") and str(item.get("id")) not in prior_set
+    ]
+    merged_ids = list(dict.fromkeys(current_ids + prior_ids))[:500]
+    return {
+        "baseline_initialized": True,
+        "message_ids": merged_ids,
+        "consecutive_failures": 0,
+        "monitoring_status": "ok",
+    }, new_items
 
 
 def monitor_tick() -> list[dict[str, Any]]:
