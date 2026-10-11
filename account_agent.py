@@ -1424,76 +1424,87 @@ async def morning_telegram_digest(bot: Any) -> dict[str, int]:
 
 
 async def account_monitor_job(context: Any) -> None:
-    """Background account watcher: immediate daytime feedback, morning buffering during sleep."""
+    """Persist account events and retry channel delivery from the durable queue."""
     try:
-        events = await _run_sync(monitor_tick)
-        if not events:
+        await _run_sync(monitor_tick)
+        if _sleeping():
             return
+
         from neon_memory import NeonMemory
+        from account_notifications import (
+            pending_account_notifications,
+            mark_account_notification_delivered,
+        )
         mem = NeonMemory()
         with mem.lock:
             conn = mem._connect()
             try:
                 cur = conn.cursor()
-                cur.execute("SELECT platform,external_id,user_id FROM kz_memory_identities WHERE platform='telegram'")
+                cur.execute(
+                    "SELECT external_id,user_id FROM kz_memory_identities WHERE platform='telegram'"
+                )
                 identities = cur.fetchall() or []
             finally:
                 conn.close()
-        targets = {}
-        for row in identities:
-            raw_user = str(row[2] or "")
-            if raw_user.startswith("web:"):
-                raw_user = raw_user[4:]
-            targets[raw_user] = str(row[1])
-        for event in events:
-            if event.get("sleep_buffered"):
-                continue
-            chat_id = targets.get(str(event.get("user_id") or ""))
-            if not chat_id:
-                continue
-            event_type = str(event.get("type") or "")
-            if event_type in ("gmail_access_revoked", "gmail_monitor_failed", "gmail_monitor_recovered"):
-                title = {
-                    "gmail_access_revoked": "🔐 GMAIL ACCESS NEEDS ATTENTION",
-                    "gmail_monitor_failed": "⚠️ GMAIL MONITORING IS FAILING",
-                    "gmail_monitor_recovered": "✅ GMAIL MONITORING RESUMED",
-                }.get(event_type, "GMAIL MONITOR STATUS")
-                detail = html_escape(event.get("reason") or (
-                    "Monitoring has resumed and a successful check completed."
-                    if event_type == "gmail_monitor_recovered" else
-                    "KZ will retry the next scheduled check."
-                ))
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=f"<b>{title}</b>\n\n{detail}",
-                    parse_mode="HTML",
-                )
-                continue
 
-            high = event.get("high") or []
-            medium = event.get("medium") or []
-            low = event.get("low") or []
-            from gmail_intelligence import format_email_alert, format_email_digest
-            for item in high:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=html_escape(format_email_alert(item)),
-                    parse_mode="HTML",
-                )
-            for item in medium:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=html_escape(format_email_alert(item)),
-                    parse_mode="HTML",
-                )
-            if low:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=html_escape(format_email_digest(low)),
-                    parse_mode="HTML",
-                )
+        targets: dict[str, list[str]] = {}
+        for row in identities:
+            external_id = str(row[0] or "")
+            user_id = str(row[1] or "")
+            if user_id.startswith("web:"):
+                user_id = user_id[4:]
+            if user_id and external_id:
+                targets.setdefault(user_id, []).append(external_id)
+
+        for user_id, chat_ids in targets.items():
+            items = await _run_sync(pending_account_notifications, user_id, "telegram", 10)
+            for item in items:
+                payload = item.get("payload") or {}
+                event_type = str(item.get("event_type") or payload.get("type") or "")
+                if event_type in {
+                    "gmail_access_revoked", "gmail_monitor_failed", "gmail_monitor_recovered"
+                }:
+                    title = {
+                        "gmail_access_revoked": "🔐 GMAIL ACCESS NEEDS ATTENTION",
+                        "gmail_monitor_failed": "⚠️ GMAIL MONITORING IS FAILING",
+                        "gmail_monitor_recovered": "✅ GMAIL MONITORING RESUMED",
+                    }.get(event_type, "GMAIL MONITOR STATUS")
+                    message_text = title + "\n\n" + str(
+                        payload.get("reason") or "Check King Zarry AI for the latest account status."
+                    )
+                elif event_type == "new_gmail":
+                    from gmail_intelligence import format_email_alert, format_email_digest
+                    high = payload.get("high") or []
+                    medium = payload.get("medium") or []
+                    low = payload.get("low") or []
+                    blocks = [format_email_alert(x) for x in (high + medium)[:5]]
+                    if low:
+                        blocks.append(format_email_digest(low))
+                    message_text = "\n\n".join(blocks) or (
+                        f"KZ detected {int(payload.get('count') or 0)} new Gmail message(s). "
+                        "Open King Zarry AI to review."
+                    )
+                else:
+                    message_text = "King Zarry AI account-monitor update: " + (event_type or "status update")
+
+                delivered = False
+                for chat_id in chat_ids:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=chat_id, text=message_text[:3900]
+                        )
+                        delivered = True
+                    except Exception as exc:
+                        logger.warning(
+                            "Account notification Telegram delivery failed: %s",
+                            type(exc).__name__,
+                        )
+                if delivered:
+                    await _run_sync(
+                        mark_account_notification_delivered, str(item["id"]), "telegram"
+                    )
     except Exception as exc:
-        logger.warning("Account monitor job failed: %s", exc)
+        logger.warning("Account monitor job failed: %s", type(exc).__name__)
 
 
 
