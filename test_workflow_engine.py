@@ -57,6 +57,17 @@ class WorkflowOutcomeTests(unittest.TestCase):
         self.assertEqual(result['outcome_status'], 'unverified')
         self.assertFalse(result['verified'])
 
+    def test_verified_flag_with_empty_evidence_entries_is_not_verified(self):
+        item = {'plan': [
+            {'action': 'external_action', 'status': 'completed', 'output': {'success': True}},
+            {'action': 'browser_verify', 'status': 'completed', 'output': {
+                'success': True, 'verified': True, 'verification_status': 'verified_sent',
+                'evidence': ['', {}, None]}},
+        ], 'result': {}}
+        result = _outcome_verification(item)
+        self.assertEqual(result['outcome_status'], 'unverified')
+        self.assertFalse(result['verified'])
+
     def test_non_external_workflow_does_not_require_delivery_evidence(self):
         result = _outcome_verification({'plan': [{'action': 'research_goal', 'output': {'success': True}}], 'result': {}})
         self.assertEqual(result['outcome_status'], 'not_required')
