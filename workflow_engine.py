@@ -410,6 +410,39 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
     return {"success": False, "error": f"No executor is registered for action '{action}'. The task was not executed.", "execution_status": "blocked_no_adapter"}
 
 
+def _outcome_verification(item: Dict[str, Any]) -> Dict[str, Any]:
+    """Report evidence confidence separately from workflow step completion."""
+    plan = item.get("plan") or []
+    consequential = [step for step in plan if step.get("action") in {"external_action", "browser_execute"}]
+    if not consequential:
+        return {"outcome_status": "not_required", "verified": True, "evidence": []}
+
+    for step in plan:
+        output = step.get("output") or {}
+        verification = output.get("verification") or {}
+        status = str(output.get("verification_status") or verification.get("verification_status") or "").lower()
+        proof = output.get("evidence") or verification.get("evidence") or []
+        if (
+            (output.get("verified") is True or verification.get("verified") is True or status in {
+                "verified_sent", "verified_completed", "verified_published"
+            })
+            and isinstance(proof, list)
+            and len(proof) > 0
+        ):
+            return {
+                "outcome_status": "verified",
+                "verified": True,
+                "evidence": proof[:20],
+            }
+
+    return {
+        "outcome_status": "unverified",
+        "verified": False,
+        "evidence": [],
+        "note": "Workflow steps finished, but external outcome evidence was not available.",
+    }
+
+
 def run_workflow(workflow_id: str, user_id: str) -> Dict[str, Any]:
     item = get_workflow(workflow_id, user_id)
     if not item:
@@ -417,7 +450,7 @@ def run_workflow(workflow_id: str, user_id: str) -> Dict[str, Any]:
 
     with _LOCK:
         item = get_workflow(workflow_id, user_id) or item
-        if item["status"] in {WorkflowStatus.COMPLETED.value, WorkflowStatus.FAILED.value}:
+        if item["status"] in {WorkflowStatus.COMPLETED.value, WorkflowStatus.FAILED.value, WorkflowStatus.PAUSED.value}:
             return item
 
         # Crash recovery must be conservative. A RUNNING step may have
@@ -522,6 +555,7 @@ def run_workflow(workflow_id: str, user_id: str) -> Dict[str, Any]:
 
         _update(item, WorkflowStatus.COMPLETED.value)
         item["result"]["completed_at"] = _now()
+        item["result"]["outcome_verification"] = _outcome_verification(item)
         save_workflow(item)
         add_event(item["id"], item["user_id"], "workflow_completed", {"potential_revenue": item.get("potential_revenue", 0)})
         return item

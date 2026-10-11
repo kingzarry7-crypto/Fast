@@ -1,5 +1,7 @@
 import unittest
-from workflow_engine import plan_goal
+from unittest.mock import patch
+
+from workflow_engine import plan_goal, run_workflow, _outcome_verification
 class WorkflowPlannerTests(unittest.TestCase):
     def test_revenue_goal_requires_approval(self):
         plan = plan_goal('wf', 'user', 'Find me legitimate website clients this week')
@@ -21,4 +23,53 @@ class WorkflowPlannerTests(unittest.TestCase):
     def test_general_goal_has_approval_step(self):
         plan = plan_goal('wf', 'user', 'Help me launch my new service')
         self.assertTrue(plan['requires_approval'])
+
+class WorkflowOutcomeTests(unittest.TestCase):
+    def test_external_action_without_evidence_is_unverified(self):
+        item = {'plan': [
+            {'action': 'external_action', 'status': 'completed', 'output': {'success': True, 'action': {'status': 'completed'}}},
+            {'action': 'verify', 'status': 'completed', 'output': {'success': True, 'verified': False, 'verification_status': 'not_verified'}},
+        ], 'result': {}}
+        result = _outcome_verification(item)
+        self.assertEqual(result['outcome_status'], 'unverified')
+        self.assertFalse(result['verified'])
+
+    def test_explicit_provider_evidence_verifies_external_outcome(self):
+        item = {'plan': [
+            {'action': 'external_action', 'status': 'completed', 'output': {'success': True}},
+            {'action': 'browser_verify', 'status': 'completed', 'output': {
+                'success': True, 'verified': True, 'verification_status': 'verified_sent',
+                'evidence': [{'source': 'provider'}]}},
+        ], 'result': {}}
+        result = _outcome_verification(item)
+        self.assertEqual(result['outcome_status'], 'verified')
+        self.assertTrue(result['verified'])
+
+
+    def test_verified_flag_without_evidence_is_not_verified(self):
+        item = {'plan': [
+            {'action': 'external_action', 'status': 'completed', 'output': {'success': True}},
+            {'action': 'browser_verify', 'status': 'completed', 'output': {
+                'success': True, 'verified': True, 'verification_status': 'verified_sent',
+                'evidence': []}},
+        ], 'result': {}}
+        result = _outcome_verification(item)
+        self.assertEqual(result['outcome_status'], 'unverified')
+        self.assertFalse(result['verified'])
+
+    def test_non_external_workflow_does_not_require_delivery_evidence(self):
+        result = _outcome_verification({'plan': [{'action': 'research_goal', 'output': {'success': True}}], 'result': {}})
+        self.assertEqual(result['outcome_status'], 'not_required')
+        self.assertTrue(result['verified'])
+
+    def test_paused_workflow_never_resumes_external_steps_implicitly(self):
+        item = {'id': 'wf-paused', 'user_id': 'u1', 'goal': 'send approved message',
+                'status': 'paused', 'plan': [{'action': 'external_action', 'status': 'skipped'}],
+                'result': {}, 'context': {}}
+        with patch('workflow_engine.get_workflow', return_value=item):
+            with patch('workflow_engine._execute_step') as execute:
+                result = run_workflow('wf-paused', 'u1')
+        self.assertEqual(result['status'], 'paused')
+        execute.assert_not_called()
+
 if __name__ == '__main__': unittest.main()
