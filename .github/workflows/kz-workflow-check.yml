@@ -41,6 +41,8 @@ on:
       - "ai_engine.py"
       - "email_draft_safety.py"
       - "test_email_draft_safety.py"
+      - "google_connector.py"
+      - "account_agent.py"
       - "workflow_api.py"
       - "workflow_scheduler.py"
       - "reliability_guardian.py"
