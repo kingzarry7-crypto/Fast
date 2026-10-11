@@ -38,9 +38,7 @@ GITHUB_AUTHORIZE = "https://github.com/login/oauth/authorize"
 GITHUB_TOKEN = "https://github.com/login/oauth/access_token"
 GITHUB_API = "https://api.github.com"
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://kingzarry.bid").rstrip("/")
-# Production frontend origins. The custom domain is now supported alongside the
-# existing workers.dev/Vercel hosts so OAuth can return to whichever host
-# actually started the flow.
+# Production frontend origins. OAuth returns only to trusted Cloudflare/custom-domain hosts.
 FRONTEND_CUSTOM_DOMAIN = "kingzarry.bid"
 FRONTEND_CUSTOM_ORIGINS = {
     "https://kingzarry.bid",
@@ -173,7 +171,6 @@ def _is_allowed_frontend_origin(value: str) -> bool:
         return False
     if origin in {
         FRONTEND_URL,
-        "https://fast-a84x.vercel.app",
         "https://fast.kingzarry7.workers.dev",
         *FRONTEND_CUSTOM_ORIGINS,
     }:
