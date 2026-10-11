@@ -29,6 +29,7 @@ import os
 import re
 import hashlib
 import logging
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any, Tuple, Set
 import requests
@@ -924,6 +925,9 @@ class NewsEngineSingleton:
     def __init__(self):
         self.cache: Dict[str, Any] = {}
         self.cache_expiry: Dict[str, datetime] = {}
+        # Requests for different assets can arrive simultaneously. Protect the
+        # shared cache and provider fallback chain from cache-miss stampedes.
+        self._cache_lock = threading.RLock()
         self.news_providers: Dict[str, BaseNewsProvider] = {"currents": CurrentsProvider(), "newsdata": NewsDataProvider(), "newsapi": NewsAPIProvider(), "eodhd": EODHDNewsProvider()}
         NewsEngineSingleton._instance = self
         logger.info(f"NewsEngine init: NEWS={NEWS_PROVIDER} CAL={CALENDAR_PROVIDER}")
@@ -1065,6 +1069,13 @@ class NewsEngineSingleton:
         return filtered
 
     def get_news_for_asset(self, asset: str) -> Dict[str, Any]:
+        # Serialize cache misses so a five-symbol dashboard refresh does not
+        # trigger five concurrent calendar-provider fallbacks and duplicate
+        # requests against rate-limited headline providers.
+        with self._cache_lock:
+            return self._get_news_for_asset_locked(asset)
+
+    def _get_news_for_asset_locked(self, asset: str) -> Dict[str, Any]:
         cache_key = f"asset_news_{asset}_{NEWS_PROVIDER}_{CALENDAR_PROVIDER}"
         if self._is_cache_valid(cache_key):
             return self.cache[cache_key]
