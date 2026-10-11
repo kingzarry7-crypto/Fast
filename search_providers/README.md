@@ -1,23 +1,23 @@
 # King Zarry AI search providers
 
-All adapters normalize results to `{title, url, content, score, published_date}` and are isolated so a failing provider does not stop the next one.
+All adapters normalize results to `{title, url, content, score, published_date}` and are isolated so a provider failure does not stop the next one.
 
-## Runtime order
+## Actual runtime fallback order
 
-1. Tavily — primary provider, uses `TAVILY_API_KEY`.
-2. Brave Search — optional paid/free-tier API, uses `BRAVE_SEARCH_API_KEY`.
-3. Serper (Google results) — optional API, uses `SERPER_API_KEY`.
-4. SearXNG — optional self-hosted/public instance list, uses `SEARXNG_URLS` (comma-separated HTTPS base URLs).
-5. DuckDuckGo HTML — keyless best-effort final fallback; it is unofficial and can be throttled or blocked.
+1. **Tavily** — primary provider; `TAVILY_API_KEY`.
+2. **Brave Search** — optional; `BRAVE_SEARCH_API_KEY`.
+3. **Serper / Google results** — optional; `SERPER_API_KEY`.
+4. **SearXNG** — optional self-hosted/public instance list; `SEARXNG_URLS` (comma-separated HTTPS base URLs).
+5. **DuckDuckGo HTML** — keyless best-effort final fallback; it is unofficial and may be throttled or blocked.
 
-Tavily quota/rate failures trigger the same fallback chain. Search results are best-effort, not guaranteed to be complete or current; the caller should cite actual returned URLs only.
+The router skips providers that are not configured, return no usable results, or fail due to quota/rate limits, timeouts, or provider errors. Tavily quota/rate failures trigger the same fallback chain. Results are best-effort; the caller should cite only URLs actually returned by a provider.
 
 ## Railway environment
 
-Already-used variables: `TAVILY_API_KEY`, `TAVILY_MAX_RESULTS`, `TAVILY_TIMEOUT`, `SEARXNG_URLS`, `WEB_RESEARCH_TIMEOUT`.
+Already used by the application: `TAVILY_API_KEY`, `TAVILY_MAX_RESULTS`, `TAVILY_TIMEOUT`, `SEARXNG_URLS`, `WEB_RESEARCH_TIMEOUT`.
 
-Optional additions:
-- `BRAVE_SEARCH_API_KEY`: add a key from Brave Search API if you choose to enable that provider.
-- `SERPER_API_KEY`: add a key from Serper if you choose to enable that provider.
+Optional additions (only if you have these provider accounts/keys):
+- `BRAVE_SEARCH_API_KEY`: a Brave Search API key. If absent, Brave is skipped automatically.
+- `SERPER_API_KEY`: a Serper API key. If absent, Serper is skipped automatically.
 
-No API key is required for DuckDuckGo, but it is a best-effort HTML fallback and may fail under bot protection. Do not paste secrets into source files or commit them. A blank or missing optional key safely disables its provider.
+No key is required for DuckDuckGo. It is a best-effort fallback, not a guaranteed service. Do not paste secrets into source files or commit them. Empty/missing optional keys safely disable their provider.
