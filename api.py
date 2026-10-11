@@ -1600,8 +1600,10 @@ async def chat_endpoint(request: Request, chat: ChatRequest):
         return {"status": "success", "reply": response_text, "conversation_id": conversation_id}
     except HTTPException:
         raise
-    except Exception as exc:
-        logger.error("Web chat failed: %s", type(exc).__name__)
+    except Exception:
+        # Preserve the safe client-facing error while recording the traceback
+        # in Railway so intermittent HTTP 500s can be diagnosed accurately.
+        logger.exception("Web chat failed")
         raise HTTPException(status_code=500, detail="AI processing failed")
 
 
