@@ -411,35 +411,48 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _outcome_verification(item: Dict[str, Any]) -> Dict[str, Any]:
-    """Report evidence confidence separately from workflow step completion."""
+    """Report verified outcomes only when explicit verification has meaningful evidence."""
     plan = item.get("plan") or []
-    consequential = [step for step in plan if step.get("action") in {"external_action", "browser_execute"}]
+    consequential = [
+        step for step in plan
+        if step.get("action") in {"external_action", "browser_execute"}
+    ]
     if not consequential:
         return {"outcome_status": "not_required", "verified": True, "evidence": []}
 
     for step in plan:
         output = step.get("output") or {}
         verification = output.get("verification") or {}
-        status = str(output.get("verification_status") or verification.get("verification_status") or "").lower()
+        status = str(
+            output.get("verification_status")
+            or verification.get("verification_status")
+            or ""
+        ).lower()
         proof = output.get("evidence") or verification.get("evidence") or []
-        if (
-            (output.get("verified") is True or verification.get("verified") is True or status in {
-                "verified_sent", "verified_completed", "verified_published"
-            })
-            and isinstance(proof, list)
-            and len(proof) > 0
-        ):
+        if not isinstance(proof, list):
+            continue
+        meaningful_proof = [
+            entry for entry in proof
+            if (isinstance(entry, dict) and bool(entry))
+            or (isinstance(entry, str) and bool(entry.strip()))
+        ]
+        explicitly_verified = (
+            output.get("verified") is True
+            or verification.get("verified") is True
+            or status in {"verified_sent", "verified_completed", "verified_published"}
+        )
+        if explicitly_verified and meaningful_proof:
             return {
                 "outcome_status": "verified",
                 "verified": True,
-                "evidence": proof[:20],
+                "evidence": meaningful_proof[:20],
             }
 
     return {
         "outcome_status": "unverified",
         "verified": False,
         "evidence": [],
-        "note": "Workflow steps finished, but external outcome evidence was not available.",
+        "note": "Workflow steps finished, but meaningful external-outcome evidence was not available.",
     }
 
 
