@@ -537,6 +537,7 @@ def _monitor_gmail(user_id: str, previous: dict[str, Any]) -> tuple[dict[str, An
             "message_ids": current_ids[:500],
             "consecutive_failures": 0,
             "monitoring_status": "ok",
+            "failure_alert_sent": False,
         }, []
 
     new_items = [
@@ -549,6 +550,7 @@ def _monitor_gmail(user_id: str, previous: dict[str, Any]) -> tuple[dict[str, An
         "message_ids": merged_ids,
         "consecutive_failures": 0,
         "monitoring_status": "ok",
+        "failure_alert_sent": False,
     }, new_items
 
 
@@ -615,7 +617,7 @@ def monitor_tick() -> list[dict[str, Any]]:
                     )
             except Exception as persist_exc:
                 logger.warning("Could not persist account monitor failure: %s", type(persist_exc).__name__)
-            should_alert = auth_revoked or (failures >= 3 and not state.get("failure_alert_sent"))
+            should_alert = not state.get("failure_alert_sent") and (auth_revoked or failures >= 3)
             if should_alert:
                 events.append({
                     "user_id": user_id, "provider": "google",
