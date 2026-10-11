@@ -61,7 +61,7 @@ export default function InstallApp() {
   return (
     <div className="fixed bottom-4 left-1/2 z-[100] w-[calc(100%-20px)] max-w-md -translate-x-1/2 rounded-2xl border border-cyan-400/30 bg-[#020914]/[.97] p-3 shadow-2xl backdrop-blur-xl">
       <div className="flex items-center gap-3">
-        <img src="/icon.svg" alt="KING ZARRY AI" className="h-11 w-11 shrink-0 rounded-xl border border-cyan-400/30" />
+        <img src="/icons/kz-ai.svg" alt="KING ZARRY AI" className="h-11 w-11 shrink-0 rounded-xl border border-cyan-400/30" />
         <div className="min-w-0 flex-1">
           <div className="font-mono-tech text-[10px] tracking-widest text-cyan-300">KING ZARRY AI APP</div>
           <div className="mt-0.5 text-[11px] text-zinc-400">
@@ -83,7 +83,7 @@ export default function InstallApp() {
       ) : (
         <div className="mt-3 rounded-xl border border-cyan-400/15 bg-cyan-400/5 p-3 text-[10px] leading-relaxed text-zinc-300">
           <b className="text-cyan-300">Android / Chrome:</b> open the browser <b>⋮</b> menu → <b>Install app</b> or <b>Add to Home screen</b>.
-          <div className="mt-1 text-zinc-500">The app must be opened from the HTTPS Vercel site for installation to be available.</div>
+          <div className="mt-1 text-zinc-500">Open the secure King Zarry AI website in your browser to install the app.</div>
         </div>
       )}
     </div>
