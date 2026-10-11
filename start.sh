@@ -1,6 +1,28 @@
 #!/bin/bash
 set -e
 
+# Normalize legacy Railway environment-variable names that were accidentally
+# created with a trailing space. Never print values; only report the variable name.
+normalize_legacy_env() {
+  local target="$1"
+  local legacy="$2"
+  local current_value
+  current_value="$(printenv "$target" 2>/dev/null || true)"
+  if [ -z "$current_value" ]; then
+    local legacy_value
+    legacy_value="$(printenv "$legacy" 2>/dev/null || true)"
+    if [ -n "$legacy_value" ]; then
+      export "$target=$legacy_value"
+      echo "   → Normalized legacy environment variable name: $target"
+    fi
+  fi
+}
+normalize_legacy_env "GROQ_API_KEY" "GROQ_API_KEY "
+normalize_legacy_env "GROQ_MODEL" "GROQ_MODEL "
+normalize_legacy_env "ELEVENLABS_API_KEY" "ELEVENLABS_API_KEY "
+normalize_legacy_env "ELEVENLABS_MODEL_ID" "ELEVENLABS_MODEL_ID "
+normalize_legacy_env "FAL_KEY" "FAL_KEY "
+
 echo "═══════════════════════════════════════════════════════════════"
 echo "👑 KING ZARRY AI — STARTING FULL STACK"
 echo "═══════════════════════════════════════════════════════════════"
