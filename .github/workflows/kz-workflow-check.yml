@@ -33,6 +33,11 @@ on:
       - "frontend/**"
   pull_request:
     paths:
+      - "account_agent.py"
+      - "account_notifications.py"
+      - "gmail_intelligence.py"
+      - "test_account_notifications.py"
+      - "test_gmail_intelligence.py"
       - "frontend/**"
       - "web_research_engine.py"
       - "test_web_research_engine.py"
@@ -83,9 +88,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Compile workflow modules
-        run: python -m py_compile account_agent.py account_notifications.py gmail_intelligence.py workflow_models.py workflow_store.py workflow_engine.py workflow_api.py workflow_scheduler.py reliability_guardian.py learning_loop.py revenue_engine.py channel_work.py work_intent.py api.py browser_operator.py browser_api.py connector_api.py job_outreach_agent.py test_browser_operator.py test_job_outreach_agent.py test_workflow_engine.py bot.py discord_bot.py web_research_engine.py test_web_research_engine.py
+        run: python -m py_compile account_agent.py account_notifications.py gmail_intelligence.py test_account_notifications.py test_gmail_intelligence.py workflow_models.py workflow_store.py workflow_engine.py workflow_api.py workflow_scheduler.py reliability_guardian.py learning_loop.py revenue_engine.py channel_work.py work_intent.py api.py browser_operator.py browser_api.py connector_api.py job_outreach_agent.py test_browser_operator.py test_job_outreach_agent.py test_workflow_engine.py bot.py discord_bot.py web_research_engine.py test_web_research_engine.py
       - name: Run workflow tests with coverage
         run: |
           python -m pip install --disable-pip-version-check coverage requests
-          coverage run -m unittest test_gmail_intelligence.py test_workflow_engine.py test_work_intent.py test_delivery_agent.py test_business_dashboard.py test_workflow_scheduler.py test_learning_loop.py test_reliability_guardian.py test_browser_operator.py test_job_outreach_agent.py test_web_research_engine.py
+          coverage run -m unittest test_account_notifications.py test_gmail_intelligence.py test_workflow_engine.py test_work_intent.py test_delivery_agent.py test_business_dashboard.py test_workflow_scheduler.py test_learning_loop.py test_reliability_guardian.py test_browser_operator.py test_job_outreach_agent.py test_web_research_engine.py
           coverage report -m
