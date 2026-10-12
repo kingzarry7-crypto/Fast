@@ -39,7 +39,7 @@ KNOWN_PROVIDERS = {
     "chutes": ("Chutes", ["CHUTES_API_KEY"], ["text_ai", "model_routing"], "native", "OpenAI-compatible text fallback is wired into AIEngine; model is controlled by CHUTES_MODEL."),
     "gemini": ("Google Gemini", ["GEMINI_API_KEY"], ["text_ai", "vision_ai"], "native", "Already wired into AIEngine."),
     "xai": ("xAI", ["XAI_API_KEY"], ["text_ai"], "adapter_pending", "Needs a native xAI adapter/provider mapping before direct use."),
-    "openai": ("OpenAI", ["OPENAI_API_KEY"], ["text_ai", "vision_ai"], "adapter_pending", "Needs a native OpenAI adapter/provider mapping before direct use."),
+    "openai": ("OpenAI", ["OPENAI_API_KEY"], ["text_ai", "vision_ai"], "native", "Direct OpenAI Chat Completions adapter is wired into AIEngine and the streaming chat provider chain; provider selection and model availability still depend on valid Railway environment settings."),
     "elevenlabs": ("ElevenLabs", ["ELEVENLABS_API_KEY"], ["text_to_speech", "voice"], "native", "Voice/TTS capability is already represented in the app."),
     "tavily": ("Tavily", ["TAVILY_API_KEY"], ["web_search"], "native", "Web-search capability is already represented in the app."),
     "newsapi": ("NewsAPI", ["NEWSAPI_API_KEY", "NEWS_API_KEY"], ["news"], "native", "News provider is already represented in news.py."),
