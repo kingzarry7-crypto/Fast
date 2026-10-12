@@ -118,3 +118,43 @@ def kitty_gold_features(timeframe: str = Query(default="15m", pattern="^(1m|5m|1
             status_code=503,
             detail="Live gold feature extraction failed: " + type(exc).__name__ + ": " + str(exc)[:180],
         )
+
+
+@router.get("/market-predict")
+def kitty_market_predict(
+    symbol: str = Query(default="BTC/USDT", pattern="^(BTC/USDT|BTC/USD)$"),
+):
+    """Run experimental Kitty V3 inference on live daily BTC candles.
+
+    The packaged metadata does not record the training symbol, so this endpoint
+    is an inference smoke test and must not be presented as a validated signal.
+    """
+    try:
+        from market import get_candles
+        candles = get_candles(symbol, timeframe="1d", outputsize=150)
+        features = _gold_features(candles)
+        prediction = kitty_v3.predict_features(features)
+        return {
+            "symbol": symbol,
+            "timeframe": "1d",
+            "candle_count": len(candles),
+            "latest_candle_time": candles[-1].get("datetime"),
+            "prediction_available": True,
+            "prediction_mode": "experimental_unvalidated",
+            "training_symbol_confirmed": False,
+            "features": {key: round(value, 8) for key, value in features.items()},
+            "prediction": prediction,
+            "warning": (
+                "Kitty V3 produced an inference from live daily BTC candles, but its "
+                "training metadata does not identify the training symbol. Treat this "
+                "as an experimental model test, not a validated trading signal. "
+                "No trades are placed."
+            ),
+            "trading_enabled": False,
+            "source": "market.get_candles (configured live crypto providers)",
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Live market inference failed: " + type(exc).__name__ + ": " + str(exc)[:180],
+        )
