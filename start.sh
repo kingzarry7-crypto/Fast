@@ -23,7 +23,7 @@ normalize_legacy_env "ELEVENLABS_API_KEY" "ELEVENLABS_API_KEY "
 normalize_legacy_env "ELEVENLABS_MODEL_ID" "ELEVENLABS_MODEL_ID "
 normalize_legacy_env "FAL_KEY" "FAL_KEY "
 
-echo "═══════��═══════════════════════════════════════════════════════"
+echo "═══════════════════════════════════════════════════════════════"
 echo "👑 KING ZARRY AI — STARTING FULL STACK"
 echo "═══════════════════════════════════════════════════════════════"
 
@@ -101,6 +101,7 @@ except Exception as e:
     print(f"⚠️ Browser runtime check failed: {type(e).__name__}: {e}")
 PY
 fi
+
 # ------------------------------------------------------------------
 # 1) FastAPI HTTP server (Railway backend API)
 # ------------------------------------------------------------------
@@ -109,12 +110,41 @@ uvicorn api:app --host 0.0.0.0 --port "${PORT}" --workers 1 &
 API_PID=$!
 echo "   → FastAPI PID: ${API_PID}"
 
-sleep 3
+wait_for_api() {
+  local max_attempts=60
+  local attempt=0
+  while [ "$attempt" -lt "$max_attempts" ]; do
+    if ! kill -0 "${API_PID}" 2>/dev/null; then
+      echo "❌ FastAPI exited before becoming healthy."
+      exit 1
+    fi
 
-if ! kill -0 "${API_PID}" 2>/dev/null; then
-  echo "❌ FastAPI failed to start. Exiting."
+    if python - "$PORT" <<'PY'
+import json, sys, urllib.request
+port = sys.argv[1]
+url = f"http://127.0.0.1:{port}/health"
+try:
+    with urllib.request.urlopen(url, timeout=2) as resp:
+        body = resp.read().decode("utf-8", errors="replace")
+        print(body)
+        raise SystemExit(0 if resp.status == 200 else 1)
+except Exception:
+    raise SystemExit(1)
+PY
+    then
+      echo "✅ FastAPI /health check passed."
+      return 0
+    fi
+
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+
+  echo "❌ FastAPI never became healthy on http://127.0.0.1:${PORT}/health"
   exit 1
-fi
+}
+
+wait_for_api
 
 # ------------------------------------------------------------------
 # 2) Telegram + Discord bot
@@ -150,18 +180,22 @@ echo "════════════════════════�
 echo "✅ Services launched. Monitoring..."
 echo "═══════════════════════════════════════════════════════════════"
 
-monitor_service() {
-  local label="$1"
-  local pid="$2"
-  local cmd="$3"
-  if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
-    echo "⚠️ ${label} exited unexpectedly. Restarting..."
-    bash -c "$cmd" &
-    echo $!
-  fi
+health_check_api() {
+  python - "$PORT" <<'PY'
+import sys, urllib.request
+port = sys.argv[1]
+url = f"http://127.0.0.1:{port}/health"
+try:
+    with urllib.request.urlopen(url, timeout=2) as resp:
+        if resp.status == 200:
+            print(f"API health check ok: {resp.status}")
+            raise SystemExit(0)
+except Exception:
+    pass
+raise SystemExit(1)
+PY
 }
 
-# Keep the API alive at all costs; bot failures should not bring down the web service.
 while true; do
   if ! kill -0 "${API_PID}" 2>/dev/null; then
     echo "⚠️ FastAPI exited unexpectedly. Shutting down bot processes..."
@@ -169,6 +203,10 @@ while true; do
     if [ -n "${DISCORD_PID:-}" ]; then kill "${DISCORD_PID}" 2>/dev/null || true; fi
     wait 2>/dev/null || true
     exit 1
+  fi
+
+  if ! health_check_api; then
+    echo "⚠️ FastAPI health endpoint is failing. Keeping process alive but logging degraded state."
   fi
 
   if [ -n "${BOT_PID:-}" ] && ! kill -0 "${BOT_PID}" 2>/dev/null; then
