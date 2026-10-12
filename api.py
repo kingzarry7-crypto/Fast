@@ -34,6 +34,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
 import uvicorn
 
+try:
+    from kitty_api import router as kitty_api_router
+except Exception as _kitty_api_import_error:
+    kitty_api_router = None
+    logging.getLogger("king_zarry_api").exception("Kitty V3 API unavailable: %s", type(_kitty_api_import_error).__name__)
+
 from ai_engine import AIEngine
 
 try:
@@ -169,6 +175,9 @@ if google_connector_router is not None:
 
 if plugin_registry_router is not None:
     app.include_router(plugin_registry_router)
+
+if kitty_api_router is not None:
+    app.include_router(kitty_api_router)
 
 app.add_middleware(
     CORSMiddleware,
