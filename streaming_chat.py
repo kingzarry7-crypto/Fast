@@ -168,40 +168,50 @@ def _stream_cloudflare(messages: list):
 
 
 def _provider_streams(messages: list):
-    # Keep streaming chat aligned with ai_engine's Cloudflare-first provider
-    # order. Cloudflare's Worker returns a complete JSON answer, so emit it as
-    # one SSE token; the frontend still receives the same stream event format.
-    if ai_engine.CLOUDFLARE_AI_TOKEN:
-        yield "cloudflare", _stream_cloudflare(messages)
-    if ai_engine.OPENAI_API_KEY:
-        yield "openai", _stream_openai_compatible(
+    """Yield configured stream providers in the requested preference order.
+
+    AI_PROVIDER is shared with normal chat. AUTO keeps Cloudflare first, then
+    paid OpenAI and the configured compatibility providers. A requested
+    provider is tried first, but failures can still fall through to the rest.
+    """
+    providers = {
+        "cloudflare": lambda: _stream_cloudflare(messages),
+        "openai": lambda: _stream_openai_compatible(
             url=ai_engine.OPENAI_URL,
             key=ai_engine.OPENAI_API_KEY,
             model=ai_engine.OPENAI_MODEL,
             messages=messages,
             token_parameter="max_completion_tokens",
-        )
-    if _GROQ_KEY:
-        yield "groq", _stream_openai_compatible(
-            url=_GROQ_URL,
-            key=_GROQ_KEY,
-            model=_GROQ_MODEL,
-            messages=messages,
-        )
-    if _OPENROUTER_KEY:
-        yield "openrouter", _stream_openai_compatible(
-            url=_OPENROUTER_URL,
-            key=_OPENROUTER_KEY,
-            model=_OPENROUTER_MODEL,
-            messages=messages,
-        )
-    if _CHUTES_KEY:
-        yield "chutes", _stream_openai_compatible(
-            url=_CHUTES_URL,
-            key=_CHUTES_KEY,
-            model=_CHUTES_MODEL,
-            messages=messages,
-        )
+        ),
+        "groq": lambda: _stream_openai_compatible(
+            url=_GROQ_URL, key=_GROQ_KEY, model=_GROQ_MODEL, messages=messages
+        ),
+        "openrouter": lambda: _stream_openai_compatible(
+            url=_OPENROUTER_URL, key=_OPENROUTER_KEY,
+            model=_OPENROUTER_MODEL, messages=messages
+        ),
+        "chutes": lambda: _stream_openai_compatible(
+            url=_CHUTES_URL, key=_CHUTES_KEY, model=_CHUTES_MODEL, messages=messages
+        ),
+    }
+    configured = {
+        "cloudflare": bool(ai_engine.CLOUDFLARE_AI_TOKEN),
+        "openai": bool(ai_engine.OPENAI_API_KEY),
+        "groq": bool(_GROQ_KEY),
+        "openrouter": bool(_OPENROUTER_KEY),
+        "chutes": bool(_CHUTES_KEY),
+    }
+    default_order = ["cloudflare", "openai", "groq", "openrouter", "chutes"]
+    requested = str(getattr(ai_engine, "AI_PROVIDER", "AUTO") or "AUTO").strip().lower()
+    aliases = {"workers-ai": "cloudflare", "cloudflare-ai": "cloudflare",
+               "xai": "openai", "grok": "openai"}
+    requested = aliases.get(requested, requested)
+    order = ([requested] if requested in providers else []) + [
+        name for name in default_order if name != requested
+    ]
+    for name in order:
+        if configured[name]:
+            yield name, providers[name]()
 
 
 def _build_stream_generator(
