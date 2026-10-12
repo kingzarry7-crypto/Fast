@@ -161,4 +161,54 @@ class WorkflowApprovalContractTests(unittest.TestCase):
         self.assertEqual(result["plan"][0]["status"], "skipped")
         self.assertTrue(result["result"]["approval_rejected"])
 
+
+class SafeRetryTests(unittest.TestCase):
+    def _workflow(self):
+        return {"id": "wf-retry", "user_id": "u1"}
+
+    def _step(self, action):
+        return {"id": "step-1", "action": action, "attempt_count": 0}
+
+    @patch("workflow_engine.add_event")
+    @patch("workflow_engine._execute_step", side_effect=[TimeoutError("provider timeout"), {"success": True, "data": [1]}])
+    def test_transient_read_only_failure_retries_once(self, execute, event):
+        from workflow_engine import _execute_with_safe_retry
+        step = self._step("market_analysis")
+        result = _execute_with_safe_retry(self._workflow(), step)
+        self.assertTrue(result["success"])
+        self.assertEqual(execute.call_count, 2)
+        self.assertEqual(step["attempt_count"], 2)
+        event.assert_called_once()
+        self.assertEqual(event.call_args.args[2], "step_retry")
+
+    @patch("workflow_engine.add_event")
+    @patch("workflow_engine._execute_step", side_effect=TimeoutError("provider timeout"))
+    def test_retry_budget_is_bounded(self, execute, event):
+        from workflow_engine import _execute_with_safe_retry
+        step = self._step("research_goal")
+        with self.assertRaises(TimeoutError):
+            _execute_with_safe_retry(self._workflow(), step, max_attempts=99)
+        self.assertEqual(execute.call_count, 2)
+        self.assertEqual(step["attempt_count"], 2)
+
+    @patch("workflow_engine.add_event")
+    @patch("workflow_engine._execute_step", side_effect=TimeoutError("provider timeout"))
+    def test_external_action_is_never_retried(self, execute, event):
+        from workflow_engine import _execute_with_safe_retry
+        step = self._step("external_action")
+        with self.assertRaises(TimeoutError):
+            _execute_with_safe_retry(self._workflow(), step)
+        execute.assert_called_once()
+        event.assert_not_called()
+
+    @patch("workflow_engine.add_event")
+    @patch("workflow_engine._execute_step", side_effect=TimeoutError("invalid credentials"))
+    def test_non_transient_read_failure_is_not_retried(self, execute, event):
+        from workflow_engine import _execute_with_safe_retry
+        step = self._step("market_analysis")
+        with self.assertRaises(TimeoutError):
+            _execute_with_safe_retry(self._workflow(), step)
+        execute.assert_called_once()
+        event.assert_not_called()
+
 if __name__ == '__main__': unittest.main()
