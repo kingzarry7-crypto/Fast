@@ -345,6 +345,46 @@ export async function streamChatMessage(
   });
 
   if (!response.ok) {
+    // Production FastAPI currently exposes /api/chat but may not expose the
+    // optional SSE route. Fall back to the real authenticated chat endpoint
+    // on a missing stream route so the deployed UI still receives AI replies.
+    if (response.status === 404 || response.status === 405) {
+      const fallback = await fetch(buildUrl("/api/chat"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          message: trimmed,
+          ...(options.conversationId ? { conversation_id: options.conversationId } : {}),
+        }),
+        signal: options.signal,
+      });
+      let data: { reply?: string; detail?: string; message?: string; conversation_id?: string; approval_id?: string; provider?: string; operation?: string; target?: string };
+      try {
+        data = await fallback.json();
+      } catch {
+        throw new ApiError({ status: fallback.status || 502, message: "Chat endpoint returned an invalid response" });
+      }
+      if (!fallback.ok) {
+        throw new ApiError({
+          status: fallback.status,
+          message: data.detail || data.message || `Chat failed (HTTP ${fallback.status})`,
+          detail: data.detail,
+          raw: data,
+        });
+      }
+      const reply = typeof data.reply === "string" ? data.reply : "";
+      if (!reply.trim()) throw new ApiError({ status: 502, message: "AI returned an empty response" });
+      options.onStart?.(typeof data.provider === "string" ? data.provider : "chat-api");
+      options.onDelta(reply);
+      return {
+        reply,
+        conversation_id: data.conversation_id,
+        approval: data.approval_id && data.provider === "google"
+          ? { id: data.approval_id, provider: "google" as const, operation: data.operation || "send_gmail", target: data.target }
+          : undefined,
+      };
+    }
     let message = response.statusText || `HTTP ${response.status}`;
     try {
       const data = await response.json();
