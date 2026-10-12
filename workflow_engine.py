@@ -446,6 +446,64 @@ def _outcome_verification(item: Dict[str, Any]) -> Dict[str, Any]:
         "evidence": [],
         "note": "Workflow steps finished, but explicit external-outcome evidence was not available.",
     }
+
+# Only these operations are explicitly read-only and safe to retry after a transient
+# transport/provider failure. Browser submissions, emails, writes, trades, and any
+# unclassified action are intentionally excluded to avoid duplicate side effects.
+_RETRYABLE_READ_ACTIONS = frozenset({
+    "analyze_goal",
+    "research_goal",
+    "market_analysis",
+    "shopify_inventory_check",
+})
+_TRANSIENT_ERROR_MARKERS = (
+    "timeout", "timed out", "temporarily unavailable", "connection reset",
+    "connection aborted", "connection error", "rate limit", "too many requests",
+    "http 429", "http 502", "http 503", "http 504", "status 429",
+    "status 502", "status 503", "status 504",
+)
+
+
+def _is_transient_failure(error: Any) -> bool:
+    message = str(error or "").lower()
+    return any(marker in message for marker in _TRANSIENT_ERROR_MARKERS)
+
+
+def _execute_with_safe_retry(item: Dict[str, Any], step: Dict[str, Any],
+                             max_attempts: int = 2) -> Dict[str, Any]:
+    """Retry only explicitly read-only steps on known transient failures."""
+    action = str(step.get("action") or "")
+    retryable = action in _RETRYABLE_READ_ACTIONS
+    attempts = max(1, min(int(max_attempts), 2))
+    last_error = None
+
+    for attempt in range(1, attempts + 1):
+        step["attempt_count"] = int(step.get("attempt_count") or 0) + 1
+        try:
+            output = _execute_with_safe_retry(item, step)
+            output = output if isinstance(output, dict) else {"success": False, "error": "step returned no structured result"}
+            failure = output.get("error") if output.get("success") is False else None
+            if not failure:
+                return output
+            last_error = failure
+        except Exception as exc:
+            last_error = exc
+
+        if not retryable or attempt >= attempts or not _is_transient_failure(last_error):
+            if isinstance(last_error, Exception):
+                raise last_error
+            return {"success": False, "error": str(last_error or "step failed")}
+
+        add_event(item["id"], item["user_id"], "step_retry", {
+            "step_id": step.get("id"),
+            "action": action,
+            "attempt": attempt + 1,
+            "max_attempts": attempts,
+            "reason": "transient_read_only_failure",
+        })
+
+    return {"success": False, "error": str(last_error or "step failed")}
+
 def run_workflow(workflow_id: str, user_id: str) -> Dict[str, Any]:
     item = get_workflow(workflow_id, user_id)
     if not item:
