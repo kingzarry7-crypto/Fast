@@ -41,7 +41,15 @@ def _asset_bytes(name: str) -> bytes:
     path = ASSET_DIR / name
     if not path.is_file():
         raise FileNotFoundError(f"Kitty V3 asset missing: {name}")
-    return base64.b64decode(path.read_text(encoding="ascii").strip(), validate=True)
+    raw = path.read_bytes()
+    # Assets are normally stored as Base64 text. Accept raw binary too, because
+    # GitHub may preserve the PyTorch checkpoint as a binary blob despite the
+    # historical .b64 filename.
+    try:
+        encoded = raw.decode("ascii").strip()
+        return base64.b64decode(encoded, validate=True)
+    except (UnicodeDecodeError, ValueError):
+        return raw
 
 @lru_cache(maxsize=1)
 def _load() -> tuple[KittyOptimizedNet, Any, dict]:
