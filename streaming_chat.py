@@ -203,8 +203,7 @@ def _provider_streams(messages: list):
     }
     default_order = ["cloudflare", "openai", "groq", "openrouter", "chutes"]
     requested = str(getattr(ai_engine, "AI_PROVIDER", "AUTO") or "AUTO").strip().lower()
-    aliases = {"workers-ai": "cloudflare", "cloudflare-ai": "cloudflare",
-               "xai": "openai", "grok": "openai"}
+    aliases = {"workers-ai": "cloudflare", "cloudflare-ai": "cloudflare"}
     requested = aliases.get(requested, requested)
     order = ([requested] if requested in providers else []) + [
         name for name in default_order if name != requested
