@@ -23,7 +23,7 @@ normalize_legacy_env "ELEVENLABS_API_KEY" "ELEVENLABS_API_KEY "
 normalize_legacy_env "ELEVENLABS_MODEL_ID" "ELEVENLABS_MODEL_ID "
 normalize_legacy_env "FAL_KEY" "FAL_KEY "
 
-echo "═══════════════════════════════════════════════════════════════"
+echo "═══════��═══════════════════════════════════════════════════════"
 echo "👑 KING ZARRY AI — STARTING FULL STACK"
 echo "═══════════════════════════════════════════════════════════════"
 
@@ -119,36 +119,67 @@ fi
 # ------------------------------------------------------------------
 # 2) Telegram + Discord bot
 # ------------------------------------------------------------------
-echo "🤖 Starting Telegram bot (bot.py)..."
-python bot.py &
-BOT_PID=$!
-echo "   → Telegram bot PID: ${BOT_PID}"
+start_telegram() {
+  if [ -f "bot.py" ]; then
+    echo "🤖 Starting Telegram bot (bot.py)..."
+    python bot.py &
+    BOT_PID=$!
+    echo "   → Telegram bot PID: ${BOT_PID}"
+  else
+    echo "ℹ️ Telegram bot not started (bot.py missing)."
+    BOT_PID=""
+  fi
+}
 
-# discord_bot.py is intentionally separate because bot.py detects it and
-# skips its legacy inline Discord client to avoid duplicate Discord connections.
-DISCORD_PID=""
-if [ -f "discord_bot.py" ] && [ -n "${DISCORD_BOT_TOKEN:-}" ]; then
-  echo "💬 Starting Discord bot (discord_bot.py)..."
-  python discord_bot.py &
-  DISCORD_PID=$!
-  echo "   → Discord bot PID: ${DISCORD_PID}"
-else
-  echo "ℹ️ Discord bot not started (discord_bot.py missing or DISCORD_BOT_TOKEN not configured)."
-fi
+start_discord() {
+  if [ -f "discord_bot.py" ] && [ -n "${DISCORD_BOT_TOKEN:-}" ]; then
+    echo "💬 Starting Discord bot (discord_bot.py)..."
+    python discord_bot.py &
+    DISCORD_PID=$!
+    echo "   → Discord bot PID: ${DISCORD_PID}"
+  else
+    echo "ℹ️ Discord bot not started (discord_bot.py missing or DISCORD_BOT_TOKEN not configured)."
+    DISCORD_PID=""
+  fi
+}
+
+start_telegram
+start_discord
 
 echo "═══════════════════════════════════════════════════════════════"
-echo "✅ All services launched. Monitoring..."
+echo "✅ Services launched. Monitoring..."
 echo "═══════════════════════════════════════════════════════════════"
 
-# The Telegram poller is intentionally auxiliary. A Telegram conflict or
-# temporary bot failure must never take down the FastAPI web/connector service.
-# Keep the API alive and only shut everything down when the API itself exits.
-wait "${API_PID}"
-EXIT_CODE=$?
+monitor_service() {
+  local label="$1"
+  local pid="$2"
+  local cmd="$3"
+  if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
+    echo "⚠️ ${label} exited unexpectedly. Restarting..."
+    bash -c "$cmd" &
+    echo $!
+  fi
+}
 
-echo "⚠️ FastAPI exited (code ${EXIT_CODE}). Shutting down bot processes..."
-kill "${BOT_PID}" 2>/dev/null || true
-if [ -n "${DISCORD_PID}" ]; then kill "${DISCORD_PID}" 2>/dev/null || true; fi
-wait 2>/dev/null || true
+# Keep the API alive at all costs; bot failures should not bring down the web service.
+while true; do
+  if ! kill -0 "${API_PID}" 2>/dev/null; then
+    echo "⚠️ FastAPI exited unexpectedly. Shutting down bot processes..."
+    kill "${BOT_PID}" 2>/dev/null || true
+    if [ -n "${DISCORD_PID:-}" ]; then kill "${DISCORD_PID}" 2>/dev/null || true; fi
+    wait 2>/dev/null || true
+    exit 1
+  fi
 
-exit "${EXIT_CODE}"
+  if [ -n "${BOT_PID:-}" ] && ! kill -0 "${BOT_PID}" 2>/dev/null; then
+    echo "⚠️ Telegram bot process died. Restarting..."
+    start_telegram
+  fi
+
+  if [ -n "${DISCORD_PID:-}" ] && ! kill -0 "${DISCORD_PID}" 2>/dev/null; then
+    echo "⚠️ Discord bot process died. Restarting..."
+    start_discord
+  fi
+
+  sleep 10
+done
