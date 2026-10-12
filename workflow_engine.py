@@ -565,27 +565,71 @@ def run_workflow(workflow_id: str, user_id: str) -> Dict[str, Any]:
 
 
 def approve_workflow(workflow_id: str, user_id: str, approved: bool) -> Dict[str, Any]:
+    """Apply a decision only when the current user's exact pending approval exists.
+
+    The durable approval record is the gate. If it cannot be transitioned from
+    awaiting, leave the workflow waiting and do not execute its pending action.
+    """
     item = get_workflow(workflow_id, user_id)
     if not item:
         raise ValueError("workflow not found")
-    changed = False
-    for step in item.get("plan", []):
-        if step.get("status") == StepStatus.WAITING_FOR_APPROVAL.value:
-            if approved:
-                step["status"] = StepStatus.PENDING.value
-                changed = True
-            else:
-                step["status"] = StepStatus.SKIPPED.value
-                changed = True
-                item["result"]["approval_rejected"] = True
-            break
-    if not changed:
-        return item
-    item["status"] = WorkflowStatus.APPROVED.value if approved else WorkflowStatus.PAUSED.value
-    save_workflow(item)
-    add_event(item["id"], item["user_id"], "approval_decided", {"approved": approved})
-    return item
 
+    waiting = [
+        step for step in item.get("plan", [])
+        if step.get("status") == StepStatus.WAITING_FOR_APPROVAL.value
+    ]
+    if not waiting:
+        return item
+    if len(waiting) != 1:
+        item.setdefault("result", {})["approval_error"] = (
+            "Multiple pending approval steps were found; no action was approved."
+        )
+        save_workflow(item)
+        return item
+
+    step = waiting[0]
+    approval_id = str(step.get("approval_id") or "").strip()
+    if not approval_id:
+        item.setdefault("result", {})["approval_error"] = (
+            "This step has no durable approval record. It remains blocked."
+        )
+        save_workflow(item)
+        add_event(item["id"], item["user_id"], "approval_blocked", {
+            "step_id": step.get("id"), "reason": "missing_approval_record"
+        })
+        return item
+
+    # Fail closed if the durable, user-scoped approval cannot be transitioned.
+    # This also rejects stale/replayed decisions and approvals for another user.
+    from workflow_store import decide_approval
+    if not decide_approval(approval_id, str(user_id), bool(approved)):
+        item.setdefault("result", {})["approval_error"] = (
+            "The approval record is missing, stale, already decided, or unavailable. "
+            "The pending action was not executed."
+        )
+        save_workflow(item)
+        add_event(item["id"], item["user_id"], "approval_blocked", {
+            "step_id": step.get("id"), "approval_id": approval_id,
+            "reason": "approval_record_not_transitioned"
+        })
+        return item
+
+    item.setdefault("result", {}).pop("approval_error", None)
+    if approved:
+        step["status"] = StepStatus.PENDING.value
+    else:
+        step["status"] = StepStatus.SKIPPED.value
+        item.setdefault("result", {})["approval_rejected"] = True
+
+    item["status"] = (
+        WorkflowStatus.APPROVED.value if approved else WorkflowStatus.PAUSED.value
+    )
+    save_workflow(item)
+    add_event(item["id"], item["user_id"], "approval_decided", {
+        "approved": bool(approved), "step_id": step.get("id"),
+        "approval_id": approval_id,
+    })
+    return item
 
 
 def resume_human_verification(workflow_id: str, user_id: str) -> Dict[str, Any]:
