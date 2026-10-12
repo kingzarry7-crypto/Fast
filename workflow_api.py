@@ -50,18 +50,6 @@ def install_workflow_api(app, require_current_user, row_value=None):
         return original_execute(item, step)
     engine._execute_step = execute_with_gateway
 
-    original_approve = engine.approve_workflow
-    def approve_with_persistence(workflow_id, user_id, approved):
-        current = engine.get_workflow(workflow_id, user_id)
-        if current:
-            for step in current.get("plan", []):
-                approval_id = step.get("approval_id")
-                if approval_id:
-                    decide_approval(approval_id, str(user_id), bool(approved))
-                    break
-        return original_approve(workflow_id, user_id, approved)
-    engine.approve_workflow = approve_with_persistence
-
     def uid(row):
         try:
             value = row_value(row, 'id', 0) if row_value else (row.get('id') if isinstance(row, dict) else row[0])
