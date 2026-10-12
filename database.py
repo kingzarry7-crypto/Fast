@@ -21,6 +21,7 @@ import os
 import logging
 from typing import Optional, Generator, Tuple, Any
 from contextlib import contextmanager
+from urllib.parse import urlparse
 
 logger = logging.getLogger("web_database")
 
@@ -39,11 +40,24 @@ def get_database_url() -> Optional[str]:
     if not url:
         logger.warning("DATABASE_URL not set - web database unavailable (expected in deployment)")
         return None
-    # Basic validation - must be postgresql
-    if not url.startswith("postgres"):
-        logger.error("DATABASE_URL does not appear to be a PostgreSQL URL")
+
+    normalized = str(url).strip()
+    if not normalized:
+        logger.error("DATABASE_URL is empty")
         return None
-    return url
+
+    parsed = urlparse(normalized)
+    allowed_schemes = {
+        "postgres",
+        "postgresql",
+        "postgresql+psycopg2",
+        "postgresql+psycopg2cffi",
+    }
+    if parsed.scheme.lower() not in allowed_schemes:
+        logger.error("DATABASE_URL does not appear to be a PostgreSQL URL: %s", parsed.scheme or "(missing)")
+        return None
+
+    return normalized
 
 
 def is_database_configured() -> bool:
