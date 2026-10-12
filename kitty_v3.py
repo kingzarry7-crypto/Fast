@@ -1,8 +1,6 @@
 """Kitty V3 local inference for King Zarry AI.
 
-The model and scaler are packaged as base64 text assets to keep binary serialization
-out of source-control tooling. This module performs inference only; it never places
-trades. Input feature order is defined by metadata.json.
+Inference only; this module never places trades. Feature order is defined by metadata.
 """
 from __future__ import annotations
 
@@ -21,6 +19,17 @@ from torch import nn
 logger = logging.getLogger("king_zarry_kitty")
 ASSET_DIR = Path(__file__).resolve().parent / "kitty_v3_assets"
 
+# Verified from the packaged six-feature StandardScaler. This fallback avoids
+# pickle/joblib compatibility failures across Python/NumPy/sklearn environments.
+_SCALER_MEAN = [
+    53990.878397032764, 53625.73539316434, 52.24818795669928,
+    58035.154544454905, 49216.316241873756, 276.2951492237883,
+]
+_SCALER_SCALE = [
+    31040.441903947303, 30510.269121710633, 17.490193792131915,
+    32300.862122537816, 28902.077741073736, 1638.5673916408148,
+]
+
 class KittyOptimizedNet(nn.Module):
     def __init__(self) -> None:
         super().__init__()
@@ -37,40 +46,58 @@ class KittyOptimizedNet(nn.Module):
         x = self.dropout_2(self.relu(self.layer_2(x)))
         return self.sigmoid(self.layer_out(x))
 
+class _ScalerFallback:
+    """Small StandardScaler-compatible transform using verified saved statistics."""
+    n_features_in_ = 6
+
+    def transform(self, rows):
+        return [[(float(value) - mean) / scale
+                 for value, mean, scale in zip(row, _SCALER_MEAN, _SCALER_SCALE)]
+                for row in rows]
+
 def _asset_bytes(name: str) -> bytes:
     path = ASSET_DIR / name
     if not path.is_file():
         raise FileNotFoundError(f"Kitty V3 asset missing: {name}")
     raw = path.read_bytes()
-    # Assets are normally stored as Base64 text. Accept raw binary too, because
-    # GitHub may preserve the PyTorch checkpoint as a binary blob despite the
-    # historical .b64 filename.
     try:
-        encoded = raw.decode("ascii").strip()
-        return base64.b64decode(encoded, validate=True)
+        return base64.b64decode(raw.decode("ascii").strip(), validate=True)
     except (UnicodeDecodeError, ValueError):
         return raw
 
 @lru_cache(maxsize=1)
 def _load() -> tuple[KittyOptimizedNet, Any, dict]:
     metadata = json.loads(_asset_bytes("metadata.json.b64").decode("utf-8"))
-    scaler = joblib.load(io.BytesIO(_asset_bytes("scaler.joblib.b64")))
-    model = KittyOptimizedNet()
-    state = torch.load(io.BytesIO(_asset_bytes("kitty_v3_weights.pt.b64")), map_location="cpu", weights_only=True)
-    model.load_state_dict(state, strict=True)
-    model.eval()
     if len(metadata.get("features", [])) != 6:
         raise ValueError("Kitty V3 metadata must define exactly six features")
-    if not hasattr(scaler, "transform"):
-        raise ValueError("Kitty V3 scaler does not support transform")
+    try:
+        scaler = joblib.load(io.BytesIO(_asset_bytes("scaler.joblib.b64")))
+        if not hasattr(scaler, "transform"):
+            raise TypeError("Packaged Kitty scaler has no transform method")
+    except Exception as exc:
+        logger.warning("Kitty V3 using compatible scaler fallback (%s)", type(exc).__name__)
+        scaler = _ScalerFallback()
+    model = KittyOptimizedNet()
+    state = torch.load(
+        io.BytesIO(_asset_bytes("kitty_v3_weights.pt.b64")),
+        map_location="cpu",
+        weights_only=True,
+    )
+    model.load_state_dict(state, strict=True)
+    model.eval()
     return model, scaler, metadata
 
 def status() -> dict:
     try:
         _, scaler, metadata = _load()
-        return {"available": True, "model": metadata.get("model_name", "Kitty V3"),
-                "features": metadata["features"], "scaler_loaded": hasattr(scaler, "transform"),
-                "inference_only": True}
+        return {
+            "available": True,
+            "model": metadata.get("model_name", "Kitty V3"),
+            "features": metadata["features"],
+            "scaler_loaded": hasattr(scaler, "transform"),
+            "scaler_mode": "compatible_fallback" if isinstance(scaler, _ScalerFallback) else "packaged",
+            "inference_only": True,
+        }
     except Exception as exc:
         logger.exception("Kitty V3 failed to load")
         return {"available": False, "model": "Kitty V3", "error": type(exc).__name__}
@@ -95,8 +122,11 @@ def predict_features(features: dict[str, float]) -> dict:
     sell_below = float(thresholds.get("sell_below", 0.47))
     buy_above = float(thresholds.get("buy_above", 0.53))
     signal = "BUY_BIAS" if probability >= buy_above else "SELL_BIAS" if probability <= sell_below else "HOLD"
-    return {"model": metadata.get("model_name", "Kitty V3"),
-            "probability_next_close_up": round(probability, 6),
-            "signal": signal, "thresholds": {"sell_below": sell_below, "buy_above": buy_above},
-            "features": {name: float(features[name]) for name in names},
-            "warning": "Model output is experimental, not a validated profitable strategy or financial advice. No trades are placed."}
+    return {
+        "model": metadata.get("model_name", "Kitty V3"),
+        "probability_next_close_up": round(probability, 6),
+        "signal": signal,
+        "thresholds": {"sell_below": sell_below, "buy_above": buy_above},
+        "features": {name: float(features[name]) for name in names},
+        "warning": "Model output is experimental, not a validated profitable strategy or financial advice. No trades are placed.",
+    }
