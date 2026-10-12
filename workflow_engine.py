@@ -480,7 +480,7 @@ def _execute_with_safe_retry(item: Dict[str, Any], step: Dict[str, Any],
     for attempt in range(1, attempts + 1):
         step["attempt_count"] = int(step.get("attempt_count") or 0) + 1
         try:
-            output = _execute_with_safe_retry(item, step)
+            output = _execute_step(item, step)
             output = output if isinstance(output, dict) else {"success": False, "error": "step returned no structured result"}
             failure = output.get("error") if output.get("success") is False else None
             if not failure:
@@ -577,7 +577,7 @@ def run_workflow(workflow_id: str, user_id: str) -> Dict[str, Any]:
             step["status"] = StepStatus.RUNNING.value
             _update(item, WorkflowStatus.EXECUTING.value)
             try:
-                output = _execute_step(item, step)
+                output = _execute_with_safe_retry(item, step)
                 step["output"] = output or {}
                 if not output.get("success", True):
                     step["status"] = StepStatus.FAILED.value
