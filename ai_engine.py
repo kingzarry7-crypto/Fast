@@ -1846,12 +1846,14 @@ class AIEngine:
         logger.info(f"✅ Crypto Vision ready (free tier) | endpoint={CRYPTOVISION_BASE_URL}")
 
     def _get_provider_order(self, provider_override: Optional[str] = None) -> List[str]:
-        if provider_override:
-            provider = str(provider_override).strip().lower()
-            if provider in {"cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"}:
-                return [provider] + [p for p in ["cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"] if p != provider]
-        # Free Cloudflare Workers AI first; daily quota/errors fall through to configured providers.
-        return ["cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"]
+        providers = ["cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"]
+        # An explicit per-request choice wins. Otherwise honor AI_PROVIDER as the
+        # preferred provider, while retaining failover to the remaining providers.
+        preferred = str(provider_override or os.getenv("AI_PROVIDER", "")).strip().lower()
+        if preferred in {"cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"}:
+            return [preferred] + [p for p in providers if p != preferred]
+        # Default remains Cloudflare-first; unavailable providers are skipped by the caller.
+        return providers
 
     def _should_use_tavily(self, prompt: str) -> bool:
         if not self._tavily_module:
@@ -2187,7 +2189,7 @@ class AIEngine:
         # keep the automatic Groq -> OpenRouter -> Chutes -> Gemini chain.
         provider_override = None
         provider_command = re.search(
-            r"\b(?:use|switch\s+to|run\s+on|answer\s+with|force)\s+(groq|openrouter|chutes|gemini)\b",
+            r"\b(?:use|switch\s+to|run\s+on|answer\s+with|force)\s+(cloudflare|openai|groq|openrouter|chutes|gemini)\b",
             original_prompt,
             re.IGNORECASE,
         )
