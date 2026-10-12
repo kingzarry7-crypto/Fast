@@ -83,4 +83,82 @@ class WorkflowOutcomeTests(unittest.TestCase):
         self.assertEqual(result['status'], 'paused')
         execute.assert_not_called()
 
+
+class WorkflowApprovalContractTests(unittest.TestCase):
+    def _item(self, *, approval_id="approval-1", status="waiting_for_approval"):
+        return {
+            "id": "wf-approval",
+            "user_id": "u1",
+            "goal": "send the prepared message",
+            "status": status,
+            "plan": [{
+                "id": "step-send",
+                "action": "external_action",
+                "status": "waiting_for_approval",
+                "requires_approval": True,
+                "approval_id": approval_id,
+            }],
+            "result": {},
+        }
+
+    @patch("workflow_engine.add_event")
+    @patch("workflow_engine.save_workflow")
+    @patch("workflow_store.decide_approval", return_value=True)
+    @patch("workflow_engine.get_workflow")
+    def test_approval_transitions_only_after_durable_decision(
+        self, get_workflow_mock, decide_mock, save_mock, event_mock
+    ):
+        item = self._item()
+        get_workflow_mock.return_value = item
+        from workflow_engine import approve_workflow
+        result = approve_workflow("wf-approval", "u1", True)
+        decide_mock.assert_called_once_with("approval-1", "u1", True)
+        self.assertEqual(result["status"], "approved")
+        self.assertEqual(result["plan"][0]["status"], "pending")
+
+    @patch("workflow_engine.add_event")
+    @patch("workflow_engine.save_workflow")
+    @patch("workflow_store.decide_approval", return_value=False)
+    @patch("workflow_engine.get_workflow")
+    def test_stale_or_missing_durable_decision_fails_closed(
+        self, get_workflow_mock, decide_mock, save_mock, event_mock
+    ):
+        item = self._item()
+        get_workflow_mock.return_value = item
+        from workflow_engine import approve_workflow
+        result = approve_workflow("wf-approval", "u1", True)
+        self.assertEqual(result["status"], "waiting_for_approval")
+        self.assertEqual(result["plan"][0]["status"], "waiting_for_approval")
+        self.assertIn("approval_error", result["result"])
+
+    @patch("workflow_engine.add_event")
+    @patch("workflow_engine.save_workflow")
+    @patch("workflow_engine.get_workflow")
+    def test_missing_approval_id_cannot_approve(
+        self, get_workflow_mock, save_mock, event_mock
+    ):
+        item = self._item(approval_id="")
+        get_workflow_mock.return_value = item
+        from workflow_engine import approve_workflow
+        result = approve_workflow("wf-approval", "u1", True)
+        self.assertEqual(result["status"], "waiting_for_approval")
+        self.assertEqual(result["plan"][0]["status"], "waiting_for_approval")
+        self.assertIn("approval_error", result["result"])
+
+    @patch("workflow_engine.add_event")
+    @patch("workflow_engine.save_workflow")
+    @patch("workflow_store.decide_approval", return_value=True)
+    @patch("workflow_engine.get_workflow")
+    def test_rejection_pauses_and_never_resumes_pending_action(
+        self, get_workflow_mock, decide_mock, save_mock, event_mock
+    ):
+        item = self._item()
+        get_workflow_mock.return_value = item
+        from workflow_engine import approve_workflow
+        result = approve_workflow("wf-approval", "u1", False)
+        decide_mock.assert_called_once_with("approval-1", "u1", False)
+        self.assertEqual(result["status"], "paused")
+        self.assertEqual(result["plan"][0]["status"], "skipped")
+        self.assertTrue(result["result"]["approval_rejected"])
+
 if __name__ == '__main__': unittest.main()
