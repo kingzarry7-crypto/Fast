@@ -148,6 +148,28 @@ def route_agent_request(message: str, user_id: str) -> Optional[Dict[str, Any]]:
                         "error": "analysis returned no structured result"}
         news = tool_news_risk(symbol)
         analysis["news_risk"] = news if isinstance(news, dict) else {}
+
+        # Add Kitty's daily BTC inference as clearly-labelled context only.
+        # The training symbol is unverified, so it must not override the MTF
+        # Market Agent or create entry/SL/TP levels by itself.
+        kitty_context = None
+        if symbol == "BTC/USD":
+            try:
+                from market import get_candles
+                from kitty_api import _gold_features
+                import kitty_v3
+                btc_candles = get_candles("BTC/USDT", timeframe="1d", outputsize=150)
+                btc_features = _gold_features(btc_candles)
+                kitty_prediction = kitty_v3.predict_features(btc_features)
+                kitty_context = {
+                    "signal": str(kitty_prediction.get("signal") or "UNKNOWN").upper(),
+                    "probability_next_close_up": kitty_prediction.get("probability_next_close_up"),
+                    "latest_candle_time": btc_candles[-1].get("datetime"),
+                }
+            except Exception as kitty_exc:
+                # Keep the primary market setup available if the optional model check fails.
+                kitty_context = {"status": "unavailable", "reason": type(kitty_exc).__name__}
+
         try:
             tool_learn(
                 user_id=str(user_id),
@@ -187,6 +209,17 @@ def route_agent_request(message: str, user_id: str) -> Optional[Dict[str, Any]]:
             f"Trend: {show(analysis.get('trend'))}",
             f"News risk: {show(news_risk.get('risk') or news_risk.get('level') or news_risk.get('status'))}",
         ]
+        if kitty_context:
+            if kitty_context.get("status") == "unavailable":
+                lines.append("Kitty V3 daily BTC model: unavailable for this request (optional check failed).")
+            else:
+                probability = kitty_context.get("probability_next_close_up")
+                probability_text = f"{float(probability) * 100:.2f}%" if isinstance(probability, (int, float)) else "not provided"
+                lines.append(
+                    f"Kitty V3 daily BTC model (experimental): {kitty_context['signal']}; "
+                    f"estimated next-daily-close-up probability: {probability_text}. "
+                    "Training symbol is unconfirmed, so this is context only and does not validate the setup."
+                )
         reasons = analysis.get("reasons") or []
         if isinstance(reasons, str):
             reasons = [reasons]
