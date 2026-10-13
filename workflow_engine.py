@@ -77,7 +77,7 @@ def _classify_goal(goal: str) -> Dict[str, Any]:
         "generate a website", "website code", "web app", "web application",
     )
     if any(term in low for term in website_build_terms):
-        return {"kind": "engineering", "revenue": 0.0}
+        return {"kind": "website_build", "revenue": 0.0}
     if any(x in low for x in ("open website", "open the website", "edit my website", "edit website", "update my website", "update website", "post on", "publish on", "upload to", "fill the form", "fill out the form", "click on", "browser", "website")):
         return {"kind": "browser", "revenue": 0.0}
     if any(x in low for x in ("deploy", "github", "code", "fix my app", "build")):
@@ -147,6 +147,12 @@ def plan_goal(workflow_id: str, user_id: str, goal: str) -> Dict[str, Any]:
             _step(workflow_id, 5, "Execute the approved browser actions", "browser_execute", RiskLevel.YELLOW, True),
             _step(workflow_id, 6, "Verify the browser result", "browser_verify"),
             _step(workflow_id, 7, "Record the result for future work", "learn"),
+        ]
+    elif kind == "website_build":
+        steps += [
+            _step(workflow_id, 3, "Generate the website files", "engineering_plan"),
+            _step(workflow_id, 4, "Run safe project checks", "verify"),
+            _step(workflow_id, 5, "Record the result for future work", "learn"),
         ]
     elif kind == "engineering":
         steps += [
@@ -352,8 +358,18 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
             },
         }
 
-    if action in {"engineering_plan", "prepare_change"}:
-        return {"success": True, "plan": ["Inspect existing implementation", "Make additive change", "Run tests", "Verify deployment"], "approval_preview": {"goal": goal}}
+    if action == "engineering_plan":
+        if item.get("context", {}).get("kind") == "website_build":
+            try:
+                from engineering_executor import generate_project
+                return generate_project(goal)
+            except Exception as exc:
+                logger.exception("Website project generation failed")
+                return {"success": False, "error": f"Project generation failed: {type(exc).__name__}", "execution_status": "generation_failed"}
+        return {"success": True, "plan": ["Inspect existing implementation", "Prepare additive change", "Require approval before live repository/deployment changes"], "approval_preview": {"goal": goal}}
+
+    if action == "prepare_change":
+        return {"success": True, "approval_preview": {"goal": goal, "proposed_action": "Live repository or deployment changes", "requires_approval": True}}
 
     if action == "market_analysis":
         symbols = ["BTC/USD","ETH/USD","SOL/USD","XAU/USD","UNI/USD"]
@@ -387,10 +403,23 @@ def _execute_step(item: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
         return {"success": True, "revenue_verified": False, "potential_revenue": item.get("potential_revenue", 0), "note": "Only confirmed receipts are revenue; opportunities are not income."}
 
     if action == "verify":
+        # For a generated website, verify the actual draft and its static checks.
+        if item.get("context", {}).get("kind") == "website_build":
+            draft = item.get("result", {}).get("engineering_plan") or {}
+            checks = draft.get("checks") or []
+            failed = [check for check in checks if check.get("status") == "failed"]
+            generated = bool(draft.get("files"))
+            passed = generated and bool(draft.get("success")) and not failed
+            return {
+                "success": passed,
+                "verified": passed,
+                "verification_status": "draft_checks_passed" if passed else "draft_checks_failed",
+                "file_count": draft.get("file_count", 0),
+                "checks": checks,
+                "evidence": [{"type": "generated_file", "path": row.get("path")} for row in (draft.get("files") or []) if row.get("path")],
+                "note": draft.get("note") or "Static checks only; generated code was not executed or deployed.",
+            }
         # This is a workflow checkpoint, not proof of an external side effect.
-        # Keep internal/research missions usable while explicitly withholding
-        # any claim that an email, post, submission, or other external action
-        # was verified.
         return {
             "success": True,
             "verified": False,
