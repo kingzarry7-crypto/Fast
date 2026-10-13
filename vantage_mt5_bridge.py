@@ -207,7 +207,10 @@ class BridgeState:
                     (str(signal_id), json.dumps(payload, sort_keys=True, default=str), _utc_now()),
                 )
             except sqlite3.IntegrityError:
-                self._audit("signal_duplicate_blocked", {"signal_id": str(signal_id)})
+                conn.execute(
+                    "INSERT INTO bridge_audit(event, details, created_at) VALUES (?, ?, ?)",
+                    ("signal_duplicate_blocked", json.dumps({"signal_id": str(signal_id)}, sort_keys=True), _utc_now()),
+                )
                 return False
         self._audit("signal_recorded", {"signal_id": str(signal_id), "symbol": payload.get("symbol"), "signal": payload.get("signal")})
         return True
@@ -388,7 +391,7 @@ def monitor_once(state: BridgeState, mt5: Any = None) -> dict[str, Any]:
 
 def create_control_server(state: BridgeState, host: str = "127.0.0.1", port: int = 8765) -> ThreadingHTTPServer:
     """Expose a tiny local-only control dashboard; non-loopback binds are forbidden."""
-    if host not in {"127.0.0.1", "localhost", "::1"}:
+    if host not in {"127.0.0.1", "localhost"}:
         raise ValueError("bridge controls must bind to loopback only")
 
     class Handler(BaseHTTPRequestHandler):
