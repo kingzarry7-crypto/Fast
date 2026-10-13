@@ -126,6 +126,11 @@ if "x.ai" not in XAI_URL and XAI_API_KEY:
 
 AI_PROVIDER = clean_env_str(os.getenv("AI_PROVIDER"), "AUTO").upper()
 
+# Hugging Face Inference Providers OpenAI-compatible endpoint for the custom Zarry model.
+HF_TOKEN = clean_env_str(os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_API_KEY"))
+HF_MODEL_ID = clean_env_str(os.getenv("HF_MODEL_ID"), "KINGZARRY3/zarry-coder-model")
+HF_INFERENCE_URL = clean_env_str(os.getenv("HF_INFERENCE_URL"), "https://router.huggingface.co/v1/chat/completions")
+
 ELEVENLABS_API_KEY = clean_env_str(os.getenv("ELEVENLABS_API_KEY"))
 ELEVENLABS_VOICE_ID = clean_env_str(os.getenv("ELEVENLABS_VOICE_ID"), "hpp4J3VqNfWAUOO0d1Us")
 ELEVENLABS_MODEL_ID = clean_env_str(
@@ -1846,14 +1851,12 @@ class AIEngine:
         logger.info(f"✅ Crypto Vision ready (free tier) | endpoint={CRYPTOVISION_BASE_URL}")
 
     def _get_provider_order(self, provider_override: Optional[str] = None) -> List[str]:
-        providers = ["cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"]
-        # An explicit per-request choice wins. Otherwise honor AI_PROVIDER as the
-        # preferred provider, while retaining failover to the remaining providers.
+        providers = ["huggingface", "cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"]
         preferred = str(provider_override or os.getenv("AI_PROVIDER", "")).strip().lower()
-        if preferred in {"cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"}:
+        if preferred in {"hf", "zarry", "huggingface", "cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"}:
+            preferred = "huggingface" if preferred in {"hf", "zarry"} else preferred
             return [preferred] + [p for p in providers if p != preferred]
-        # Default remains Cloudflare-first; unavailable providers are skipped by the caller.
-        return providers
+        return providers if HF_TOKEN else providers[1:]
 
     def _should_use_tavily(self, prompt: str) -> bool:
         if not self._tavily_module:
@@ -2116,7 +2119,10 @@ class AIEngine:
         for provider in finite_providers:
             try:
                 resp = None
-                if provider == "cloudflare" and CLOUDFLARE_AI_TOKEN and not image:
+                if provider == "huggingface" and HF_TOKEN and not image:
+                    logger.info("AI provider attempt: huggingface-zarry | model=%s", HF_MODEL_ID)
+                    resp = self._huggingface(prompt_text, history, image, persistent_ctx, casual)
+                elif provider == "cloudflare" and CLOUDFLARE_AI_TOKEN and not image:
                     logger.info("AI provider attempt: cloudflare-workers-ai | model=@cf/meta/llama-3.3-70b-instruct-fp8-fast")
                     resp = self._cloudflare(prompt_text, history, image, persistent_ctx, casual)
                 elif provider == "openrouter" and OPENROUTER_API_KEY:
@@ -2145,7 +2151,7 @@ class AIEngine:
                 logger.warning(
                     "AI provider failed | provider=%s | model=%s | error=%s",
                     provider,
-                    {"cloudflare": "@cf/meta/llama-3.3-70b-instruct-fp8-fast", "openai": OPENAI_MODEL, "groq": GROQ_MODEL, "openrouter": OPENROUTER_MODEL,
+                    {"huggingface": HF_MODEL_ID, "cloudflare": "@cf/meta/llama-3.3-70b-instruct-fp8-fast", "openai": OPENAI_MODEL, "groq": GROQ_MODEL, "openrouter": OPENROUTER_MODEL,
                      "chutes": CHUTES_MODEL, "gemini": GEMINI_MODEL}.get(provider, "unknown"),
                     last_err,
                 )
@@ -2155,6 +2161,7 @@ class AIEngine:
             finite_providers,
             last_err or "no configured provider returned a response",
             [p for p in finite_providers if (
+                (p == "huggingface" and HF_TOKEN) or
                 (p == "cloudflare" and CLOUDFLARE_AI_TOKEN) or
                 (p == "openai" and OPENAI_API_KEY) or
                 (p == "groq" and GROQ_API_KEY) or
@@ -2189,12 +2196,14 @@ class AIEngine:
         # keep the automatic Groq -> OpenRouter -> Chutes -> Gemini chain.
         provider_override = None
         provider_command = re.search(
-            r"\b(?:use|switch\s+to|run\s+on|answer\s+with|force)\s+(cloudflare|openai|groq|openrouter|chutes|gemini)\b",
+            r"\b(?:use|switch\s+to|run\s+on|answer\s+with|force)\s+(huggingface|zarry|hf|cloudflare|openai|groq|openrouter|chutes|gemini)\b",
             original_prompt,
             re.IGNORECASE,
         )
         if provider_command:
             provider_override = provider_command.group(1).lower()
+            if provider_override in {"zarry", "hf"}:
+                provider_override = "huggingface"
             logger.info("Explicit AI provider requested: %s", provider_override)
 
         prompt_for_providers = original_prompt
@@ -2805,6 +2814,24 @@ class AIEngine:
     def _openai(self, prompt: str, history: List[dict], image: Optional[Tuple[str, bytes]], persistent_ctx: str = "", casual: bool = False) -> Optional[str]:
         return self._openrouter(prompt, history, image, persistent_ctx, casual)
 
+    def _huggingface(self, prompt: str, history: List[dict], image: Optional[Tuple[str, bytes]], persistent_ctx: str = "", casual: bool = False) -> Optional[str]:
+        """Generate text with the configured Zarry model through HF's OpenAI-compatible router."""
+        if not HF_TOKEN or image:
+            return None
+        messages = self._build_openai_messages(prompt, history, None, persistent_ctx, casual=casual)
+        headers = {"Authorization": f"Bearer {HF_TOKEN}", "Content-Type": "application/json"}
+        payload = {"model": HF_MODEL_ID, "messages": messages,
+                   "temperature": 0.85 if casual else 0.7, "max_tokens": 700 if casual else 1200}
+        resp = self._request_with_retry(HF_INFERENCE_URL, headers, payload, "huggingface",
+                                        max_retries=0, timeout=AI_PROVIDER_TIMEOUT)
+        data = resp.json()
+        choices = data.get("choices") or []
+        if not choices:
+            logger.warning("Hugging Face returned no choices")
+            return None
+        content = (choices[0].get("message") or {}).get("content")
+        return content if isinstance(content, str) and content.strip() else None
+
     def _openai_direct(self, prompt: str, history: List[dict], image: Optional[Tuple[str, bytes]], persistent_ctx: str = "", casual: bool = False) -> Optional[str]:
         if not OPENAI_API_KEY:
             return None
@@ -2927,6 +2954,9 @@ class AIEngine:
         """Return a summary of configured providers. No secrets exposed."""
         return {
             "chain": self._get_provider_order(),
+            "huggingface": bool(HF_TOKEN),
+            "huggingface_model": HF_MODEL_ID,
+            "huggingface_endpoint": HF_INFERENCE_URL,
             "cloudflare_workers_ai": bool(CLOUDFLARE_AI_TOKEN),
             "cloudflare_model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
             "openrouter": bool(OPENROUTER_API_KEY),
