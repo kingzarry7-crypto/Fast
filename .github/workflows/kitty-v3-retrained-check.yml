@@ -1,0 +1,26 @@
+name: Kitty V3 retrained checkpoint contract
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "kitty_v3_retrained_checkpoint.pt"
+      - "kitty_v3_retrained.py"
+      - "tests/test_kitty_v3_retrained.py"
+      - ".github/workflows/kitty-v3-retrained-check.yml"
+  push:
+    branches: [main, "kingzarry7-crypto-patch-6"]
+
+jobs:
+  validate-retrained-checkpoint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install model dependencies
+        run: python -m pip install --upgrade pip torch scikit-learn numpy
+      - name: Load real checkpoint and run contract tests
+        run: python -m unittest discover -s tests -p 'test_kitty_v3_retrained.py' -v
