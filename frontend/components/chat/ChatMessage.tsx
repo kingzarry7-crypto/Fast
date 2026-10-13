@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import MessageContent from "@/components/chat/MessageContent";
 
 export interface ChatMessageProps {
   id?: string;
@@ -173,7 +174,8 @@ export function ChatMessage({
           </div>
         ) : null}
 
-        <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{displayContent}{isStreaming ? <span aria-hidden="true" className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-pulse rounded-full bg-cyan-300 align-baseline" /> : null}</div>
+        <MessageContent content={displayContent} isUser={isUser} />
+        {isStreaming ? <span aria-hidden="true" className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-pulse rounded-full bg-cyan-300 align-baseline" /> : null}
 
         {timestamp ? <div className="mt-2 text-[10px] tracking-wide text-cyan-100/35">{timestamp}</div> : null}
 
