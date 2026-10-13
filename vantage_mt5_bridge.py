@@ -374,6 +374,10 @@ def monitor_once(state: BridgeState, mt5: Any = None) -> dict[str, Any]:
     except PermissionError as exc:
         state.emergency_stop(str(exc))
         raise
+    except Exception as exc:
+        if state.get_status()["mode"] not in {"EMERGENCY_STOP", "PAUSED"}:
+            state.pause(f"monitor cycle failed: {type(exc).__name__}")
+        raise
     finally:
         if owns_mt5:
             try:
