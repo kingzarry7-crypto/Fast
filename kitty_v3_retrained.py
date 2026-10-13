@@ -1,16 +1,12 @@
 """Isolated loader for the Colab Kitty V3 retraining checkpoint.
-
-The checkpoint bundles a PyTorch state dict and a fitted sklearn scaler.
-Only load this trusted repository artifact: loading a bundled sklearn object
-requires pickle deserialization. This module never places trades.
+Signal inference is opt-in and monitor-only; this module never places trades.
 """
 from __future__ import annotations
-
 import math
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
-
 import numpy as np
 import torch
 from torch import nn
@@ -25,7 +21,7 @@ EXPECTED_FEATURES = [
     "range_pct", "body_pct", "close_position",
 ]
 CLASS_MAPPING = {"0": "SHORT", "1": "NO TRADE", "2": "LONG"}
-
+MONITORING_ENV = "KITTY_V3_SIGNAL_MONITORING_ENABLED"
 
 class KittyV3RetrainedNet(nn.Module):
     def __init__(self) -> None:
@@ -35,29 +31,24 @@ class KittyV3RetrainedNet(nn.Module):
             nn.Linear(64, 32), nn.ReLU(), nn.Dropout(0.10),
             nn.Linear(32, 3),
         )
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)
 
+def _monitoring_enabled() -> bool:
+    return (os.getenv(MONITORING_ENV) or "").strip().lower() in {"1", "true", "yes", "on"}
 
 @lru_cache(maxsize=1)
 def _load() -> tuple[KittyV3RetrainedNet, Any, dict[str, Any]]:
     if not CHECKPOINT_PATH.is_file():
         raise FileNotFoundError(f"Missing checkpoint: {CHECKPOINT_PATH.name}")
-    # weights_only=False is required because this trusted checkpoint bundles a
-    # StandardScaler object. Never use this loader for an untrusted file.
-    checkpoint = torch.load(
-        CHECKPOINT_PATH, map_location="cpu", weights_only=False
-    )
+    checkpoint = torch.load(CHECKPOINT_PATH, map_location="cpu", weights_only=False)
     if not isinstance(checkpoint, dict):
         raise ValueError("Checkpoint must be a dictionary bundle")
-    features = checkpoint.get("features")
-    if features != EXPECTED_FEATURES:
+    if checkpoint.get("features") != EXPECTED_FEATURES:
         raise ValueError("Checkpoint feature order does not match the 18-feature contract")
     if checkpoint.get("architecture") != [18, 64, 32, 3]:
         raise ValueError("Unexpected model architecture")
-    state = checkpoint.get("model_state_dict")
-    scaler = checkpoint.get("scaler")
+    state, scaler = checkpoint.get("model_state_dict"), checkpoint.get("scaler")
     if not isinstance(state, dict) or scaler is None:
         raise ValueError("Checkpoint must include model_state_dict and scaler")
     expected_shapes = {
@@ -70,45 +61,59 @@ def _load() -> tuple[KittyV3RetrainedNet, Any, dict[str, Any]]:
         raise ValueError("Checkpoint tensor names/shapes do not match the trained network")
     if getattr(scaler, "n_features_in_", None) != 18:
         raise ValueError("Bundled scaler must accept exactly 18 features")
-    if getattr(scaler, "feature_names_in_", None) is not None:
-        if list(scaler.feature_names_in_) != EXPECTED_FEATURES:
-            raise ValueError("Scaler feature order does not match the model")
+    if getattr(scaler, "feature_names_in_", None) is not None and list(scaler.feature_names_in_) != EXPECTED_FEATURES:
+        raise ValueError("Scaler feature order does not match the model")
     model = KittyV3RetrainedNet()
     model.load_state_dict(state, strict=True)
     model.eval()
     return model, scaler, checkpoint
 
-
 def status() -> dict[str, Any]:
+    enabled = _monitoring_enabled()
     try:
         model, scaler, checkpoint = _load()
         return {
-            "available": True,
-            "model": "Kitty V3 BTC retrained",
-            "num_features": 18,
-            "classes": CLASS_MAPPING,
-            "scaler_features": int(scaler.n_features_in_),
+            "available": True, "model": "Kitty V3 BTC retrained", "num_features": 18,
+            "classes": CLASS_MAPPING, "scaler_features": int(scaler.n_features_in_),
             "best_epoch": checkpoint.get("best_epoch"),
             "validation_accuracy": checkpoint.get("validation_accuracy"),
-            "research_only": True,
-            "prediction_enabled": False,
-            "automatic_order_execution_enabled": False,
-            "reason": "Target/execution alignment and realistic paper-trading validation remain unverified.",
+            "research_only": True, "prediction_enabled": enabled,
+            "signal_monitoring_only": True, "automatic_order_execution_enabled": False,
+            "gold_forex_validation": "unverified",
+            "reason": "Opt-in monitor-only inference. BTC-trained checkpoint, feature engineering, target horizon and gold/forex transfer are not validated.",
         }
     except Exception as exc:
         return {
-            "available": False,
-            "model": "Kitty V3 BTC retrained",
-            "prediction_enabled": False,
+            "available": False, "model": "Kitty V3 BTC retrained",
+            "prediction_enabled": False, "signal_monitoring_only": True,
             "automatic_order_execution_enabled": False,
             "error": f"{type(exc).__name__}: {exc}",
         }
 
-
 def predict_features(features: dict[str, float]) -> dict[str, Any]:
-    # Explicitly fail closed: good classification scores alone do not authorize
-    # predictions or trades until target timing and trading validation are audited.
-    raise RuntimeError(
-        "Kitty V3 retrained inference is disabled pending target/execution alignment "
-        "and paper-trading validation. No orders are placed."
-    )
+    """Return experimental inference only; this function cannot authorize orders."""
+    if not _monitoring_enabled():
+        raise RuntimeError(f"Kitty signal monitoring is disabled; set {MONITORING_ENV}=true locally to opt in. No orders are placed.")
+    if not isinstance(features, dict) or set(features) != set(EXPECTED_FEATURES):
+        raise ValueError("features must contain exactly the 18 expected Kitty feature names")
+    try:
+        ordered = [float(features[name]) for name in EXPECTED_FEATURES]
+    except (TypeError, ValueError, KeyError) as exc:
+        raise ValueError("all Kitty features must be numeric") from exc
+    if not all(math.isfinite(value) for value in ordered):
+        raise ValueError("Kitty features must all be finite numbers")
+    model, scaler, checkpoint = _load()
+    scaled = scaler.transform(np.asarray(ordered, dtype=np.float64).reshape(1, -1))
+    tensor = torch.as_tensor(scaled, dtype=torch.float32)
+    with torch.no_grad():
+        probabilities = torch.softmax(model(tensor), dim=1)[0].cpu().numpy().tolist()
+    index = int(np.argmax(probabilities))
+    return {
+        "signal": CLASS_MAPPING[str(index)], "class_index": index,
+        "confidence": float(probabilities[index]),
+        "probabilities": {CLASS_MAPPING[str(i)]: float(probabilities[i]) for i in range(3)},
+        "model": "Kitty V3 BTC retrained", "best_epoch": checkpoint.get("best_epoch"),
+        "monitor_only": True, "trading_authorized": False,
+        "gold_forex_validation": "unverified",
+        "warning": "Experimental cross-market output only. Confirm feature formulas and target horizon against the original training pipeline; do not use this output to place orders.",
+    }
