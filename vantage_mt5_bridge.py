@@ -38,6 +38,10 @@ def _utc_now() -> str:
 def _as_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
+    dtype = getattr(value, "dtype", None)
+    field_names = getattr(dtype, "names", None)
+    if field_names:
+        return {name: value[name].item() if hasattr(value[name], "item") else value[name] for name in field_names}
     names = ("trade_mode", "login", "server", "currency", "balance", "equity")
     return {name: getattr(value, name) for name in names if hasattr(value, name)}
 
