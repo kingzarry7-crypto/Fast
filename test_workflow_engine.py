@@ -3,6 +3,15 @@ from unittest.mock import patch
 
 from workflow_engine import plan_goal, run_workflow, _outcome_verification
 class WorkflowPlannerTests(unittest.TestCase):
+    def test_new_website_build_does_not_require_browser_url(self):
+        plan = plan_goal('wf-site', 'user', 'Build me a complete responsive website, create all required files, and run tests')
+        self.assertEqual(plan['kind'], 'website_build')
+        self.assertFalse(plan['requires_approval'])
+        self.assertEqual(
+            [step['action'] for step in plan['steps'][-3:]],
+            ['engineering_plan', 'verify', 'learn'],
+        )
+
     def test_revenue_goal_requires_approval(self):
         plan = plan_goal('wf', 'user', 'Find me legitimate website clients this week')
         self.assertEqual(plan['kind'], 'revenue_freelance')
