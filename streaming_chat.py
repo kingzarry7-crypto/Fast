@@ -168,9 +168,15 @@ def _stream_cloudflare(messages: list):
 
 
 def _provider_streams(messages: list):
-    # Keep streaming chat aligned with ai_engine's Cloudflare-first provider
-    # order. Cloudflare's Worker returns a complete JSON answer, so emit it as
-    # one SSE token; the frontend still receives the same stream event format.
+    # The Zarry model is available on both normal and streaming chat.
+    if ai_engine.HF_TOKEN:
+        yield "huggingface", _stream_openai_compatible(
+            url=ai_engine.HF_INFERENCE_URL,
+            key=ai_engine.HF_TOKEN,
+            model=ai_engine.HF_MODEL_ID,
+            messages=messages,
+        )
+    # Cloudflare's Worker returns a complete JSON answer, so emit it as one SSE token.
     if ai_engine.CLOUDFLARE_AI_TOKEN:
         yield "cloudflare", _stream_cloudflare(messages)
     if ai_engine.OPENAI_API_KEY:
