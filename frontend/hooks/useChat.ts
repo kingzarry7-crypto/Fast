@@ -126,7 +126,7 @@ export function useChat(
         // Code/build requests need the full agent-capable /api/chat path, not the
         // casual-chat streaming shortcut. This lets the backend plan tools and
         // return larger, structured code responses.
-        const codeTask = /\\b(write|generate|build|create|implement|debug|fix|refactor|review|explain|print|show)\\b.{0,80}\\b(code|script|function|class|component|website|web app|app|api|backend|frontend|html|css|javascript|typescript|python|react|next\\.js|sql|file|repository|repo|program|software|project)\\b|\\b(code|script|function|class|component|website|web app|api|backend|frontend|html|css|javascript|typescript|python|react|next\\.js|sql|repository|repo|program|software|project)\\b.{0,80}\\b(write|generate|build|create|implement|debug|fix|refactor|review|print|show)\\b/i.test(effectiveText);
+        const codeTask = /\b(write|generate|build|create|implement|debug|fix|refactor|review|explain|print|show)\b.{0,80}\b(code|script|function|class|component|website|web app|app|api|backend|frontend|html|css|javascript|typescript|python|react|next\.js|sql|file|repository|repo|program|software|project)\b|\b(code|script|function|class|component|website|web app|api|backend|frontend|html|css|javascript|typescript|python|react|next\.js|sql|repository|repo|program|software|project)\b.{0,80}\b(write|generate|build|create|implement|debug|fix|refactor|review|print|show)\b/i.test(effectiveText);
         const shouldStream = intent === "normal" && !hasImage && !codeTask;
 
         if (shouldStream) {
