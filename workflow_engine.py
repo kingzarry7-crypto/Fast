@@ -67,6 +67,17 @@ def _classify_goal(goal: str) -> Dict[str, Any]:
         return {"kind": "revenue_research", "revenue": 0.0}
     if any(x in low for x in ("market", "trade", "btc", "eth", "sol", "gold", "xau")):
         return {"kind": "market", "revenue": 0.0}
+    # Building a new website is a coding/repository task, not browser operation.
+    # It does not require an existing URL; only navigation/editing/publishing an
+    # existing site should enter the browser workflow.
+    website_build_terms = (
+        "build a website", "build me a website", "create a website",
+        "create me a website", "make a website", "make me a website",
+        "responsive website", "landing page", "website from scratch",
+        "generate a website", "website code", "web app", "web application",
+    )
+    if any(term in low for term in website_build_terms):
+        return {"kind": "engineering", "revenue": 0.0}
     if any(x in low for x in ("open website", "open the website", "edit my website", "edit website", "update my website", "update website", "post on", "publish on", "upload to", "fill the form", "fill out the form", "click on", "browser", "website")):
         return {"kind": "browser", "revenue": 0.0}
     if any(x in low for x in ("deploy", "github", "code", "fix my app", "build")):
