@@ -14,5 +14,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install model test dependencies
+        run: python -m pip install --upgrade pip numpy torch scikit-learn
       - name: Run bridge safety tests
         run: python -m unittest tests.test_vantage_mt5_bridge -v
+      - name: Run Kitty inference safety tests
+        run: python -m unittest tests.test_kitty_v3_retrained -v
