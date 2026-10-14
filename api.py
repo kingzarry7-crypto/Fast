@@ -3486,6 +3486,17 @@ try:
 except Exception as e:
     print("KZ_WORKFLOW_API_FAILED", type(e).__name__, str(e)[:160], flush=True)
 
+try:
+    from skills_api import install_skills_api
+    install_skills_api(
+        app,
+        require_current_user=globals().get("_require_current_user"),
+        row_value=_row_value,
+    )
+    print("KZ_SKILLS_API_INSTALLED", flush=True)
+except Exception as e:
+    print("KZ_SKILLS_API_FAILED", type(e).__name__, str(e)[:160], flush=True)
+
 
 # cTrader routes use the same session-cookie authentication as the web API.
 if ctrader_api_router is not None:
