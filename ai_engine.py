@@ -2209,7 +2209,7 @@ class AIEngine:
         )
         if provider_command:
             provider_override = provider_command.group(1).lower()
-            if provider_override in {"zarry", "hf"}:
+            if provider_override == "hf":
                 provider_override = "huggingface"
             logger.info("Explicit AI provider requested: %s", provider_override)
 
