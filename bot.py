@@ -2394,7 +2394,7 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE):
             else:
                 interpretation = "HOLD / NO CLEAR BIAS"
 
-            message = "\\n".join([
+            message = "\n".join([
                 "🐈 <b>KING ZARRY AI • KITTY V3 MODEL ALERT</b>",
                 "",
                 f"Asset: <b>{html.escape(label)}</b> · Timeframe: <b>1D</b>",
