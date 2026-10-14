@@ -49,7 +49,7 @@ def execute_project(files: list[dict[str, Any]], *, command: list[str] | None = 
         if not isinstance(item, dict):
             raise ValueError("Each file must be an object")
         path, content = item.get("path"), item.get("content")
-        if not isinstance(path, str) or not path or path.startswith("/") or "\\\\" in path or any(part in ("", ".", "..") for part in path.split("/")):
+        if not isinstance(path, str) or not path or path.startswith("/") or "\\" in path or any(part in ("", ".", "..") for part in path.split("/")):
             raise ValueError("Invalid project path")
         parts = path.split("/")
         if parts[0].lower() in {".git", ".env", "node_modules", "__pycache__"} or any(part.lower() == ".env" or part.lower().startswith(".env.") for part in parts):
