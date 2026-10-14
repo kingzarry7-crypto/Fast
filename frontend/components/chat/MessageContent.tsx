@@ -4,6 +4,13 @@ import React, { useState } from "react";
 
 type Props = { content: string; isUser?: boolean };
 
+type PyodideRuntime = {
+  runPythonAsync: (source: string) => Promise<unknown>;
+  setStdout: (options: { batched: (text: string) => void }) => void;
+  setStderr: (options: { batched: (text: string) => void }) => void;
+};
+
+
 function safeImageUrl(value: string): string | null {
   try {
     const url = new URL(value);
@@ -49,7 +56,7 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
     if (running) return;
     setRunning(true); setOutput("Starting Python WebAssembly runtime…");
     try {
-      const w = window as Window & { loadPyodide?: (options: { indexURL: string }) => Promise<{ runPythonAsync: (source: string) => Promise<unknown>; setStdout: (options: { batched: (text: string) => void }) => void; setStderr: (options: { batched: (text: string) => void }) => void }> ; __kzPyodide?: Awaited<ReturnType<NonNullable<(Window & { loadPyodide?: unknown }).loadPyodide extends (...args: never[]) => unknown ? (Window & { loadPyodide?: (...args: never[]) => unknown }).loadPyodide : never>>> };
+      const w = window as Window & { loadPyodide?: (options: { indexURL: string }) => Promise<PyodideRuntime>; __kzPyodide?: PyodideRuntime };
       const loadRuntime = async () => {
         if (w.__kzPyodide) return w.__kzPyodide;
         if (!w.loadPyodide) {
