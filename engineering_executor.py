@@ -53,6 +53,8 @@ def generate_project(goal: str) -> dict[str, Any]:
             raise ValueError("The model did not return a valid project-file JSON document")
         data = json.loads(match.group(0))
 
+    if not isinstance(data, dict):
+        raise ValueError("The model response must be a JSON object")
     rows = data.get("files")
     if not isinstance(rows, list) or not rows:
         raise ValueError("The model returned no project files")
@@ -79,18 +81,28 @@ def generate_project(goal: str) -> dict[str, Any]:
 
     checks = []
     index = files.get("index.html", "")
-    if index:
-        ok = "<html" in index.lower() and "</html>" in index.lower()
-        checks.append({"name": "HTML document structure", "status": "passed" if ok else "failed"})
-    else:
-        checks.append({"name": "index.html present", "status": "failed"})
+    html_ok = bool(index and "<html" in index.lower() and "</html>" in index.lower())
+    checks.append({
+        "name": "HTML document structure",
+        "status": "passed" if html_ok else "failed",
+        "note": None if html_ok else "index.html must contain both opening and closing html tags.",
+    })
     for path, content in files.items():
         if path.endswith((".js", ".jsx", ".ts", ".tsx")):
             # This is a lightweight guard, not a JavaScript runtime test.
             balanced = content.count("{") == content.count("}") and content.count("(") == content.count(")")
-            checks.append({"name": f"Basic delimiter check: {path}", "status": "passed" if balanced else "warning"})
-    checks.append({"name": "Generated code execution", "status": "not_run", "note": "Generated code is not executed on the API server for safety."})
-    passed = bool(index and "</html>" in index.lower())
+            checks.append({
+                "name": f"Basic delimiter check: {path}",
+                "status": "passed" if balanced else "warning",
+                "note": None if balanced else "Delimiter counts differ; this is a heuristic, not a parser.",
+            })
+    checks.append({
+        "name": "Generated code execution",
+        "status": "not_run",
+        "note": "Generated code is not executed on the API server for safety.",
+    })
+    # A draft must not be reported as successful when a required structural check fails.
+    passed = all(item["status"] != "failed" for item in checks)
     return {
         "success": passed,
         "summary": str(data.get("summary") or "Generated project draft"),
