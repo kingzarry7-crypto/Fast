@@ -43,6 +43,12 @@ except Exception as _kitty_api_import_error:
 from ai_engine import AIEngine
 
 try:
+    from ctrader_api import router as ctrader_api_router
+except Exception as _ctrader_import_error:
+    ctrader_api_router = None
+    logging.getLogger("king_zarry_api").exception("cTrader API unavailable: %s", type(_ctrader_import_error).__name__)
+
+try:
     from connector_api import router as connector_api_router
 except Exception as _connector_api_import_error:
     connector_api_router = None
@@ -166,6 +172,9 @@ if not allowed_origins:
 
 if fiverr_api_router is not None:
     app.include_router(fiverr_api_router)
+
+if ctrader_api_router is not None:
+    app.include_router(ctrader_api_router)
 
 if connector_api_router is not None:
     app.include_router(connector_api_router)
@@ -3477,6 +3486,10 @@ try:
 except Exception as e:
     print("KZ_WORKFLOW_API_FAILED", type(e).__name__, str(e)[:160], flush=True)
 
+
+# cTrader routes use the same session-cookie authentication as the web API.
+if ctrader_api_router is not None:
+    app.state.ctrader_require_current_user = _require_current_user
 
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=int(os.getenv("PORT", "8000")), reload=False)
