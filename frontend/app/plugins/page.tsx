@@ -21,6 +21,16 @@ type PluginResponse = {
   providers?: Record<string, { connected?: boolean }>;
   detail?: string;
 };
+type CTraderStatus = {
+  configured?: boolean;
+  connected?: boolean;
+  account_id?: string | null;
+  environment?: string | null;
+  demo_verified?: boolean;
+  automated_orders_enabled?: boolean;
+  message?: string;
+  detail?: string;
+};
 
 const labels: Record<string, string> = {
   github: "GitHub",
@@ -38,6 +48,7 @@ export default function PluginsPage() {
   const [data, setData] = useState<PluginResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [ctrader, setCtrader] = useState<CTraderStatus | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -54,6 +65,15 @@ export default function PluginsPage() {
           : `Could not load plugin status (HTTP ${response.status}).`));
       }
       setData(parsed);
+      // cTrader is a separate OAuth connector and is not part of /api/plugins' tool registry.
+      try {
+        const cTraderResponse = await fetch("/api/ctrader/status", { credentials: "include", cache: "no-store" });
+        const cTraderRaw = await cTraderResponse.text();
+        const cTraderParsed = JSON.parse(cTraderRaw) as CTraderStatus;
+        setCtrader(cTraderResponse.ok ? cTraderParsed : { configured: false, connected: false, message: cTraderParsed.detail || "Could not verify cTrader status." });
+      } catch {
+        setCtrader({ configured: false, connected: false, message: "cTrader status could not be reached from this page." });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load plugin status.");
     } finally {
@@ -120,6 +140,28 @@ export default function PluginsPage() {
                   </article>
                 );
               })}
+            </section>
+
+            <section className="rounded-xl border border-cyan-400/20 bg-cyan-400/[0.035] p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs text-zinc-400">PROVIDER</p>
+                  <h2 className="mt-2 text-lg font-semibold">cTrader Open API</h2>
+                  <p className="mt-2 text-[10px] font-mono-tech tracking-widest text-zinc-400">
+                    {ctrader?.connected ? (ctrader.demo_verified ? "CONNECTED · DEMO VERIFIED" : "CONNECTED · VERIFICATION REQUIRED") : ctrader?.configured ? "CONFIGURED · NOT CONNECTED" : "SERVER SETUP REQUIRED"}
+                  </p>
+                  {ctrader?.account_id && <p className="mt-2 text-xs text-zinc-400">Account: {ctrader.account_id}{ctrader.environment ? " · " + ctrader.environment : ""}</p>}
+                  <p className="mt-2 text-xs leading-relaxed text-zinc-500">{ctrader?.message || "Status is checked against the Railway cTrader API. No connection is assumed."}</p>
+                  <p className="mt-1 text-xs text-amber-200/70">Automated orders are disabled.</p>
+                </div>
+                <a
+                  href="/api/ctrader/connect"
+                  aria-disabled={!ctrader?.configured}
+                  className={"inline-flex shrink-0 items-center justify-center rounded-lg border px-4 py-2 text-xs font-semibold " + (ctrader?.configured ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/20" : "pointer-events-none border-white/10 bg-white/5 text-zinc-500")}
+                >
+                  {ctrader?.connected ? "REAUTHORIZE cTRADER" : "CONNECT cTRADER"}
+                </a>
+              </div>
             </section>
 
             <section className="space-y-3">
