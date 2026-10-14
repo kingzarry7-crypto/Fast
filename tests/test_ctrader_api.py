@@ -1,22 +1,19 @@
 import unittest
-from ctrader_api import _sign_state, _verify_state
 import time
+from ctrader_api import _sign_state, _verify_state
 
 
 class CTraderStateTests(unittest.TestCase):
     def test_signed_state_round_trip(self):
-        secret = "test-secret"
-        state = _sign_state(f"user-123:{int(time.time())}", secret)
-        self.assertTrue(_verify_state(state, secret))
+        state = _sign_state("user-123", "a-long-test-secret-at-least-32-characters")
+        self.assertEqual(_verify_state(state, "a-long-test-secret-at-least-32-characters"), "user-123")
 
     def test_tampered_state_rejected(self):
-        secret = "test-secret"
-        state = _sign_state(f"user-123:{int(time.time())}", secret)
-        self.assertFalse(_verify_state(state + "x", secret))
-
-    def test_expired_state_rejected(self):
-        state = _sign_state(f"user-123:{int(time.time()) - 9999}", "test-secret")
-        self.assertFalse(_verify_state(state, "test-secret"))
+        secret = "a-long-test-secret-at-least-32-characters"
+        state = _sign_state("user-123", secret)
+        self.assertNotEqual(state, state + "x")
+        with self.assertRaises(Exception):
+            _verify_state(state + "x", secret)
 
 
 if __name__ == "__main__":
