@@ -155,7 +155,7 @@ export default function PluginsPage() {
                   <p className="mt-1 text-xs text-amber-200/70">Automated orders are disabled.</p>
                 </div>
                 <a
-                  href="/api/ctrader/connect"
+                  href="/ctrader/connect"
                   aria-disabled={!ctrader?.configured}
                   className={"inline-flex shrink-0 items-center justify-center rounded-lg border px-4 py-2 text-xs font-semibold " + (ctrader?.configured ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/20" : "pointer-events-none border-white/10 bg-white/5 text-zinc-500")}
                 >
