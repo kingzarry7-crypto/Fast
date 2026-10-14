@@ -16,7 +16,8 @@ SKILLS = (
         "tools": ["repository_files", "agent_workflow"],
         "execution": "isolated_runner_required_for_project_execution",
         "approval": "Review changes before merging or deploying.",
-        "available": True,
+        "available": False,
+        "availability": "unverified",
     },
     {
         "id": "web",
@@ -79,7 +80,7 @@ _SKILL_BY_ID = {skill["id"]: skill for skill in SKILLS}
 
 
 def list_skills():
-    """Return safe public metadata, not secrets or runtime credentials."""
+    """Return safe metadata. Provider readiness must be verified separately."""
     return [dict(skill, tools=list(skill["tools"]), task_types=list(skill["task_types"])) for skill in SKILLS]
 
 
