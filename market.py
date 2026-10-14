@@ -1219,7 +1219,12 @@ def get_price(symbol):
             logger.debug("price %s via Alpaca crypto feed = %s", symbol, price)
             return price
         except Exception as e:
-            logger.warning("Alpaca price unavailable for %s (%s); trying fallback providers", symbol, type(e).__name__)
+            reason = str(e)[:180]
+            _key, _secret = _alpaca_credentials()
+            for _credential in (_key, _secret):
+                if _credential:
+                    reason = reason.replace(_credential, "[redacted]")
+            logger.warning("Alpaca price unavailable for %s (%s: %s); trying fallback providers", symbol, type(e).__name__, reason)
     pair = binance_pair(symbol)
     if pair:
         try:
@@ -1241,7 +1246,12 @@ def get_candles(symbol, timeframe="15m", outputsize=150):
             logger.debug("candles %s via Alpaca tf=%s n=%s", symbol, timeframe, len(candles))
             return candles
         except Exception as e:
-            logger.warning("Alpaca candles unavailable for %s (%s); trying fallback providers", symbol, type(e).__name__)
+            reason = str(e)[:180]
+            _key, _secret = _alpaca_credentials()
+            for _credential in (_key, _secret):
+                if _credential:
+                    reason = reason.replace(_credential, "[redacted]")
+            logger.warning("Alpaca candles unavailable for %s (%s: %s); trying fallback providers", symbol, type(e).__name__, reason)
     pair = binance_pair(symbol)
     if pair:
         try:
