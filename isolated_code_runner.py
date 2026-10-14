@@ -17,6 +17,8 @@ MAX_FILES = 12
 MAX_FILE_CHARS = 18000
 MAX_OUTPUT_CHARS = 12000
 MAX_TIMEOUT_SECONDS = 60
+ALLOWED_SUFFIXES = {'.html', '.css', '.js', '.jsx', '.ts', '.tsx', '.json', '.md', '.svg', '.py'}
+ALLOWED_COMMANDS = {'python', 'python3', 'pytest', 'node', 'npm', 'npx'}
 
 
 class RunnerUnavailable(RuntimeError):
@@ -49,8 +51,12 @@ def execute_project(files: list[dict[str, Any]], *, command: list[str] | None = 
         path, content = item.get("path"), item.get("content")
         if not isinstance(path, str) or not path or path.startswith("/") or "\\\\" in path or any(part in ("", ".", "..") for part in path.split("/")):
             raise ValueError("Invalid project path")
-        if path.split("/")[0].lower() in {".git", ".env", "node_modules", "__pycache__"}:
+        parts = path.split("/")
+        if parts[0].lower() in {".git", ".env", "node_modules", "__pycache__"} or any(part.lower() == ".env" or part.lower().startswith(".env.") for part in parts):
             raise ValueError("Restricted project path")
+        suffix = "." + parts[-1].rsplit(".", 1)[-1].lower() if "." in parts[-1] else ""
+        if suffix not in ALLOWED_SUFFIXES:
+            raise ValueError("Unsupported project file type")
         if path in seen:
             raise ValueError(f"Duplicate project path: {path}")
         if not isinstance(content, str) or len(content) > MAX_FILE_CHARS:
@@ -60,8 +66,10 @@ def execute_project(files: list[dict[str, Any]], *, command: list[str] | None = 
     if command is not None:
         if not isinstance(command, list) or not command or len(command) > 8 or any(not isinstance(arg, str) or len(arg) > 200 for arg in command):
             raise ValueError("command must be a short list of strings")
-        # Command policy is enforced by the runner too; never accept a shell string.
-        if any(arg in {"sh", "bash", "-c", "/bin/sh", "/bin/bash"} for arg in command):
+        # Restrict the executable itself; the runner must enforce this independently.
+        if command[0] not in ALLOWED_COMMANDS:
+            raise ValueError("Command executable is not permitted")
+        if any(arg in {"sh", "bash", "-c", "/bin/sh", "/bin/bash", "&&", "||", ";", "|", ">", "<"} for arg in command):
             raise ValueError("Shell execution is not permitted")
     base_url, token = _runner_config()
     payload = {"files": normalized, "command": command, "timeout_seconds": timeout_seconds}
