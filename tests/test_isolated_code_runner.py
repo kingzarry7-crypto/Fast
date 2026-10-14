@@ -20,7 +20,7 @@ class IsolatedRunnerGatewayTests(unittest.TestCase):
                 runner.execute_project([{"path": "main.py", "content": "print('hi')"}])
 
     def test_rejects_path_traversal_and_shell_command(self):
-        for path in ("../secret.py", "folder\\\\secret.py"):
+        for path in ("../secret.py", "folder\\secret.py"):
             with self.subTest(path=path), self.assertRaises(ValueError):
                 runner.execute_project([{"path": path, "content": "x"}])
         with self.assertRaises(ValueError):
