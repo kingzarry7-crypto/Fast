@@ -62,8 +62,13 @@ def install_skills_api(app, require_current_user, row_value=None):
         # The existing agent is the execution coordinator; it owns workflow
         # persistence, approvals, and external-action policy.
         from kz_agent import run
-        result = run(user_id, goal, account_id=str(account_id or "").strip() or None,
-                     run_now=run_now)
+        result = run(
+            user_id,
+            goal,
+            account_id=str(account_id or "").strip() or None,
+            run_now=run_now,
+            requested_skill=skill["id"],
+        )
         return {
             "status": "ok",
             "skill": {
@@ -73,6 +78,6 @@ def install_skills_api(app, require_current_user, row_value=None):
                 "available": bool(skill.get("available", False)),
             },
             "execution": "existing_agent_workflow",
-            "note": "Skill selection is a routing hint; provider-specific execution is not guaranteed unless its connector is configured.",
+            "note": "The requested skill is recorded in the workflow for audit. The current executor still uses the general agent plan; provider-specific execution is not yet implemented.",
             "agent": result,
         }
