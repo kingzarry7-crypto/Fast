@@ -183,7 +183,7 @@ async def ctrader_callback(request: Request, code: str = "", state: str = "", er
     if len(demo_accounts) != 1:
         raise HTTPException(status_code=422, detail="Could not uniquely verify one cTrader demo account. No account was saved; trading remains disabled.")
     _save_connection(user_id, token_data, demo_accounts[0])
-    return RedirectResponse("https://fast.kingzarry7.workers.dev/?connector=ctrader&status=connected", status_code=303)
+    return RedirectResponse("https://kingzarry.bid/?connector=ctrader&status=connected", status_code=303)
 
 
 @router.post("/disconnect")
