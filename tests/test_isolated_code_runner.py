@@ -25,6 +25,17 @@ class IsolatedRunnerGatewayTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             runner.execute_project([{"path": "main.py", "content": "x"}], command=["bash", "-c", "id"])
 
+    def test_rejects_unsupported_file_types_and_env_files(self):
+        for path in ("main.exe", "folder/.env.production", ".env.local"):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                runner.execute_project([{"path": path, "content": "x"}])
+
+    def test_rejects_unapproved_command_executable(self):
+        with self.assertRaises(ValueError):
+            runner.execute_project([{"path": "main.py", "content": "x"}], command=["curl", "https://example.com"])
+        with self.assertRaises(ValueError):
+            runner.execute_project([{"path": "main.py", "content": "x"}], command=["python", "-c", "print(1)"])
+
     @patch("isolated_code_runner.requests.post")
     def test_captures_actual_remote_exit_code_and_output(self, post):
         response = Mock()
