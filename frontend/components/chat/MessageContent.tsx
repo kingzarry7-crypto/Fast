@@ -80,7 +80,7 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
       runtime.setStderr({ batched: (text: string) => logs.push(text) });
       const result = await runtime.runPythonAsync(code);
       if (result !== undefined && result !== null) logs.push(String(result));
-      setOutput(logs.join("\\n") || "Finished successfully (no output).");
+      setOutput(logs.join("\n") || "Finished successfully (no output).");
     } catch (error) {
       setOutput(`Execution error: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
