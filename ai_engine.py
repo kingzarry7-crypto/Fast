@@ -1851,12 +1851,15 @@ class AIEngine:
         logger.info(f"✅ Crypto Vision ready (free tier) | endpoint={CRYPTOVISION_BASE_URL}")
 
     def _get_provider_order(self, provider_override: Optional[str] = None) -> List[str]:
-        providers = ["huggingface", "cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"]
+        providers = ["zarry", "huggingface", "cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"]
         preferred = str(provider_override or os.getenv("AI_PROVIDER", "")).strip().lower()
         if preferred in {"hf", "zarry", "huggingface", "cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"}:
-            preferred = "huggingface" if preferred in {"hf", "zarry"} else preferred
+            preferred = "huggingface" if preferred == "hf" else preferred
             return [preferred] + [p for p in providers if p != preferred]
-        return providers if HF_TOKEN else providers[1:]
+        # Prefer the user's own Zarry endpoint when configured, then fail over.
+        if clean_env_str(os.getenv("ZARRY_API_URL")):
+            return providers
+        return providers[1:] if HF_TOKEN else providers[2:]
 
     def _should_use_tavily(self, prompt: str) -> bool:
         if not self._tavily_module:
@@ -2119,8 +2122,11 @@ class AIEngine:
         for provider in finite_providers:
             try:
                 resp = None
-                if provider == "huggingface" and HF_TOKEN and not image:
-                    logger.info("AI provider attempt: huggingface-zarry | model=%s", HF_MODEL_ID)
+                if provider == "zarry" and clean_env_str(os.getenv("ZARRY_API_URL")) and not image:
+                    logger.info("AI provider attempt: local-zarry | endpoint configured")
+                    resp = self._zarry_local(prompt_text, history, persistent_ctx, casual)
+                elif provider == "huggingface" and HF_TOKEN and not image:
+                    logger.info("AI provider attempt: huggingface | model=%s", HF_MODEL_ID)
                     resp = self._huggingface(prompt_text, history, image, persistent_ctx, casual)
                 elif provider == "cloudflare" and CLOUDFLARE_AI_TOKEN and not image:
                     logger.info("AI provider attempt: cloudflare-workers-ai | model=@cf/meta/llama-3.3-70b-instruct-fp8-fast")
@@ -2161,6 +2167,7 @@ class AIEngine:
             finite_providers,
             last_err or "no configured provider returned a response",
             [p for p in finite_providers if (
+                (p == "zarry" and clean_env_str(os.getenv("ZARRY_API_URL"))) or
                 (p == "huggingface" and HF_TOKEN) or
                 (p == "cloudflare" and CLOUDFLARE_AI_TOKEN) or
                 (p == "openai" and OPENAI_API_KEY) or
@@ -2813,6 +2820,65 @@ class AIEngine:
 
     def _openai(self, prompt: str, history: List[dict], image: Optional[Tuple[str, bytes]], persistent_ctx: str = "", casual: bool = False) -> Optional[str]:
         return self._openrouter(prompt, history, image, persistent_ctx, casual)
+
+    def _zarry_local(self, prompt: str, history: List[dict], persistent_ctx: str = "", casual: bool = False) -> Optional[str]:
+        """Call the configured self-hosted Zarry text-generation endpoint.
+
+        Accept common FastAPI response shapes while keeping failures non-fatal so
+        the normal provider fallback chain can answer if the local tunnel is down.
+        """
+        endpoint = clean_env_str(os.getenv("ZARRY_API_URL"))
+        if not endpoint:
+            return None
+        messages = self._build_openai_messages(prompt, history, None, persistent_ctx, casual=casual)
+        payload = {
+            "prompt": prompt,
+            "input": prompt,
+            "text": prompt,
+            "messages": messages,
+            "history": history or [],
+            "max_new_tokens": 700 if casual else 1200,
+            "temperature": 0.85 if casual else 0.7,
+        }
+        headers = {"Content-Type": "application/json"}
+        token = clean_env_str(os.getenv("ZARRY_API_KEY"))
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        try:
+            response = requests.post(
+                endpoint, json=payload, headers=headers,
+                timeout=float(os.getenv("ZARRY_API_TIMEOUT", "25") or 25),
+            )
+            response.raise_for_status()
+            data = response.json()
+        except Exception as exc:
+            logger.warning("Local Zarry endpoint failed (%s); falling back", type(exc).__name__)
+            return None
+
+        if isinstance(data, str):
+            answer = data
+        elif isinstance(data, dict):
+            answer = None
+            for key in ("response", "generated_text", "text", "output", "result", "answer", "content"):
+                value = data.get(key)
+                if isinstance(value, str) and value.strip():
+                    answer = value
+                    break
+            if not answer:
+                choices = data.get("choices")
+                if isinstance(choices, list) and choices:
+                    first = choices[0] if isinstance(choices[0], dict) else {}
+                    answer = (first.get("message") or {}).get("content") or first.get("text")
+            if not answer and isinstance(data.get("data"), dict):
+                nested = data["data"]
+                answer = next((nested.get(k) for k in ("response", "generated_text", "text", "output", "answer")
+                               if isinstance(nested.get(k), str) and nested.get(k).strip()), None)
+        elif isinstance(data, list) and data and isinstance(data[0], dict):
+            answer = next((data[0].get(k) for k in ("generated_text", "text", "response", "output")
+                           if isinstance(data[0].get(k), str) and data[0].get(k).strip()), None)
+        else:
+            answer = None
+        return answer.strip() if isinstance(answer, str) and answer.strip() else None
 
     def _huggingface(self, prompt: str, history: List[dict], image: Optional[Tuple[str, bytes]], persistent_ctx: str = "", casual: bool = False) -> Optional[str]:
         """Generate text with the configured Zarry model through HF's OpenAI-compatible router."""
