@@ -8,6 +8,12 @@ class SkillRegistryTests(unittest.TestCase):
         ids = {skill["id"] for skill in list_skills()}
         self.assertEqual(ids, {"coding", "web", "images", "github", "testing", "data"})
 
+    def test_unverified_skills_are_not_advertised_as_ready(self):
+        for skill in list_skills():
+            with self.subTest(skill=skill["id"]):
+                self.assertFalse(skill["available"])
+                self.assertEqual(skill["availability"], "unverified")
+
     def test_every_skill_has_policy_and_execution_metadata(self):
         for skill in SKILLS:
             with self.subTest(skill=skill["id"]):
