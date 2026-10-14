@@ -141,7 +141,7 @@ async def ctrader_connect(request: Request):
     client_id, client_secret, redirect_uri, state_secret = _config()
     if not client_id or not client_secret or len(state_secret) < 32:
         raise HTTPException(status_code=503, detail="Set cTrader credentials and a 32+ character CONNECTOR_STATE_SECRET in Railway.")
-    params = {"client_id": client_id, "redirect_uri": redirect_uri, "scope": "trading", "product": " cTrader", "state": _sign_state(user_id, state_secret)}
+    params = {"client_id": client_id, "redirect_uri": redirect_uri, "scope": "trading", "product": "web", "state": _sign_state(user_id, state_secret)}
     return RedirectResponse(AUTH_URL + "?" + urlencode(params))
 
 
