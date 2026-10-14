@@ -24,7 +24,7 @@ type RunResult = {
 };
 
 const FALLBACK_SKILLS: Skill[] = [
-  { id: "coding", name: "Coding & App Building", description: "Plan and create applications, APIs, components, and code changes.", icon: "⌘", task_types: ["engineering", "website_build"], tools: ["repository_files", "agent_workflow"], execution: "Isolated runner required for full project execution.", approval: "Review changes before merging or deploying.", available: true },
+  { id: "coding", name: "Coding & App Building", description: "Plan and create applications, APIs, components, and code changes.", icon: "⌘", task_types: ["engineering", "website_build"], tools: ["repository_files", "agent_workflow"], execution: "Isolated runner required for full project execution.", approval: "Review changes before merging or deploying.", available: false, availability: "unverified" },
   { id: "web", name: "Web Research", description: "Research current information and summarize evidence with sources.", icon: "◎", task_types: ["research", "browser"], tools: ["configured_web_search", "browser_operator"], execution: "Existing research workflow.", approval: "Authenticated sessions and consequential actions require approval.", available: true },
   { id: "images", name: "Images & Media", description: "Prepare image or video generation/editing requests using configured providers.", icon: "▧", task_types: ["image_generation", "media_editing"], tools: ["configured_media_providers"], execution: "Depends on the media provider being configured.", approval: "Confirm paid or external publishing actions.", available: true },
   { id: "github", name: "GitHub & Delivery", description: "Inspect repository files, prepare code changes, and check CI/deployment evidence.", icon: "⑂", task_types: ["github", "engineering", "deployment"], tools: ["github_connector_when_authorized", "workflow_engine"], execution: "Repository actions are permission-gated.", approval: "Review before merge, release, or production deployment.", available: true },
@@ -96,10 +96,10 @@ export default function SkillsPage() {
               <Link href="/dashboard" className="text-xs text-cyan-300 hover:text-cyan-100">← Back to dashboard</Link>
               <p className="mt-4 text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-300/70">King Zarry AI · Capability workspace</p>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Build & Skills</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">Choose a skill, describe the outcome, and start a task through the existing authenticated agent workflow.</p>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">Choose a skill and submit a task through the authenticated agent workflow. A skill is not marked ready until its required integrations are verified.</p>
             </div>
             <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/[0.06] px-4 py-3 text-xs text-cyan-100/80">
-              {loadingSkills ? "Loading catalogue…" : `${skills.length} skills available`}
+              {loadingSkills ? "Checking skills…" : `${skills.filter((skill) => skill.available).length} verified ready · ${skills.length} defined`}
             </div>
           </header>
 
@@ -110,7 +110,7 @@ export default function SkillsPage() {
                 <div className="flex items-start gap-3">
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-300/20 bg-cyan-300/[0.08] text-lg text-cyan-200">{skill.icon || "✦"}</span>
                   <div className="min-w-0">
-                    <h2 className="font-semibold text-white">{skill.name}</h2>
+                    <div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold text-white">{skill.name}</h2><span className={"rounded-full border px-2 py-0.5 text-[9px] " + (skill.available ? "border-emerald-400/30 text-emerald-200" : "border-amber-400/30 text-amber-200")}>{skill.available ? "Verified ready" : "Not verified"}</span></div>
                     <p className="mt-1 text-xs leading-5 text-slate-400">{skill.description}</p>
                   </div>
                 </div>
