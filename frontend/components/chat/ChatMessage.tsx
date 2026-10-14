@@ -48,8 +48,9 @@ export function ChatMessage({
   const isUser = normalizedRole === "user";
   const isSystem = normalizedRole === "system";
 
-  // Chat is rendered as plain text, so never expose Markdown emphasis markers.
-  const displayContent = content.replaceAll("***", "").replaceAll("**", "").replaceAll("__", "");
+  // Preserve Markdown markers so MessageContent can render bold text, inline code,
+  // lists, and fenced code blocks consistently instead of damaging source snippets.
+  const displayContent = content;
 
   const handleCopy = async () => {
     try {
