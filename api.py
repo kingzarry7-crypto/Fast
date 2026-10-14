@@ -1592,6 +1592,11 @@ async def execute_isolated_code_endpoint(request: Request):
 
     try:
         from isolated_code_runner import execute_project, RunnerUnavailable
+    except Exception as exc:
+        logger.error("Isolated execution gateway unavailable: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Isolated execution is unavailable; no local execution was attempted")
+
+    try:
         result = await asyncio.to_thread(
             execute_project,
             files,
