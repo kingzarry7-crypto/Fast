@@ -97,7 +97,7 @@ def _save_connection(user_id: str, token_data: dict, account: dict):
         "environment": str(account.get("environment") or account.get("accountType") or "").lower(),
         "broker_title": str(account.get("brokerTitle") or account.get("brokerName") or ""),
         "trader_login": str(account.get("traderLogin") or ""),
-        "demo_verified": False,
+        "demo_verified": True,
     }
     with get_db_cursor(commit=True) as cur:
         cur.execute(
