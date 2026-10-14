@@ -1096,10 +1096,130 @@ def _twelve_get_candles(symbol: str, timeframe: str = "15m", outputsize: int = 1
         raise RuntimeError(f"Insufficient candle data returned for {symbol} (got {len(candles)} candles).")
     return candles
 
+def _alpaca_credentials():
+    """Read Alpaca credentials at call time; never log or return secret values."""
+    key = _clean_env_str(os.getenv("ALPACA_API_KEY"))
+    secret = _clean_env_str(os.getenv("ALPACA_SECRET_KEY"))
+    return key, secret
+
+
+def _alpaca_symbol(symbol: str) -> str:
+    """Normalize common crypto aliases to Alpaca's BASE/USD market symbols."""
+    raw = _normalize_symbol_key(symbol)
+    if _is_gold_symbol(raw):
+        raise RuntimeError("Alpaca crypto feed does not provide spot XAU/USD")
+    raw = raw.replace("-", "/")
+    if "/" in raw:
+        base = raw.split("/", 1)[0]
+    else:
+        base = raw
+        for suffix in ("USDT", "USD"):
+            if base.endswith(suffix) and len(base) > len(suffix):
+                base = base[:-len(suffix)]
+                break
+    if not base or not base.isalnum():
+        raise RuntimeError(f"Unsupported Alpaca crypto symbol: {symbol}")
+    return f"{base}/USD"
+
+
+def _alpaca_request(path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    key, secret = _alpaca_credentials()
+    if not key or not secret:
+        raise RuntimeError("Alpaca market-data credentials are not configured")
+    response = requests.get(
+        f"https://data.alpaca.markets{path}",
+        params=params or {},
+        headers={"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret},
+        timeout=18,
+    )
+    if response.status_code != 200:
+        # Do not include request headers or credentials in errors.
+        raise RuntimeError(f"Alpaca market-data HTTP {response.status_code}: {response.text[:160]}")
+    data = response.json()
+    if not isinstance(data, dict):
+        raise RuntimeError("Alpaca returned an unexpected market-data response")
+    return data
+
+
+def _alpaca_get_price(symbol: str) -> float:
+    alpaca_symbol = _alpaca_symbol(symbol)
+    data = _alpaca_request(
+        "/v1beta3/crypto/us/latest/trades",
+        {"symbols": alpaca_symbol},
+    )
+    trades = data.get("trades") or {}
+    trade = trades.get(alpaca_symbol) or {}
+    price = safe_float(trade.get("p") or trade.get("price"))
+    if price is None or price <= 0:
+        raise RuntimeError(f"Alpaca has no latest trade for {alpaca_symbol}")
+    return price
+
+
+def _alpaca_get_candles(symbol: str, timeframe: str = "15m", outputsize: int = 150) -> list:
+    alpaca_symbol = _alpaca_symbol(symbol)
+    tf_map = {
+        "1m": "1Min", "1min": "1Min",
+        "5m": "5Min", "5min": "5Min",
+        "15m": "15Min", "15min": "15Min",
+        "30m": "30Min", "30min": "30Min",
+        "1h": "1Hour", "1hour": "1Hour",
+        "2h": "2Hour", "2hour": "2Hour",
+        "4h": "4Hour", "4hour": "4Hour",
+        "1d": "1Day", "1day": "1Day",
+    }
+    tf = str(timeframe or "15m").strip().lower()
+    alpaca_tf = tf_map.get(tf)
+    if not alpaca_tf:
+        try:
+            alpaca_tf = tf_map.get(normalize_timeframe(tf).lower())
+        except Exception:
+            alpaca_tf = None
+    if not alpaca_tf:
+        raise RuntimeError(f"Unsupported Alpaca timeframe: {timeframe}")
+    limit = max(15, min(int(outputsize or 150), 1000))
+    data = _alpaca_request(
+        "/v1beta3/crypto/us/bars",
+        {"symbols": alpaca_symbol, "timeframe": alpaca_tf, "limit": limit, "sort": "asc"},
+    )
+    bars_by_symbol = data.get("bars") or {}
+    bars = bars_by_symbol.get(alpaca_symbol) or []
+    candles = []
+    for bar in bars:
+        try:
+            candles.append({
+                "datetime": str(bar.get("t") or ""),
+                "open": str(bar.get("o")),
+                "high": str(bar.get("h")),
+                "low": str(bar.get("l")),
+                "close": str(bar.get("c")),
+                "volume": str(bar.get("v") or "0"),
+            })
+        except Exception:
+            continue
+    if len(candles) < 15:
+        raise RuntimeError(f"Alpaca returned insufficient candles for {alpaca_symbol}: {len(candles)}")
+    return candles
+
+
+def _should_try_alpaca_market_data() -> bool:
+    provider = _clean_env_str(os.getenv("MARKET_DATA_PROVIDER"), "auto").lower()
+    if provider in {"off", "none", "disabled", "binance", "twelve", "twelvedata"}:
+        return False
+    key, secret = _alpaca_credentials()
+    return bool(key and secret)
+
+
 def get_price(symbol):
-    """Live price: free Binance for crypto, free providers for XAU, Twelve as final fallback."""
+    """Price routing: Alpaca crypto when configured, then free providers and Twelve Data."""
     if _is_gold_symbol(symbol):
         return _gold_free_get_price(symbol)
+    if _should_try_alpaca_market_data():
+        try:
+            price = _alpaca_get_price(symbol)
+            logger.debug("price %s via Alpaca crypto feed = %s", symbol, price)
+            return price
+        except Exception as e:
+            logger.warning("Alpaca price unavailable for %s (%s); trying fallback providers", symbol, type(e).__name__)
     pair = binance_pair(symbol)
     if pair:
         try:
@@ -1110,10 +1230,18 @@ def get_price(symbol):
             logger.warning("Binance price failed for %s (%s): %s — trying Twelve Data", symbol, pair, e)
     return _twelve_get_price(symbol)
 
+
 def get_candles(symbol, timeframe="15m", outputsize=150):
-    """OHLC: free Binance for crypto, biquote for XAU, Twelve as final fallback."""
+    """OHLC: Alpaca crypto when credentials are set, then Binance/Bybit, gold providers, or Twelve."""
     if _is_gold_symbol(symbol):
         return _gold_free_get_candles(symbol, timeframe, outputsize)
+    if _should_try_alpaca_market_data():
+        try:
+            candles = _alpaca_get_candles(symbol, timeframe, outputsize)
+            logger.debug("candles %s via Alpaca tf=%s n=%s", symbol, timeframe, len(candles))
+            return candles
+        except Exception as e:
+            logger.warning("Alpaca candles unavailable for %s (%s); trying fallback providers", symbol, type(e).__name__)
     pair = binance_pair(symbol)
     if pair:
         try:
