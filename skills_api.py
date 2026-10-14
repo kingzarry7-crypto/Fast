@@ -38,20 +38,41 @@ def install_skills_api(app, require_current_user, row_value=None):
     @app.post("/api/skills/run")
     async def skills_run(request: Request):
         user_id = user_id_for(request)
-        body = await request.json()
-        body = body if isinstance(body, dict) else {}
+        try:
+            body = await request.json()
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="Request body must be valid JSON") from exc
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="Request body must be a JSON object")
         goal = str(body.get("goal") or "").strip()
         skill_id = str(body.get("skill_id") or "").strip().lower()
         if not goal:
             raise HTTPException(status_code=400, detail="goal is required")
         if len(goal) > 4000:
             raise HTTPException(status_code=400, detail="goal must be 4000 characters or fewer")
+        run_now = body.get("run_now", True)
+        if not isinstance(run_now, bool):
+            raise HTTPException(status_code=400, detail="run_now must be a boolean")
+        account_id = body.get("account_id")
+        if account_id is not None and not isinstance(account_id, (str, int)):
+            raise HTTPException(status_code=400, detail="account_id must be a string or integer")
         skill = get_skill(skill_id) if skill_id else get_skill(classify_skill_request(goal))
         if not skill:
             raise HTTPException(status_code=404, detail="Unknown skill")
         # The existing agent is the execution coordinator; it owns workflow
         # persistence, approvals, and external-action policy.
         from kz_agent import run
-        result = run(user_id, goal, account_id=str(body.get("account_id") or "").strip() or None,
-                     run_now=bool(body.get("run_now", True)))
-        return {"status": "ok", "skill": {"id": skill["id"], "name": skill["name"]}, "agent": result}
+        result = run(user_id, goal, account_id=str(account_id or "").strip() or None,
+                     run_now=run_now)
+        return {
+            "status": "ok",
+            "skill": {
+                "id": skill["id"],
+                "name": skill["name"],
+                "availability": skill.get("availability", "unverified"),
+                "available": bool(skill.get("available", False)),
+            },
+            "execution": "existing_agent_workflow",
+            "note": "Skill selection is a routing hint; provider-specific execution is not guaranteed unless its connector is configured.",
+            "agent": result,
+        }
