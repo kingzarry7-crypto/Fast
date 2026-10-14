@@ -1557,6 +1557,70 @@ async def logout(request: Request, response: Response):
     _clear_session_cookie(response)
     return {"status": "success", "message": "Logged out successfully"}
 
+@app.post("/api/execute")
+async def execute_isolated_code_endpoint(request: Request):
+    """Run user-submitted code only through the authenticated remote sandbox gateway.
+
+    The browser authenticates with its King Zarry session cookie. The private
+    runner bearer token is used only server-to-server by isolated_code_runner.
+    Accepts the documented files/command/timeout_seconds contract and a simple
+    code/timeout convenience payload, normalizing both to the canonical runner API.
+    """
+    await asyncio.to_thread(_require_current_user, request)
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Expected a JSON request body")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Expected a JSON object")
+
+    files = payload.get("files")
+    command = payload.get("command")
+    timeout_seconds = payload.get("timeout_seconds", payload.get("timeout", 30))
+    code = payload.get("code")
+    if files is None and isinstance(code, str):
+        if not code.strip():
+            raise HTTPException(status_code=400, detail="Code must not be empty")
+        files = [{"path": "main.py", "content": code}]
+        command = command or ["python", "main.py"]
+    if not isinstance(files, list) or not files:
+        raise HTTPException(status_code=400, detail="Provide non-empty files or a code string")
+    if not isinstance(timeout_seconds, int) or isinstance(timeout_seconds, bool) or not 1 <= timeout_seconds <= 60:
+        raise HTTPException(status_code=400, detail="timeout_seconds must be an integer from 1 to 60")
+    if command is not None and (not isinstance(command, list) or not command):
+        raise HTTPException(status_code=400, detail="command must be a non-empty list of strings")
+
+    try:
+        from isolated_code_runner import execute_project, RunnerUnavailable
+        result = await asyncio.to_thread(
+            execute_project,
+            files,
+            command=command,
+            timeout_seconds=timeout_seconds,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RunnerUnavailable as exc:
+        logger.warning("Isolated execution unavailable: %s", str(exc))
+        raise HTTPException(status_code=503, detail="Isolated execution is unavailable; no local execution was attempted")
+    except Exception as exc:
+        logger.exception("Unexpected isolated execution failure: %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Isolated execution failed")
+
+    stdout = result.get("stdout", "")
+    stderr = result.get("stderr", "")
+    exit_code = result["exit_code"]
+    return {
+        "status": "OK" if exit_code == 0 else "ERROR",
+        "output": stdout,
+        "stdout": stdout,
+        "stderr": stderr,
+        "exit_code": exit_code,
+        "duration_ms": result.get("duration_ms"),
+        "runner": result.get("runner", "remote_isolated"),
+    }
+
+
 @app.post("/api/chat")
 async def chat_endpoint(request: Request, chat: ChatRequest):
     user_row = await asyncio.to_thread(_require_current_user, request)
