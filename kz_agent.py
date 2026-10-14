@@ -73,7 +73,7 @@ def snapshot(item: Dict[str, Any] | None) -> Dict[str, Any]:
 
 
 def run(user_id: str, goal: str, *, account_id: str | None = None,
-        run_now: bool = True) -> Dict[str, Any]:
+        run_now: bool = True, requested_skill: str | None = None) -> Dict[str, Any]:
     goal = str(goal or "").strip()
     if not goal:
         raise ValueError("goal is required")
@@ -87,6 +87,10 @@ def run(user_id: str, goal: str, *, account_id: str | None = None,
     # has an inspectable plan and the executor can never silently lose context.
     item.setdefault("context", {})["brain"] = brain_plan
     item["context"]["agent_version"] = "brain-v1"
+    if requested_skill:
+        # Preserve the UI/API skill choice for audit and future executor routing.
+        # This is metadata only; it does not assert that a provider is available.
+        item["context"]["requested_skill"] = str(requested_skill).strip().lower()
     item["risk"] = brain_plan["risk"]
     item["requires_approval"] = bool(
         item.get("requires_approval") or brain_plan["approval_required"]
