@@ -25,6 +25,7 @@ const EXPLORE = [
   { href: "/signals", label: "Signals", detail: "Trading signals and analysis", icon: "⌁" },
   { href: "/news", label: "News & research", detail: "Discover current opportunities", icon: "⌕" },
   { href: "/plugins", label: "Explore tools", detail: "Tools and integrations", icon: "◇" },
+  { href: "/skills", label: "Build & Skills", detail: "Build, research, test, and analyze", icon: "⌘" },
   { href: "/history", label: "Chat history", detail: "Find previous conversations", icon: "◷" },
   { href: "/settings", label: "Settings", detail: "Account and preferences", icon: "⚙" },
   { href: "/pricing", label: "Plans", detail: "View plan options", icon: "☆" },
