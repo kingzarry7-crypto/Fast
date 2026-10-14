@@ -28,7 +28,8 @@ SKILLS = (
         "tools": ["configured_web_search", "browser_operator"],
         "execution": "existing_research_workflow",
         "approval": "Authenticated sessions and consequential actions require approval.",
-        "available": True,
+        "available": False,
+        "availability": "unverified",
     },
     {
         "id": "images",
@@ -39,7 +40,8 @@ SKILLS = (
         "tools": ["configured_media_providers"],
         "execution": "provider_dependent",
         "approval": "Confirm paid or external publishing actions before execution.",
-        "available": True,
+        "available": False,
+        "availability": "unverified",
     },
     {
         "id": "github",
@@ -50,7 +52,8 @@ SKILLS = (
         "tools": ["github_connector_when_authorized", "workflow_engine"],
         "execution": "repository_actions_are_permission_gated",
         "approval": "Require review before merge, release, or production deployment.",
-        "available": True,
+        "available": False,
+        "availability": "unverified",
     },
     {
         "id": "testing",
@@ -61,7 +64,8 @@ SKILLS = (
         "tools": ["configured_test_runner", "workflow_engine"],
         "execution": "isolated_runner_required_for_untrusted_code",
         "approval": "Never report a test as passing without captured test evidence.",
-        "available": True,
+        "available": False,
+        "availability": "unverified",
     },
     {
         "id": "data",
@@ -72,7 +76,8 @@ SKILLS = (
         "tools": ["python_runner_for_supported_snippets", "configured_data_tools"],
         "execution": "browser_wasm_for_supported_python; isolated_runner_for_full_jobs",
         "approval": "Distinguish measured results from estimates; protect uploaded data.",
-        "available": True,
+        "available": False,
+        "availability": "unverified",
     },
 )
 
