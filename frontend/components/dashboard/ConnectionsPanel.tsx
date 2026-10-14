@@ -50,6 +50,7 @@ export default function ConnectionsPanel() {
   const [tiktokQr, setTiktokQr] = useState<any>(null);
   const [google, setGoogle] = useState<any>(null);
   const [shopify, setShopify] = useState<any>(null);
+  const [ctrader, setCtrader] = useState<any>(null);
   const [googleData, setGoogleData] = useState<any>(null);
   const [googleApproval, setGoogleApproval] = useState<any>(null);
   const [googleTo, setGoogleTo] = useState("");
@@ -131,6 +132,14 @@ export default function ConnectionsPanel() {
       setGithub(d.github || null);
       setTiktok(d.tiktok || null);
       setShopify(d.shopify || null);
+      try {
+        const cr = await fetch("/api/ctrader/status", { credentials: "include", cache: "no-store" });
+        const cd = await readApiResponse(cr);
+        if (cr.ok) setCtrader(cd);
+        else setCtrader({ configured: false, connected: false, message: cd.detail || "Sign in to check cTrader status." });
+      } catch {
+        setCtrader((current: any) => current || { configured: false, connected: false, message: "Could not load cTrader status." });
+      }
       try {
         const gr = await fetch("/api/connectors/google/status", { credentials: "include", cache: "no-store" });
         const gd = await readApiResponse(gr);
@@ -733,6 +742,32 @@ export default function ConnectionsPanel() {
                       <div className="text-[10px] text-zinc-500">{github?.connected ? "AUTHORIZED ACCOUNT CONNECTED" : github?.configured ? "OAuth ready" : "SERVER SETUP REQUIRED"}</div>
                     </div>
                     <button onClick={connectGitHub} disabled={busy || !github?.configured} className="rounded-md border border-cyan-400/30 px-3 py-2 text-[9px] tracking-widest text-cyan-200 disabled:opacity-40">{github?.connected ? "RECONNECT / CHANGE ACCOUNT" : "CONNECT"}</button>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/[0.03] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-medium text-white">cTrader</div>
+                      <div className="text-[10px] text-zinc-500">
+                        {ctrader?.connected && ctrader?.demo_verified
+                          ? "DEMO ACCOUNT VERIFIED · ORDERS DISABLED"
+                          : ctrader?.connected
+                            ? "CONNECTED · DEMO VERIFICATION REQUIRED"
+                            : ctrader?.configured
+                              ? "READY TO AUTHORIZE"
+                              : "CHECK RAILWAY cTRADER SETTINGS"}
+                      </div>
+                      {ctrader?.account_id && <div className="mt-1 text-[9px] text-cyan-200/70">Account: {ctrader.account_id}</div>}
+                    </div>
+                    <button
+                      onClick={() => { window.location.href = "/api/ctrader/connect"; }}
+                      disabled={busy || !ctrader?.configured}
+                      className="rounded-md border border-cyan-400/30 px-3 py-2 text-[9px] tracking-widest text-cyan-200 disabled:opacity-40"
+                    >{ctrader?.connected ? "RECONNECT" : "CONNECT"}</button>
+                  </div>
+                  <div className="mt-2 text-[10px] leading-relaxed text-zinc-500">
+                    Secure cTrader authorization. Demo-account verification is required; automated orders remain disabled.
+                    {!ctrader?.configured && ctrader?.message ? " " + ctrader.message : ""}
                   </div>
                 </div>
                 <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/[0.03] p-3">
