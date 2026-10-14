@@ -59,6 +59,19 @@ def install_skills_api(app, require_current_user, row_value=None):
         skill = get_skill(skill_id) if skill_id else get_skill(classify_skill_request(goal))
         if not skill:
             raise HTTPException(status_code=404, detail="Unknown skill")
+        # Fail closed: the catalogue currently marks provider readiness as
+        # unverified. Do not create a workflow that might imply a skill can run
+        # when its dedicated executor/connector has not been verified.
+        if not skill.get("available", False) or skill.get("availability") != "verified":
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "skill_not_verified",
+                    "skill_id": skill["id"],
+                    "availability": skill.get("availability", "unverified"),
+                    "message": "This skill is not enabled yet because its dedicated executor and required providers have not been verified. No workflow was started.",
+                },
+            )
         # The existing agent is the execution coordinator; it owns workflow
         # persistence, approvals, and external-action policy.
         from kz_agent import run
