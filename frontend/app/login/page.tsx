@@ -1,14 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AICore from "@/components/AICore";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,7 +39,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email.trim(), password);
-      const requestedNext = searchParams.get("next") || "";
+      const requestedNext = new URLSearchParams(window.location.search).get("next") || "";
       // Only allow same-origin relative paths; never turn login into an open redirect.
       const next = requestedNext.startsWith("/") && !requestedNext.startsWith("//") && !requestedNext.includes("\\")
         ? requestedNext
