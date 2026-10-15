@@ -107,7 +107,7 @@ def _load() -> tuple[KittyOptimizedNet, Any, dict]:
         if not all(math.isfinite(float(value)) for value in probe[0]):
             raise ValueError("Packaged Kitty scaler returned non-finite values")
     except Exception as exc:
-        logger.warning("Kitty V3 using compatible scaler fallback (%s)", type(exc).__name__)
+        logger.warning("Kitty V3 using compatible scaler fallback (%s: %s)", type(exc).__name__, str(exc)[:200])
         scaler = _ScalerFallback()
 
     model = KittyOptimizedNet()
