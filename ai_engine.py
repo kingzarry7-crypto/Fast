@@ -737,6 +737,19 @@ def _detect_media_intent(prompt: str, has_image: bool = False) -> Optional[Dict[
     if not text:
         return None
 
+    # Editing an existing video is distinct from generating a new one. The
+    # current media provider pipeline does not expose a verified video-edit API.
+    is_video_edit = bool(re.search(
+        r"\b(?:edit|modify|trim|cut|splice|merge|caption|subtitle|stabilize|enhance)\b.{0,80}\b(?:video|clip|footage)\b",
+        text, re.IGNORECASE,
+    ))
+    if is_video_edit:
+        return {
+            "kind": "video_edit_unsupported",
+            "mode": "video-to-video",
+            "prompt": text,
+        }
+
     has_clear_verb = bool(_CLEAR_GENERATION_VERB.search(text))
     is_image_edit = bool(re.search(
         r"\b(?:edit|modify|retouch|enhance|restore|crop|resize|recolor|colorize|colourize|remove|change|replace|add)\b.{0,80}\b(?:image|picture|photo|photograph|portrait|artwork|illustration|background|chart|diagram)\b",
@@ -1985,6 +1998,13 @@ class AIEngine:
     # =====================================================
     def _route_media_request(self, user_id: str, prompt: str, intent: Dict[str, Any], image: Optional[Tuple[str, bytes]]) -> Optional[str]:
         kind = intent.get("kind")
+        if kind == "video_edit_unsupported":
+            return (
+                "🎬 I understood that you want to edit an existing video. This server currently supports "
+                "generating new videos, but its connected media pipeline does not yet provide verified "
+                "video-to-video editing. I have not changed the video. You can ask me to generate a new "
+                "video, or upload an image and request an image edit."
+            )
         agnes_ok = bool(AGNES_API_KEY)
         acedata_ok = bool(ACEDATA_API_KEY)
 
