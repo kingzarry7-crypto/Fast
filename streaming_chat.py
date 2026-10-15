@@ -255,6 +255,38 @@ def _build_stream_generator(
             })
             return
 
+    # Build requests must use the coding executor instead of the generic chat model.
+    # Keep this before web research and ordinary generation so the request cannot drift
+    # into an unrelated email/account explanation.
+    try:
+        from coding_request import handle_coding_request
+        coding_result = handle_coding_request(message)
+    except Exception as exc:
+        logger.exception("Streaming coding router failed: %s", type(exc).__name__)
+        coding_result = {
+            "status": "error",
+            "provider": "coding_agent",
+            "operation": "generate_project",
+            "reply": "The Coding Agent could not start safely. No project was created or deployed. Check Railway logs and retry.",
+            "project": None,
+        }
+    if coding_result is not None:
+        reply = str(coding_result.get("reply") or "").strip()
+        engine._save_memory(user_id, message, reply)
+        yield _sse({"type": "activity", "stage": "coding", "label": "Generating project files", "done": True})
+        yield _sse({"type": "start", "provider": "coding_agent"})
+        yield _sse({"type": "delta", "text": reply})
+        yield _sse({
+            "type": "done",
+            "conversation_id": conversation_id,
+            "text": reply,
+            "status": coding_result.get("status"),
+            "provider": "coding_agent",
+            "operation": coding_result.get("operation"),
+            "project": coding_result.get("project"),
+        })
+        return
+
     # Streaming is intentionally limited to ordinary text chat. The normal
     # /api/chat path remains authoritative for tools, web research, media and
     # images, so this feature cannot silently bypass those systems.
