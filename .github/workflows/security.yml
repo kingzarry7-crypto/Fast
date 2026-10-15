@@ -29,7 +29,7 @@ jobs:
       - name: Prepare runtime-only dependency manifest
         working-directory: frontend
         run: |
-          node -e 'const fs=require("node:fs"); const p=require("./package.json"); fs.mkdirSync(".audit-runtime",{recursive:true}); fs.writeFileSync(".audit-runtime/package.json", JSON.stringify({name:p.name,version:p.version,private:true,dependencies:p.dependencies},null,2));'
+          node -e 'const fs=require("node:fs"); const p=require("./package.json"); fs.mkdirSync(".audit-runtime",{recursive:true}); fs.writeFileSync(".audit-runtime/package.json", JSON.stringify({name:p.name,version:p.version,private:true,dependencies:p.dependencies,overrides:p.overrides},null,2));'
       - name: Generate runtime lockfile for audit
         working-directory: frontend/.audit-runtime
         run: |
