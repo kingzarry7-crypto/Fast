@@ -52,12 +52,18 @@ KNOWN_PROVIDERS = {
     "twelvedata": ("TwelveData", ["TWELVE_DATA_API_KEY", "TWELVEDATA_API_KEY"], ["market_data", "calendar"], "native", "Market/calendar capability is already represented in news.py."),
     "trading_economics": (
         "Trading Economics",
-        ["TRADING_ECONOMICS_API_KEY"],
-        ["economic_indicators", "market_data", "calendar", "financials", "forecasts", "news"],
-        "adapter_pending",
-        "Needs an adapter in news/market/calendar code before the AI can call it directly.",
+        ["TRADING_ECONOMICS_API_KEY", "TRADING_ECONOMICS_KEY"],
+        ["calendar"],
+        "native",
+        "Economic-calendar requests are implemented in news.py. Market indicators, financials, forecasts, and news are not yet advertised as wired capabilities.",
     ),
-    "massive": ("Massive/Polygon", ["MASSIVE_API_KEY", "POLYGON_API_KEY"], ["market_data"], "adapter_pending", "Needs a native market-data adapter before direct use."),
+    "massive": (
+        "Massive/Polygon",
+        ["MASSIVE_API_KEY", "POLYGON_API_KEY"],
+        ["market_data"],
+        "native",
+        "OHLCV aggregate adapter is implemented in market.py with runtime credential lookup and fallback routing; a live authenticated request is still required to verify the account/feed.",
+    ),
     "alpaca": ("Alpaca", ["ALPACA_API_KEY", "ALPACA_SECRET_KEY"], ["market_data"], "native", "market.py includes Alpaca market-data requests; both credentials are required and the live data path should be health-tested."),
     "fal": (
         "FAL AI",
@@ -184,15 +190,28 @@ def snapshot() -> Dict[str, Any]:
         except Exception as exc:
             universal = {"providers": [], "configured_count": 0, "error": type(exc).__name__}
 
-    web_research = {"configured": False, "instances": 0}
+    web_research = {
+        "configured": False,
+        "instances": 0,
+        "searxng_configured": False,
+        "tavily_fallback": bool(_env("TAVILY_API_KEY")),
+    }
     if web_research_engine is not None:
         try:
+            searxng_configured = bool(web_research_engine.is_configured())
             web_research = {
-                "configured": bool(web_research_engine.is_configured()),
+                "configured": searxng_configured or bool(_env("TAVILY_API_KEY")),
                 "instances": len(web_research_engine._env_urls()),
+                "searxng_configured": searxng_configured,
+                "tavily_fallback": bool(_env("TAVILY_API_KEY")),
             }
         except Exception:
-            web_research = {"configured": False, "instances": 0}
+            web_research = {
+                "configured": bool(_env("TAVILY_API_KEY")),
+                "instances": 0,
+                "searxng_configured": False,
+                "tavily_fallback": bool(_env("TAVILY_API_KEY")),
+            }
 
     return {
         "providers": providers,
@@ -294,15 +313,21 @@ def format_admin_report(s: Dict[str, Any], first_run: bool = False) -> str:
 
     web_research = s.get("web_research") or {}
     lines.append("")
-    if web_research.get("configured"):
+    if web_research.get("searxng_configured"):
         lines.append(
             f'🌐 <b>Deep Web Research: ACTIVE</b> — '
             f'{web_research.get("instances", 1)} SearXNG instance(s)'
         )
-        lines.append("   Multi-source search + public page fetching enabled for research/current questions.")
+        if web_research.get("tavily_fallback"):
+            lines.append("   SearXNG multi-source search + Tavily fallback + public page fetching enabled.")
+        else:
+            lines.append("   SearXNG multi-source search + public page fetching enabled.")
+    elif web_research.get("tavily_fallback"):
+        lines.append("🌐 <b>Web Research: ACTIVE (Tavily fallback)</b>")
+        lines.append("   Tavily search is configured; SearXNG is optional and adds self-hosted multi-source search.")
     else:
         lines.append("🌐 <b>Deep Web Research: NOT CONFIGURED</b>")
-        lines.append("   Add SEARXNG_URL or SEARXNG_URLS to enable multi-source free web research.")
+        lines.append("   Add TAVILY_API_KEY for managed web search, or SEARXNG_URL / SEARXNG_URLS for self-hosted multi-source research.")
 
     if s["unknown_env_keys"]:
         lines.append("")
