@@ -8,6 +8,7 @@ class MassiveMarketAdapterTests(unittest.TestCase):
     def test_crypto_symbol_maps_to_massive_ticker(self):
         self.assertEqual(market._massive_symbol("BTC/USD"), "X:BTCUSD")
         self.assertEqual(market._massive_symbol("ETHUSDT"), "X:ETHUSD")
+        self.assertEqual(market._massive_symbol("EUR/USD"), "C:EURUSD")
         self.assertEqual(market._massive_symbol("AAPL"), "AAPL")
 
     @patch.dict("os.environ", {"MASSIVE_API_KEY": "test-key"}, clear=False)
@@ -21,7 +22,7 @@ class MassiveMarketAdapterTests(unittest.TestCase):
                 {"t": 1792000000000 + index * 60000, "o": 100 + index,
                  "h": 102 + index, "l": 99 + index, "c": 101 + index,
                  "v": 12 + index}
-                for index in range(20)
+                for index in reversed(range(20))
             ],
         }
         get.return_value = response
@@ -34,6 +35,7 @@ class MassiveMarketAdapterTests(unittest.TestCase):
         args, kwargs = get.call_args
         self.assertIn("/v2/aggs/ticker/X:BTCUSD/range/1/minute/", args[0])
         self.assertEqual(kwargs["params"]["apiKey"], "test-key")
+        self.assertEqual(kwargs["params"]["sort"], "desc")
         self.assertNotIn("test-key", args[0])
 
     @patch.dict("os.environ", {}, clear=True)
