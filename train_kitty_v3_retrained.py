@@ -1,0 +1,236 @@
+"""Research-only Kitty V3 retraining experiments.
+
+Input CSV must contain the 18 features in EXPECTED_FEATURES and a target column
+named "target" with SHORT/NO TRADE/LONG or 0/1/2. An optional timestamp column
+("timestamp", "datetime", or "date") is sorted chronologically. No live trading
+or production checkpoint is changed by this script.
+"""
+from __future__ import annotations
+
+import argparse
+import copy
+import hashlib
+import json
+import random
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import torch
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, classification_report, confusion_matrix, f1_score, log_loss
+from sklearn.preprocessing import StandardScaler
+from torch import nn
+from torch.utils.data import DataLoader, TensorDataset
+
+FEATURES = [
+    "ret_1h", "ret_3h", "ret_6h", "ret_12h", "ret_24h",
+    "close_vs_sma6", "close_vs_sma20", "close_vs_sma50",
+    "sma6_vs_sma20", "rsi_14", "macd_norm", "macd_signal_norm",
+    "macd_hist_norm", "volatility_6h", "volatility_24h",
+    "range_pct", "body_pct", "close_position",
+]
+LABELS = {"SHORT": 0, "NO TRADE": 1, "LONG": 2}
+ARCHITECTURE = [18, 64, 32, 3]
+
+
+class KittyExperimentNet(nn.Module):
+    """Small MLP with selectable normalization/activation for fair comparisons."""
+
+    def __init__(self, variant: str = "baseline", dropout: float = 0.15):
+        super().__init__()
+        if variant not in {"baseline", "batchnorm", "leaky_relu"}:
+            raise ValueError("variant must be baseline, batchnorm, or leaky_relu")
+        activation = nn.LeakyReLU(0.05) if variant == "leaky_relu" else nn.ReLU()
+        layers: list[nn.Module] = [nn.Linear(18, 64)]
+        if variant == "batchnorm":
+            layers.append(nn.BatchNorm1d(64))
+        layers.extend([activation, nn.Dropout(dropout), nn.Linear(64, 32)])
+        if variant == "batchnorm":
+            layers.append(nn.BatchNorm1d(32))
+        layers.extend([copy.deepcopy(activation), nn.Dropout(0.10), nn.Linear(32, 3)])
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
+
+
+def load_dataset(path: Path) -> tuple[np.ndarray, np.ndarray, str]:
+    frame = pd.read_csv(path)
+    missing = [name for name in FEATURES + ["target"] if name not in frame.columns]
+    if missing:
+        raise ValueError("CSV is missing required columns: " + ", ".join(missing))
+    time_col = next((name for name in ("timestamp", "datetime", "date") if name in frame.columns), None)
+    if time_col:
+        frame[time_col] = pd.to_datetime(frame[time_col], errors="raise", utc=True)
+        frame = frame.sort_values(time_col, kind="stable").reset_index(drop=True)
+    x = frame[FEATURES].apply(pd.to_numeric, errors="raise").to_numpy(dtype=np.float32)
+    raw_y = frame["target"].astype(str).str.strip().str.upper()
+    y = raw_y.map({**LABELS, "0": 0, "1": 1, "2": 2})
+    if y.isna().any():
+        bad = sorted(raw_y[y.isna()].unique().tolist())
+        raise ValueError(f"Unsupported target labels: {bad}. Use SHORT, NO TRADE, LONG or 0, 1, 2.")
+    y_array = y.to_numpy(dtype=np.int64)
+    if len(x) < 100:
+        raise ValueError("At least 100 rows are required for chronological train/validation/test splits.")
+    if not np.isfinite(x).all():
+        raise ValueError("Feature values contain NaN or infinity; clean them before training.")
+    if set(np.unique(y_array)) != {0, 1, 2}:
+        raise ValueError("Dataset must contain all three classes: SHORT, NO TRADE, LONG.")
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    return x, y_array, digest
+
+
+def split_chronologically(x: np.ndarray, y: np.ndarray):
+    n = len(x)
+    train_end, val_end = int(n * 0.70), int(n * 0.85)
+    if min(train_end, val_end - train_end, n - val_end) < 1:
+        raise ValueError("Not enough rows for chronological splits.")
+    return (x[:train_end], y[:train_end]), (x[train_end:val_end], y[train_end:val_end]), (x[val_end:], y[val_end:])
+
+
+def train_one(
+    x_train: np.ndarray, y_train: np.ndarray,
+    x_val: np.ndarray, y_val: np.ndarray,
+    variant: str, optimizer_name: str, seed: int, epochs: int, patience: int,
+    batch_size: int, weight_decay: float,
+) -> tuple[KittyExperimentNet, dict]:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    model = KittyExperimentNet(variant=variant)
+    counts = np.bincount(y_train, minlength=3).astype(np.float32)
+    class_weights = counts.sum() / np.maximum(counts, 1.0) / 3.0
+    criterion = nn.CrossEntropyLoss(weight=torch.tensor(class_weights, dtype=torch.float32))
+    if optimizer_name == "adamw":
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=weight_decay)
+    elif optimizer_name == "adam":
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=weight_decay)
+    else:
+        raise ValueError("optimizer must be adamw or adam")
+
+    # Scaling is fitted only on the training window to avoid future-data leakage.
+    train_ds = TensorDataset(torch.from_numpy(x_train), torch.from_numpy(y_train))
+    loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, drop_last=(variant == "batchnorm" and len(train_ds) > batch_size))
+    val_x = torch.from_numpy(x_val)
+    val_y = torch.from_numpy(y_val)
+    best_loss, best_state, best_epoch, stale = float("inf"), None, 0, 0
+    history = []
+    for epoch in range(1, epochs + 1):
+        model.train()
+        train_losses = []
+        for batch_x, batch_y in loader:
+            optimizer.zero_grad(set_to_none=True)
+            logits = model(batch_x)
+            loss = criterion(logits, batch_y)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+            train_losses.append(float(loss.detach()))
+        model.eval()
+        with torch.inference_mode():
+            val_logits = model(val_x)
+            val_loss = float(nn.functional.cross_entropy(val_logits, val_y))
+        history.append({"epoch": epoch, "train_loss": float(np.mean(train_losses)), "val_loss": val_loss})
+        if val_loss < best_loss - 1e-5:
+            best_loss, best_state, best_epoch, stale = val_loss, copy.deepcopy(model.state_dict()), epoch, 0
+        else:
+            stale += 1
+            if stale >= patience:
+                break
+    if best_state is None:
+        raise RuntimeError("Training did not produce a valid checkpoint.")
+    model.load_state_dict(best_state)
+    model.eval()
+    return model, {"best_epoch": best_epoch, "best_validation_loss": best_loss, "history": history}
+
+
+def evaluate(model: nn.Module, x: np.ndarray, y: np.ndarray) -> dict:
+    model.eval()
+    with torch.inference_mode():
+        logits = model(torch.from_numpy(x))
+        probs = torch.softmax(logits, dim=1).cpu().numpy()
+    pred = probs.argmax(axis=1)
+    return {
+        "accuracy": float(accuracy_score(y, pred)),
+        "balanced_accuracy": float(balanced_accuracy_score(y, pred)),
+        "macro_f1": float(f1_score(y, pred, average="macro", zero_division=0)),
+        "log_loss": float(log_loss(y, probs, labels=[0, 1, 2])),
+        "confusion_matrix_labels_0_SHORT_1_NO_TRADE_2_LONG": confusion_matrix(y, pred, labels=[0, 1, 2]).tolist(),
+        "classification_report": classification_report(y, pred, labels=[0, 1, 2], target_names=["SHORT", "NO TRADE", "LONG"], output_dict=True, zero_division=0),
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--csv", required=True, type=Path, help="Historical feature dataset CSV")
+    parser.add_argument("--output-dir", type=Path, default=Path("kitty_v3_experiments"))
+    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--patience", type=int, default=10)
+    parser.add_argument("--batch-size", type=int, default=128)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--weight-decay", type=float, default=1e-4)
+    args = parser.parse_args()
+    if args.epochs < 1 or args.patience < 1 or args.batch_size < 2:
+        parser.error("epochs/patience must be positive and batch-size must be at least 2")
+    x, y, dataset_sha256 = load_dataset(args.csv)
+    (x_train, y_train), (x_val, y_val), (x_test, y_test) = split_chronologically(x, y)
+    scaler = StandardScaler()
+    x_train = scaler.fit_transform(x_train).astype(np.float32)
+    x_val = scaler.transform(x_val).astype(np.float32)
+    x_test = scaler.transform(x_test).astype(np.float32)
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    results = []
+    for variant in ("baseline", "batchnorm", "leaky_relu"):
+        for optimizer_name in ("adamw", "adam"):
+            model, training = train_one(
+                x_train, y_train, x_val, y_val, variant, optimizer_name,
+                args.seed, args.epochs, args.patience, args.batch_size, args.weight_decay,
+            )
+            val_metrics = evaluate(model, x_val, y_val)
+            # The test set is only evaluated after early stopping has selected weights.
+            test_metrics = evaluate(model, x_test, y_test)
+            run_name = f"{variant}_{optimizer_name}"
+            checkpoint_path = args.output_dir / f"{run_name}_candidate.pt"
+            torch.save({
+                "model_state_dict": model.state_dict(),
+                "scaler": scaler,
+                "features": FEATURES,
+                "architecture": ARCHITECTURE,
+                "model_variant": variant,
+                "optimizer": optimizer_name,
+                "seed": args.seed,
+                "best_epoch": training["best_epoch"],
+                "validation_accuracy": val_metrics["accuracy"],
+                "validation_metrics": val_metrics,
+                "test_metrics": test_metrics,
+                "dataset_sha256": dataset_sha256,
+                "split_sizes": {"train": len(y_train), "validation": len(y_val), "test": len(y_test)},
+                "research_only": True,
+                "production_ready": False,
+                "automatic_order_execution_enabled": False,
+            }, checkpoint_path)
+            results.append({
+                "variant": variant, "optimizer": optimizer_name,
+                "best_epoch": training["best_epoch"],
+                "best_validation_loss": training["best_validation_loss"],
+                "validation": val_metrics, "test": test_metrics,
+                "checkpoint": str(checkpoint_path),
+            })
+            print(json.dumps({"run": run_name, "validation": val_metrics, "test": test_metrics, "checkpoint": str(checkpoint_path)}))
+    report = {
+        "model": "Kitty V3 retraining experiment",
+        "research_only": True,
+        "production_ready": False,
+        "dataset_sha256": dataset_sha256,
+        "feature_order": FEATURES,
+        "chronological_split": {"train": len(y_train), "validation": len(y_val), "test": len(y_test)},
+        "note": "Do not choose a model from accuracy alone. Inspect class-wise recall, trading costs, drawdown, calibration, and walk-forward results before any production use.",
+        "results": results,
+    }
+    report_path = args.output_dir / "comparison_report.json"
+    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    print(f"Saved comparison report: {report_path}")
+
+
+if __name__ == "__main__":
+    main()
