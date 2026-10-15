@@ -146,7 +146,7 @@ AGNES_API_KEY = clean_env_str(os.getenv("AGNES_API_KEY"))
 AGNES_BASE_URL = clean_env_str(os.getenv("AGNES_BASE_URL"), "https://apihub.agnes-ai.com/v1").rstrip("/")
 AGNES_IMAGE_MODEL = clean_env_str(os.getenv("AGNES_IMAGE_MODEL"), "agnes-image-2.0-flash")
 AGNES_VIDEO_MODEL = clean_env_str(os.getenv("AGNES_VIDEO_MODEL"), "agnes-video-2.5")
-AGNES_IMAGE_TIMEOUT = int(clean_env_str(os.getenv("AGNES_IMAGE_TIMEOUT"), "120"))
+AGNES_IMAGE_TIMEOUT = min(30, max(5, int(clean_env_str(os.getenv("AGNES_IMAGE_TIMEOUT"), "30"))))
 AGNES_VIDEO_POLL_TIMEOUT = int(clean_env_str(os.getenv("AGNES_VIDEO_POLL_TIMEOUT"), "300"))
 AGNES_VIDEO_POLL_INTERVAL = float(clean_env_str(os.getenv("AGNES_VIDEO_POLL_INTERVAL"), "2.0"))
 
@@ -156,11 +156,11 @@ AGNES_VIDEO_POLL_INTERVAL = float(clean_env_str(os.getenv("AGNES_VIDEO_POLL_INTE
 ACEDATA_API_KEY = clean_env_str(os.getenv("ACEDATA_API_KEY"))
 ACEDATA_BASE_URL = clean_env_str(os.getenv("ACEDATA_BASE_URL"), "https://api.acedata.cloud").rstrip("/")
 
-ACEDATA_IMAGE_MODEL = clean_env_str(os.getenv("ACEDATA_IMAGE_MODEL"), "flux-pro-1.1")
+ACEDATA_IMAGE_MODEL = clean_env_str(os.getenv("ACEDATA_IMAGE_MODEL"), "flux-kontext-pro")
 ACEDATA_IMAGE_SUBMIT_PATH = clean_env_str(os.getenv("ACEDATA_IMAGE_SUBMIT_PATH"), "/flux/images")
 ACEDATA_IMAGE_TASKS_PATH = clean_env_str(os.getenv("ACEDATA_IMAGE_TASKS_PATH"), "/flux/tasks")
-ACEDATA_IMAGE_TIMEOUT = int(clean_env_str(os.getenv("ACEDATA_IMAGE_TIMEOUT"), "60"))
-ACEDATA_IMAGE_POLL_TIMEOUT = int(clean_env_str(os.getenv("ACEDATA_IMAGE_POLL_TIMEOUT"), "90"))
+ACEDATA_IMAGE_TIMEOUT = min(20, max(5, int(clean_env_str(os.getenv("ACEDATA_IMAGE_TIMEOUT"), "20"))))
+ACEDATA_IMAGE_POLL_TIMEOUT = min(45, max(5, int(clean_env_str(os.getenv("ACEDATA_IMAGE_POLL_TIMEOUT"), "45"))))
 ACEDATA_IMAGE_POLL_INTERVAL = float(clean_env_str(os.getenv("ACEDATA_IMAGE_POLL_INTERVAL"), "2.0"))
 
 ACEDATA_VIDEO_MODEL = clean_env_str(os.getenv("ACEDATA_VIDEO_MODEL"), "veo2-fast")
@@ -2021,7 +2021,7 @@ class AIEngine:
                 logger.info(f"Image generation request -> user={str(user_id)[:3]}***")
                 result = {"success": False}
                 if agnes_ok:
-                    result = agnes_generate_image(prompt=intent["prompt"], size=intent.get("size", "1024x1024"))
+                    result = agnes_generate_image(prompt=intent["prompt"], size=intent.get("size", "1024x1024"), max_retries=0)
                     if not result.get("success"):
                         logger.warning(f"Agnes image generation failed ({result.get('error')}) - falling back to Ace Data Cloud")
                 if not result.get("success") and acedata_ok:
@@ -2049,7 +2049,7 @@ class AIEngine:
                 logger.info(f"Image edit request -> user={str(user_id)[:3]}***")
                 result = {"success": False}
                 if agnes_ok:
-                    result = agnes_edit_image(prompt=intent["prompt"], image_url=data_uri, size=intent.get("size", "1024x1024"))
+                    result = agnes_edit_image(prompt=intent["prompt"], image_url=data_uri, size=intent.get("size", "1024x1024"), max_retries=0)
                     if not result.get("success"):
                         logger.warning(f"Agnes image edit failed ({result.get('error')}) - falling back to Ace Data Cloud")
                 if not result.get("success") and acedata_ok:
