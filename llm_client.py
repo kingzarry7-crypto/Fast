@@ -131,7 +131,7 @@ def _zarry_completion(messages: list[dict[str, Any]], max_tokens: int, timeout: 
         "max_new_tokens": max_tokens,
         "temperature": 0.7,
     }
-    headers = {"Content-Type": "application/json"}
+    headers = {"Content-Type": "application/json", "bypass-tunnel-reminder": "true"}
     token = os.getenv("ZARRY_API_KEY", "").strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
