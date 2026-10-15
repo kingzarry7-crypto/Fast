@@ -1005,7 +1005,7 @@ def _acedata_image_flow(payload: Dict[str, Any]) -> Dict[str, Any]:
     start = time.time()
     while time.time() - start < ACEDATA_IMAGE_POLL_TIMEOUT:
         try:
-            poll_resp = requests.get(tasks_url, headers=_acedata_headers(), params={"task_id": task_id}, timeout=30)
+            poll_resp = requests.get(tasks_url, headers=_acedata_headers(), params={"task_id": task_id}, timeout=min(10, ACEDATA_IMAGE_TIMEOUT))
             if poll_resp.status_code >= 400:
                 return {"success": False, "url": None, "error": _redact_secrets(poll_resp.text[:300]), "model": ACEDATA_IMAGE_MODEL}
             poll_data = poll_resp.json()
