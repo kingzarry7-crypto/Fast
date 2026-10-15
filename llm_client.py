@@ -7,11 +7,12 @@ failed.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
+import urllib.request
 from typing import Any
 
-import requests
 from openai import OpenAI
 
 logger = logging.getLogger("kz_llm_client")
@@ -134,9 +135,14 @@ def _zarry_completion(messages: list[dict[str, Any]], max_tokens: int, timeout: 
     token = os.getenv("ZARRY_API_KEY", "").strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    response = requests.post(endpoint, json=payload, headers=headers, timeout=timeout)
-    response.raise_for_status()
-    data = response.json()
+    request = urllib.request.Request(
+        endpoint,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        data = json.loads(response.read().decode("utf-8"))
     answer = data if isinstance(data, str) else None
     if isinstance(data, dict):
         for key in ("response", "generated_text", "text", "output", "result", "answer", "content"):
