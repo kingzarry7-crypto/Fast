@@ -4,10 +4,8 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import ChatMessage from "@/components/chat/ChatMessage";
 import RobotHead from "@/components/RobotHead";
 import AICore from "@/components/AICore";
-import VoiceCallUI from "@/components/chat/VoiceCallUI";
 import { useChat } from "@/hooks/useChat";
 import { useVoice, type VoiceStyle } from "@/hooks/useVoice";
-import { useRealtimeVoice } from "@/hooks/useRealtimeVoice";
 import { api, type ConversationItem } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
@@ -71,13 +69,6 @@ export default function ChatWorkspace({
   const [attachError, setAttachError] = useState<string | null>(null);
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [voicePanelOpen, setVoicePanelOpen] = useState(false);
-  const [callMode, setCallMode] = useState(false);
-  const [callMuted, setCallMuted] = useState(false);
-  const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
-  const [callElapsed, setCallElapsed] = useState(0);
-  const callModeRef = useRef(false);
-  const callMutedRef = useRef(false);
-  const lastVoiceResponseRef = useRef<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
@@ -99,19 +90,7 @@ export default function ChatWorkspace({
     setVoice,
   } = useVoice();
 
-  const {
-    supported: realtimeSupported,
-    enabled: realtimeEnabled,
-    active: realtimeActive,
-    muted: realtimeMuted,
-    speaking: realtimeSpeaking,
-    listening: realtimeListening,
-    start: startRealtime,
-    stop: stopRealtime,
-    toggleMute: toggleRealtimeMute,
-  } = useRealtimeVoice();
 
-  const voiceCallSupported = voiceSupported || (realtimeSupported && realtimeEnabled);
 
   const refreshConversations = async () => {
     try {
@@ -179,58 +158,17 @@ export default function ChatWorkspace({
   }, [user?.id]);
 
   useEffect(() => {
-    if (!callMode || realtimeActive || sending || !messages.length) return;
-    const last = messages[messages.length - 1];
-    if (
-      last?.role === "assistant" &&
-      last.text &&
-      !String(last.id || "").startsWith("error") &&
-      String(last.id || "") !== lastVoiceResponseRef.current
-    ) {
-      lastVoiceResponseRef.current = String(last.id || "");
-      speakInstant(last.text);
-    }
-  }, [callMode, messages, sending, speakInstant]);
-
-  useEffect(() => {
-    if (!callMode || realtimeActive || callMuted || sending || isSpeaking || listening) return;
-    const last = messages[messages.length - 1];
-    if (!last || last.role !== "assistant" || !last.text) return;
-
-    const timer = window.setTimeout(() => {
-      if (!callMode) return;
-      listenContinuous((text) => {
-        stopListening();
-        void sendVoiceText(text);
-      });
-    }, 350);
-
-    return () => window.clearTimeout(timer);
-  }, [callMode, callMuted, sending, isSpeaking, listening, messages, listenContinuous]);
-
-  useEffect(() => {
     if (!input && inputRef.current) inputRef.current.style.height = "auto";
   }, [input]);
 
   useEffect(() => {
-    if (!autoSpeak || realtimeActive || sending || !messages.length) return;
+    if (!autoSpeak || sending || !messages.length) return;
     const last = messages[messages.length - 1];
     if (last?.role === "assistant" && last.text && !String(last.id || "").startsWith("error")) {
       speak(last.text);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, sending, autoSpeak]);
-
-  useEffect(() => {
-    if (!callMode || !callStartedAt) {
-      setCallElapsed(0);
-      return;
-    }
-    const tick = () => setCallElapsed(Math.max(0, Math.floor((Date.now() - callStartedAt) / 1000)));
-    tick();
-    const timer = window.setInterval(tick, 1000);
-    return () => window.clearInterval(timer);
-  }, [callMode, callStartedAt]);
 
   useEffect(() => {
     const el = listRef.current;
@@ -371,163 +309,6 @@ export default function ChatWorkspace({
     }
   };
 
-  const sendVoiceText = async (text: string) => {
-    const spokenText = text.trim();
-    if (!spokenText || sending || !callModeRef.current) return;
-    const res = await send(spokenText, capability);
-    if (res && (res as { conversation_id?: string }).conversation_id) {
-      const cid = (res as { conversation_id: string }).conversation_id;
-      setConversationId(cid);
-      refreshConversations();
-    }
-  };
-
-  const saveRealtimeTranscript = useCallback(async (
-    role: "user" | "assistant",
-    text: string
-  ) => {
-    try {
-      const saved = await api.saveRealtimeTranscript(conversationId, role, text);
-      if (saved.conversation_id && saved.conversation_id !== conversationId) {
-        setConversationId(saved.conversation_id);
-        void refreshConversations();
-      }
-    } catch {
-      // Audio continues even if transcript persistence is temporarily unavailable.
-    }
-  }, [conversationId]);
-
-  const playCallStartSound = () => {
-    try {
-      const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!AudioContextCtor) return;
-      const ctx = new AudioContextCtor();
-      const now = ctx.currentTime;
-      const notes = [
-        { frequency: 880, start: 0, duration: 0.16 },
-        { frequency: 1174.66, start: 0.2, duration: 0.16 },
-        { frequency: 880, start: 0.4, duration: 0.22 },
-      ];
-      for (const note of notes) {
-        const oscillator = ctx.createOscillator();
-        const gain = ctx.createGain();
-        oscillator.type = "sine";
-        oscillator.frequency.setValueAtTime(note.frequency, now + note.start);
-        gain.gain.setValueAtTime(0.0001, now + note.start);
-        gain.gain.exponentialRampToValueAtTime(0.12, now + note.start + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + note.start + note.duration);
-        oscillator.connect(gain);
-        gain.connect(ctx.destination);
-        oscillator.start(now + note.start);
-        oscillator.stop(now + note.start + note.duration + 0.02);
-      }
-      window.setTimeout(() => void ctx.close(), 1000);
-    } catch {
-      // Some browsers may block Web Audio; the voice call still starts normally.
-    }
-  };
-
-  const playCallEndSound = () => {
-    try {
-      const AudioContextCtor =
-        window.AudioContext ||
-        (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!AudioContextCtor) return;
-      const ctx = new AudioContextCtor();
-      const now = ctx.currentTime;
-      const notes = [
-        { frequency: 659.25, start: 0, duration: 0.16 },
-        { frequency: 523.25, start: 0.18, duration: 0.16 },
-        { frequency: 392, start: 0.36, duration: 0.28 },
-      ];
-
-      for (const note of notes) {
-        const oscillator = ctx.createOscillator();
-        const gain = ctx.createGain();
-        oscillator.type = "sine";
-        oscillator.frequency.setValueAtTime(note.frequency, now + note.start);
-        gain.gain.setValueAtTime(0.0001, now + note.start);
-        gain.gain.exponentialRampToValueAtTime(0.12, now + note.start + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + note.start + note.duration);
-        oscillator.connect(gain);
-        gain.connect(ctx.destination);
-        oscillator.start(now + note.start);
-        oscillator.stop(now + note.start + note.duration + 0.02);
-      }
-
-      window.setTimeout(() => void ctx.close(), 1000);
-    } catch {
-      // Some browsers may block Web Audio; ending the call still works normally.
-    }
-  };
-
-  const startVoiceCall = () => {
-    if (!voiceCallSupported || callMode) return;
-    playCallStartSound();
-    stopSpeaking();
-    stopListening();
-
-    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-    lastVoiceResponseRef.current = lastAssistant?.id ? String(lastAssistant.id) : null;
-    callModeRef.current = true;
-    callMutedRef.current = false;
-    setCallMuted(false);
-    setCallStartedAt(Date.now());
-    setCallElapsed(0);
-    setCallMode(true);
-
-    if (realtimeSupported && realtimeEnabled) {
-      void startRealtime(conversationId, (role, text) => {
-        void saveRealtimeTranscript(role, text);
-      }).then((started) => {
-        if (started || !callModeRef.current) return;
-        setTimeout(() => {
-          if (!callModeRef.current) return;
-          listen((text) => { void sendVoiceText(text); });
-        }, 150);
-      });
-      return;
-    }
-
-    setTimeout(() => {
-      listen((text) => {
-        void sendVoiceText(text);
-      });
-    }, 150);
-  };
-
-  const endVoiceCall = () => {
-    playCallEndSound();
-    callModeRef.current = false;
-    callMutedRef.current = false;
-    setCallMuted(false);
-    setCallStartedAt(null);
-    setCallElapsed(0);
-    setCallMode(false);
-    stopRealtime();
-    stopListening();
-    stopSpeaking();
-  };
-
-  const toggleCallMute = () => {
-    if (realtimeActive) {
-      toggleRealtimeMute();
-      return;
-    }
-    const next = !callMutedRef.current;
-    callMutedRef.current = next;
-    setCallMuted(next);
-    if (next) {
-      stopListening();
-      return;
-    }
-    if (!callModeRef.current || sending || isSpeaking) return;
-    window.setTimeout(() => {
-      if (!callModeRef.current || callMutedRef.current || sending || isSpeaking) return;
-      listenContinuous((text) => { void sendVoiceText(text); });
-    }, 120);
-  };
-
   const handleStarterSuggestion = async (suggestion: string) => {
     if (sending) return;
     const res = await send(suggestion, capability);
@@ -559,31 +340,14 @@ export default function ChatWorkspace({
 
   useEffect(() => {
     return () => {
-      stopRealtime();
       stopListening();
       stopSpeaking();
     };
-  }, [stopRealtime, stopListening, stopSpeaking]);
+  }, [stopListening, stopSpeaking]);
 
   const isVip = Boolean(user?.is_subscribed || membership?.isVip);
-  const callIsMuted = realtimeActive ? realtimeMuted : callMuted;
-  const callIsSpeaking = realtimeActive ? realtimeSpeaking : isSpeaking;
-  const callIsListening = realtimeActive ? realtimeListening : listening;
   const showSideHistory = !embedMode;
-  const callStatus = callIsMuted
-    ? "MIC MUTED"
-    : callIsSpeaking
-      ? "SPEAKING"
-      : callIsListening
-        ? "LISTENING..."
-        : sending
-          ? "THINKING..."
-          : "READY";
-  const callPrompt = [...messages]
-    .reverse()
-    .find((message) => message.role === "user")
-    ?.text?.trim()
-    .slice(0, 64);
+
 
   // Preserve repeated messages: identical consecutive questions or answers are valid conversation history.
   const visibleMessages = messages;
@@ -626,7 +390,7 @@ export default function ChatWorkspace({
             <button
               type="button"
               onClick={() => { void handleNewChat(); setHistoryOpen(false); }}
-              disabled={sending || callMode}
+              disabled={sending}
               className="mx-3 mt-4 flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-3 text-left text-sm text-cyan-50 transition hover:border-cyan-200/40 hover:bg-cyan-300/[0.12] disabled:opacity-40"
             >
               <span className="text-lg leading-none">＋</span>
@@ -677,23 +441,7 @@ export default function ChatWorkspace({
               
             </div>
             <div className="flex items-center gap-1.5">
-              {voiceCallSupported && (
-                <button
-                  type="button"
-                  onClick={callMode ? endVoiceCall : startVoiceCall}
-                  disabled={sending && !callMode}
-                  className={
-                    "px-2.5 py-1 rounded-full border text-[9px] tracking-widest transition " +
-                    (callMode
-                      ? "border-red-400/50 bg-red-500/10 text-red-200"
-                      : "border-cyan-400/30 bg-cyan-500/5 text-cyan-200 hover:bg-cyan-500/10")
-                  }
-                  title={callMode ? "End AI voice call" : "Start AI voice call"}
-                >
-                  {callMode ? "● END CALL" : "☎ CALL AI"}
-                </button>
-              )}
-              <button type="button" onClick={handleNewChat} disabled={sending || callMode} className="px-2 py-0.5 rounded-md border border-cyan-500/25 text-[9px] tracking-widest text-cyan-200 disabled:opacity-40">
+              <button type="button" onClick={handleNewChat} disabled={sending} className="px-2 py-0.5 rounded-md border border-cyan-500/25 text-[9px] tracking-widest text-cyan-200 disabled:opacity-40">
                 + NEW
               </button>
             </div>
@@ -703,22 +451,6 @@ export default function ChatWorkspace({
 
       {embedMode && (
         <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-end border-b border-white/5 bg-[#05080f]/70 px-3 py-1.5 backdrop-blur-sm">
-          {voiceCallSupported && (
-            <button
-              type="button"
-              onClick={callMode ? endVoiceCall : startVoiceCall}
-              disabled={sending && !callMode}
-              className={
-                "rounded-full border px-3 py-1.5 text-[9px] tracking-[0.18em] transition " +
-                (callMode
-                  ? "border-red-400/50 bg-red-500/10 text-red-200"
-                  : "border-cyan-400/30 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20")
-              }
-              title={callMode ? "End AI voice call" : "Start AI voice call"}
-            >
-              {callMode ? "● END CALL" : "☎ CALL AI"}
-            </button>
-          )}
         </div>
       )}
 
@@ -731,7 +463,7 @@ export default function ChatWorkspace({
             <div className="flex flex-col items-center justify-center min-h-[200px] text-center py-8">
               <div className="flex items-center justify-center" aria-label="King Zarry AI animated core">
                 <AICore
-                  state={sending ? "thinking" : (isSpeaking || realtimeSpeaking) ? "speaking" : (listening || realtimeListening) ? "listening" : "idle"}
+                  state={sending ? "thinking" : isSpeaking ? "speaking" : listening ? "listening" : "idle"}
                   size={220}
                 />
               </div>
@@ -864,20 +596,6 @@ export default function ChatWorkspace({
         </div>
       </div>
 
-      {callMode && (
-        <VoiceCallUI
-          status={callStatus}
-          prompt={callPrompt}
-          elapsed={callElapsed}
-          muted={callIsMuted}
-          speaking={callIsSpeaking}
-          listening={callIsListening}
-          onMute={toggleCallMute}
-          onEnd={endVoiceCall}
-          onStopSpeaking={stopSpeaking}
-        />
-      )}
-
       <form
         onSubmit={handleSubmit}
         className="relative inset-x-0 z-30 shrink-0 border-t border-white/[0.06] bg-[#0b0b0c]/95 px-3 sm:px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
@@ -910,7 +628,6 @@ export default function ChatWorkspace({
             </div>
           )}
 
-          {!callMode && (
           <div className="rounded-[26px] border border-white/[0.12] bg-[#1b1b1d] px-3 py-2 shadow-[0_8px_30px_rgba(0,0,0,0.22)] transition-colors focus-within:border-white/20">
             <div className="flex items-end gap-2">
             <button
@@ -956,7 +673,6 @@ export default function ChatWorkspace({
 
             {voiceSupported && (
               <>
-                {!callMode && (
                   <button
                     type="button"
                     onClick={() => (listening ? stopListening() : listen((t) => setInput(t)))}
@@ -974,7 +690,6 @@ export default function ChatWorkspace({
                       </svg>
                     )}
                   </button>
-                )}
                 <button type="button" onClick={() => setVoicePanelOpen((v) => !v)} className="hidden sm:flex h-8 shrink-0 items-center justify-center rounded-full px-2 text-[9px] tracking-widest text-zinc-500 hover:text-cyan-300" title="Voice">VOICE</button>
               </>
             )}
@@ -1005,7 +720,6 @@ export default function ChatWorkspace({
             )}
             </div>
           </div>
-          )}
         </div>
       </form>
         </div>
