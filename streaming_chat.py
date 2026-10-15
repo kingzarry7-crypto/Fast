@@ -290,6 +290,35 @@ def _build_stream_generator(
     engine = ai_engine.AIEngine(memory=memory)
     yield _sse({"type": "activity", "stage": "thinking", "label": "Thinking through your request", "done": False})
 
+    # Match /api/chat routing: explicit image/video requests must be handled
+    # before coding, connectors, or ordinary LLM streaming. The streaming
+    # request currently carries text only, so image edits ask for an upload.
+    try:
+        media_intent = ai_engine._detect_media_intent(message, has_image=False)
+    except Exception as exc:
+        logger.warning("Streaming media intent detection failed: %s", type(exc).__name__)
+        media_intent = None
+    if media_intent is not None:
+        try:
+            reply = str(engine._route_media_request(user_id, message, media_intent, None) or "").strip()
+        except Exception as exc:
+            logger.exception("Streaming media task failed safely: %s", type(exc).__name__)
+            reply = "I recognized this as a media task, but the media pipeline failed. No successful output was created; please retry or check the media provider configuration."
+        if not reply:
+            reply = "I recognized this as a media task, but no media result was returned. Nothing is being reported as completed."
+        engine._save_memory(user_id, message, reply)
+        yield _sse({"type": "activity", "stage": "media", "label": "Handling image/video request", "done": True})
+        yield _sse({"type": "start", "provider": "media_agent"})
+        yield _sse({"type": "delta", "text": reply})
+        yield _sse({
+            "type": "done",
+            "conversation_id": conversation_id,
+            "text": reply,
+            "provider": "media_agent",
+            "status": "handled",
+        })
+        return
+
     # Build requests must use the coding executor instead of the generic chat model.
     # Keep this before web research and ordinary generation so the request cannot drift
     # into an unrelated email/account explanation.
@@ -355,9 +384,44 @@ def _build_stream_generator(
             })
             return
 
-    # Streaming is intentionally limited to ordinary text chat. The normal
-    # /api/chat path remains authoritative for tools, web research, media and
-    # images, so this feature cannot silently bypass those systems.
+    # Keep explicit market/capability/project requests on the same specialist
+    # router as /api/chat. Without this, the streaming endpoint can answer with
+    # generic prose instead of a verified market-agent result.
+    try:
+        import agent_router
+        agent_result = agent_router.route_agent_request(message, str(user_id))
+    except Exception as exc:
+        logger.exception("Streaming specialist router failed: %s", type(exc).__name__)
+        agent_result = None
+        try:
+            import agent_router
+            if agent_router._market_requested(message):
+                agent_result = {
+                    "status": "unavailable",
+                    "provider": "market_agent",
+                    "reply": "I recognized this as a market-analysis request, but the Market Agent failed safely. No price or signal was invented; check market-provider configuration and retry.",
+                }
+        except Exception:
+            pass
+    if agent_result is not None and str(agent_result.get("reply") or "").strip():
+        reply = str(agent_result["reply"])[:8000]
+        engine._save_memory(user_id, message, reply)
+        yield _sse({"type": "activity", "stage": "specialist", "label": "Using the relevant specialist agent", "done": True})
+        yield _sse({"type": "start", "provider": str(agent_result.get("provider") or "specialist_agent")})
+        yield _sse({"type": "delta", "text": reply})
+        yield _sse({
+            "type": "done",
+            "conversation_id": conversation_id,
+            "text": reply,
+            "status": agent_result.get("status") or "completed",
+            "provider": agent_result.get("provider"),
+            "operation": agent_result.get("operation"),
+            "target": agent_result.get("target"),
+        })
+        return
+
+    # Streaming is intentionally limited to ordinary text chat after media,
+    # coding, account, and specialist routers have all declined the request.
     casual = True
     history = engine._load_memory_history(user_id, limit=20)
     persistent_ctx = engine._load_persistent_context(user_id)
@@ -754,13 +818,21 @@ def install_streaming_chat(
                 if not message:
                     return await call_next(request)
 
-                # Route explicit KZ Work missions through the central agent
-                # before ordinary chat. This keeps normal conversation unchanged.
+                # Explicit media requests must not be interpreted as broad KZ
+                # Work missions (e.g. "fix this image for me"). Let the media
+                # router handle those before work/connector interception.
                 try:
-                    from work_intent import parse as parse_work_intent
-                    work_intent = parse_work_intent(message)
+                    media_intent_for_work = ai_engine._detect_media_intent(message, has_image=False)
                 except Exception:
+                    media_intent_for_work = None
+                if media_intent_for_work is not None:
                     work_intent = None
+                else:
+                    try:
+                        from work_intent import parse as parse_work_intent
+                        work_intent = parse_work_intent(message)
+                    except Exception:
+                        work_intent = None
 
                 if work_intent and work_intent.get("kind") in {"approve", "reject", "status"}:
                     try:
