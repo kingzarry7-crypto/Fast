@@ -40,6 +40,8 @@ KNOWN_PROVIDERS = {
     "gemini": ("Google Gemini", ["GEMINI_API_KEY"], ["text_ai", "vision_ai"], "native", "Already wired into AIEngine."),
     "xai": ("xAI", ["XAI_API_KEY"], ["text_ai"], "adapter_pending", "Needs a native xAI adapter/provider mapping before direct use."),
     "openai": ("OpenAI", ["OPENAI_API_KEY"], ["text_ai", "vision_ai"], "native", "Direct OpenAI Chat Completions adapter is wired into AIEngine and the streaming chat provider chain; provider selection and model availability still depend on valid Railway environment settings."),
+    "cloudflare": ("Cloudflare Workers AI", ["CLOUDFLARE_AI_TOKEN"], ["text_ai", "model_routing"], "native", "OpenAI-compatible provider mapping exists in llm_client.py; verify the Worker URL, token, and selected model with a live request."),
+    "huggingface": ("Hugging Face Inference", ["HF_TOKEN", "HUGGINGFACE_API_KEY"], ["text_ai", "model_routing"], "native", "OpenAI-compatible inference-router mapping exists in llm_client.py; configured model availability must be tested."),
     "elevenlabs": ("ElevenLabs", ["ELEVENLABS_API_KEY"], ["text_to_speech", "voice"], "native", "Voice/TTS capability is already represented in the app."),
     "tavily": ("Tavily", ["TAVILY_API_KEY"], ["web_search"], "native", "Web-search capability is already represented in the app."),
     "newsapi": ("NewsAPI", ["NEWSAPI_API_KEY", "NEWS_API_KEY"], ["news"], "native", "News provider is already represented in news.py."),
@@ -56,12 +58,13 @@ KNOWN_PROVIDERS = {
         "Needs an adapter in news/market/calendar code before the AI can call it directly.",
     ),
     "massive": ("Massive/Polygon", ["MASSIVE_API_KEY", "POLYGON_API_KEY"], ["market_data"], "adapter_pending", "Needs a native market-data adapter before direct use."),
+    "alpaca": ("Alpaca", ["ALPACA_API_KEY", "ALPACA_SECRET_KEY"], ["market_data"], "native", "market.py includes Alpaca market-data requests; both credentials are required and the live data path should be health-tested."),
     "fal": (
         "FAL AI",
         ["FAL_KEY", "FAL_API_KEY"],
-        ["image_generation", "video_generation", "audio_generation", "media_generation"],
-        "adapter_pending",
-        "Needs a FAL adapter/model router; FAL_KEY alone does not automatically wire the service.",
+        ["video_generation"],
+        "partial",
+        "A Fal.ai video-generation path exists in discord_bot.py; image/audio generation and app-wide routing are not confirmed wired.",
     ),
     "agnes": ("Agnes AI", ["AGNES_API_KEY"], ["image_generation", "video_generation", "media_editing"], "native", "Media capability is already represented in the app."),
     "acedata": ("AceData Cloud", ["ACEDATA_API_KEY"], ["image_generation", "video_generation"], "native", "Media capability is already represented in the app."),
@@ -69,8 +72,8 @@ KNOWN_PROVIDERS = {
         "Resend",
         ["RESEND_API_KEY"],
         ["email_sending", "email_events", "contacts", "broadcasts", "domains", "webhooks", "inbound_email"],
-        "adapter_pending",
-        "Needs an email adapter; useful for registration/verification emails and agent email workflows.",
+        "native",
+        "Resend is already called by api.py for account/workflow email and admin_email_broadcast.py for admin broadcasts; test real delivery and sender-domain configuration.",
     ),
 }
 
@@ -79,6 +82,9 @@ KNOWN_SERVICE_CREDENTIALS = {
     "DISCORD_BOT_TOKEN": ("Discord Bot credential", "Platform/service credential; not an external API provider."),
     "TELEGRAM_BOT_TOKEN": ("Telegram Bot credential", "Platform/service credential; not an external API provider."),
     "GPG_KEY": ("Container/system key", "System/container credential; not an application API provider."),
+    "KING_ZARRY_SLACK_BRIDGE_KEY": ("Slack bridge secret", "Internal application-to-Slack bridge credential, not a third-party API provider by itself."),
+    "KZ_CONNECTOR_ENCRYPTION_KEY": ("Connector encryption key", "Internal application key for protecting connector credentials; not a third-party API provider."),
+    "KZ_SANDBOX_RUNNER_TOKEN": ("Sandbox runner token", "Internal application credential for the sandbox runner; not a third-party API provider."),
 }
 
 GENERIC_CUSTOM_PREFIX = "CUSTOM_AI_"
@@ -125,7 +131,11 @@ def _custom_ai() -> List[Dict[str, Any]]:
 def snapshot() -> Dict[str, Any]:
     providers = []
     for pid, (name, envs, skills, adapter, hint) in KNOWN_PROVIDERS.items():
-        configured_by = next((e for e in envs if _env(e)), None)
+        configured_keys = [e for e in envs if _env(e)]
+        if pid == "alpaca":
+            configured_by = configured_keys[0] if len(configured_keys) == len(envs) else None
+        else:
+            configured_by = configured_keys[0] if configured_keys else None
         if not configured_by:
             continue
         providers.append({
@@ -134,8 +144,8 @@ def snapshot() -> Dict[str, Any]:
             "configured": True,
             "env": configured_by,
             "adapter": adapter,
-            "skills": list(skills) if adapter == "native" else list(skills),
-            "needs_code": adapter != "native",
+            "skills": list(skills),
+            "needs_code": adapter not in ("native", "partial"),
             "what_it_can_do": ", ".join(skills),
             "integration_hint": hint,
         })
@@ -243,7 +253,12 @@ def format_admin_report(s: Dict[str, Any], first_run: bool = False) -> str:
         lines.append(f"🔌 Configured providers: <b>{s['configured_count']}</b>")
         for p in s["providers"]:
             skills = _skill_lines(p.get("skills", []))
-            if p["needs_code"]:
+            if p.get("adapter") == "partial":
+                lines.append(f'🟠 <b>{p["name"]}</b> — partially wired; not all listed capabilities are available')
+                lines.append(f'   What it can do: <b>{p.get("what_it_can_do", skills)}</b>')
+                lines.append(f'   App status: partial integration; live request still needs verification')
+                lines.append(f'   Details: {p.get("integration_hint", "Some provider paths exist; verify remaining capabilities.")}')
+            elif p["needs_code"]:
                 lines.append(f'🟠 <b>{p["name"]}</b> — detected, adapter/code needed')
                 lines.append(f'   What it can do: <b>{p.get("what_it_can_do", skills)}</b>')
                 lines.append(f'   App status: not wired for direct use yet')
@@ -251,7 +266,7 @@ def format_admin_report(s: Dict[str, Any], first_run: bool = False) -> str:
                     lines.append(f'   Missing: {", ".join(p["missing"])}')
                 lines.append(f'   How to add: {p.get("integration_hint", "Add a provider adapter.")}')
             else:
-                lines.append(f'🟢 <b>{p["name"]}</b> — configured + app skill exists')
+                lines.append(f'🟢 <b>{p["name"]}</b> — configured + app integration exists')
                 lines.append(f'   What it can do: <b>{p.get("what_it_can_do", skills)}</b>')
                 lines.append(f'   App status: ready through existing integration')
                 if p.get("integration_hint"):
