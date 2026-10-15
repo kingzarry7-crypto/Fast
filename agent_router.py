@@ -34,12 +34,12 @@ _MEDIA_ACTION_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _MEDIA_OBJECT_PATTERN = re.compile(
-    r"\b(?:image|picture|photo|photograph|portrait|artwork|illustration|background|chart|diagram)\b",
+    r"\b(?:image|picture|photo|photograph|portrait|artwork|illustration|background|chart|diagram|video|clip|animation)\b",
     re.IGNORECASE,
 )
 _MEDIA_CREATE_PATTERN = re.compile(
-    r"\b(?:draw|sketch|illustrate|paint|render|generate|create|make)\b.{0,80}"
-    r"\b(?:image|picture|photo|photograph|portrait|artwork|illustration)\b",
+    r"\b(?:draw|sketch|illustrate|paint|render|generate|create|make|animate)\b.{0,80}"
+    r"\b(?:image|picture|photo|photograph|portrait|artwork|illustration|video|clip|animation)\b",
     re.IGNORECASE,
 )
 
