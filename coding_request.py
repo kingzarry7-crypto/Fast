@@ -1,8 +1,11 @@
 """Explicit coding-intent detection and safe website draft generation."""
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, Optional
+
+logger = logging.getLogger("kz_coding_agent")
 
 _EMAIL_INTENT = re.compile(
     r"\b(?:send|compose|draft|write|reply to|forward)\b.{0,50}\b(?:email|e-mail|gmail|message)\b|"
@@ -66,6 +69,16 @@ def _format_project(project: dict[str, Any], max_chars: int = 16000) -> str:
     return "\n".join(lines)[:max_chars + 1200]
 
 
+def _safe_error_detail(exc: Exception) -> str:
+    """Expose useful diagnostic labels without returning credentials or raw responses."""
+    detail = str(exc).strip()
+    detail = re.sub(r"(?i)Bearer\s+\S+", "Bearer [redacted]", detail)
+    detail = re.sub(r"(?i)(api[_-]?key[=: ]+)\S+", r"\1[redacted]", detail)
+    detail = re.sub(r"\b(?:sk|gsk|hf|xai)-[A-Za-z0-9_-]{8,}\b", "[redacted]", detail)
+    detail = re.sub(r"\s+", " ", detail)
+    return detail[:240] or type(exc).__name__
+
+
 def handle_coding_request(message: str) -> Optional[dict[str, Any]]:
     """Generate a safe, inspectable project draft for explicit coding requests."""
     if not is_coding_request(message):
@@ -75,15 +88,16 @@ def handle_coding_request(message: str) -> Optional[dict[str, Any]]:
     try:
         project = generate_project(str(message).strip())
     except Exception as exc:
-        # Do not fall through to general chat and imply that the build happened.
+        detail = _safe_error_detail(exc)
+        logger.error("Coding project generation failed (%s): %s", type(exc).__name__, detail)
         return {
             "status": "error",
             "provider": "coding_agent",
             "operation": "generate_project",
             "reply": (
                 "I routed this request to the Coding Agent, but project generation failed. "
-                f"Reason: {type(exc).__name__}. No project files were created or deployed. "
-                "Please retry; if this persists, check the configured AI provider and Railway logs."
+                f"Reason: {type(exc).__name__} — {detail}. "
+                "No project files were created or deployed."
             ),
             "project": None,
         }
