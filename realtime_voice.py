@@ -1,7 +1,8 @@
-"""Optional OpenAI Realtime voice integration for KING ZARRY AI.
+"""OpenAI Realtime voice integration for KING ZARRY AI.
 
-This module is deliberately additive. If OPENAI_REALTIME_API_KEY is absent,
-the existing browser SpeechRecognition/tts voice path remains untouched.
+Prefer a dedicated realtime key, but reuse OPENAI_API_KEY when available so
+Call AI can use the configured OpenAI account instead of silently degrading to
+a browser dictation + text-to-speech experience.
 """
 
 from __future__ import annotations
@@ -15,7 +16,9 @@ from fastapi import HTTPException, Request, Response
 
 logger = logging.getLogger("king_zarry_realtime")
 
-REALTIME_KEY = (os.getenv("OPENAI_REALTIME_API_KEY") or "").strip()
+REALTIME_KEY = (
+    os.getenv("OPENAI_REALTIME_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
+).strip()
 REALTIME_MODEL = (os.getenv("OPENAI_REALTIME_MODEL") or "gpt-realtime").strip()
 REALTIME_VOICE = (os.getenv("OPENAI_REALTIME_VOICE") or "marin").strip()
 REALTIME_TRANSCRIBE_MODEL = (
