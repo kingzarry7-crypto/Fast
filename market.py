@@ -1209,6 +1209,115 @@ def _should_try_alpaca_market_data() -> bool:
     return bool(key and secret)
 
 
+
+def _massive_api_key() -> str:
+    """Resolve Massive/Polygon credentials at call time without exposing them."""
+    for name in ("MASSIVE_API_KEY", "POLYGON_API_KEY"):
+        value = _clean_env_str(os.getenv(name))
+        if value:
+            return value
+    return ""
+
+
+def _massive_symbol(symbol: str) -> str:
+    """Map common crypto, FX and stock symbols to Massive aggregate tickers."""
+    raw = _normalize_symbol_key(symbol).upper().replace("-", "/")
+    if _is_gold_symbol(raw):
+        raise RuntimeError("Massive crypto aggregates do not provide spot XAU/USD")
+    if "/" in raw:
+        base, quote = raw.split("/", 1)
+    else:
+        base, quote = raw, ""
+        for suffix in ("USDT", "USDC", "USD", "EUR", "BTC"):
+            if len(raw) > len(suffix) and raw.endswith(suffix):
+                base, quote = raw[:-len(suffix)], suffix
+                break
+    if not base or not base.isalnum():
+        raise RuntimeError(f"Unsupported Massive symbol: {symbol}")
+    fx_currencies = {"USD", "EUR", "GBP", "JPY", "CHF", "AUD", "CAD", "NZD", "CNY", "HKD", "SGD", "MXN", "SEK", "NOK", "PLN", "TRY", "ZAR"}
+    if quote in fx_currencies and base in fx_currencies:
+        return f"C:{base}{quote}"
+    if quote in ("USD", "USDT", "USDC") and base not in ("AAPL", "MSFT", "TSLA"):
+        return f"X:{base}USD"
+    if quote in ("EUR", "GBP", "JPY", "CHF", "AUD", "CAD", "NZD"):
+        return f"C:{base}{quote}"
+    return base
+
+
+def _massive_get_candles(symbol: str, timeframe: str = "15m", outputsize: int = 150) -> list:
+    """Fetch OHLCV bars from Massive/Polygon's aggregates API."""
+    api_key = _massive_api_key()
+    if not api_key:
+        raise RuntimeError("MASSIVE_API_KEY or POLYGON_API_KEY is missing")
+    tf = str(timeframe or "15m").strip().lower()
+    interval_map = {
+        "1m": (1, "minute"), "1min": (1, "minute"),
+        "5m": (5, "minute"), "5min": (5, "minute"),
+        "15m": (15, "minute"), "15min": (15, "minute"),
+        "30m": (30, "minute"), "30min": (30, "minute"),
+        "1h": (1, "hour"), "1hour": (1, "hour"),
+        "2h": (2, "hour"), "2hour": (2, "hour"),
+        "4h": (4, "hour"), "4hour": (4, "hour"),
+        "1d": (1, "day"), "1day": (1, "day"),
+    }
+    if tf not in interval_map:
+        try:
+            tf = normalize_timeframe(tf).lower()
+        except Exception:
+            pass
+    if tf not in interval_map:
+        raise RuntimeError(f"Unsupported Massive timeframe: {timeframe}")
+    multiplier, timespan = interval_map[tf]
+    limit = max(15, min(int(outputsize or 150), 1000))
+    now = datetime.now(timezone.utc)
+    # Request enough calendar time for weekends/quiet markets and interval gaps.
+    minutes = multiplier * ({"minute": 1, "hour": 60, "day": 1440}[timespan])
+    lookback_days = max(3, int((limit * minutes / 1440) * 3) + 2)
+    start = (now - timedelta(days=lookback_days)).date().isoformat()
+    end = now.date().isoformat()
+    ticker = _massive_symbol(symbol)
+    url = f"https://api.massive.com/v2/aggs/ticker/{ticker}/range/{multiplier}/{timespan}/{start}/{end}"
+    response = requests.get(
+        url,
+        params={"adjusted": "true", "sort": "desc", "limit": limit, "apiKey": api_key},
+        headers={"Accept": "application/json"},
+        timeout=20,
+    )
+    if response.status_code != 200:
+        # Never include the query string or API key in logs/errors.
+        raise RuntimeError(f"Massive market-data HTTP {response.status_code}")
+    payload = response.json()
+    if not isinstance(payload, dict) or payload.get("status") == "ERROR":
+        raise RuntimeError("Massive returned an invalid market-data response")
+    rows = payload.get("results") or []
+    # Massive applies the limit before returning rows; fetch newest-first, then
+    # reverse locally so callers receive chronological candles ending at latest.
+    candles = []
+    for row in reversed(rows):
+        try:
+            stamp = row.get("t")
+            candles.append({
+                "datetime": datetime.fromtimestamp(float(stamp) / 1000, tz=timezone.utc).isoformat() if stamp else "",
+                "open": str(row.get("o")),
+                "high": str(row.get("h")),
+                "low": str(row.get("l")),
+                "close": str(row.get("c")),
+                "volume": str(row.get("v") or 0),
+            })
+        except (TypeError, ValueError, OSError):
+            continue
+    if len(candles) < 15:
+        raise RuntimeError(f"Massive returned insufficient candles for {ticker}: {len(candles)}")
+    return candles[-limit:]
+
+
+def _should_try_massive_market_data() -> bool:
+    provider = _clean_env_str(os.getenv("MARKET_DATA_PROVIDER"), "auto").lower()
+    if provider in {"off", "none", "disabled", "binance", "twelve", "twelvedata", "alpaca"}:
+        return False
+    return bool(_massive_api_key())
+
+
 def get_price(symbol):
     """Price routing: Alpaca crypto when configured, then free providers and Twelve Data."""
     if _is_gold_symbol(symbol):
@@ -1225,6 +1334,16 @@ def get_price(symbol):
                 if _credential:
                     reason = reason.replace(_credential, "[redacted]")
             logger.warning("Alpaca price unavailable for %s (%s: %s); trying fallback providers", symbol, type(e).__name__, reason)
+    if _should_try_massive_market_data():
+        try:
+            candles = _massive_get_candles(symbol, "1m", 20)
+            price = safe_float(candles[-1].get("close")) if candles else None
+            if price is not None and price > 0:
+                logger.debug("price %s via Massive aggregates = %s", symbol, price)
+                return price
+            raise RuntimeError("Massive returned no valid last close")
+        except Exception as e:
+            logger.warning("Massive price unavailable for %s (%s); trying fallback providers", symbol, type(e).__name__)
     pair = binance_pair(symbol)
     if pair:
         try:
@@ -1252,6 +1371,13 @@ def get_candles(symbol, timeframe="15m", outputsize=150):
                 if _credential:
                     reason = reason.replace(_credential, "[redacted]")
             logger.warning("Alpaca candles unavailable for %s (%s: %s); trying fallback providers", symbol, type(e).__name__, reason)
+    if _should_try_massive_market_data():
+        try:
+            candles = _massive_get_candles(symbol, timeframe, outputsize)
+            logger.debug("candles %s via Massive tf=%s n=%s", symbol, timeframe, len(candles))
+            return candles
+        except Exception as e:
+            logger.warning("Massive candles unavailable for %s (%s); trying fallback providers", symbol, type(e).__name__)
     pair = binance_pair(symbol)
     if pair:
         try:
