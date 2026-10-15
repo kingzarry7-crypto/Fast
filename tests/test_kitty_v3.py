@@ -14,6 +14,7 @@ class KittyV3ContractTests(unittest.TestCase):
         model, scaler, metadata = kitty_v3._load()
         self.assertFalse(model.training)
         self.assertEqual(len(metadata["features"]), 6)
+        self.assertNotIsInstance(scaler, kitty_v3._ScalerFallback)
         self.assertEqual(scaler.n_features_in_, 6)
         self.assertEqual(tuple(model.layer_1.weight.shape), (32, 6))
         self.assertEqual(tuple(model.layer_2.weight.shape), (16, 32))
