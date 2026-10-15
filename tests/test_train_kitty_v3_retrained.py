@@ -16,10 +16,11 @@ class KittyTrainingExperimentTests(unittest.TestCase):
             rows = []
             for i in range(120):
                 row = {feature: float(i + j) for j, feature in enumerate(kitty.FEATURES)}
-                row["timestamp"] = pd.Timestamp("2024-01-01", tz="UTC") + pd.Timedelta(hours=119 - i)
+                row["timestamp"] = pd.Timestamp("2024-01-01", tz="UTC") + pd.Timedelta(hours=i)
                 row["target"] = ("SHORT", "NO TRADE", "LONG")[i % 3]
                 rows.append(row)
-            pd.DataFrame(rows).to_csv(path, index=False)
+            # Reverse source row order so the loader must sort by timestamp.
+            pd.DataFrame(rows[::-1]).to_csv(path, index=False)
             x, y, digest = kitty.load_dataset(path)
             self.assertEqual(x.shape, (120, 18))
             self.assertEqual(set(y.tolist()), {0, 1, 2})
