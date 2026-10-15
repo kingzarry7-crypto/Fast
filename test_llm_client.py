@@ -1,8 +1,9 @@
 import os
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
-from llm_client import _configured_providers
+from llm_client import _configured_providers, ask
 
 
 class ConfiguredProviderTests(unittest.TestCase):
@@ -43,6 +44,55 @@ class ConfiguredProviderTests(unittest.TestCase):
         with patch.dict(os.environ, {"AI_PROVIDER": "DEEPSEEK"}, clear=True):
             with self.assertRaisesRegex(RuntimeError, "DEEPSEEK"):
                 _configured_providers()
+
+    def test_huggingface_http_400_retries_with_fallback_model(self):
+        class BadRequest(Exception):
+            status_code = 400
+
+        response = SimpleNamespace(choices=[
+            SimpleNamespace(message=SimpleNamespace(content='{"files": []}'))
+        ])
+        client = SimpleNamespace(chat=SimpleNamespace(
+            completions=SimpleNamespace(create=unittest.mock.Mock(
+                side_effect=[BadRequest("model rejected"), response]
+            ))
+        ))
+        with patch.dict(os.environ, {
+            "AI_PROVIDER": "HF",
+            "HF_TOKEN": "test-token",
+            "HF_MODEL_ID": "KINGZARRY3/zarry-coder-model",
+        }, clear=True), patch("llm_client.OpenAI", return_value=client):
+            result = ask([{"role": "user", "content": "build a page"}], max_tokens=100)
+
+        self.assertEqual(result, '{"files": []}')
+        calls = client.chat.completions.create.call_args_list
+        self.assertEqual(calls[0].kwargs["model"], "KINGZARRY3/zarry-coder-model")
+        self.assertEqual(calls[1].kwargs["model"], "openai/gpt-oss-120b:cheapest")
+
+    def test_huggingface_fallback_model_can_be_overridden(self):
+        class BadRequest(Exception):
+            status_code = 400
+
+        response = SimpleNamespace(choices=[
+            SimpleNamespace(message=SimpleNamespace(content="ok"))
+        ])
+        client = SimpleNamespace(chat=SimpleNamespace(
+            completions=SimpleNamespace(create=unittest.mock.Mock(
+                side_effect=[BadRequest("model rejected"), response]
+            ))
+        ))
+        with patch.dict(os.environ, {
+            "AI_PROVIDER": "HF",
+            "HF_TOKEN": "test-token",
+            "HF_MODEL_ID": "owner/custom-model",
+            "HF_FALLBACK_MODEL_ID": "provider/available-model",
+        }, clear=True), patch("llm_client.OpenAI", return_value=client):
+            self.assertEqual(ask([{"role": "user", "content": "hello"}]), "ok")
+
+        self.assertEqual(
+            client.chat.completions.create.call_args_list[1].kwargs["model"],
+            "provider/available-model",
+        )
 
 
 if __name__ == "__main__":
