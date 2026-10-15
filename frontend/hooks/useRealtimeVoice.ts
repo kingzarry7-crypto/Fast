@@ -61,7 +61,6 @@ export function useRealtimeVoice(conversationId?: string | null) {
         const audio = audioRef.current || new Audio();
         audioRef.current = audio;
         audio.autoplay = true;
-        audio.playsInline = true;
         audio.srcObject = event.streams[0];
         void audio.play().catch(() => setError("Tap the live voice button again to allow audio playback."));
       };
