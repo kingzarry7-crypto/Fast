@@ -65,8 +65,9 @@ export function useRealtimeVoice(conversationId?: string | null) {
         void audio.play().catch(() => setError("Tap the live voice button again to allow audio playback."));
       };
       pc.onconnectionstatechange = () => {
-        if (pc?.connectionState === "failed" || pc?.connectionState === "disconnected") {
-          setError("Live voice disconnected. Tap to reconnect.");
+        // "disconnected" can be transient on mobile networks; only tear down on failure.
+        if (pc?.connectionState === "failed") {
+          setError("Live voice connection failed. Check your network and tap to reconnect.");
           stop();
         }
       };
@@ -92,8 +93,11 @@ export function useRealtimeVoice(conversationId?: string | null) {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       if (pc.iceGatheringState !== "complete") {
-        await new Promise<void>((resolve) => {
-          const timeout = window.setTimeout(resolve, 2500);
+        await new Promise<void>((resolve, reject) => {
+          const timeout = window.setTimeout(() => {
+            pc?.removeEventListener("icegatheringstatechange", onGathering);
+            reject(new Error("Network setup timed out while preparing live voice. Check your connection and try again."));
+          }, 10000);
           const onGathering = () => {
             if (pc?.iceGatheringState === "complete") {
               window.clearTimeout(timeout);
@@ -104,8 +108,35 @@ export function useRealtimeVoice(conversationId?: string | null) {
           pc?.addEventListener("icegatheringstatechange", onGathering);
         });
       }
-      const answer = await api.startRealtimeCall(pc.localDescription?.sdp || "");
+      const offerSdp = pc.localDescription?.sdp;
+      if (!offerSdp) throw new Error("The browser could not prepare a live voice connection.");
+      const answer = await api.startRealtimeCall(offerSdp, conversationRef.current);
       await pc.setRemoteDescription({ type: "answer", sdp: answer });
+      // SDP acceptance is not the same as a working audio connection. Wait for
+      // WebRTC to connect so the UI doesn't claim live voice is active too early.
+      await new Promise<void>((resolve, reject) => {
+        if (pc?.connectionState === "connected") {
+          resolve();
+          return;
+        }
+        const timeout = window.setTimeout(() => {
+          pc?.removeEventListener("connectionstatechange", onConnectionState);
+          reject(new Error("Live voice did not connect in time. Check the backend and network, then try again."));
+        }, 15000);
+        const onConnectionState = () => {
+          if (pc?.connectionState === "connected") {
+            window.clearTimeout(timeout);
+            pc?.removeEventListener("connectionstatechange", onConnectionState);
+            resolve();
+          } else if (pc?.connectionState === "failed" || pc?.connectionState === "closed") {
+            window.clearTimeout(timeout);
+            pc?.removeEventListener("connectionstatechange", onConnectionState);
+            reject(new Error("Live voice connection failed. Check the backend and try again."));
+          }
+        };
+        pc?.addEventListener("connectionstatechange", onConnectionState);
+        onConnectionState();
+      });
       setActive(true);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Could not start live voice.";
