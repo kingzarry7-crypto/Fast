@@ -29,6 +29,6 @@ jobs:
       - name: Install experiment dependencies
         run: python -m pip install --upgrade pip numpy pandas scikit-learn torch
       - name: Run Kitty experiment contract tests
-        run: python -m unittest tests.test_train_kitty_v3_retrained -v
+        run: python -m unittest discover -s tests -p 'test_train_kitty_v3_retrained.py' -v
       - name: Compile training script
         run: python -m py_compile train_kitty_v3_retrained.py
