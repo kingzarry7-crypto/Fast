@@ -1234,6 +1234,9 @@ def _massive_symbol(symbol: str) -> str:
                 break
     if not base or not base.isalnum():
         raise RuntimeError(f"Unsupported Massive symbol: {symbol}")
+    fx_currencies = {"USD", "EUR", "GBP", "JPY", "CHF", "AUD", "CAD", "NZD", "CNY", "HKD", "SGD", "MXN", "SEK", "NOK", "PLN", "TRY", "ZAR"}
+    if quote in fx_currencies and base in fx_currencies:
+        return f"C:{base}{quote}"
     if quote in ("USD", "USDT", "USDC") and base not in ("AAPL", "MSFT", "TSLA"):
         return f"X:{base}USD"
     if quote in ("EUR", "GBP", "JPY", "CHF", "AUD", "CAD", "NZD"):
@@ -1276,7 +1279,7 @@ def _massive_get_candles(symbol: str, timeframe: str = "15m", outputsize: int = 
     url = f"https://api.massive.com/v2/aggs/ticker/{ticker}/range/{multiplier}/{timespan}/{start}/{end}"
     response = requests.get(
         url,
-        params={"adjusted": "true", "sort": "asc", "limit": limit, "apiKey": api_key},
+        params={"adjusted": "true", "sort": "desc", "limit": limit, "apiKey": api_key},
         headers={"Accept": "application/json"},
         timeout=20,
     )
@@ -1287,8 +1290,10 @@ def _massive_get_candles(symbol: str, timeframe: str = "15m", outputsize: int = 
     if not isinstance(payload, dict) or payload.get("status") == "ERROR":
         raise RuntimeError("Massive returned an invalid market-data response")
     rows = payload.get("results") or []
+    # Massive applies the limit before returning rows; fetch newest-first, then
+    # reverse locally so callers receive chronological candles ending at latest.
     candles = []
-    for row in rows:
+    for row in reversed(rows):
         try:
             stamp = row.get("t")
             candles.append({
