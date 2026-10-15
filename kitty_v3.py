@@ -1,6 +1,7 @@
 """Kitty V3 local inference for King Zarry AI.
 
-Inference only; this module never places trades. Feature order is defined by metadata.
+Inference only; this module never places trades. The six input features and
+their order are part of the trained model contract.
 """
 from __future__ import annotations
 
@@ -8,6 +9,7 @@ import base64
 import io
 import json
 import logging
+import math
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -19,6 +21,10 @@ from torch import nn
 logger = logging.getLogger("king_zarry_kitty")
 ASSET_DIR = Path(__file__).resolve().parent / "kitty_v3_assets"
 
+EXPECTED_FEATURES = [
+    "Close", "SMA_20", "RSI_14", "BB_Upper", "BB_Lower", "MACD",
+]
+
 # Verified from the packaged six-feature StandardScaler. This fallback avoids
 # pickle/joblib compatibility failures across Python/NumPy/sklearn environments.
 _SCALER_MEAN = [
@@ -29,6 +35,7 @@ _SCALER_SCALE = [
     31040.441903947303, 30510.269121710633, 17.490193792131915,
     32300.862122537816, 28902.077741073736, 1638.5673916408148,
 ]
+
 
 class KittyOptimizedNet(nn.Module):
     def __init__(self) -> None:
@@ -46,14 +53,25 @@ class KittyOptimizedNet(nn.Module):
         x = self.dropout_2(self.relu(self.layer_2(x)))
         return self.sigmoid(self.layer_out(x))
 
+
 class _ScalerFallback:
-    """Small StandardScaler-compatible transform using verified saved statistics."""
+    """Small StandardScaler-compatible transform using saved statistics."""
     n_features_in_ = 6
 
     def transform(self, rows):
-        return [[(float(value) - mean) / scale
-                 for value, mean, scale in zip(row, _SCALER_MEAN, _SCALER_SCALE)]
-                for row in rows]
+        transformed = []
+        for row in rows:
+            if len(row) != len(EXPECTED_FEATURES):
+                raise ValueError("Kitty scaler expects exactly six features")
+            values = [float(value) for value in row]
+            if not all(math.isfinite(value) for value in values):
+                raise ValueError("Kitty scaler input must contain only finite values")
+            transformed.append([
+                (value - mean) / scale
+                for value, mean, scale in zip(values, _SCALER_MEAN, _SCALER_SCALE)
+            ])
+        return transformed
+
 
 def _asset_bytes(name: str) -> bytes:
     path = ASSET_DIR / name
@@ -63,29 +81,47 @@ def _asset_bytes(name: str) -> bytes:
     try:
         return base64.b64decode(raw.decode("ascii").strip(), validate=True)
     except (UnicodeDecodeError, ValueError):
+        # Supports either Base64 text assets or raw binary checkpoints.
         return raw
+
 
 @lru_cache(maxsize=1)
 def _load() -> tuple[KittyOptimizedNet, Any, dict]:
     metadata = json.loads(_asset_bytes("metadata.json.b64").decode("utf-8"))
-    if len(metadata.get("features", [])) != 6:
-        raise ValueError("Kitty V3 metadata must define exactly six features")
+    if metadata.get("features") != EXPECTED_FEATURES:
+        raise ValueError(
+            "Kitty V3 metadata feature names/order do not match the trained six-feature contract"
+        )
+    if metadata.get("architecture") != [6, 32, 16, 1]:
+        raise ValueError("Kitty V3 metadata architecture must be [6, 32, 16, 1]")
+
     try:
         scaler = joblib.load(io.BytesIO(_asset_bytes("scaler.joblib.b64")))
-        if not hasattr(scaler, "transform"):
+        if not callable(getattr(scaler, "transform", None)):
             raise TypeError("Packaged Kitty scaler has no transform method")
+        if getattr(scaler, "n_features_in_", None) != len(EXPECTED_FEATURES):
+            raise ValueError("Packaged Kitty scaler must accept exactly six features")
+        probe = scaler.transform([[0.0] * len(EXPECTED_FEATURES)])
+        if len(probe) != 1 or len(probe[0]) != len(EXPECTED_FEATURES):
+            raise ValueError("Packaged Kitty scaler returned an unexpected shape")
+        if not all(math.isfinite(float(value)) for value in probe[0]):
+            raise ValueError("Packaged Kitty scaler returned non-finite values")
     except Exception as exc:
         logger.warning("Kitty V3 using compatible scaler fallback (%s)", type(exc).__name__)
         scaler = _ScalerFallback()
+
     model = KittyOptimizedNet()
     state = torch.load(
         io.BytesIO(_asset_bytes("kitty_v3_weights.pt.b64")),
         map_location="cpu",
         weights_only=True,
     )
+    if not isinstance(state, dict):
+        raise ValueError("Kitty V3 weights must contain a state dictionary")
     model.load_state_dict(state, strict=True)
     model.eval()
     return model, scaler, metadata
+
 
 def status() -> dict:
     try:
@@ -102,26 +138,52 @@ def status() -> dict:
         logger.exception("Kitty V3 failed to load")
         return {"available": False, "model": "Kitty V3", "error": type(exc).__name__}
 
+
 def predict_features(features: dict[str, float]) -> dict:
     model, scaler, metadata = _load()
     names = metadata["features"]
     missing = [name for name in names if name not in features]
     if missing:
         raise ValueError("Missing required Kitty features: " + ", ".join(missing))
+
     values = []
     for name in names:
-        value = float(features[name])
-        if not torch.isfinite(torch.tensor(value)).item():
+        try:
+            value = float(features[name])
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(f"Feature {name} must be a finite number") from exc
+        if not math.isfinite(value):
             raise ValueError(f"Feature {name} must be finite")
         values.append(value)
+
     scaled = scaler.transform([values])
-    tensor = torch.tensor(scaled, dtype=torch.float32)
-    with torch.no_grad():
+    if len(scaled) != 1 or len(scaled[0]) != len(names):
+        raise ValueError("Kitty scaler must return exactly six scaled features")
+    scaled_values = [float(value) for value in scaled[0]]
+    if not all(math.isfinite(value) for value in scaled_values):
+        raise ValueError("Kitty scaler returned non-finite feature values")
+
+    tensor = torch.tensor([scaled_values], dtype=torch.float32)
+    with torch.inference_mode():
         probability = float(model(tensor).item())
+    if not math.isfinite(probability) or not 0.0 <= probability <= 1.0:
+        raise ValueError("Kitty model returned an invalid probability")
+
     thresholds = metadata.get("thresholds", {})
     sell_below = float(thresholds.get("sell_below", 0.47))
     buy_above = float(thresholds.get("buy_above", 0.53))
-    signal = "BUY_BIAS" if probability >= buy_above else "SELL_BIAS" if probability <= sell_below else "HOLD"
+    if not (
+        math.isfinite(sell_below)
+        and math.isfinite(buy_above)
+        and 0.0 <= sell_below < buy_above <= 1.0
+    ):
+        raise ValueError("Kitty model thresholds must satisfy 0 <= sell_below < buy_above <= 1")
+
+    signal = (
+        "BUY_BIAS" if probability >= buy_above
+        else "SELL_BIAS" if probability <= sell_below
+        else "HOLD"
+    )
     return {
         "model": metadata.get("model_name", "Kitty V3"),
         "probability_next_close_up": round(probability, 6),
