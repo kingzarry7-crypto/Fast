@@ -1653,6 +1653,34 @@ async def chat_endpoint(request: Request, chat: ChatRequest):
         )
         await asyncio.to_thread(_maybe_set_conversation_title, conversation_id, message)
 
+        # Explicit coding/build requests must go to the coding executor before any
+        # connector router; this prevents unrelated account/email flows from hijacking them.
+        try:
+            from coding_request import handle_coding_request
+            coding_result = await asyncio.to_thread(handle_coding_request, message)
+        except Exception as coding_exc:
+            logger.exception("Coding request router failed: %s", type(coding_exc).__name__)
+            coding_result = {
+                "status": "error",
+                "reply": "The Coding Agent could not start safely. No project was created or deployed. Check Railway logs and retry.",
+                "provider": "coding_agent",
+                "operation": "generate_project",
+                "project": None,
+            }
+        if coding_result is not None:
+            coding_reply = str(coding_result.get("reply") or "").strip()
+            await asyncio.to_thread(_save_web_message, conversation_id, "user", message)
+            await asyncio.to_thread(_save_web_message, conversation_id, "assistant", coding_reply)
+            return {
+                "status": coding_result.get("status") or "completed",
+                "reply": coding_reply,
+                "conversation_id": conversation_id,
+                "connector": True,
+                "provider": "coding_agent",
+                "operation": coding_result.get("operation") or "generate_project",
+                "project": coding_result.get("project"),
+            }
+
         # Account/connector actions must never fall through to the general LLM.
         # The streaming route already uses this authoritative router; the normal
         # /api/chat route must use the same path so Shopify/Gmail requests are
