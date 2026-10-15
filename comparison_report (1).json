@@ -1,0 +1,474 @@
+{
+  "model": "Kitty V3 retraining experiment",
+  "research_only": true,
+  "production_ready": false,
+  "dataset_sha256": "2e513710c7de5cf7bf2a4f38e286099f1213cf7bba0447b6acadf4665a72f974",
+  "feature_order": [
+    "ret_1h",
+    "ret_3h",
+    "ret_6h",
+    "ret_12h",
+    "ret_24h",
+    "close_vs_sma6",
+    "close_vs_sma20",
+    "close_vs_sma50",
+    "sma6_vs_sma20",
+    "rsi_14",
+    "macd_norm",
+    "macd_signal_norm",
+    "macd_hist_norm",
+    "volatility_6h",
+    "volatility_24h",
+    "range_pct",
+    "body_pct",
+    "close_position"
+  ],
+  "chronological_split": {
+    "train": 12045,
+    "validation": 2581,
+    "test": 2582
+  },
+  "selection": {
+    "candidate": "kitty_v3_experiments/baseline_adamw_candidate.pt",
+    "rule": "validation_macro_f1_then_validation_log_loss",
+    "holdout_test_evaluations": 1
+  },
+  "note": "Only the validation-selected candidate is evaluated on the holdout test set. Do not choose a model on accuracy alone. Inspect class-wise recall, trading costs, drawdown, calibration, and walk-forward results before any production use.",
+  "results": [
+    {
+      "variant": "baseline",
+      "optimizer": "adamw",
+      "best_epoch": 5,
+      "best_validation_loss": 1.0910528898239136,
+      "validation": {
+        "accuracy": 0.39093374660984115,
+        "balanced_accuracy": 0.39531134986185035,
+        "macro_f1": 0.38815223146845085,
+        "log_loss": 1.0910528530390682,
+        "confusion_matrix_labels_0_SHORT_1_NO_TRADE_2_LONG": [
+          [
+            302,
+            340,
+            262
+          ],
+          [
+            198,
+            419,
+            184
+          ],
+          [
+            250,
+            338,
+            288
+          ]
+        ],
+        "classification_report": {
+          "SHORT": {
+            "precision": 0.4026666666666667,
+            "recall": 0.334070796460177,
+            "f1-score": 0.3651753325272068,
+            "support": 904.0
+          },
+          "NO TRADE": {
+            "precision": 0.381950774840474,
+            "recall": 0.5230961298377028,
+            "f1-score": 0.44151738672286617,
+            "support": 801.0
+          },
+          "LONG": {
+            "precision": 0.3923705722070845,
+            "recall": 0.3287671232876712,
+            "f1-score": 0.3577639751552795,
+            "support": 876.0
+          },
+          "accuracy": 0.39093374660984115,
+          "macro avg": {
+            "precision": 0.3923293379047417,
+            "recall": 0.39531134986185035,
+            "f1-score": 0.38815223146845085,
+            "support": 2581.0
+          },
+          "weighted avg": {
+            "precision": 0.3927430680229726,
+            "recall": 0.39093374660984115,
+            "f1-score": 0.3863522547871506,
+            "support": 2581.0
+          }
+        }
+      },
+      "checkpoint": "kitty_v3_experiments/baseline_adamw_candidate.pt",
+      "test": {
+        "accuracy": 0.3876839659178931,
+        "balanced_accuracy": 0.3694044001174161,
+        "macro_f1": 0.3476366844924457,
+        "log_loss": 1.080128341241417,
+        "confusion_matrix_labels_0_SHORT_1_NO_TRADE_2_LONG": [
+          [
+            176,
+            408,
+            158
+          ],
+          [
+            169,
+            656,
+            144
+          ],
+          [
+            233,
+            469,
+            169
+          ]
+        ],
+        "classification_report": {
+          "SHORT": {
+            "precision": 0.3044982698961938,
+            "recall": 0.2371967654986523,
+            "f1-score": 0.26666666666666666,
+            "support": 742.0
+          },
+          "NO TRADE": {
+            "precision": 0.4279191128506197,
+            "recall": 0.6769865841073271,
+            "f1-score": 0.5243804956035172,
+            "support": 969.0
+          },
+          "LONG": {
+            "precision": 0.35881104033970274,
+            "recall": 0.19402985074626866,
+            "f1-score": 0.2518628912071535,
+            "support": 871.0
+          },
+          "accuracy": 0.3876839659178931,
+          "macro avg": {
+            "precision": 0.3637428076955054,
+            "recall": 0.3694044001174161,
+            "f1-score": 0.3476366844924457,
+            "support": 2582.0
+          },
+          "weighted avg": {
+            "precision": 0.3691385564489184,
+            "recall": 0.3876839659178931,
+            "f1-score": 0.35839037379856914,
+            "support": 2582.0
+          }
+        }
+      },
+      "selected_by": "validation_macro_f1_then_validation_log_loss"
+    },
+    {
+      "variant": "baseline",
+      "optimizer": "adam",
+      "best_epoch": 5,
+      "best_validation_loss": 1.0909255743026733,
+      "validation": {
+        "accuracy": 0.390546299883766,
+        "balanced_accuracy": 0.39487081802170043,
+        "macro_f1": 0.38807070085822454,
+        "log_loss": 1.090925599966921,
+        "confusion_matrix_labels_0_SHORT_1_NO_TRADE_2_LONG": [
+          [
+            295,
+            346,
+            263
+          ],
+          [
+            207,
+            415,
+            179
+          ],
+          [
+            248,
+            330,
+            298
+          ]
+        ],
+        "classification_report": {
+          "SHORT": {
+            "precision": 0.3933333333333333,
+            "recall": 0.32632743362831856,
+            "f1-score": 0.3567110036275695,
+            "support": 904.0
+          },
+          "NO TRADE": {
+            "precision": 0.38038496791934007,
+            "recall": 0.5181023720349563,
+            "f1-score": 0.43868921775898523,
+            "support": 801.0
+          },
+          "LONG": {
+            "precision": 0.4027027027027027,
+            "recall": 0.3401826484018265,
+            "f1-score": 0.3688118811881188,
+            "support": 876.0
+          },
+          "accuracy": 0.390546299883766,
+          "macro avg": {
+            "precision": 0.392140334651792,
+            "recall": 0.39487081802170043,
+            "f1-score": 0.38807070085822454,
+            "support": 2581.0
+          },
+          "weighted avg": {
+            "precision": 0.39249487028449914,
+            "recall": 0.390546299883766,
+            "f1-score": 0.3862595965226897,
+            "support": 2581.0
+          }
+        }
+      },
+      "checkpoint": "kitty_v3_experiments/baseline_adam_candidate.pt"
+    },
+    {
+      "variant": "batchnorm",
+      "optimizer": "adamw",
+      "best_epoch": 3,
+      "best_validation_loss": 1.0908197164535522,
+      "validation": {
+        "accuracy": 0.38860906625339015,
+        "balanced_accuracy": 0.39155783999745336,
+        "macro_f1": 0.38733495946663243,
+        "log_loss": 1.0908196542923059,
+        "confusion_matrix_labels_0_SHORT_1_NO_TRADE_2_LONG": [
+          [
+            327,
+            323,
+            254
+          ],
+          [
+            227,
+            386,
+            188
+          ],
+          [
+            274,
+            312,
+            290
+          ]
+        ],
+        "classification_report": {
+          "SHORT": {
+            "precision": 0.39492753623188404,
+            "recall": 0.36172566371681414,
+            "f1-score": 0.37759815242494227,
+            "support": 904.0
+          },
+          "NO TRADE": {
+            "precision": 0.3780607247796278,
+            "recall": 0.4818976279650437,
+            "f1-score": 0.42371020856201974,
+            "support": 801.0
+          },
+          "LONG": {
+            "precision": 0.39617486338797814,
+            "recall": 0.3310502283105023,
+            "f1-score": 0.36069651741293535,
+            "support": 876.0
+          },
+          "accuracy": 0.38860906625339015,
+          "macro avg": {
+            "precision": 0.38972104146649666,
+            "recall": 0.39155783999745336,
+            "f1-score": 0.38733495946663243,
+            "support": 2581.0
+          },
+          "weighted avg": {
+            "precision": 0.3901163555327291,
+            "recall": 0.38860906625339015,
+            "f1-score": 0.3861723192964189,
+            "support": 2581.0
+          }
+        }
+      },
+      "checkpoint": "kitty_v3_experiments/batchnorm_adamw_candidate.pt"
+    },
+    {
+      "variant": "batchnorm",
+      "optimizer": "adam",
+      "best_epoch": 5,
+      "best_validation_loss": 1.0905205011367798,
+      "validation": {
+        "accuracy": 0.39325842696629215,
+        "balanced_accuracy": 0.39406733092705926,
+        "macro_f1": 0.3858197631976192,
+        "log_loss": 1.0905204495498808,
+        "confusion_matrix_labels_0_SHORT_1_NO_TRADE_2_LONG": [
+          [
+            435,
+            284,
+            185
+          ],
+          [
+            304,
+            364,
+            133
+          ],
+          [
+            379,
+            281,
+            216
+          ]
+        ],
+        "classification_report": {
+          "SHORT": {
+            "precision": 0.389087656529517,
+            "recall": 0.4811946902654867,
+            "f1-score": 0.43026706231454004,
+            "support": 904.0
+          },
+          "NO TRADE": {
+            "precision": 0.39181916038751347,
+            "recall": 0.4544319600499376,
+            "f1-score": 0.4208092485549133,
+            "support": 801.0
+          },
+          "LONG": {
+            "precision": 0.4044943820224719,
+            "recall": 0.2465753424657534,
+            "f1-score": 0.30638297872340425,
+            "support": 876.0
+          },
+          "accuracy": 0.39325842696629215,
+          "macro avg": {
+            "precision": 0.3951337329798341,
+            "recall": 0.39406733092705926,
+            "f1-score": 0.3858197631976192,
+            "support": 2581.0
+          },
+          "weighted avg": {
+            "precision": 0.39516445859154087,
+            "recall": 0.39325842696629215,
+            "f1-score": 0.3852852079761843,
+            "support": 2581.0
+          }
+        }
+      },
+      "checkpoint": "kitty_v3_experiments/batchnorm_adam_candidate.pt"
+    },
+    {
+      "variant": "leaky_relu",
+      "optimizer": "adamw",
+      "best_epoch": 5,
+      "best_validation_loss": 1.0910857915878296,
+      "validation": {
+        "accuracy": 0.38744672607516467,
+        "balanced_accuracy": 0.3919330226133162,
+        "macro_f1": 0.3847186593627568,
+        "log_loss": 1.0910859410210056,
+        "confusion_matrix_labels_0_SHORT_1_NO_TRADE_2_LONG": [
+          [
+            289,
+            345,
+            270
+          ],
+          [
+            203,
+            416,
+            182
+          ],
+          [
+            248,
+            333,
+            295
+          ]
+        ],
+        "classification_report": {
+          "SHORT": {
+            "precision": 0.39054054054054055,
+            "recall": 0.3196902654867257,
+            "f1-score": 0.3515815085158151,
+            "support": 904.0
+          },
+          "NO TRADE": {
+            "precision": 0.3802559414990859,
+            "recall": 0.519350811485643,
+            "f1-score": 0.43905013192612136,
+            "support": 801.0
+          },
+          "LONG": {
+            "precision": 0.3949129852744311,
+            "recall": 0.3367579908675799,
+            "f1-score": 0.36352433764633396,
+            "support": 876.0
+          },
+          "accuracy": 0.38744672607516467,
+          "macro avg": {
+            "precision": 0.3885698224380192,
+            "recall": 0.3919330226133162,
+            "f1-score": 0.3847186593627568,
+            "support": 2581.0
+          },
+          "weighted avg": {
+            "precision": 0.3888327907360783,
+            "recall": 0.38744672607516467,
+            "f1-score": 0.382780379368194,
+            "support": 2581.0
+          }
+        }
+      },
+      "checkpoint": "kitty_v3_experiments/leaky_relu_adamw_candidate.pt"
+    },
+    {
+      "variant": "leaky_relu",
+      "optimizer": "adam",
+      "best_epoch": 5,
+      "best_validation_loss": 1.0907623767852783,
+      "validation": {
+        "accuracy": 0.3847345989926385,
+        "balanced_accuracy": 0.38896079636785696,
+        "macro_f1": 0.382401833809168,
+        "log_loss": 1.090762200543823,
+        "confusion_matrix_labels_0_SHORT_1_NO_TRADE_2_LONG": [
+          [
+            291,
+            341,
+            272
+          ],
+          [
+            210,
+            408,
+            183
+          ],
+          [
+            256,
+            326,
+            294
+          ]
+        ],
+        "classification_report": {
+          "SHORT": {
+            "precision": 0.3844121532364597,
+            "recall": 0.3219026548672566,
+            "f1-score": 0.35039133052378085,
+            "support": 904.0
+          },
+          "NO TRADE": {
+            "precision": 0.37953488372093025,
+            "recall": 0.5093632958801498,
+            "f1-score": 0.4349680170575693,
+            "support": 801.0
+          },
+          "LONG": {
+            "precision": 0.3925233644859813,
+            "recall": 0.3356164383561644,
+            "f1-score": 0.3618461538461539,
+            "support": 876.0
+          },
+          "accuracy": 0.3847345989926385,
+          "macro avg": {
+            "precision": 0.3854901338144571,
+            "recall": 0.38896079636785696,
+            "f1-score": 0.382401833809168,
+            "support": 2581.0
+          },
+          "weighted avg": {
+            "precision": 0.3856514899945542,
+            "recall": 0.3847345989926385,
+            "f1-score": 0.38052707292748617,
+            "support": 2581.0
+          }
+        }
+      },
+      "checkpoint": "kitty_v3_experiments/leaky_relu_adam_candidate.pt"
+    }
+  ]
+}
