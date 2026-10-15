@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import ChatMessage from "@/components/chat/ChatMessage";
 import RobotHead from "@/components/RobotHead";
 import AICore from "@/components/AICore";
@@ -75,12 +75,10 @@ export default function ChatWorkspace({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {
     speak,
-    speakInstant,
     stop: stopSpeaking,
     speaking: isSpeaking,
     listening,
     listen,
-    listenContinuous,
     stopListening,
     error: voiceError,
     supported: voiceSupported,
@@ -464,7 +462,8 @@ export default function ChatWorkspace({
               <div className="flex items-center justify-center" aria-label="King Zarry AI animated core">
                 <AICore
                   state={sending ? "thinking" : isSpeaking ? "speaking" : listening ? "listening" : "idle"}
-                  size={220}
+                  size={148}
+                  compact
                 />
               </div>
               <p className="mt-4 text-lg font-medium tracking-tight text-slate-100">What can I help you with?</p>
@@ -690,7 +689,25 @@ export default function ChatWorkspace({
                       </svg>
                     )}
                   </button>
-                <button type="button" onClick={() => setVoicePanelOpen((v) => !v)} className="hidden sm:flex h-8 shrink-0 items-center justify-center rounded-full px-2 text-[9px] tracking-widest text-zinc-500 hover:text-cyan-300" title="Voice">VOICE</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAutoSpeak((enabled) => {
+                      if (enabled) stopSpeaking();
+                      return !enabled;
+                    });
+                  }}
+                  aria-label={autoSpeak ? "Turn spoken replies off" : "Turn spoken replies on"}
+                  aria-pressed={autoSpeak}
+                  title={autoSpeak ? "Spoken replies on" : "Read replies aloud"}
+                  className={"flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300 " + (autoSpeak ? "border-cyan-300/40 bg-cyan-300/[0.10] text-cyan-100" : "border-white/[0.08] text-zinc-400 hover:border-cyan-300/40 hover:text-cyan-100")}
+                >
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 10v4h4l5 4V6l-5 4H4Z" />
+                    {autoSpeak ? <><path d="M16 9a5 5 0 0 1 0 6" /><path d="M18.5 6.5a9 9 0 0 1 0 11" /></> : <path d="m17 9 4 6m0-6-4 6" />}
+                  </svg>
+                </button>
+                <button type="button" onClick={() => setVoicePanelOpen((v) => !v)} className="hidden sm:flex h-8 shrink-0 items-center justify-center rounded-full px-2 text-[9px] tracking-widest text-zinc-500 hover:text-cyan-300" title="Voice settings">VOICE</button>
               </>
             )}
 
