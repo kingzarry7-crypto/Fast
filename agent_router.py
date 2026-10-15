@@ -27,19 +27,19 @@ _MARKET_ACTION = re.compile(
 # Explicit media work must never be hijacked by the market agent just because
 # the image prompt mentions an asset (for example, "edit my gold chart").
 _MEDIA_ACTION_PATTERN = re.compile(
-    r"\\b(?:edit|modify|retouch|enhance|restore|crop|resize|recolor|colorize|colourize|"
-    r"remove\\s+(?:the\\s+)?background|change\\s+(?:the\\s+)?background|"
-    r"replace\\s+(?:the\\s+)?background|make\\s+(?:this|it)\\s+look|"
-    r"turn\\s+(?:this|it)\\s+into|style\\s+transfer)\\b",
+    r"\b(?:edit|modify|retouch|enhance|restore|crop|resize|recolor|colorize|colourize|"
+    r"remove\s+(?:the\s+)?background|change\s+(?:the\s+)?background|"
+    r"replace\s+(?:the\s+)?background|make\s+(?:this|it)\s+look|"
+    r"turn\s+(?:this|it)\s+into|style\s+transfer)\b",
     re.IGNORECASE,
 )
 _MEDIA_OBJECT_PATTERN = re.compile(
-    r"\\b(?:image|picture|photo|photograph|portrait|artwork|illustration|background|chart|diagram)\\b",
+    r"\b(?:image|picture|photo|photograph|portrait|artwork|illustration|background|chart|diagram)\b",
     re.IGNORECASE,
 )
 _MEDIA_CREATE_PATTERN = re.compile(
-    r"\\b(?:draw|sketch|illustrate|paint|render|generate|create|make)\\b.{0,80}"
-    r"\\b(?:image|picture|photo|photograph|portrait|artwork|illustration)\\b",
+    r"\b(?:draw|sketch|illustrate|paint|render|generate|create|make)\b.{0,80}"
+    r"\b(?:image|picture|photo|photograph|portrait|artwork|illustration)\b",
     re.IGNORECASE,
 )
 
