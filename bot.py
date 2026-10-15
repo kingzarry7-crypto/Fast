@@ -15,6 +15,7 @@ import sqlite3
 import tempfile
 import shutil
 import logging
+import math
 from io import BytesIO
 from datetime import datetime, timezone, timedelta, time as dt_time
 from typing import Optional, Dict, List
@@ -1473,13 +1474,17 @@ or UNSURE - 12 words max reason
         verdict = reply.split()[0].upper().strip(":-")
         mtf_data["ai_verdict"] = reply
         mtf_data["ai_verdict_raw"] = reply
+        # The central market engine can omit confidence for partial snapshots.
+        # Normalize it before applying an AI verdict so UNSURE cannot raise KeyError.
+        tf_15m.setdefault("confidence", "LOW")
+        tf_15m.setdefault("reasons", [])
         if verdict == "REJECT":
-            mtf_data["15m"]["signal"] = "WAIT"
-            mtf_data["15m"]["confidence"] = "LOW"
-            mtf_data["15m"]["reasons"] = [f"AI MTF cross-check: {reply}"]
+            tf_15m["signal"] = "WAIT"
+            tf_15m["confidence"] = "LOW"
+            tf_15m["reasons"] = [f"AI MTF cross-check: {reply}"]
             mtf_data["mtf_signal"] = "WAIT"
-        elif verdict == "UNSURE" and mtf_data["15m"]["confidence"] == "MEDIUM":
-            mtf_data["15m"]["confidence"] = "LOW"
+        elif verdict == "UNSURE" and tf_15m.get("confidence", "LOW") == "MEDIUM":
+            tf_15m["confidence"] = "LOW"
     except Exception as error:
         logger.warning(f"AI MTF cross-check skipped: {error}")
     return mtf_data
