@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 from typing import Any
 
 from openai import OpenAI
@@ -84,16 +83,9 @@ def _configured_providers():
 
 
 def _error_summary(exc: Exception) -> str:
-    """Return a short, sanitized provider diagnostic without credentials."""
-    detail = str(exc).strip()
-    detail = re.sub(r"(?i)Bearer\\s+\\S+", "Bearer [redacted]", detail)
-    detail = re.sub(r"(?i)(api[_-]?key[=: ]+)\\S+", r"\\1[redacted]", detail)
-    detail = re.sub(r"\\b(?:sk|gsk|hf|xai)-[A-Za-z0-9_-]{8,}\\b", "[redacted]", detail)
-    detail = re.sub(r"\\s+", " ", detail)
+    """Return a safe diagnostic without exposing provider response bodies."""
     status = getattr(exc, "status_code", None)
-    prefix = f"HTTP {status}: " if status else ""
-    return prefix + (detail[:180] or type(exc).__name__)
-
+    return f"HTTP {status} {type(exc).__name__}" if status else type(exc).__name__
 
 def _create_completion(name: str, key: str, base_url: str, model: str,
                        messages: list[dict[str, Any]], max_tokens: int,
