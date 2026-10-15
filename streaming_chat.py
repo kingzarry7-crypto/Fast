@@ -16,6 +16,7 @@ from typing import Any, Callable, Dict, Generator, Optional
 
 import requests
 from fastapi import HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -41,7 +42,7 @@ class StreamChatRequest(BaseModel):
 
 
 def _sse(event: Dict[str, Any]) -> str:
-    return "data: " + json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n\n"
+    return "data: " + json.dumps(jsonable_encoder(event), ensure_ascii=False, separators=(",", ":")) + "\n\n"
 
 
 def _extract_delta(payload: Dict[str, Any]) -> str:
@@ -670,6 +671,7 @@ def install_streaming_chat(
                         workflow_id = str(work_intent.get("workflow_id") or "")
                         if kind == "status":
                             agent = await __import__("asyncio").to_thread(get_kz_agent, user_id, workflow_id)
+                        agent = jsonable_encoder(agent)
                         else:
                             agent = await __import__("asyncio").to_thread(approve_kz_agent, user_id, workflow_id, kind == "approve")
                             if kind == "approve" and agent.get("status") == "approved":
@@ -712,6 +714,7 @@ def install_streaming_chat(
                             account_id=str(payload.get("account_id") or "").strip() or None,
                             run_now=True,
                         )
+                        agent = jsonable_encoder(agent)
                         reply = (
                             "KZ AGENT mission started.\\n\\n"
                             f"Goal: {agent.get('goal', '')}\\n"
