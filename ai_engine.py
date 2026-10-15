@@ -1034,7 +1034,7 @@ def acedata_edit_image(prompt: str, image_url: str, width: int = 1024, height: i
         return {"success": False, "url": None, "error": "acedata_not_configured", "model": ACEDATA_IMAGE_MODEL}
     if not image_url:
         return {"success": False, "url": None, "error": "missing_image_url", "model": ACEDATA_IMAGE_MODEL}
-    payload = {"model": ACEDATA_IMAGE_MODEL, "prompt": prompt, "width": width, "height": height, "count": 1, "image_url": image_url}
+    payload = {"action": "edit", "model": ACEDATA_IMAGE_MODEL, "prompt": prompt, "width": width, "height": height, "count": 1, "image_url": image_url}
     return _acedata_image_flow(payload)
 
 
