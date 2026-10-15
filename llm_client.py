@@ -7,8 +7,10 @@ failed.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
+import urllib.request
 from typing import Any
 
 from openai import OpenAI
@@ -103,6 +105,62 @@ def _create_completion(name: str, key: str, base_url: str, model: str,
     raise RuntimeError("empty_completion")
 
 
+
+def _zarry_completion(messages: list[dict[str, Any]], max_tokens: int, timeout: float):
+    """Call the user's self-hosted Zarry /generate API, if configured."""
+    endpoint = os.getenv("ZARRY_API_URL", "").strip()
+    if not endpoint:
+        return None
+    prompt = ""
+    for item in reversed(messages or []):
+        if isinstance(item, dict) and item.get("role") == "user":
+            content = item.get("content", "")
+            if isinstance(content, str):
+                prompt = content
+            elif isinstance(content, list):
+                prompt = "\\n".join(
+                    str(part.get("text", "")) for part in content if isinstance(part, dict)
+                )
+            break
+    payload = {
+        "prompt": prompt,
+        "input": prompt,
+        "text": prompt,
+        "messages": messages,
+        "history": [],
+        "max_new_tokens": max_tokens,
+        "temperature": 0.7,
+    }
+    headers = {"Content-Type": "application/json", "bypass-tunnel-reminder": "true"}
+    token = os.getenv("ZARRY_API_KEY", "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(
+        endpoint,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        data = json.loads(response.read().decode("utf-8"))
+    answer = data if isinstance(data, str) else None
+    if isinstance(data, dict):
+        for key in ("response", "generated_text", "text", "output", "result", "answer", "content"):
+            value = data.get(key)
+            if isinstance(value, str) and value.strip():
+                answer = value
+                break
+        if not answer:
+            choices = data.get("choices")
+            if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+                first = choices[0]
+                message = first.get("message") or {}
+                answer = message.get("content") or first.get("text")
+    if isinstance(answer, str) and answer.strip():
+        return answer.strip()
+    raise RuntimeError("zarry_empty_completion")
+
+
 def get_client():
     """Return the first configured provider for callers that need streaming."""
     providers = _configured_providers()
@@ -115,12 +173,24 @@ def get_client():
 
 def ask(messages: list[dict[str, Any]], max_tokens: int = 500):
     """Try providers in order; recover once from an unsupported HF model."""
-    providers = _configured_providers()
-    if not providers:
-        raise RuntimeError("No supported AI provider is configured")
-
     errors = []
     timeout = float(os.getenv("AI_PROVIDER_TIMEOUT", "12") or 12)
+    if os.getenv("ZARRY_API_URL", "").strip():
+        try:
+            answer = _zarry_completion(messages, max_tokens, timeout)
+            if answer:
+                logger.info("LLM provider local-zarry succeeded")
+                return answer
+        except Exception as exc:
+            errors.append(f"zarry:generate:{_error_summary(exc)}")
+            logger.warning("Local Zarry API failed; trying configured fallback providers (%s)", type(exc).__name__)
+
+    providers = _configured_providers()
+    if not providers:
+        if errors:
+            raise RuntimeError("All configured LLM providers failed: " + "; ".join(errors))
+        raise RuntimeError("No supported AI provider is configured")
+
     for name, key, base_url, model in providers:
         try:
             return _create_completion(name, key, base_url, model, messages, max_tokens, timeout)

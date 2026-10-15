@@ -168,8 +168,51 @@ def _stream_cloudflare(messages: list):
     yield text
 
 
+
+def _stream_zarry(messages: list):
+    """Use the Colab-hosted Zarry /generate API for the streaming chat path."""
+    endpoint = os.getenv("ZARRY_API_URL", "").strip()
+    if not endpoint:
+        raise RuntimeError("zarry_not_configured")
+    prompt = ""
+    for item in reversed(messages or []):
+        if isinstance(item, dict) and item.get("role") == "user":
+            content = item.get("content", "")
+            prompt = content if isinstance(content, str) else ""
+            break
+    payload = {
+        "prompt": prompt, "input": prompt, "text": prompt,
+        "messages": messages, "history": [], "max_new_tokens": 700,
+        "temperature": 0.85,
+    }
+    headers = {"Content-Type": "application/json", "bypass-tunnel-reminder": "true"}
+    token = os.getenv("ZARRY_API_KEY", "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    response = requests.post(endpoint, json=payload, headers=headers, timeout=(10, _TIMEOUT))
+    if response.status_code >= 400:
+        raise RuntimeError(f"zarry_http_{response.status_code}")
+    data = response.json()
+    answer = data if isinstance(data, str) else None
+    if isinstance(data, dict):
+        for key in ("response", "generated_text", "text", "output", "result", "answer", "content"):
+            value = data.get(key)
+            if isinstance(value, str) and value.strip():
+                answer = value
+                break
+        if not answer:
+            choices = data.get("choices") or []
+            if choices and isinstance(choices[0], dict):
+                answer = (choices[0].get("message") or {}).get("content") or choices[0].get("text")
+    if not isinstance(answer, str) or not answer.strip():
+        raise RuntimeError("zarry_empty_completion")
+    yield answer.strip()
+
+
 def _provider_streams(messages: list):
-    # The Zarry model is available on both normal and streaming chat.
+    # Prefer the user's Colab-hosted Zarry model for streaming chat as well.
+    if os.getenv("ZARRY_API_URL", "").strip():
+        yield "zarry", _stream_zarry(messages)
     if ai_engine.HF_TOKEN:
         yield "huggingface", _stream_openai_compatible(
             url=ai_engine.HF_INFERENCE_URL,

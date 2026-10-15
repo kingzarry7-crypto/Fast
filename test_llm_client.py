@@ -1,7 +1,8 @@
+import json
 import os
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from llm_client import _configured_providers, ask
 
@@ -93,6 +94,36 @@ class ConfiguredProviderTests(unittest.TestCase):
             client.chat.completions.create.call_args_list[1].kwargs["model"],
             "provider/available-model",
         )
+
+
+    def test_zarry_generate_api_is_primary_for_coding_prompts(self):
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = json.dumps({
+            "response": '{"files": [{"path": "index.html", "content": "ok"}]}'
+        }).encode("utf-8")
+        with patch.dict(os.environ, {
+            "AI_PROVIDER": "AUTO",
+            "ZARRY_API_URL": "https://ready-rivers-bow.loca.lt/generate",
+        }, clear=True), patch("llm_client.urllib.request.urlopen", return_value=response) as post:
+            result = ask([{"role": "user", "content": "Build a website"}], max_tokens=700)
+        self.assertIn('"files"', result)
+        request = post.call_args.args[0]
+        self.assertEqual(request.full_url, "https://ready-rivers-bow.loca.lt/generate")
+        self.assertEqual(json.loads(request.data.decode("utf-8"))["prompt"], "Build a website")
+
+    def test_zarry_failure_falls_back_to_configured_provider(self):
+        fallback = SimpleNamespace(choices=[
+            SimpleNamespace(message=SimpleNamespace(content="fallback answer"))
+        ])
+        client = SimpleNamespace(chat=SimpleNamespace(
+            completions=SimpleNamespace(create=unittest.mock.Mock(return_value=fallback))
+        ))
+        with patch.dict(os.environ, {
+            "AI_PROVIDER": "AUTO",
+            "ZARRY_API_URL": "https://example.test/generate",
+            "OPENAI_API_KEY": "test-openai-key",
+        }, clear=True), patch("llm_client.urllib.request.urlopen", side_effect=RuntimeError("tunnel unavailable")), patch("llm_client.OpenAI", return_value=client):
+            self.assertEqual(ask([{"role": "user", "content": "hello"}]), "fallback answer")
 
 
 if __name__ == "__main__":
