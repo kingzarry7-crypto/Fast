@@ -169,20 +169,45 @@ def _stream_cloudflare(messages: list):
 
 
 
+def _build_zarry_context(messages: list):
+    """Keep system instructions/project memory while bounding recent chat history."""
+    items = [item for item in (messages or []) if isinstance(item, dict)]
+    system_message = next((item for item in items if item.get("role") == "system"), None)
+    recent_turns = [
+        item for item in items
+        if item.get("role") in ("user", "assistant")
+    ][-4:]
+    context_messages = ([system_message] if system_message else []) + recent_turns
+
+    sections = []
+    if system_message:
+        system_content = system_message.get("content", "")
+        if isinstance(system_content, str) and system_content.strip():
+            sections.append("SYSTEM INSTRUCTIONS AND PROJECT MEMORY:\n" + system_content.strip())
+    if recent_turns:
+        lines = ["RECENT CONVERSATION:"]
+        for item in recent_turns:
+            text = item.get("content", "")
+            if not isinstance(text, str) or not text.strip():
+                continue
+            role = "USER" if item.get("role") == "user" else "ASSISTANT"
+            lines.append(f"{role}: {text.strip()}")
+        if len(lines) > 1:
+            sections.append("\n".join(lines))
+    return "\n\n".join(sections).strip(), context_messages
+
+
 def _stream_zarry(messages: list):
     """Use the Colab-hosted Zarry /generate API for the streaming chat path."""
     endpoint = os.getenv("ZARRY_API_URL", "").strip()
     if not endpoint:
         raise RuntimeError("zarry_not_configured")
-    prompt = ""
-    for item in reversed(messages or []):
-        if isinstance(item, dict) and item.get("role") == "user":
-            content = item.get("content", "")
-            prompt = content if isinstance(content, str) else ""
-            break
+    prompt, context_messages = _build_zarry_context(messages)
     payload = {
+        # Some /generate implementations prioritize prompt over messages;
+        # include system instructions and project memory in all prompt aliases.
         "prompt": prompt, "input": prompt, "text": prompt,
-        "messages": messages[-4:], "history": [], "max_new_tokens": 192,
+        "messages": context_messages, "history": context_messages[-4:], "max_new_tokens": 192,
         "temperature": 0.7,
     }
     headers = {"Content-Type": "application/json", "bypass-tunnel-reminder": "true"}
