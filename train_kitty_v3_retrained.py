@@ -107,6 +107,11 @@ def train_one(
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=weight_decay)
     else:
         raise ValueError("optimizer must be adamw or adam")
+    # Reduce the learning rate when validation loss plateaus instead of continuing
+    # large updates after the model has stopped improving.
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=3, min_lr=1e-5
+    )
 
     # Scaling is fitted only on the training window to avoid future-data leakage.
     train_ds = TensorDataset(torch.from_numpy(x_train), torch.from_numpy(y_train))
@@ -130,7 +135,13 @@ def train_one(
         with torch.inference_mode():
             val_logits = model(val_x)
             val_loss = float(nn.functional.cross_entropy(val_logits, val_y))
-        history.append({"epoch": epoch, "train_loss": float(np.mean(train_losses)), "val_loss": val_loss})
+        scheduler.step(val_loss)
+        history.append({
+            "epoch": epoch,
+            "train_loss": float(np.mean(train_losses)),
+            "val_loss": val_loss,
+            "learning_rate": float(optimizer.param_groups[0]["lr"]),
+        })
         if val_loss < best_loss - 1e-5:
             best_loss, best_state, best_epoch, stale = val_loss, copy.deepcopy(model.state_dict()), epoch, 0
         else:
@@ -180,6 +191,7 @@ def main() -> None:
     x_test = scaler.transform(x_test).astype(np.float32)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     results = []
+    candidates = []
     for variant in ("baseline", "batchnorm", "leaky_relu"):
         for optimizer_name in ("adamw", "adam"):
             model, training = train_one(
@@ -187,10 +199,10 @@ def main() -> None:
                 args.seed, args.epochs, args.patience, args.batch_size, args.weight_decay,
             )
             val_metrics = evaluate(model, x_val, y_val)
-            # The test set is only evaluated after early stopping has selected weights.
-            test_metrics = evaluate(model, x_test, y_test)
             run_name = f"{variant}_{optimizer_name}"
             checkpoint_path = args.output_dir / f"{run_name}_candidate.pt"
+            # Do not inspect the holdout test set for every candidate: that would
+            # turn it into another tuning set. Candidate selection uses validation only.
             torch.save({
                 "model_state_dict": model.state_dict(),
                 "scaler": scaler,
@@ -200,23 +212,43 @@ def main() -> None:
                 "optimizer": optimizer_name,
                 "seed": args.seed,
                 "best_epoch": training["best_epoch"],
-                "validation_accuracy": val_metrics["accuracy"],
+                "best_validation_loss": training["best_validation_loss"],
                 "validation_metrics": val_metrics,
-                "test_metrics": test_metrics,
                 "dataset_sha256": dataset_sha256,
                 "split_sizes": {"train": len(y_train), "validation": len(y_val), "test": len(y_test)},
                 "research_only": True,
                 "production_ready": False,
                 "automatic_order_execution_enabled": False,
             }, checkpoint_path)
-            results.append({
+            candidate = {
                 "variant": variant, "optimizer": optimizer_name,
                 "best_epoch": training["best_epoch"],
                 "best_validation_loss": training["best_validation_loss"],
-                "validation": val_metrics, "test": test_metrics,
+                "validation": val_metrics,
                 "checkpoint": str(checkpoint_path),
-            })
-            print(json.dumps({"run": run_name, "validation": val_metrics, "test": test_metrics, "checkpoint": str(checkpoint_path)}))
+            }
+            results.append(candidate)
+            candidates.append((candidate, model))
+            print(json.dumps({"run": run_name, "validation": val_metrics, "checkpoint": str(checkpoint_path)}))
+
+    # Predeclare selection using validation macro-F1, then validation log loss.
+    # The holdout test partition is evaluated exactly once, after selection.
+    winner, winning_model = max(
+        candidates,
+        key=lambda item: (
+            item[0]["validation"]["macro_f1"],
+            -item[0]["validation"]["log_loss"],
+        ),
+    )
+    test_metrics = evaluate(winning_model, x_test, y_test)
+    winner["test"] = test_metrics
+    winner["selected_by"] = "validation_macro_f1_then_validation_log_loss"
+    winner_path = Path(winner["checkpoint"])
+    winner_checkpoint = torch.load(winner_path, map_location="cpu", weights_only=False)
+    winner_checkpoint["test_metrics"] = test_metrics
+    winner_checkpoint["selected_by"] = winner["selected_by"]
+    torch.save(winner_checkpoint, winner_path)
+    print(json.dumps({"selected_candidate": winner["checkpoint"], "selection_metric": winner["selected_by"], "test": test_metrics}))
     report = {
         "model": "Kitty V3 retraining experiment",
         "research_only": True,
@@ -224,7 +256,8 @@ def main() -> None:
         "dataset_sha256": dataset_sha256,
         "feature_order": FEATURES,
         "chronological_split": {"train": len(y_train), "validation": len(y_val), "test": len(y_test)},
-        "note": "Do not choose a model from accuracy alone. Inspect class-wise recall, trading costs, drawdown, calibration, and walk-forward results before any production use.",
+        "selection": {"candidate": winner["checkpoint"], "rule": winner["selected_by"], "holdout_test_evaluations": 1},
+        "note": "Only the validation-selected candidate is evaluated on the holdout test set. Do not choose a model on accuracy alone. Inspect class-wise recall, trading costs, drawdown, calibration, and walk-forward results before any production use.",
         "results": results,
     }
     report_path = args.output_dir / "comparison_report.json"

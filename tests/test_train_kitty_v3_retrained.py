@@ -35,6 +35,23 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         self.assertLess(train[0][-1, 0], validation[0][0, 0])
         self.assertLess(validation[0][-1, 0], test[0][0, 0])
 
+
+    def test_training_tracks_learning_rate_for_scheduler(self):
+        rng = np.random.default_rng(7)
+        x_train = rng.normal(size=(84, 18)).astype(np.float32)
+        y_train = np.arange(84, dtype=np.int64) % 3
+        x_val = rng.normal(size=(18, 18)).astype(np.float32)
+        y_val = np.arange(18, dtype=np.int64) % 3
+        _, training = kitty.train_one(
+            x_train, y_train, x_val, y_val,
+            variant="baseline", optimizer_name="adamw", seed=7,
+            epochs=3, patience=2, batch_size=32, weight_decay=1e-4,
+        )
+        self.assertGreaterEqual(training["best_epoch"], 1)
+        self.assertTrue(training["history"])
+        self.assertTrue(all("learning_rate" in item for item in training["history"]))
+        self.assertTrue(all(item["learning_rate"] > 0 for item in training["history"]))
+
     def test_architecture_variants_return_three_class_logits(self):
         for variant in ("baseline", "batchnorm", "leaky_relu"):
             model = kitty.KittyExperimentNet(variant=variant)
