@@ -41,6 +41,13 @@ class AgentRouterTests(unittest.TestCase):
         self.assertIsNotNone(intent)
         self.assertEqual(intent["kind"], "video")
 
+    def test_existing_video_edit_is_not_misrouted_to_market_or_generation(self):
+        request = "Edit this video of my gold chart"
+        self.assertIsNone(agent_router.route_agent_request(request, "u1"))
+        intent = _detect_media_intent(request, has_image=False)
+        self.assertIsNotNone(intent)
+        self.assertEqual(intent["kind"], "video_edit_unsupported")
+
     def test_market_intent_routes_to_market_agent(self):
         analysis = {
             "symbol": "XAU/USD", "timeframe": "1h", "price": 4312.5,
