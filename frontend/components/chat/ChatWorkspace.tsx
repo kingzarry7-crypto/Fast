@@ -6,6 +6,7 @@ import RobotHead from "@/components/RobotHead";
 import AICore from "@/components/AICore";
 import { useChat } from "@/hooks/useChat";
 import { useVoice, type VoiceStyle } from "@/hooks/useVoice";
+import { useRealtimeVoice } from "@/hooks/useRealtimeVoice";
 import { api, type ConversationItem } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
@@ -87,6 +88,7 @@ export default function ChatWorkspace({
     voiceCharacter,
     setVoice,
   } = useVoice();
+  const realtimeVoice = useRealtimeVoice(conversationId);
 
 
 
@@ -160,7 +162,7 @@ export default function ChatWorkspace({
   }, [input]);
 
   useEffect(() => {
-    if (!autoSpeak || sending || !messages.length) return;
+    if (!autoSpeak || realtimeVoice.active || sending || !messages.length) return;
     const last = messages[messages.length - 1];
     if (last?.role === "assistant" && last.text && !String(last.id || "").startsWith("error")) {
       speak(last.text);
@@ -603,6 +605,9 @@ export default function ChatWorkspace({
               <button type="button" onClick={clearAttachment} className="ml-auto text-zinc-400 hover:text-white text-sm">×</button>
             </div>
           )}
+          {realtimeVoice.error && (
+            <p role="status" className="mb-2 px-2 text-xs leading-5 text-amber-200/90">{realtimeVoice.error}</p>
+          )}
           {voiceError && (
             <p role="status" className="mb-2 px-2 text-xs leading-5 text-amber-200/90">{voiceError}</p>
           )}
@@ -665,6 +670,26 @@ export default function ChatWorkspace({
               className="max-h-36 min-w-0 flex-1 resize-none bg-transparent px-1 py-2 text-[15px] leading-6 text-white placeholder-zinc-500 outline-none disabled:opacity-50"
             />
 
+            <button
+              type="button"
+              onClick={realtimeVoice.toggle}
+              disabled={realtimeVoice.connecting}
+              aria-label={realtimeVoice.active ? "End live voice conversation" : "Start live voice conversation"}
+              aria-pressed={realtimeVoice.active}
+              title={realtimeVoice.active ? "End live voice" : "Talk live with King Zarry AI"}
+              className={"mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300 " + (realtimeVoice.active ? "border-red-400/40 bg-red-400/10 text-red-300" : "border-white/[0.08] text-zinc-300 hover:border-cyan-300/40 hover:bg-cyan-300/[0.08] hover:text-cyan-100")}
+            >
+              {realtimeVoice.connecting ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-current/30 border-t-current" aria-hidden="true" />
+              ) : realtimeVoice.active ? (
+                <span className="h-3.5 w-3.5 rounded-[3px] bg-current" aria-hidden="true" />
+              ) : (
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="3" width="6" height="12" rx="3" />
+                  <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 18v3m-4 0h8" />
+                </svg>
+              )}
+            </button>
             {voiceSupported && (
               <>
                   <button
