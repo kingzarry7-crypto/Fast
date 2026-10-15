@@ -2837,8 +2837,9 @@ class AIEngine:
             "text": prompt,
             "messages": messages,
             "history": history or [],
-            "max_new_tokens": 700 if casual else 1200,
-            "temperature": 0.85 if casual else 0.7,
+            # Keep Colab-hosted inference bounded; fall back quickly if it is slow.
+            "max_new_tokens": 192 if casual else 384,
+            "temperature": 0.7,
         }
         headers = {"Content-Type": "application/json", "bypass-tunnel-reminder": "true"}
         token = clean_env_str(os.getenv("ZARRY_API_KEY"))
@@ -2847,7 +2848,7 @@ class AIEngine:
         try:
             response = requests.post(
                 endpoint, json=payload, headers=headers,
-                timeout=float(os.getenv("ZARRY_API_TIMEOUT", "25") or 25),
+                timeout=max(8, min(float(os.getenv("ZARRY_API_TIMEOUT", "15") or 15), 20)),
             )
             response.raise_for_status()
             data = response.json()
