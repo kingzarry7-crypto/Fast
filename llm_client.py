@@ -1,22 +1,21 @@
 """OpenAI-compatible LLM client with provider-aware automatic failover.
 
-Provider model names and base URLs are not interchangeable. DeepSeek is
-intentionally excluded from the fallback chain.
+DeepSeek is intentionally excluded from the fallback chain. Hugging Face's
+custom model is tried first; if its router rejects the model with HTTP 400,
+a known Inference Providers model is tried once before the provider is marked
+failed.
 """
 from __future__ import annotations
 
 import logging
 import os
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
 
 from openai import OpenAI
 
 logger = logging.getLogger("kz_llm_client")
 
 # (name, key env, base URL, model env, default model, optional endpoint env)
-# OpenAI is first in AUTO mode because it is the configured paid primary. If it
-# is unavailable, the remaining configured providers are tried in order.
 PROVIDERS = [
     ("openai", "OPENAI_API_KEY", "https://api.openai.com/v1", "OPENAI_MODEL", "gpt-5.4-nano", None),
     ("groq", "GROQ_API_KEY", "https://api.groq.com/openai/v1", "GROQ_MODEL", "openai/gpt-oss-20b", None),
@@ -26,6 +25,8 @@ PROVIDERS = [
     ("cloudflare", "CLOUDFLARE_AI_TOKEN", "https://kingzarry-ai-inference.kingzarry7.workers.dev/v1", "CLOUDFLARE_AI_MODEL", "@cf/meta/llama-3.3-70b-instruct-fp8-fast", "CLOUDFLARE_AI_URL"),
     ("huggingface", "HF_TOKEN", "https://router.huggingface.co/v1", "HF_MODEL_ID", "KINGZARRY3/zarry-coder-model", "HF_INFERENCE_URL"),
 ]
+HF_ROUTER_BASE_URL = "https://router.huggingface.co/v1"
+DEFAULT_HF_FALLBACK_MODEL = "openai/gpt-oss-120b:cheapest"
 
 
 def _api_base_url(value: str, fallback: str) -> str:
@@ -81,6 +82,27 @@ def _configured_providers():
     return configured
 
 
+def _error_summary(exc: Exception) -> str:
+    """Return a safe diagnostic without exposing provider response bodies."""
+    status = getattr(exc, "status_code", None)
+    return f"HTTP {status} {type(exc).__name__}" if status else type(exc).__name__
+
+def _create_completion(name: str, key: str, base_url: str, model: str,
+                       messages: list[dict[str, Any]], max_tokens: int,
+                       timeout: float):
+    client = OpenAI(api_key=key, base_url=base_url, timeout=timeout, max_retries=0)
+    kwargs: dict[str, Any] = {"model": model, "messages": messages}
+    if name == "openai" and model.lower().startswith(("gpt-5", "o1", "o3", "o4")):
+        kwargs["max_completion_tokens"] = max_tokens
+    else:
+        kwargs["max_tokens"] = max_tokens
+    response = client.chat.completions.create(**kwargs)
+    answer = response.choices[0].message.content if response.choices else None
+    if isinstance(answer, str) and answer.strip():
+        return answer.strip()
+    raise RuntimeError("empty_completion")
+
+
 def get_client():
     """Return the first configured provider for callers that need streaming."""
     providers = _configured_providers()
@@ -92,7 +114,7 @@ def get_client():
 
 
 def ask(messages: list[dict[str, Any]], max_tokens: int = 500):
-    """Try each configured provider; only return a non-empty generated answer."""
+    """Try providers in order; recover once from an unsupported HF model."""
     providers = _configured_providers()
     if not providers:
         raise RuntimeError("No supported AI provider is configured")
@@ -101,19 +123,36 @@ def ask(messages: list[dict[str, Any]], max_tokens: int = 500):
     timeout = float(os.getenv("AI_PROVIDER_TIMEOUT", "12") or 12)
     for name, key, base_url, model in providers:
         try:
-            client = OpenAI(api_key=key, base_url=base_url, timeout=timeout, max_retries=0)
-            kwargs: dict[str, Any] = {"model": model, "messages": messages}
-            if name == "openai" and model.lower().startswith(("gpt-5", "o1", "o3", "o4")):
-                kwargs["max_completion_tokens"] = max_tokens
-            else:
-                kwargs["max_tokens"] = max_tokens
-            response = client.chat.completions.create(**kwargs)
-            answer = response.choices[0].message.content if response.choices else None
-            if isinstance(answer, str) and answer.strip():
-                return answer.strip()
-            raise RuntimeError("empty_completion")
+            return _create_completion(name, key, base_url, model, messages, max_tokens, timeout)
         except Exception as exc:
-            errors.append(f"{name}:{type(exc).__name__}")
-            logger.warning("LLM provider %s failed; trying next provider (%s)", name, type(exc).__name__)
+            status = getattr(exc, "status_code", None)
+            # A Hub repo is not necessarily enabled on Inference Providers. If
+            # the router rejects a custom model, retry with a documented model.
+            if name == "huggingface" and status == 400 and base_url.rstrip("/") == HF_ROUTER_BASE_URL:
+                fallback_model = os.getenv("HF_FALLBACK_MODEL_ID", "").strip() or DEFAULT_HF_FALLBACK_MODEL
+                if fallback_model != model:
+                    try:
+                        logger.warning(
+                            "Hugging Face rejected configured model %s (HTTP 400); retrying with fallback model %s",
+                            model, fallback_model,
+                        )
+                        return _create_completion(
+                            name, key, base_url, fallback_model, messages, max_tokens, timeout
+                        )
+                    except Exception as fallback_exc:
+                        errors.append(
+                            f"{name}:{model}:{_error_summary(exc)}; "
+                            f"fallback {fallback_model}:{_error_summary(fallback_exc)}"
+                        )
+                        logger.warning(
+                            "Hugging Face configured and fallback models failed (%s; %s)",
+                            type(exc).__name__, type(fallback_exc).__name__,
+                        )
+                        continue
+            errors.append(f"{name}:{model}:{_error_summary(exc)}")
+            logger.warning(
+                "LLM provider %s model %s failed; trying next provider (%s)",
+                name, model, type(exc).__name__,
+            )
 
-    raise RuntimeError("All configured LLM providers failed: " + ", ".join(errors))
+    raise RuntimeError("All configured LLM providers failed: " + "; ".join(errors))
