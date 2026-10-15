@@ -1643,9 +1643,6 @@ async def chat_endpoint(request: Request, chat: ChatRequest):
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid base64 image data")
 
-    # NEW: Inject live market data if the message mentions a supported asset
-    enriched_message = _enrich_with_market_data(message)
-
     try:
         conv_id = (chat.conversation_id or "").strip() or None
         conversation_id = await asyncio.to_thread(
@@ -1754,6 +1751,11 @@ async def chat_endpoint(request: Request, chat: ChatRequest):
                 "operation": agent_result.get("operation"),
                 "target": agent_result.get("target"),
             }
+
+        # Only enrich the ordinary AI fallback after task-specific routers decline
+        # the request. Media, coding, and connector tasks should not trigger needless
+        # market-data calls merely because their prompt mentions gold/BTC/etc.
+        enriched_message = _enrich_with_market_data(message)
 
         # NOTE: Do NOT call _save_web_message here. The AIEngine's WebMemoryAdapter
         # now handles saving both user and assistant messages to web_messages.
