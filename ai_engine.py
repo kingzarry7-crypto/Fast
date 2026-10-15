@@ -2840,7 +2840,7 @@ class AIEngine:
             "max_new_tokens": 700 if casual else 1200,
             "temperature": 0.85 if casual else 0.7,
         }
-        headers = {"Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json", "bypass-tunnel-reminder": "true"}
         token = clean_env_str(os.getenv("ZARRY_API_KEY"))
         if token:
             headers["Authorization"] = f"Bearer {token}"
