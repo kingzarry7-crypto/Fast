@@ -24,9 +24,14 @@ jobs:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package.json
+      - name: Use the repository-pinned npm version
+        run: npm install --global npm@10.9.2
       - name: Generate frontend lockfile for audit
         working-directory: frontend
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+        run: |
+          npm --version
+          npm cache clean --force
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund --legacy-peer-deps
       - name: Audit runtime frontend dependencies
         working-directory: frontend
         run: npm audit --omit=dev --audit-level=high
