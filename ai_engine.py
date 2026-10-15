@@ -157,6 +157,13 @@ ACEDATA_API_KEY = clean_env_str(os.getenv("ACEDATA_API_KEY"))
 ACEDATA_BASE_URL = clean_env_str(os.getenv("ACEDATA_BASE_URL"), "https://api.acedata.cloud").rstrip("/")
 
 ACEDATA_IMAGE_MODEL = clean_env_str(os.getenv("ACEDATA_IMAGE_MODEL"), "flux-kontext-pro")
+_ACEDATA_SUPPORTED_IMAGE_MODELS = {
+    "flux-dev", "flux-pro", "flux-kontext-pro", "flux-kontext-max",
+    "flux-2-flex", "flux-2-pro", "flux-2-max", "flux-2-klein",
+}
+if ACEDATA_IMAGE_MODEL not in _ACEDATA_SUPPORTED_IMAGE_MODELS:
+    logger.warning("Unsupported ACEDATA_IMAGE_MODEL=%s; using flux-kontext-pro", ACEDATA_IMAGE_MODEL)
+    ACEDATA_IMAGE_MODEL = "flux-kontext-pro"
 ACEDATA_IMAGE_SUBMIT_PATH = clean_env_str(os.getenv("ACEDATA_IMAGE_SUBMIT_PATH"), "/flux/images")
 ACEDATA_IMAGE_TASKS_PATH = clean_env_str(os.getenv("ACEDATA_IMAGE_TASKS_PATH"), "/flux/tasks")
 ACEDATA_IMAGE_TIMEOUT = min(20, max(5, int(clean_env_str(os.getenv("ACEDATA_IMAGE_TIMEOUT"), "20"))))
