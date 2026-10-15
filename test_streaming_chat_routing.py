@@ -4,6 +4,8 @@ import json
 import unittest
 from unittest.mock import patch
 
+import coding_request
+
 from streaming_chat import _build_stream_generator
 
 
@@ -48,7 +50,7 @@ class StreamingIntentRoutingTests(unittest.TestCase):
             "reply": "Market Agent report — XAU/USD (1h). Signal: WAIT. No trade was placed.",
         }
         with patch("ai_engine.AIEngine._save_memory", return_value=None), \
-             patch("coding_request.handle_coding_request", return_value=None), \
+             patch("coding_request.handle_coding_request", wraps=coding_request.handle_coding_request) as coding, \
              patch("account_agent.handle_web_request", return_value=None), \
              patch("agent_router.route_agent_request", return_value=specialist):
             events = _events(_build_stream_generator(
@@ -60,6 +62,9 @@ class StreamingIntentRoutingTests(unittest.TestCase):
 
         self.assertTrue(any(e.get("provider") == "market_agent" for e in events))
         self.assertTrue(any("XAU/USD" in e.get("text", "") for e in events))
+        # Use the real coding detector: a market-only request must be declined
+        # so the specialist router can own the response.
+        coding.assert_called_once_with("Analyze gold on the 1h timeframe")
 
     def test_market_router_failure_is_not_replaced_with_generic_guess(self):
         with patch("ai_engine.AIEngine._save_memory", return_value=None), \
