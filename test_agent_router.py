@@ -9,6 +9,14 @@ class AgentRouterTests(unittest.TestCase):
     def test_general_chat_is_not_intercepted(self):
         self.assertIsNone(agent_router.route_agent_request("Hello, how are you?", "u1"))
 
+    def test_image_edit_with_market_words_is_not_routed_to_market_agent(self):
+        result = agent_router.route_agent_request("Edit this picture of my gold chart", "u1")
+        self.assertIsNone(result)
+
+    def test_image_generation_is_not_routed_to_market_agent(self):
+        result = agent_router.route_agent_request("Create an image of a gold trader", "u1")
+        self.assertIsNone(result)
+
     def test_market_intent_routes_to_market_agent(self):
         analysis = {
             "symbol": "XAU/USD", "timeframe": "1h", "price": 4312.5,
