@@ -1643,15 +1643,29 @@ async def chat_endpoint(request: Request, chat: ChatRequest):
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid base64 image data")
 
-    # NEW: Inject live market data if the message mentions a supported asset
-    enriched_message = _enrich_with_market_data(message)
-
     try:
         conv_id = (chat.conversation_id or "").strip() or None
         conversation_id = await asyncio.to_thread(
             _get_or_create_conversation, user_id, conv_id
         )
         await asyncio.to_thread(_maybe_set_conversation_title, conversation_id, message)
+
+        # Explicit media tasks and image attachments take precedence over every
+        # specialist router. A request such as "edit my gold chart" must reach
+        # AIEngine's image pipeline, not be mistaken for market analysis.
+        try:
+            from ai_engine import _detect_media_intent
+            media_intent = _detect_media_intent(message, has_image=bool(image_data))
+        except Exception as media_router_exc:
+            logger.warning("Media intent detection unavailable: %s", type(media_router_exc).__name__)
+            media_intent = None
+        if media_intent is not None or image_data is not None:
+            response_text = await _run_web_ai(user_id, message, image_data, conversation_id)
+            return {
+                "status": "success",
+                "reply": response_text,
+                "conversation_id": conversation_id,
+            }
 
         # Explicit coding/build requests must go to the coding executor before any
         # connector router; this prevents unrelated account/email flows from hijacking them.
@@ -1737,6 +1751,11 @@ async def chat_endpoint(request: Request, chat: ChatRequest):
                 "operation": agent_result.get("operation"),
                 "target": agent_result.get("target"),
             }
+
+        # Only enrich the ordinary AI fallback after task-specific routers decline
+        # the request. Media, coding, and connector tasks should not trigger needless
+        # market-data calls merely because their prompt mentions gold/BTC/etc.
+        enriched_message = _enrich_with_market_data(message)
 
         # NOTE: Do NOT call _save_web_message here. The AIEngine's WebMemoryAdapter
         # now handles saving both user and assistant messages to web_messages.

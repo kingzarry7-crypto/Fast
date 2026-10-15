@@ -2,12 +2,51 @@ import unittest
 from unittest.mock import patch
 
 import agent_router
+from ai_engine import _detect_media_intent
 from system_inventory import format_project_inventory, get_project_inventory
 
 
 class AgentRouterTests(unittest.TestCase):
     def test_general_chat_is_not_intercepted(self):
         self.assertIsNone(agent_router.route_agent_request("Hello, how are you?", "u1"))
+
+    def test_image_edit_with_market_words_is_not_routed_to_market_agent(self):
+        result = agent_router.route_agent_request("Edit this picture of my gold chart", "u1")
+        self.assertIsNone(result)
+
+    def test_image_generation_is_not_routed_to_market_agent(self):
+        result = agent_router.route_agent_request("Create an image of a gold trader", "u1")
+        self.assertIsNone(result)
+
+    def test_video_generation_with_market_words_is_not_routed_to_market_agent(self):
+        result = agent_router.route_agent_request("Create a video of gold bars moving on a chart", "u1")
+        self.assertIsNone(result)
+
+    def test_image_edit_with_market_words_reaches_media_pipeline(self):
+        intent = _detect_media_intent("Edit this picture of my gold chart", has_image=True)
+        self.assertIsNotNone(intent)
+        self.assertEqual(intent["kind"], "image_edit")
+
+    def test_image_edit_without_attachment_is_not_misclassified_as_generation(self):
+        intent = _detect_media_intent("Edit this picture of my gold chart", has_image=False)
+        self.assertIsNotNone(intent)
+        self.assertEqual(intent["kind"], "image_edit")
+
+    def test_explicit_market_analysis_is_not_misclassified_as_media(self):
+        intent = _detect_media_intent("Analyze gold on the 1h timeframe", has_image=False)
+        self.assertIsNone(intent)
+
+    def test_video_generation_with_market_words_reaches_media_pipeline(self):
+        intent = _detect_media_intent("Create a video of gold bars moving on a chart", has_image=False)
+        self.assertIsNotNone(intent)
+        self.assertEqual(intent["kind"], "video")
+
+    def test_existing_video_edit_is_not_misrouted_to_market_or_generation(self):
+        request = "Edit this video of my gold chart"
+        self.assertIsNone(agent_router.route_agent_request(request, "u1"))
+        intent = _detect_media_intent(request, has_image=False)
+        self.assertIsNotNone(intent)
+        self.assertEqual(intent["kind"], "video_edit_unsupported")
 
     def test_market_intent_routes_to_market_agent(self):
         analysis = {

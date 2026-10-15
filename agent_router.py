@@ -24,6 +24,36 @@ _MARKET_ACTION = re.compile(
     r"buy or sell|bullish|bearish|gold forecast)\b",
     re.IGNORECASE,
 )
+# Explicit media work must never be hijacked by the market agent just because
+# the image prompt mentions an asset (for example, "edit my gold chart").
+_MEDIA_ACTION_PATTERN = re.compile(
+    r"\b(?:edit|modify|retouch|enhance|restore|crop|resize|recolor|colorize|colourize|"
+    r"remove\s+(?:the\s+)?background|change\s+(?:the\s+)?background|"
+    r"replace\s+(?:the\s+)?background|make\s+(?:this|it)\s+look|"
+    r"turn\s+(?:this|it)\s+into|style\s+transfer)\b",
+    re.IGNORECASE,
+)
+_MEDIA_OBJECT_PATTERN = re.compile(
+    r"\b(?:image|picture|photo|photograph|portrait|artwork|illustration|background|chart|diagram|video|clip|animation)\b",
+    re.IGNORECASE,
+)
+_MEDIA_CREATE_PATTERN = re.compile(
+    r"\b(?:draw|sketch|illustrate|paint|render|generate|create|make|animate)\b.{0,80}"
+    r"\b(?:image|picture|photo|photograph|portrait|artwork|illustration|video|clip|animation)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_media_request(text: str) -> bool:
+    raw = str(text or "").strip()
+    if not raw:
+        return False
+    return bool(
+        _MEDIA_CREATE_PATTERN.search(raw)
+        or (_MEDIA_ACTION_PATTERN.search(raw) and _MEDIA_OBJECT_PATTERN.search(raw))
+    )
+
+
 _PROJECT_REPORT = re.compile(
     r"\b(my files|project files|what files|files do i have|what do i have in my files|"
     r"how to use (?:them|my files|your files)|project update|my own updates|"
@@ -89,6 +119,12 @@ def route_agent_request(message: str, user_id: str) -> Optional[Dict[str, Any]]:
     """Return a handled reply for explicit agent-routing requests, otherwise None."""
     text = (message or "").strip()
     if not text:
+        return None
+
+    # The AIEngine already has a media pipeline. Let explicit image/video edits
+    # reach it before any market intent check; otherwise "edit my gold chart"
+    # is incorrectly handled as a trading-signal request.
+    if _is_media_request(text):
         return None
 
     if _PROJECT_REPORT.search(text):
