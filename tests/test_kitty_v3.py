@@ -1,6 +1,7 @@
 """Contract tests for the packaged six-feature Kitty V3 model."""
 import math
 import unittest
+from unittest.mock import patch
 
 import kitty_v3
 
@@ -13,7 +14,7 @@ class KittyV3ContractTests(unittest.TestCase):
         model, scaler, metadata = kitty_v3._load()
         self.assertFalse(model.training)
         self.assertEqual(len(metadata["features"]), 6)
-        self.assertEqual(getattr(scaler, "n_features_in_", 6), 6)
+        self.assertEqual(scaler.n_features_in_, 6)
         self.assertEqual(tuple(model.layer_1.weight.shape), (32, 6))
         self.assertEqual(tuple(model.layer_2.weight.shape), (16, 32))
         self.assertEqual(tuple(model.layer_out.weight.shape), (1, 16))
@@ -42,6 +43,26 @@ class KittyV3ContractTests(unittest.TestCase):
         self.assertLessEqual(probability, 1.0)
         self.assertIn(result["signal"], {"BUY_BIAS", "SELL_BIAS", "HOLD"})
         self.assertIn("No trades are placed", result["warning"])
+
+
+    def test_scaler_output_with_wrong_width_is_rejected(self):
+        model, _, metadata = kitty_v3._load()
+
+        class BadScaler:
+            def transform(self, rows):
+                return [[0.0] * 5]
+
+        features = {
+            "Close": 60000.0,
+            "SMA_20": 59000.0,
+            "RSI_14": 55.0,
+            "BB_Upper": 62000.0,
+            "BB_Lower": 56000.0,
+            "MACD": 500.0,
+        }
+        with patch.object(kitty_v3, "_load", return_value=(model, BadScaler(), metadata)):
+            with self.assertRaisesRegex(ValueError, "exactly six scaled features"):
+                kitty_v3.predict_features(features)
 
     def test_missing_feature_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "Missing required Kitty features"):
