@@ -1653,6 +1653,23 @@ async def chat_endpoint(request: Request, chat: ChatRequest):
         )
         await asyncio.to_thread(_maybe_set_conversation_title, conversation_id, message)
 
+        # Explicit media tasks and image attachments take precedence over every
+        # specialist router. A request such as "edit my gold chart" must reach
+        # AIEngine's image pipeline, not be mistaken for market analysis.
+        try:
+            from ai_engine import _detect_media_intent
+            media_intent = _detect_media_intent(message, has_image=bool(image_data))
+        except Exception as media_router_exc:
+            logger.warning("Media intent detection unavailable: %s", type(media_router_exc).__name__)
+            media_intent = None
+        if media_intent is not None or image_data is not None:
+            response_text = await _run_web_ai(user_id, message, image_data, conversation_id)
+            return {
+                "status": "success",
+                "reply": response_text,
+                "conversation_id": conversation_id,
+            }
+
         # Explicit coding/build requests must go to the coding executor before any
         # connector router; this prevents unrelated account/email flows from hijacking them.
         try:
