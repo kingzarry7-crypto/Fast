@@ -645,10 +645,11 @@ _IMAGE_REQUEST_PATTERNS = re.compile(
     r"generate\s+(?:a\s+)?picture|create\s+(?:a\s+)?picture|make\s+(?:a\s+)?picture|"
     r"draw|sketch|render|visualize|illustrate|paint|"
     r"image\s+of|picture\s+of|photo\s+of|artwork\s+of|art\s+of|portrait\s+of|"
-    r"edit\s+(?:this\s+|the\s+)?(?:image|photo|picture)|"
-    r"modify\s+(?:this\s+|the\s+)?(?:image|photo|picture)|"
-    r"change\s+(?:this\s+|the\s+)?(?:image|photo|picture)|"
-    r"remove\s+background|background\s+removal|"
+    r"edit\s+(?:(?:this|the|my|attached)\s+)?(?:image|photo|picture|photograph|chart|diagram)|"
+    r"modify\s+(?:(?:this|the|my|attached)\s+)?(?:image|photo|picture|photograph|chart|diagram)|"
+    r"change\s+(?:(?:this|the|my|attached)\s+)?(?:image|photo|picture|photograph|chart|diagram)|"
+    r"(?:retouch|enhance|restore|crop|resize|recolor|colorize|colourize)\s+(?:(?:this|the|my|attached)\s+)?(?:image|photo|picture|photograph|portrait|artwork|chart)|"
+    r"remove\s+(?:the\s+)?background|change\s+(?:the\s+)?background|replace\s+(?:the\s+)?background|background\s+removal|"
     r"add\s+to\s+(?:this\s+|the\s+)?(?:image|photo)|"
     r"style\s+transfer|img2img|image\s+to\s+image|"
     r"make\s+(?:this|it)\s+look|turn\s+(?:this|it)\s+into"
@@ -737,7 +738,13 @@ def _detect_media_intent(prompt: str, has_image: bool = False) -> Optional[Dict[
         return None
 
     has_clear_verb = bool(_CLEAR_GENERATION_VERB.search(text))
-    if _MEDIA_GUARD_PATTERN.search(text) and not has_clear_verb:
+    is_image_edit = bool(re.search(
+        r"\b(?:edit|modify|retouch|enhance|restore|crop|resize|recolor|colorize|colourize|remove|change|replace|add)\b.{0,80}\b(?:image|picture|photo|photograph|portrait|artwork|illustration|background|chart|diagram)\b",
+        text, re.IGNORECASE,
+    ))
+    # Explicit media actions take precedence over asset/news words. Otherwise
+    # "edit my gold chart" is incorrectly rejected as a trading request.
+    if _MEDIA_GUARD_PATTERN.search(text) and not (has_clear_verb or is_image_edit):
         return None
 
     is_video = bool(_VIDEO_REQUEST_PATTERNS.search(text))
@@ -753,10 +760,10 @@ def _detect_media_intent(prompt: str, has_image: bool = False) -> Optional[Dict[
             "aspect_ratio": "16:9",
         }
 
-    if is_image or (has_image and _IMAGE_REQUEST_PATTERNS.search(text)):
+    if is_image_edit or is_image or (has_image and _IMAGE_REQUEST_PATTERNS.search(text)):
         return {
-            "kind": "image_edit" if has_image else "image",
-            "mode": "image-to-image" if has_image else "text-to-image",
+            "kind": "image_edit" if (is_image_edit or has_image) else "image",
+            "mode": "image-to-image" if (is_image_edit or has_image) else "text-to-image",
             "prompt": text,
             "size": "1024x1024",
         }
