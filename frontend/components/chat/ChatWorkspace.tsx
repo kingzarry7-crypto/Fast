@@ -447,11 +447,6 @@ export default function ChatWorkspace({
         )}
       </div>
 
-      {embedMode && (
-        <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-end border-b border-white/5 bg-[#05080f]/70 px-3 py-1.5 backdrop-blur-sm">
-        </div>
-      )}
-
       <div
         ref={listRef}
         className="relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-y-none kz-scroll px-3 sm:px-4"
@@ -692,10 +687,8 @@ export default function ChatWorkspace({
                 <button
                   type="button"
                   onClick={() => {
-                    setAutoSpeak((enabled) => {
-                      if (enabled) stopSpeaking();
-                      return !enabled;
-                    });
+                    if (autoSpeak) stopSpeaking();
+                    setAutoSpeak(!autoSpeak);
                   }}
                   aria-label={autoSpeak ? "Turn spoken replies off" : "Turn spoken replies on"}
                   aria-pressed={autoSpeak}
