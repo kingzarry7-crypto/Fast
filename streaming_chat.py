@@ -185,7 +185,7 @@ def _stream_zarry(messages: list):
         "messages": messages, "history": [], "max_new_tokens": 700,
         "temperature": 0.85,
     }
-    headers = {"Content-Type": "application/json"}
+    headers = {"Content-Type": "application/json", "bypass-tunnel-reminder": "true"}
     token = os.getenv("ZARRY_API_KEY", "").strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
