@@ -24,7 +24,7 @@ const stateLabels: Record<CoreState, string> = {
 const modules = [
   { label: "CHAT", sub: "CONVERSATION", href: "/chat", position: "left-[0%] top-[28%]", angle: "-5deg" },
   { label: "AGENT", sub: "WORKFLOWS", href: "/dashboard", position: "right-[0%] top-[28%]", angle: "5deg" },
-  { label: "VOICE", sub: "REAL-TIME", href: "/chat", position: "left-[0%] bottom-[22%]", angle: "4deg" },
+  { label: "VOICE", sub: "VOICE INPUT", href: "/chat", position: "left-[0%] bottom-[22%]", angle: "4deg" },
   { label: "MEMORY", sub: "PERSONAL CONTEXT", href: "/settings", position: "right-[0%] bottom-[22%]", angle: "-4deg" },
 ];
 
