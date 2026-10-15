@@ -703,13 +703,13 @@ def install_streaming_chat(
                         workflow_id = str(work_intent.get("workflow_id") or "")
                         if kind == "status":
                             agent = await __import__("asyncio").to_thread(get_kz_agent, user_id, workflow_id)
-                        agent = jsonable_encoder(agent)
                         else:
                             agent = await __import__("asyncio").to_thread(approve_kz_agent, user_id, workflow_id, kind == "approve")
                             if kind == "approve" and agent.get("status") == "approved":
                                 from workflow_engine import run_workflow
                                 await __import__("asyncio").to_thread(run_workflow, workflow_id, user_id)
                                 agent = await __import__("asyncio").to_thread(get_kz_agent, user_id, workflow_id)
+                        agent = jsonable_encoder(agent)
                         if not agent or agent.get("status") == "not_found":
                             return JSONResponse({"detail": "KZ mission not found for this account. Check the full mission ID."}, status_code=404)
                         reply = (f"KZ mission {kind} processed.\\n\\nGoal: {agent.get('goal', '')}\\nStatus: {str(agent.get('status', '')).replace('_', ' ')}\\nProgress: {agent.get('completed_steps', 0)}/{agent.get('total_steps', 0)} steps\\nMission ID: {agent.get('id', workflow_id)}\\nNext: {agent.get('activity', '')}")
