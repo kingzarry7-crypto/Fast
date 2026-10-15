@@ -129,6 +129,7 @@ AI_PROVIDER = clean_env_str(os.getenv("AI_PROVIDER"), "AUTO").upper()
 # Hugging Face Inference Providers OpenAI-compatible endpoint for the custom Zarry model.
 HF_TOKEN = clean_env_str(os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_API_KEY"))
 HF_MODEL_ID = clean_env_str(os.getenv("HF_MODEL_ID"), "KINGZARRY3/zarry-coder-model")
+HF_FALLBACK_MODEL_ID = clean_env_str(os.getenv("HF_FALLBACK_MODEL_ID"), "openai/gpt-oss-120b:cheapest")
 HF_INFERENCE_URL = clean_env_str(os.getenv("HF_INFERENCE_URL"), "https://router.huggingface.co/v1/chat/completions")
 
 ELEVENLABS_API_KEY = clean_env_str(os.getenv("ELEVENLABS_API_KEY"))
@@ -2923,8 +2924,26 @@ class AIEngine:
         headers = {"Authorization": f"Bearer {HF_TOKEN}", "Content-Type": "application/json"}
         payload = {"model": HF_MODEL_ID, "messages": messages,
                    "temperature": 0.85 if casual else 0.7, "max_tokens": 700 if casual else 1200}
-        resp = self._request_with_retry(HF_INFERENCE_URL, headers, payload, "huggingface",
-                                        max_retries=0, timeout=AI_PROVIDER_TIMEOUT)
+        try:
+            resp = self._request_with_retry(HF_INFERENCE_URL, headers, payload, "huggingface",
+                                            max_retries=0, timeout=AI_PROVIDER_TIMEOUT)
+        except RuntimeError as exc:
+            # A Hub repository name may exist without being enabled on HF's
+            # Inference Providers. Retry one known compatible router model on 400.
+            message = str(exc)
+            fallback_model = HF_FALLBACK_MODEL_ID
+            if "HTTP 400" not in message or not fallback_model or fallback_model == HF_MODEL_ID:
+                raise
+            logger.warning(
+                "Hugging Face rejected model %s with HTTP 400; retrying fallback model %s",
+                HF_MODEL_ID, fallback_model,
+            )
+            fallback_payload = dict(payload)
+            fallback_payload["model"] = fallback_model
+            resp = self._request_with_retry(
+                HF_INFERENCE_URL, headers, fallback_payload, "huggingface-fallback",
+                max_retries=0, timeout=AI_PROVIDER_TIMEOUT,
+            )
         data = resp.json()
         choices = data.get("choices") or []
         if not choices:
