@@ -24,7 +24,7 @@ import ai_engine
 
 logger = logging.getLogger("kz_streaming_chat")
 
-_TIMEOUT = max(8, int(os.getenv("AI_STREAM_TIMEOUT", "60")))
+_TIMEOUT = max(8, min(int(os.getenv("AI_STREAM_TIMEOUT", "30")), 30))
 _OPENROUTER_URL = ai_engine.OPENROUTER_URL
 _OPENROUTER_KEY = ai_engine.OPENROUTER_API_KEY
 _OPENROUTER_MODEL = ai_engine.OPENROUTER_MODEL
@@ -182,14 +182,14 @@ def _stream_zarry(messages: list):
             break
     payload = {
         "prompt": prompt, "input": prompt, "text": prompt,
-        "messages": messages, "history": [], "max_new_tokens": 700,
-        "temperature": 0.85,
+        "messages": messages[-4:], "history": [], "max_new_tokens": 192,
+        "temperature": 0.7,
     }
     headers = {"Content-Type": "application/json", "bypass-tunnel-reminder": "true"}
     token = os.getenv("ZARRY_API_KEY", "").strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    response = requests.post(endpoint, json=payload, headers=headers, timeout=(10, _TIMEOUT))
+    response = requests.post(endpoint, json=payload, headers=headers, timeout=(8, min(_TIMEOUT, 25)))
     if response.status_code >= 400:
         raise RuntimeError(f"zarry_http_{response.status_code}")
     data = response.json()
