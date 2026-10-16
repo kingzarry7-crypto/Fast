@@ -508,6 +508,51 @@ def place_market_order(symbol: str, side: str, quantity: float, price: Optional[
     raise RuntimeError(f"Unsupported live provider: {provider}")
 
 
+
+def place_kitty_demo_order(
+    symbol: str,
+    side: str,
+    quantity: float,
+    price: float,
+    max_notional: float,
+) -> Dict[str, Any]:
+    """Submit a strictly Binance Spot Demo order for Kitty only.
+
+    This independent gate deliberately does not turn on generic Agent trading.
+    """
+    symbol = normalize_symbol(symbol)
+    side = (side or "").strip().upper()
+    if (os.getenv("TRADING_MODE") or "paper").strip().lower() != "demo":
+        raise RuntimeError("Kitty execution requires TRADING_MODE=demo")
+    if (os.getenv("TRADING_PROVIDER") or "auto").strip().lower() not in {"auto", "binance"}:
+        raise RuntimeError("Kitty demo execution supports Binance only")
+    if _bool_env("AGENT_TRADING_KILL_SWITCH", True):
+        raise RuntimeError("Agent trading kill switch is ON")
+    api_key, secret = _binance_credentials()
+    if not api_key or not secret:
+        raise RuntimeError("Binance Spot Demo credentials are not configured")
+    if symbol != "BTC/USD" or side not in {"BUY", "SELL"}:
+        raise ValueError("Kitty demo execution is restricted to BTC/USD BUY/SELL")
+    if not math.isfinite(float(quantity)) or quantity <= 0 or not math.isfinite(float(price)) or price <= 0:
+        raise ValueError("Kitty demo quantity and reference price must be finite and positive")
+    if not math.isfinite(float(max_notional)) or max_notional <= 0 or price * quantity > max_notional:
+        raise ValueError("Kitty demo order exceeds its configured notional limit")
+    configured_base = (os.getenv("BINANCE_API_URL") or "https://demo-api.binance.com").strip().rstrip("/")
+    if configured_base not in {"https://demo-api.binance.com", "https://demo-api.binance.com/api"}:
+        raise RuntimeError("Kitty can only submit orders to the Binance Spot Demo host")
+    data = _binance_request("POST", "/api/v3/order", params={
+        "symbol": "BTCUSDT", "side": side, "type": "MARKET",
+        "quantity": f"{quantity:.8f}".rstrip("0").rstrip("."),
+        "newOrderRespType": "FULL",
+    }, signed=True)
+    return {
+        "mode": "demo", "provider": "binance_demo",
+        "status": "FILLED" if data.get("status") == "FILLED" else str(data.get("status") or "ACCEPTED"),
+        "order_id": data.get("orderId"), "symbol": symbol, "side": side,
+        "quantity": float(quantity), "raw": data,
+    }
+
+
 def list_positions() -> List[Dict[str, Any]]:
     cfg = status()
     if cfg["mode"] == "paper":
