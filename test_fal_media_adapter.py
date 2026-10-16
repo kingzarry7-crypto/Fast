@@ -173,6 +173,42 @@ class ProviderCredentialClassificationTests(unittest.TestCase):
         self.assertEqual(xai["adapter"], "native")
         self.assertFalse(xai["needs_code"])
 
+    def test_shopify_requires_both_oauth_credentials(self):
+        with patch.dict(os.environ, {"SHOPIFY_CLIENT_ID": "client-id"}, clear=True):
+            snapshot = provider_registry.snapshot()
+
+        shopify = next(item for item in snapshot["providers"] if item["id"] == "shopify")
+        self.assertFalse(shopify["configured"])
+        self.assertEqual(shopify["missing"], ["SHOPIFY_CLIENT_SECRET"])
+        self.assertEqual(snapshot["configured_count"], 0)
+
+    def test_shopify_is_configured_when_both_oauth_credentials_exist(self):
+        with patch.dict(
+            os.environ,
+            {"SHOPIFY_CLIENT_ID": "client-id", "SHOPIFY_CLIENT_SECRET": "client-secret"},
+            clear=True,
+        ):
+            snapshot = provider_registry.snapshot()
+
+        shopify = next(item for item in snapshot["providers"] if item["id"] == "shopify")
+        self.assertTrue(shopify["configured"])
+        self.assertEqual(snapshot["configured_count"], 1)
+
+    def test_resend_scan_only_lists_integrated_capabilities(self):
+        with patch.dict(os.environ, {"RESEND_API_KEY": "resend-test-key"}, clear=True):
+            snapshot = provider_registry.snapshot()
+
+        resend = next(item for item in snapshot["providers"] if item["id"] == "resend")
+        self.assertEqual(resend["skills"], ["email_sending", "broadcasts"])
+
+    def test_fal_registry_reports_only_supported_media_capabilities(self):
+        with patch.dict(os.environ, {"FAL_KEY": "fal-test-key"}, clear=True):
+            snapshot = provider_registry.snapshot()
+
+        fal = next(item for item in snapshot["providers"] if item["id"] == "fal")
+        self.assertEqual(fal["adapter"], "native")
+        self.assertEqual(fal["skills"], ["image_generation", "image_editing", "video_generation"])
+
     def test_native_provider_report_does_not_claim_live_health(self):
         report = provider_registry.format_admin_report({
             "providers": [{
