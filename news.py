@@ -517,6 +517,8 @@ def get_available_provider() -> str:
         return "FOREXFACTORY"
 
 def get_economic_events(days: int = 7, provider: Optional[str] = None) -> List[Dict[str, Any]]:
+    if str(provider or "").strip().upper() == "TWELVEDATA":
+        raise RuntimeError("Twelve Data is not a supported macroeconomic-calendar provider; use it for market data only.")
     provider = provider or get_available_calendar_provider()
     start_date = utc_today()
     end_date = start_date + timedelta(days=max(1, days))
