@@ -795,6 +795,37 @@ export async function saveKittyPaperSettings(
   });
 }
 
+
+export type KittyDemoSettings = {
+  status?: string;
+  mode: "binance_spot_demo_only";
+  ready: boolean;
+  enabled: boolean;
+  order_btc: number;
+  max_notional_usd: number;
+  poll_seconds?: number;
+  model_training_symbol_confirmed: boolean;
+  warning: string;
+  requirements?: Record<string, boolean>;
+  position_btc?: number;
+  recent_cycles?: Array<Record<string, unknown>>;
+  initial_cycle?: Record<string, unknown> | null;
+  message?: string;
+};
+
+export async function getKittyDemoSettings(signal?: AbortSignal): Promise<KittyDemoSettings> {
+  return request<KittyDemoSettings>("/api/kitty/demo-trading/settings", { method: "GET", signal });
+}
+
+export async function saveKittyDemoSettings(
+  settings: { enabled: boolean; order_btc: number; max_notional_usd: number; acknowledge_experimental_model: boolean },
+  signal?: AbortSignal,
+): Promise<KittyDemoSettings> {
+  return request<KittyDemoSettings>("/api/kitty/demo-trading/settings", {
+    method: "PUT", body: settings, signal,
+  });
+}
+
 export async function createMemoryLinkCode(signal?: AbortSignal) {
   return request<{ status?: string; code: string; expires_in_minutes: number; instructions?: string }>(
     "/api/memory/link-code",
@@ -830,7 +861,7 @@ export const api = {
   getMarkets, getMarketDetail, getSignals, getNews,
   getAgentStatus, runAgentGoal, generateMorningBrief, getLatestMorningBrief, listAgentJobs, approveAgentJob,
   getAgentLearning, getAgentV2, getAgentIntelligence, getAgentPreferences, updateAgentPreferences,
-  getAgentActionStatus, listAgentActions, approveAgentAction, getKZAgentStatus, transcribeAudio, getKittyPaperSettings, saveKittyPaperSettings,
+  getAgentActionStatus, listAgentActions, approveAgentAction, getKZAgentStatus, transcribeAudio, getKittyPaperSettings, saveKittyPaperSettings, getKittyDemoSettings, saveKittyDemoSettings,
 };
 
 export type { AuthUser, AuthResponse, MeResponse, ChatResponse, ApiErrorData } from "@/types";
