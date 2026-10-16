@@ -2806,7 +2806,7 @@ def _resolve_elevenlabs_voice_id(voice: str = "bella") -> str:
 
 
 def _elevenlabs_tts_bytes(text: str, style: str = "human", voice: str = "bella") -> bytes:
-    """Generate MP3 via ElevenLabs (Bella or male). Raises HTTPException on failure."""
+    """Generate MP3 via ElevenLabs using the configured Bella voice."""
     api_key = (os.getenv("ELEVENLABS_API_KEY") or "").strip()
     if not api_key:
         raise HTTPException(status_code=503, detail="ElevenLabs not configured")
@@ -2823,6 +2823,7 @@ def _elevenlabs_tts_bytes(text: str, style: str = "human", voice: str = "bella")
         raise HTTPException(status_code=400, detail="Text empty")
 
     import urllib.request
+    import urllib.error
     import json as _json
 
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
@@ -2854,25 +2855,42 @@ def _elevenlabs_tts_bytes(text: str, style: str = "human", voice: str = "bella")
             if not data:
                 raise HTTPException(status_code=502, detail="Empty TTS audio")
             return data
+    except urllib.error.HTTPError as exc:
+        try:
+            provider_body = exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            provider_body = ""
+        logger.error(
+            "ElevenLabs TTS provider error status=%s body=%s",
+            exc.code,
+            _redact(provider_body),
+        )
+        if exc.code in (401, 403):
+            detail = "ElevenLabs rejected the API key or Bella voice access. Check the Railway ELEVENLABS_API_KEY and voice permissions."
+        elif exc.code == 404:
+            detail = "ElevenLabs could not find the configured Bella voice or model. Check ELEVENLABS_VOICE_ID_BELLA and ELEVENLABS_MODEL_ID."
+        elif exc.code == 429:
+            detail = "ElevenLabs rate limit or quota reached. Check your ElevenLabs plan and usage."
+        else:
+            detail = f"ElevenLabs request failed with HTTP {exc.code}."
+        raise HTTPException(status_code=502, detail=detail) from exc
     except HTTPException:
         raise
     except Exception as exc:
-        logger.error("ElevenLabs TTS failed: %s", type(exc).__name__)
-        raise HTTPException(status_code=502, detail="TTS generation failed")
+        logger.error("ElevenLabs TTS failed: %s: %s", type(exc).__name__, _redact(str(exc)))
+        raise HTTPException(status_code=502, detail="TTS generation failed; check backend logs for the redacted provider error.") from exc
 
 
 @app.post("/api/tts")
 async def tts_endpoint(request: Request, body: TtsRequest):
-    """Authenticated web TTS — ElevenLabs Bella or male voice, returns audio/mpeg."""
+    """Authenticated web TTS — always uses ElevenLabs Bella, returns audio/mpeg."""
     await asyncio.to_thread(_require_current_user, request)
     style = (body.style or "human").lower()
     if style not in ("slow", "normal", "human", "fast"):
         style = "human"
-    voice = (body.voice or "bella").lower()
-    if voice not in ("bella", "female", "male", "man", "adam", "guy"):
-        voice = "bella"
+    # Ignore client-supplied voice names so every web response uses Bella.
     audio = await asyncio.to_thread(
-        _elevenlabs_tts_bytes, body.text, style, voice
+        _elevenlabs_tts_bytes, body.text, style, "bella"
     )
     return Response(
         content=audio,
