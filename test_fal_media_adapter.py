@@ -69,6 +69,26 @@ class ProviderCredentialClassificationTests(unittest.TestCase):
         self.assertEqual(xai["adapter"], "native")
         self.assertFalse(xai["needs_code"])
 
+    def test_native_provider_report_does_not_claim_live_health(self):
+        report = provider_registry.format_admin_report({
+            "providers": [{
+                "id": "groq",
+                "name": "Groq",
+                "adapter": "native",
+                "skills": ["text_ai"],
+                "needs_code": False,
+                "what_it_can_do": "text_ai",
+                "integration_hint": "Test model access with a live request.",
+            }],
+            "configured_count": 1,
+            "service_credentials": [],
+            "unknown_env_keys": [],
+            "web_research": {},
+        })
+
+        self.assertIn("live authentication", report)
+        self.assertNotIn("ready through existing integration", report)
+
 
 if __name__ == "__main__":
     unittest.main()
