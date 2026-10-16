@@ -19,7 +19,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger("king_zarry_kitty_paper")
 router = APIRouter(prefix="/paper", tags=["Kitty Paper Trading"])
@@ -27,6 +28,8 @@ _lock = threading.RLock()
 _worker_lock = threading.Lock()
 _worker: threading.Thread | None = None
 STOP_EVENT = threading.Event()
+_runtime_lock = threading.RLock()
+_runtime_settings: dict[str, Any] = {"enabled": None, "order_btc": None, "max_notional_usd": None}
 
 SYMBOL = "BTC/USD"
 TIMEFRAME = "1d"
@@ -36,6 +39,10 @@ DEFAULT_MAX_NOTIONAL = 100.0
 
 
 def _enabled() -> bool:
+    with _runtime_lock:
+        override = _runtime_settings["enabled"]
+    if override is not None:
+        return bool(override)
     return (os.getenv("KITTY_PAPER_TRADING_ENABLED", "true").strip().lower()
             not in {"0", "false", "no", "off"})
 
@@ -133,6 +140,9 @@ def status() -> dict[str, Any]:
         "starting_cash_usd": DEFAULT_STARTING_CASH,
         "max_order_notional_usd": _max_notional(),
         "default_order_quantity_btc": _quantity(),
+        "poll_seconds": max(60, min(int(_float_env("KITTY_PAPER_POLL_SECONDS", 900)), 3600)),
+        "runtime_controls": True,
+        "settings_persistence": "current backend process only; resets on restart unless environment defaults are changed",
         "state": state,
         "recent_orders": [dict(row) for row in orders],
         "recent_cycles": [
@@ -151,14 +161,18 @@ def _json_or_empty(value: str) -> dict[str, Any]:
 
 
 def _quantity() -> float:
-    value = _float_env("KITTY_PAPER_ORDER_BTC", DEFAULT_QUANTITY)
+    with _runtime_lock:
+        override = _runtime_settings["order_btc"]
+    value = float(override) if override is not None else _float_env("KITTY_PAPER_ORDER_BTC", DEFAULT_QUANTITY)
     if value <= 0 or not math.isfinite(value):
         return DEFAULT_QUANTITY
     return min(value, 0.01)
 
 
 def _max_notional() -> float:
-    value = _float_env("KITTY_PAPER_MAX_NOTIONAL_USD", DEFAULT_MAX_NOTIONAL)
+    with _runtime_lock:
+        override = _runtime_settings["max_notional_usd"]
+    value = float(override) if override is not None else _float_env("KITTY_PAPER_MAX_NOTIONAL_USD", DEFAULT_MAX_NOTIONAL)
     if value <= 0 or not math.isfinite(value):
         return DEFAULT_MAX_NOTIONAL
     return min(value, 500.0)
@@ -329,20 +343,74 @@ def _worker_loop() -> None:
 def start_worker() -> bool:
     """Start one process-local paper-only worker; no credentials are read."""
     global _worker
-    if not _enabled():
-        return False
     with _worker_lock:
         if _worker and _worker.is_alive():
             return False
         STOP_EVENT.clear()
         _worker = threading.Thread(target=_worker_loop, name="kitty-paper-trader", daemon=True)
         _worker.start()
-        logger.info("Kitty BTC/USD paper trader worker started; live trading remains disabled")
+        logger.info("Kitty BTC/USD paper worker started; enabled=%s; broker orders remain disabled", _enabled())
         return True
 
 
 def stop_worker() -> None:
     STOP_EVENT.set()
+
+
+class KittyPaperSettingsRequest(BaseModel):
+    enabled: bool
+    order_btc: float = Field(default=0.001, gt=0, le=0.01)
+    max_notional_usd: float = Field(default=100.0, gt=0, le=500)
+
+
+def _require_settings_user(request: Request) -> None:
+    # Reuse the app's established session and VIP checks. This controls the
+    # global paper simulator only; it does not arm broker/demo/live orders.
+    try:
+        import api as web_api
+        user_row = web_api._require_current_user(request)
+        web_api._require_web_vip(user_row)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Sign in with a VIP account to control Kitty paper settings") from exc
+
+
+@router.get("/settings")
+def get_paper_settings(request: Request):
+    _require_settings_user(request)
+    return {
+        "status": "success",
+        "enabled": _enabled(),
+        "mode": "paper_only",
+        "order_btc": _quantity(),
+        "max_notional_usd": _max_notional(),
+        "poll_seconds": max(60, min(int(_float_env("KITTY_PAPER_POLL_SECONDS", 900)), 3600)),
+        "broker_orders_enabled": False,
+        "settings_persistence": "current backend process only; resets on restart unless environment defaults are changed",
+    }
+
+
+@router.put("/settings")
+def update_paper_settings(request: Request, body: KittyPaperSettingsRequest):
+    _require_settings_user(request)
+    if not math.isfinite(body.order_btc) or not math.isfinite(body.max_notional_usd):
+        raise HTTPException(status_code=422, detail="Tuning values must be finite numbers")
+    with _runtime_lock:
+        _runtime_settings["enabled"] = body.enabled
+        _runtime_settings["order_btc"] = body.order_btc
+        _runtime_settings["max_notional_usd"] = body.max_notional_usd
+    if body.enabled:
+        start_worker()
+    return {
+        "status": "success",
+        "enabled": _enabled(),
+        "mode": "paper_only",
+        "order_btc": _quantity(),
+        "max_notional_usd": _max_notional(),
+        "broker_orders_enabled": False,
+        "message": "Kitty paper settings updated. This does not submit Binance demo or live orders.",
+    }
 
 
 @router.get("/status")
