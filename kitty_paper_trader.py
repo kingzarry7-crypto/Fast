@@ -1,0 +1,359 @@
+"""Kitty V3 BTC/USD paper trader.
+
+This is an isolated research simulator: it NEVER calls the broker/trading connector.
+It evaluates only completed daily candles, processes each candle once, and maintains
+its own SQLite cash/position/order ledger. The model is experimental; paper results
+are not evidence of profitability and never authorize live trading.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import math
+import os
+import sqlite3
+import threading
+import time
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from fastapi import APIRouter, HTTPException
+
+logger = logging.getLogger("king_zarry_kitty_paper")
+router = APIRouter(prefix="/api/kitty/paper", tags=["Kitty Paper Trading"])
+_lock = threading.RLock()
+_worker_lock = threading.Lock()
+_worker: threading.Thread | None = None
+STOP_EVENT = threading.Event()
+
+SYMBOL = "BTC/USD"
+TIMEFRAME = "1d"
+DEFAULT_STARTING_CASH = 10_000.0
+DEFAULT_QUANTITY = 0.001
+DEFAULT_MAX_NOTIONAL = 100.0
+
+
+def _enabled() -> bool:
+    return (os.getenv("KITTY_PAPER_TRADING_ENABLED", "true").strip().lower()
+            not in {"0", "false", "no", "off"})
+
+
+def _db_path() -> str:
+    configured = (os.getenv("KITTY_PAPER_DB_PATH") or "").strip()
+    if configured:
+        return os.path.abspath(configured)
+    data_dir = (os.getenv("DATA_DIR") or "").strip()
+    root = data_dir if data_dir else os.getcwd()
+    return os.path.abspath(os.path.join(root, "kitty_paper_trading.db"))
+
+
+def _connect() -> sqlite3.Connection:
+    path = _db_path()
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    conn = sqlite3.connect(path, timeout=30)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _init_db() -> None:
+    with _lock:
+        conn = _connect()
+        try:
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS kitty_paper_state (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    cash REAL NOT NULL,
+                    quantity REAL NOT NULL DEFAULT 0,
+                    avg_entry REAL NOT NULL DEFAULT 0,
+                    last_candle TEXT,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS kitty_paper_orders (
+                    id TEXT PRIMARY KEY,
+                    candle_time TEXT NOT NULL UNIQUE,
+                    symbol TEXT NOT NULL,
+                    side TEXT NOT NULL,
+                    quantity REAL NOT NULL,
+                    price REAL NOT NULL,
+                    notional REAL NOT NULL,
+                    probability REAL NOT NULL,
+                    signal TEXT NOT NULL,
+                    cash_after REAL NOT NULL,
+                    position_after REAL NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS kitty_paper_cycles (
+                    id TEXT PRIMARY KEY,
+                    candle_time TEXT NOT NULL UNIQUE,
+                    symbol TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    signal TEXT,
+                    probability REAL,
+                    details_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO kitty_paper_state(id,cash,quantity,avg_entry,updated_at) VALUES(1,?,?,?,?)",
+                (DEFAULT_STARTING_CASH, 0.0, 0.0, _now()),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def status() -> dict[str, Any]:
+    _init_db()
+    with _lock:
+        conn = _connect()
+        try:
+            state = dict(conn.execute("SELECT * FROM kitty_paper_state WHERE id=1").fetchone())
+            orders = conn.execute(
+                "SELECT * FROM kitty_paper_orders ORDER BY created_at DESC LIMIT 20"
+            ).fetchall()
+            cycles = conn.execute(
+                "SELECT * FROM kitty_paper_cycles ORDER BY created_at DESC LIMIT 10"
+            ).fetchall()
+        finally:
+            conn.close()
+    return {
+        "enabled": _enabled(),
+        "mode": "paper_only",
+        "symbol": SYMBOL,
+        "timeframe": TIMEFRAME,
+        "model": "Kitty V3 (experimental; training symbol not confirmed in metadata)",
+        "live_trading_enabled": False,
+        "broker_connector_used": False,
+        "starting_cash_usd": DEFAULT_STARTING_CASH,
+        "max_order_notional_usd": _max_notional(),
+        "default_order_quantity_btc": _quantity(),
+        "state": state,
+        "recent_orders": [dict(row) for row in orders],
+        "recent_cycles": [
+            {**dict(row), "details": _json_or_empty(row["details_json"])}
+            for row in cycles
+        ],
+        "warning": "Research simulation only. No live orders are possible from this module; results do not establish profitability.",
+    }
+
+
+def _json_or_empty(value: str) -> dict[str, Any]:
+    try:
+        return json.loads(value or "{}")
+    except Exception:
+        return {}
+
+
+def _quantity() -> float:
+    value = _float_env("KITTY_PAPER_ORDER_BTC", DEFAULT_QUANTITY)
+    if value <= 0 or not math.isfinite(value):
+        return DEFAULT_QUANTITY
+    return min(value, 0.01)
+
+
+def _max_notional() -> float:
+    value = _float_env("KITTY_PAPER_MAX_NOTIONAL_USD", DEFAULT_MAX_NOTIONAL)
+    if value <= 0 or not math.isfinite(value):
+        return DEFAULT_MAX_NOTIONAL
+    return min(value, 500.0)
+
+
+def _float_env(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _features(candles: list[dict[str, Any]]) -> dict[str, float]:
+    closes = [float(item["close"]) for item in candles]
+    if len(closes) < 35 or any(not math.isfinite(x) or x <= 0 for x in closes):
+        raise ValueError("At least 35 valid positive daily closes are required")
+    close = closes[-1]
+    window = closes[-20:]
+    sma = sum(window) / len(window)
+    variance = sum((x - sma) ** 2 for x in window) / len(window)
+    gains, losses = [], []
+    for previous, current in zip(closes[-15:-1], closes[-14:]):
+        change = current - previous
+        gains.append(max(change, 0.0))
+        losses.append(max(-change, 0.0))
+    avg_gain = sum(gains) / 14.0
+    avg_loss = sum(losses) / 14.0
+    rsi = 100.0 if avg_loss == 0 and avg_gain > 0 else (
+        50.0 if avg_loss == 0 else 100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
+    )
+
+    def ema(values: list[float], period: int) -> float:
+        alpha = 2.0 / (period + 1.0)
+        result = values[0]
+        for value in values[1:]:
+            result = alpha * value + (1.0 - alpha) * result
+        return result
+
+    return {
+        "Close": close,
+        "SMA_20": sma,
+        "RSI_14": rsi,
+        "BB_Upper": sma + 2.0 * math.sqrt(variance),
+        "BB_Lower": sma - 2.0 * math.sqrt(variance),
+        "MACD": ema(closes, 12) - ema(closes, 26),
+    }
+
+
+def run_cycle() -> dict[str, Any]:
+    """Evaluate the latest completed daily candle; record once; simulate only."""
+    if not _enabled():
+        return {"status": "disabled", "mode": "paper_only", "live_trading_enabled": False}
+    _init_db()
+    try:
+        from market import get_candles
+        import kitty_v3
+
+        # Treat the newest candle as potentially still forming; use the prior candle.
+        candles = get_candles(SYMBOL, timeframe=TIMEFRAME, outputsize=160)
+        if not isinstance(candles, list) or len(candles) < 36:
+            raise ValueError("Market provider returned fewer than 36 daily candles")
+        closed_candles = candles[:-1]
+        candle = closed_candles[-1]
+        candle_time = str(candle.get("datetime") or candle.get("time") or "")
+        if not candle_time:
+            raise ValueError("Latest completed candle has no timestamp")
+        features = _features(closed_candles)
+        prediction = kitty_v3.predict_features(features)
+        probability = float(prediction["probability_next_close_up"])
+        signal = str(prediction["signal"])
+        price = float(features["Close"])
+        if not (math.isfinite(price) and price > 0 and math.isfinite(probability) and 0 <= probability <= 1):
+            raise ValueError("Model or market returned invalid values")
+    except Exception as exc:
+        logger.warning("Kitty paper cycle skipped: %s", type(exc).__name__)
+        return {
+            "status": "skipped",
+            "reason": f"{type(exc).__name__}: {str(exc)[:200]}",
+            "mode": "paper_only",
+            "live_trading_enabled": False,
+        }
+
+    with _lock:
+        conn = _connect()
+        try:
+            prior = conn.execute(
+                "SELECT status, signal FROM kitty_paper_cycles WHERE candle_time=?",
+                (candle_time,),
+            ).fetchone()
+            if prior:
+                return {"status": "already_processed", "candle_time": candle_time,
+                        "signal": prior["signal"], "mode": "paper_only",
+                        "live_trading_enabled": False}
+            state = conn.execute("SELECT * FROM kitty_paper_state WHERE id=1").fetchone()
+            cash = float(state["cash"])
+            position = float(state["quantity"])
+            avg_entry = float(state["avg_entry"])
+            side = None
+            quantity = 0.0
+            notional = 0.0
+
+            # Long-only spot-style paper portfolio. BUY opens one capped position;
+            # SELL_BIAS exits it. HOLD does nothing; no leverage or shorting.
+            order_qty = _quantity()
+            if signal == "BUY_BIAS" and position <= 0 and order_qty * price <= _max_notional() and cash >= order_qty * price:
+                side, quantity, notional = "BUY", order_qty, order_qty * price
+                cash -= notional
+                avg_entry = price
+                position += quantity
+            elif signal == "SELL_BIAS" and position > 0:
+                quantity = position
+                side, notional = "SELL", position * price
+                cash += notional
+                position = 0.0
+                avg_entry = 0.0
+
+            now = _now()
+            details = {
+                "price": price, "features": features,
+                "thresholds": prediction.get("thresholds"),
+                "warning": prediction.get("warning"),
+                "execution": "internal SQLite simulator only",
+            }
+            conn.execute(
+                "INSERT INTO kitty_paper_cycles(id,candle_time,symbol,status,signal,probability,details_json,created_at) VALUES(?,?,?,?,?,?,?,?)",
+                (str(uuid.uuid4()), candle_time, SYMBOL,
+                 "simulated_order" if side else "no_action", signal, probability,
+                 json.dumps(details, allow_nan=False), now),
+            )
+            if side:
+                conn.execute(
+                    "INSERT INTO kitty_paper_orders(id,candle_time,symbol,side,quantity,price,notional,probability,signal,cash_after,position_after,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (str(uuid.uuid4()), candle_time, SYMBOL, side, quantity, price,
+                     notional, probability, signal, cash, position, now),
+                )
+            conn.execute(
+                "UPDATE kitty_paper_state SET cash=?,quantity=?,avg_entry=?,last_candle=?,updated_at=? WHERE id=1",
+                (cash, position, avg_entry, candle_time, now),
+            )
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            return {"status": "already_processed", "candle_time": candle_time,
+                    "mode": "paper_only", "live_trading_enabled": False}
+        finally:
+            conn.close()
+    return {
+        "status": "simulated_order" if side else "no_action",
+        "mode": "paper_only", "symbol": SYMBOL, "candle_time": candle_time,
+        "signal": signal, "probability_next_close_up": probability,
+        "simulated_side": side, "simulated_quantity_btc": quantity,
+        "price": price, "notional_usd": notional,
+        "live_trading_enabled": False,
+        "warning": "Experimental research simulation; no broker order was sent.",
+    }
+
+
+def _worker_loop() -> None:
+    interval = max(60, min(int(_float_env("KITTY_PAPER_POLL_SECONDS", 900)), 3600))
+    while not STOP_EVENT.is_set():
+        try:
+            run_cycle()
+        except Exception:
+            logger.exception("Kitty paper worker cycle failed")
+        STOP_EVENT.wait(interval)
+
+
+def start_worker() -> bool:
+    """Start one process-local paper-only worker; no credentials are read."""
+    global _worker
+    if not _enabled():
+        return False
+    with _worker_lock:
+        if _worker and _worker.is_alive():
+            return False
+        STOP_EVENT.clear()
+        _worker = threading.Thread(target=_worker_loop, name="kitty-paper-trader", daemon=True)
+        _worker.start()
+        logger.info("Kitty BTC/USD paper trader worker started; live trading remains disabled")
+        return True
+
+
+def stop_worker() -> None:
+    STOP_EVENT.set()
+
+
+@router.get("/status")
+def paper_status():
+    return status()
+
+
+@router.post("/cycle")
+def paper_cycle():
+    try:
+        return run_cycle()
+    except Exception as exc:
+        logger.exception("Kitty paper cycle failed")
+        raise HTTPException(status_code=503, detail="Paper cycle failed: " + type(exc).__name__)
