@@ -285,9 +285,9 @@ def format_admin_report(s: Dict[str, Any], first_run: bool = False) -> str:
                     lines.append(f'   Missing: {", ".join(p["missing"])}')
                 lines.append(f'   How to add: {p.get("integration_hint", "Add a provider adapter.")}')
             else:
-                lines.append(f'🟢 <b>{p["name"]}</b> — configured + app integration exists')
+                lines.append(f'🟡 <b>{p["name"]}</b> — credentials configured; integration code exists')
                 lines.append(f'   What it can do: <b>{p.get("what_it_can_do", skills)}</b>')
-                lines.append(f'   App status: ready through existing integration')
+                lines.append('   App status: live authentication, account access, model/feed availability, and delivery have NOT been verified by this startup scan')
                 if p.get("integration_hint"):
                     lines.append(f'   Integration: {p["integration_hint"]}')
 
