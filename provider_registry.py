@@ -49,7 +49,7 @@ KNOWN_PROVIDERS = {
     "currents": ("Currents", ["CURRENTS_API_KEY", "CURRENTS_APIKEY"], ["news"], "native", "News provider is already represented in news.py."),
     "eodhd": ("EODHD", ["EODHD_API_KEY", "EODHD_KEY"], ["news", "market_data", "calendar"], "native", "News/market/calendar provider is already represented in news.py."),
     "finnhub": ("Finnhub", ["FINNHUB_API_KEY", "FINNHUB_KEY"], ["market_data", "calendar"], "native", "Market/calendar capability is already represented in news.py."),
-    "twelvedata": ("TwelveData", ["TWELVE_DATA_API_KEY", "TWELVEDATA_API_KEY"], ["market_data", "calendar"], "native", "Market/calendar capability is already represented in news.py."),
+    "twelvedata": ("TwelveData", ["TWELVE_DATA_API_KEY", "TWELVEDATA_API_KEY"], ["market_data"], "native", "Market-data adapter exists; Twelve Data does not expose the /calendar macroeconomic endpoint, so calendar capability is intentionally not advertised."),
     "trading_economics": (
         "Trading Economics",
         ["TRADING_ECONOMICS_API_KEY", "TRADING_ECONOMICS_KEY"],
