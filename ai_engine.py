@@ -152,6 +152,60 @@ AGNES_VIDEO_POLL_TIMEOUT = int(clean_env_str(os.getenv("AGNES_VIDEO_POLL_TIMEOUT
 AGNES_VIDEO_POLL_INTERVAL = float(clean_env_str(os.getenv("AGNES_VIDEO_POLL_INTERVAL"), "2.0"))
 
 # =========================================================
+# FAL AI CONFIG (image generation/editing fallback)
+# =========================================================
+FAL_KEY = clean_env_str(os.getenv("FAL_KEY") or os.getenv("FAL_API_KEY"))
+FAL_IMAGE_MODEL = clean_env_str(os.getenv("FAL_IMAGE_MODEL"), "fal-ai/flux/schnell")
+FAL_IMAGE_EDIT_MODEL = clean_env_str(os.getenv("FAL_IMAGE_EDIT_MODEL"), "fal-ai/flux-kontext-pro")
+
+
+def _fal_image_request(model: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """Call fal.ai lazily so non-media chat does not require an initialized SDK client."""
+    if not FAL_KEY:
+        return {"success": False, "url": None, "error": "fal_not_configured", "model": model}
+    try:
+        import fal_client
+        result = fal_client.subscribe(
+            model,
+            arguments=arguments,
+            with_logs=False,
+        )
+        images = result.get("images") if isinstance(result, dict) else None
+        image = images[0] if isinstance(images, list) and images else {}
+        url = image.get("url") if isinstance(image, dict) else None
+        if not url and isinstance(result, dict):
+            url = (result.get("image") or {}).get("url") if isinstance(result.get("image"), dict) else None
+        if not isinstance(url, str) or not url.startswith(("https://", "http://")):
+            return {"success": False, "url": None, "error": "fal_response_missing_image_url", "model": model}
+        return {"success": True, "url": url, "error": None, "model": model, "provider": "fal"}
+    except Exception as exc:
+        return {"success": False, "url": None, "error": _redact_secrets(str(exc))[:200], "model": model, "provider": "fal"}
+
+
+def fal_generate_image(prompt: str, size: str = "1024x1024") -> Dict[str, Any]:
+    if not prompt or not str(prompt).strip():
+        return {"success": False, "url": None, "error": "empty_prompt", "model": FAL_IMAGE_MODEL}
+    # fal model APIs use named image sizes; retain a conservative square default.
+    return _fal_image_request(FAL_IMAGE_MODEL, {
+        "prompt": str(prompt).strip(),
+        "image_size": "square_hd",
+        "num_images": 1,
+    })
+
+
+def fal_edit_image(prompt: str, image_url: str) -> Dict[str, Any]:
+    if not prompt or not str(prompt).strip():
+        return {"success": False, "url": None, "error": "empty_prompt", "model": FAL_IMAGE_EDIT_MODEL}
+    if not isinstance(image_url, str) or not image_url.startswith(("https://", "http://")):
+        return {"success": False, "url": None, "error": "invalid_image_url", "model": FAL_IMAGE_EDIT_MODEL}
+    return _fal_image_request(FAL_IMAGE_EDIT_MODEL, {
+        "prompt": str(prompt).strip(),
+        "image_url": image_url,
+        "num_images": 1,
+    })
+
+
+# =========================================================
 # ACEDATA CLOUD CONFIG (Image + Video FAILOVER / FALLBACK)
 # =========================================================
 ACEDATA_API_KEY = clean_env_str(os.getenv("ACEDATA_API_KEY"))
@@ -3101,13 +3155,20 @@ class AIEngine:
         }
 
     def generate_image(self, prompt: str, size: str = "1024x1024") -> Dict[str, Any]:
+        # Try configured providers in order, continuing after a provider error.
         if AGNES_API_KEY:
             result = agnes_generate_image(prompt=prompt, size=size)
             if result.get("success"):
                 return result
         if ACEDATA_API_KEY:
-            return acedata_generate_image(prompt=prompt)
-        return {"success": False, "url": None, "error": "no_provider_configured"}
+            result = acedata_generate_image(prompt=prompt)
+            if result.get("success"):
+                return result
+        if FAL_KEY:
+            result = fal_generate_image(prompt=prompt, size=size)
+            if result.get("success"):
+                return result
+        return {"success": False, "url": None, "error": "no_provider_succeeded"}
 
     def edit_image(self, prompt: str, image_url: str, size: str = "1024x1024") -> Dict[str, Any]:
         if AGNES_API_KEY:
@@ -3115,8 +3176,14 @@ class AIEngine:
             if result.get("success"):
                 return result
         if ACEDATA_API_KEY:
-            return acedata_edit_image(prompt=prompt, image_url=image_url)
-        return {"success": False, "url": None, "error": "no_provider_configured"}
+            result = acedata_edit_image(prompt=prompt, image_url=image_url)
+            if result.get("success"):
+                return result
+        if FAL_KEY:
+            result = fal_edit_image(prompt=prompt, image_url=image_url)
+            if result.get("success"):
+                return result
+        return {"success": False, "url": None, "error": "no_provider_succeeded"}
 
     def generate_video(self, prompt: str, seconds: int = 5, size: str = "720P", aspect_ratio: str = "16:9", mode: str = "text") -> Dict[str, Any]:
         if AGNES_API_KEY:
@@ -3141,7 +3208,7 @@ class AIEngine:
         return {"success": False, "status": "error", "error": "no_provider_configured"}
 
     def is_media_enabled(self) -> bool:
-        return bool(AGNES_API_KEY) or bool(ACEDATA_API_KEY)
+        return bool(AGNES_API_KEY) or bool(ACEDATA_API_KEY) or bool(FAL_KEY)
 
 
 # =========================================================
