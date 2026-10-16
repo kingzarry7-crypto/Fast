@@ -48,12 +48,33 @@ def _enabled() -> bool:
 
 
 def _db_path() -> str:
+    """Choose a writable SQLite location, falling back when a configured mount is unavailable."""
     configured = (os.getenv("KITTY_PAPER_DB_PATH") or "").strip()
-    if configured:
-        return os.path.abspath(configured)
     data_dir = (os.getenv("DATA_DIR") or "").strip()
-    root = data_dir if data_dir else os.getcwd()
-    return os.path.abspath(os.path.join(root, "kitty_paper_trading.db"))
+    candidates: list[str] = []
+    if configured:
+        candidates.append(os.path.abspath(configured))
+    if data_dir:
+        candidates.append(os.path.abspath(os.path.join(data_dir, "kitty_paper_trading.db")))
+    # The Railway image creates this directory and grants it to the unprivileged app user.
+    candidates.append(os.path.abspath("/app/data/kitty_paper_trading.db"))
+    candidates.append(os.path.abspath(os.path.join(os.getcwd(), "kitty_paper_trading.db")))
+
+    seen: set[str] = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        parent = os.path.dirname(candidate) or "."
+        try:
+            os.makedirs(parent, exist_ok=True)
+        except OSError as exc:
+            logger.warning("Kitty DB directory unavailable (%s): %s", parent, type(exc).__name__)
+            continue
+        if os.access(parent, os.W_OK | os.X_OK):
+            return candidate
+        logger.warning("Kitty DB directory is not writable: %s", parent)
+    raise RuntimeError("Kitty paper database has no writable storage directory")
 
 
 def _connect() -> sqlite3.Connection:
