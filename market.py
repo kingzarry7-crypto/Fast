@@ -1122,6 +1122,17 @@ def _alpaca_symbol(symbol: str) -> str:
     return f"{base}/USD"
 
 
+def _alpaca_supports_symbol(symbol: str) -> bool:
+    """Avoid calling Alpaca for known unsupported crypto assets; use other feeds."""
+    try:
+        base = _alpaca_symbol(symbol).split("/", 1)[0].upper()
+    except Exception:
+        return False
+    # Runtime logs show Alpaca returns no historical BNB/USD bars. Avoid
+    # repeated empty responses and let Massive/Binance/Twelve Data handle it.
+    return base not in {"BNB"}
+
+
 def _alpaca_request(path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     key, secret = _alpaca_credentials()
     if not key or not secret:
@@ -1340,7 +1351,7 @@ def get_price(symbol):
     """Price routing: Alpaca crypto when configured, then free providers and Twelve Data."""
     if _is_gold_symbol(symbol):
         return _gold_free_get_price(symbol)
-    if _should_try_alpaca_market_data():
+    if _should_try_alpaca_market_data() and _alpaca_supports_symbol(symbol):
         try:
             price = _alpaca_get_price(symbol)
             logger.debug("price %s via Alpaca crypto feed = %s", symbol, price)
@@ -1377,7 +1388,7 @@ def get_candles(symbol, timeframe="15m", outputsize=150):
     """OHLC: Alpaca crypto when credentials are set, then Binance/Bybit, gold providers, or Twelve."""
     if _is_gold_symbol(symbol):
         return _gold_free_get_candles(symbol, timeframe, outputsize)
-    if _should_try_alpaca_market_data():
+    if _should_try_alpaca_market_data() and _alpaca_supports_symbol(symbol):
         try:
             candles = _alpaca_get_candles(symbol, timeframe, outputsize)
             logger.debug("candles %s via Alpaca tf=%s n=%s", symbol, timeframe, len(candles))
