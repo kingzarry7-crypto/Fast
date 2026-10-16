@@ -20,7 +20,10 @@ REALTIME_KEY = (
     os.getenv("OPENAI_REALTIME_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
 ).strip()
 REALTIME_MODEL = (os.getenv("OPENAI_REALTIME_MODEL") or "gpt-realtime").strip()
-REALTIME_VOICE = (os.getenv("OPENAI_REALTIME_VOICE") or "marin").strip()
+# OpenAI Realtime has its own voice catalog; Bella is served by ElevenLabs.
+# Use a feminine-sounding OpenAI voice by default for live calls, while normal
+# TTS continues to use the user's selected ElevenLabs Bella voice.
+REALTIME_VOICE = (os.getenv("OPENAI_REALTIME_VOICE") or "shimmer").strip()
 REALTIME_TRANSCRIBE_MODEL = (
     os.getenv("OPENAI_REALTIME_TRANSCRIBE_MODEL") or "gpt-4o-mini-transcribe"
 ).strip()
