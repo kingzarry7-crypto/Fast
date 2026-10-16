@@ -245,6 +245,16 @@ def _provider_streams(messages: list):
             model=ai_engine.HF_MODEL_ID,
             messages=messages,
         )
+        # A configured/custom model may be missing or unavailable on the HF router.
+        # Try the known OpenAI-compatible fallback before moving to other providers.
+        fallback_model = (getattr(ai_engine, "HF_FALLBACK_MODEL_ID", "") or "").strip()
+        if fallback_model and fallback_model != ai_engine.HF_MODEL_ID:
+            yield "huggingface_fallback", _stream_openai_compatible(
+                url=ai_engine.HF_INFERENCE_URL,
+                key=ai_engine.HF_TOKEN,
+                model=fallback_model,
+                messages=messages,
+            )
     # Cloudflare's Worker returns a complete JSON answer, so emit it as one SSE token.
     if ai_engine.CLOUDFLARE_AI_TOKEN:
         yield "cloudflare", _stream_cloudflare(messages)
