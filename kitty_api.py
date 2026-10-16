@@ -163,3 +163,8 @@ def kitty_market_predict(
 # Paper-trading endpoints are isolated from the live broker connector.
 from kitty_paper_trader import router as kitty_paper_router
 router.include_router(kitty_paper_router)
+
+
+# Explicit opt-in Binance Spot Demo execution is separate from the paper simulator.
+from kitty_demo_trader import router as kitty_demo_trader_router
+router.include_router(kitty_demo_trader_router)
