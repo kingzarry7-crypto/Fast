@@ -2119,6 +2119,8 @@ class AIEngine:
                         logger.warning(f"Agnes image generation failed ({result.get('error')}) - falling back to Ace Data Cloud")
                 if not result.get("success") and acedata_ok:
                     result = acedata_generate_image(prompt=intent["prompt"])
+                if not result.get("success") and fal_ok:
+                    result = fal_generate_image(prompt=intent["prompt"], size=intent.get("size", "1024x1024"))
                 if result.get("success") and result.get("url"):
                     url = result["url"]
                     provider = result.get("provider", "agnes")
@@ -2147,6 +2149,8 @@ class AIEngine:
                         logger.warning(f"Agnes image edit failed ({result.get('error')}) - falling back to Ace Data Cloud")
                 if not result.get("success") and acedata_ok:
                     result = acedata_edit_image(prompt=intent["prompt"], image_url=data_uri)
+                if not result.get("success") and fal_ok:
+                    result = fal_edit_image(prompt=intent["prompt"], image_url=data_uri)
                 if result.get("success") and result.get("url"):
                     url = result["url"]
                     provider = result.get("provider", "agnes")
