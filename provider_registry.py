@@ -38,7 +38,7 @@ KNOWN_PROVIDERS = {
     "openrouter": ("OpenRouter", ["OPENROUTER_API_KEY"], ["text_ai", "model_routing"], "native", "Already wired into AIEngine."),
     "chutes": ("Chutes", ["CHUTES_API_KEY"], ["text_ai", "model_routing"], "native", "OpenAI-compatible text fallback is wired into AIEngine; model is controlled by CHUTES_MODEL."),
     "gemini": ("Google Gemini", ["GEMINI_API_KEY"], ["text_ai", "vision_ai"], "native", "Already wired into AIEngine."),
-    "xai": ("xAI", ["XAI_API_KEY"], ["text_ai"], "adapter_pending", "Needs a native xAI adapter/provider mapping before direct use."),
+    "xai": ("xAI", ["XAI_API_KEY"], ["text_ai"], "native", "Direct xAI Chat Completions support exists in ai_engine.py; requires its own XAI_API_KEY and a valid XAI_MODEL."),
     "openai": ("OpenAI", ["OPENAI_API_KEY"], ["text_ai", "vision_ai"], "native", "Direct OpenAI Chat Completions adapter is wired into AIEngine and the streaming chat provider chain; provider selection and model availability still depend on valid Railway environment settings."),
     "cloudflare": ("Cloudflare Workers AI", ["CLOUDFLARE_AI_TOKEN"], ["text_ai", "model_routing"], "native", "OpenAI-compatible provider mapping exists in llm_client.py; verify the Worker URL, token, and selected model with a live request."),
     "huggingface": ("Hugging Face Inference", ["HF_TOKEN", "HUGGINGFACE_API_KEY"], ["text_ai", "model_routing"], "native", "OpenAI-compatible inference-router mapping exists in llm_client.py; configured model availability must be tested."),
@@ -68,9 +68,9 @@ KNOWN_PROVIDERS = {
     "fal": (
         "FAL AI",
         ["FAL_KEY", "FAL_API_KEY"],
-        ["video_generation"],
+        ["image_generation", "video_generation"],
         "partial",
-        "A Fal.ai video-generation path exists in discord_bot.py; image/audio generation and app-wide routing are not confirmed wired.",
+        "Image generation/editing now has an app-wide AIEngine fallback; Discord also has a video-generation path. Audio generation is not advertised as integrated, and live model/key access still needs verification.",
     ),
     "agnes": ("Agnes AI", ["AGNES_API_KEY"], ["image_generation", "video_generation", "media_editing"], "native", "Media capability is already represented in the app."),
     "acedata": ("AceData Cloud", ["ACEDATA_API_KEY"], ["image_generation", "video_generation"], "native", "Media capability is already represented in the app."),
@@ -285,9 +285,9 @@ def format_admin_report(s: Dict[str, Any], first_run: bool = False) -> str:
                     lines.append(f'   Missing: {", ".join(p["missing"])}')
                 lines.append(f'   How to add: {p.get("integration_hint", "Add a provider adapter.")}')
             else:
-                lines.append(f'🟢 <b>{p["name"]}</b> — configured + app integration exists')
+                lines.append(f'🟡 <b>{p["name"]}</b> — credentials configured; integration code exists')
                 lines.append(f'   What it can do: <b>{p.get("what_it_can_do", skills)}</b>')
-                lines.append(f'   App status: ready through existing integration')
+                lines.append('   App status: live authentication, account access, model/feed availability, and delivery have NOT been verified by this startup scan')
                 if p.get("integration_hint"):
                     lines.append(f'   Integration: {p["integration_hint"]}')
 
