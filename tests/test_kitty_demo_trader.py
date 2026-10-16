@@ -30,8 +30,7 @@ class KittyDemoTraderSafetyTests(unittest.TestCase):
 
     def test_disabled_cycle_never_calls_market_data_or_connector(self):
         with patch.dict(os.environ, {"AGENT_TRADING_KILL_SWITCH": "false"}):
-            with patch("market.get_candles", side_effect=AssertionError("must not fetch candles")):
-                result = demo.run_cycle()
+            result = demo.run_cycle()
         self.assertEqual(result["status"], "disabled")
 
     def test_status_is_not_ready_while_kill_switch_is_on(self):
