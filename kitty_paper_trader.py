@@ -69,11 +69,11 @@ def _db_path() -> str:
         try:
             os.makedirs(parent, exist_ok=True)
         except OSError as exc:
-            logger.warning("Kitty DB directory unavailable (%s): %s", parent, type(exc).__name__)
+            logger.debug("Kitty DB candidate unavailable (%s): %s", parent, type(exc).__name__)
             continue
         if os.access(parent, os.W_OK | os.X_OK):
             return candidate
-        logger.warning("Kitty DB directory is not writable: %s", parent)
+        logger.debug("Kitty DB candidate is not writable: %s", parent)
     raise RuntimeError("Kitty paper database has no writable storage directory")
 
 
