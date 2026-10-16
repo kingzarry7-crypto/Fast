@@ -617,7 +617,7 @@ export default function ChatWorkspace({
           {voicePanelOpen && (
             <div className="mb-2 rounded-lg border border-cyan-500/15 bg-black/40 p-2">
               <div className="flex flex-wrap gap-1">
-                {(["bella", "male"] as const).map((v) => (
+                {(["bella"] as const).map((v) => (
                   <button key={v} type="button" onClick={() => setVoice(v)} className={"rounded border px-2 py-0.5 text-[9px] " + (voiceCharacter === v ? "border-cyan-400/50 text-cyan-100" : "border-zinc-700 text-zinc-500")}>{v.toUpperCase()}</button>
                 ))}
                 {(["slow", "normal", "human", "fast"] as VoiceStyle[]).map((s) => (
