@@ -39,6 +39,21 @@ class FalMediaAdapterTests(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertEqual(result["error"], "invalid_image_url")
 
+    def test_edit_accepts_supported_base64_image_data_uri(self):
+        fake_client = types.SimpleNamespace(
+            subscribe=lambda model, arguments, with_logs=False: {
+                "images": [{"url": "https://cdn.example.test/edited.png"}]
+            }
+        )
+        image_data_uri = "data:image/png;base64,aGVsbG8="
+        with patch.object(ai_engine, "FAL_KEY", "test-key"), patch.dict(
+            sys.modules, {"fal_client": fake_client}
+        ):
+            result = ai_engine.fal_edit_image("make it brighter", image_data_uri)
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["url"], "https://cdn.example.test/edited.png")
+
     def test_malformed_fal_response_is_not_reported_as_success(self):
         fake_client = types.SimpleNamespace(
             subscribe=lambda model, arguments, with_logs=False: {"images": []}
