@@ -11,7 +11,7 @@ import {
   setVipLocal,
   type MembershipSnapshot,
 } from "@/lib/membership";
-import { api, type ChatBehaviorPreferences, type PlatformStatus } from "@/lib/api";
+import { api, type ChatBehaviorPreferences, type PlatformStatus, type KittyPaperSettings } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 
 type Preferences = {
@@ -41,6 +41,11 @@ export default function SettingsPage() {
   const [savingPreferences, setSavingPreferences] = useState(false);
   const [settingsError, setSettingsError] = useState("");
   const [preferences, setPreferences] = useState<Preferences>(DEFAULT_PREFERENCES);
+  const [kittySettings, setKittySettings] = useState<KittyPaperSettings | null>(null);
+  const [kittyLoading, setKittyLoading] = useState(true);
+  const [kittySaving, setKittySaving] = useState(false);
+  const [kittyError, setKittyError] = useState("");
+  const [kittyNotice, setKittyNotice] = useState("");
 
   const refreshMembership = () =>
     setMembership(getMembershipSnapshot(user?.id, user?.is_subscribed));
@@ -73,6 +78,41 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.getKittyPaperSettings()
+      .then((result) => {
+        if (!cancelled) setKittySettings(result);
+      })
+      .catch((error) => {
+        if (!cancelled) setKittyError(error instanceof Error ? error.message : "Could not load Kitty controls. VIP sign-in may be required.");
+      })
+      .finally(() => {
+        if (!cancelled) setKittyLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const saveKittySettings = async () => {
+    if (!kittySettings) return;
+    setKittySaving(true);
+    setKittyError("");
+    setKittyNotice("");
+    try {
+      const result = await api.saveKittyPaperSettings({
+        enabled: kittySettings.enabled,
+        order_btc: Number(kittySettings.order_btc),
+        max_notional_usd: Number(kittySettings.max_notional_usd),
+      });
+      setKittySettings(result);
+      setKittyNotice(result.message || "Kitty paper settings applied.");
+    } catch (error) {
+      setKittyError(error instanceof Error ? error.message : "Could not apply Kitty settings.");
+    } finally {
+      setKittySaving(false);
+    }
+  };
 
   const loadPlatforms = async () => {
     setPlatformLoading(true);
@@ -222,6 +262,54 @@ export default function SettingsPage() {
                   <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-amber-200/75">
                     Live status check failed: {platformError}. The platform buttons remain real external destinations; refresh after the backend is available.
                   </div>
+                )}
+              </section>
+
+              <section className="kz-panel p-5 sm:p-6">
+                <SectionTitle title="KITTY V3" subtitle="PAPER TRADING · RESEARCH CONTROLS" />
+                <p className="mt-3 text-xs leading-relaxed text-cyan-100/55">
+                  These controls start or pause Kitty's simulated BTC/USD paper trader and tune its simulated order size. They do not place Binance Demo or live orders.
+                </p>
+                {kittyLoading && <p className="mt-4 text-xs text-cyan-200/60">Loading Kitty settings…</p>}
+                {kittyError && <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-amber-200/80">{kittyError}</div>}
+                {kittySettings && (
+                  <>
+                    <div className="mt-4 rounded-xl border border-cyan-500/15 bg-black/20 p-4">
+                      <SettingToggle
+                        title="Enable Kitty paper trader"
+                        description={kittySettings.enabled ? "ON — Kitty may evaluate new completed daily candles in the simulator." : "OFF — no new paper-trading cycles will be processed."}
+                        checked={kittySettings.enabled}
+                        onChange={(checked) => setKittySettings({ ...kittySettings, enabled: checked })}
+                      />
+                      <div className="grid gap-4 border-t border-cyan-500/10 pt-4 sm:grid-cols-2">
+                        <label className="block text-xs text-cyan-100/65">
+                          Simulated BTC order quantity
+                          <input type="number" min="0.000001" max="0.01" step="0.0001" value={kittySettings.order_btc}
+                            onChange={(event) => setKittySettings({ ...kittySettings, order_btc: Number(event.target.value) })}
+                            className="mt-2 w-full rounded-lg border border-cyan-500/20 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400/50" />
+                          <span className="mt-1 block text-[10px] text-cyan-100/35">Hard cap: 0.01 BTC per simulated entry.</span>
+                        </label>
+                        <label className="block text-xs text-cyan-100/65">
+                          Maximum simulated order value (USD)
+                          <input type="number" min="1" max="500" step="5" value={kittySettings.max_notional_usd}
+                            onChange={(event) => setKittySettings({ ...kittySettings, max_notional_usd: Number(event.target.value) })}
+                            className="mt-2 w-full rounded-lg border border-cyan-500/20 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400/50" />
+                          <span className="mt-1 block text-[10px] text-cyan-100/35">Hard cap: $500 in the simulator.</span>
+                        </label>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                      <button type="button" onClick={() => void saveKittySettings()}
+                        disabled={kittySaving || kittyLoading || kittySettings.order_btc <= 0 || kittySettings.order_btc > 0.01 || kittySettings.max_notional_usd <= 0 || kittySettings.max_notional_usd > 500}
+                        className="rounded-lg bg-cyan-400 px-4 py-2 font-mono-tech text-[10px] font-bold tracking-widest text-[#001018] transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50">
+                        {kittySaving ? "APPLYING…" : "SAVE & APPLY KITTY SETTINGS"}
+                      </button>
+                      {kittyNotice && <span className="text-xs text-emerald-300">{kittyNotice}</span>}
+                    </div>
+                    <p className="mt-3 text-[10px] leading-relaxed text-amber-200/60">
+                      Tuning currently applies to this running backend process and resets on a backend restart unless environment defaults are also updated. Kitty V3's training symbol is not yet confirmed, so keep this in paper mode while validating the model.
+                    </p>
+                  </>
                 )}
               </section>
 
