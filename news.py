@@ -76,10 +76,15 @@ def _set_provider_cooldown(name: str, status_code: int) -> None:
             tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=5, microsecond=0)
             until = tomorrow
         else:
+            # Avoid repeatedly hitting rate-limited providers for each asset/query.
             until = now + timedelta(hours=1)
     elif status_code == 402 and name == "eodhd":
         # EODHD daily exhaustion resets at midnight GMT.
         until = (now + timedelta(days=1)).replace(hour=0, minute=0, second=5, microsecond=0)
+    elif status_code in (401, 403) and name in {"eodhd", "tradingeconomics", "finnhub"}:
+        # Invalid credentials and plan-restricted endpoints should not be retried
+        # on every request. A restart/new deployment clears this process-local cooldown.
+        until = now + timedelta(hours=6)
     else:
         until = now + timedelta(minutes=10)
     _NEWS_PROVIDER_COOLDOWNS[name] = until
@@ -545,6 +550,10 @@ def get_economic_events(days: int = 7, provider: Optional[str] = None) -> List[D
                 seen.add(p)
         providers = uniq
     for current_provider in providers:
+        if _provider_cooldown_active(current_provider.lower()):
+            logger.debug("Calendar provider %s is cooling down; skipping request", current_provider)
+            errors.append(f"{current_provider}: temporarily cooling down after a recent provider error")
+            continue
         try:
             if current_provider == "EODHD":
                 events = get_eodhd_events(start_date, end_date)
@@ -571,11 +580,14 @@ def get_economic_events(days: int = 7, provider: Optional[str] = None) -> List[D
             raise RuntimeError("provider returned no usable events")
         except Exception as error:
             errors.append(f"{current_provider}: {error}")
-            # Provider failures are expected in AUTO mode (expired/free-plan
-            # keys, temporary outages, etc.). Keep the log concise and continue
-            # through the fallback chain instead of generating a traceback/noise.
+            # Remember rate limits, invalid credentials, and plan restrictions so
+            # every market asset does not repeat the same doomed network request.
+            status_match = re.search(r"HTTP\s+(\d{3})", str(error), re.IGNORECASE)
+            if status_match:
+                _set_provider_cooldown(current_provider, int(status_match.group(1)))
             logger.info(
-                f"Calendar provider {current_provider} unavailable; trying next provider"
+                "Calendar provider %s unavailable; trying next provider",
+                current_provider,
             )
             continue
 

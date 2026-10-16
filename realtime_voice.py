@@ -95,13 +95,14 @@ def install_realtime_voice(app, require_current_user=None, save_transcript=None)
         }
 
         try:
+            # The SDP is the uploaded part; session is a normal multipart
+            # form field containing JSON. Keeping it in `data` avoids some
+            # gateways treating the session JSON as a second uploaded file.
             response = requests.post(
                 REALTIME_URL,
                 headers={"Authorization": f"Bearer {REALTIME_KEY}"},
-                files={
-                    "sdp": ("offer.sdp", sdp_offer, "application/sdp"),
-                    "session": (None, json.dumps(session), "application/json"),
-                },
+                data={"session": json.dumps(session)},
+                files={"sdp": ("offer.sdp", sdp_offer, "application/sdp")},
                 timeout=30,
             )
         except requests.RequestException as exc:
@@ -109,12 +110,24 @@ def install_realtime_voice(app, require_current_user=None, save_transcript=None)
             raise HTTPException(status_code=502, detail="Realtime service unavailable")
 
         if response.status_code >= 400:
+            # Log only structured provider diagnostics; never log credentials or
+            # the SDP offer. This makes model/parameter errors actionable.
+            try:
+                provider_error = response.json().get("error", {})
+                error_code = provider_error.get("code") or provider_error.get("type") or "unknown"
+                error_message = str(provider_error.get("message") or "no provider message")[:240]
+            except Exception:
+                error_code = "unparseable_response"
+                error_message = response.text[:240].replace("\\n", " ")
             logger.warning(
-                "Realtime call rejected: status=%s body=%s",
+                "Realtime call rejected: status=%s code=%s message=%s",
                 response.status_code,
-                response.text[:500],
+                error_code,
+                error_message,
             )
-            raise HTTPException(status_code=502, detail="Realtime voice could not be started")
+            if response.status_code in (401, 403):
+                raise HTTPException(status_code=503, detail="Realtime voice credentials or account access need attention")
+            raise HTTPException(status_code=502, detail="Realtime voice could not be started; provider rejected the session")
 
         answer = response.text.strip()
         if not answer:
