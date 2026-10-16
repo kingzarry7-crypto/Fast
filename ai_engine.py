@@ -155,6 +155,7 @@ AGNES_VIDEO_POLL_INTERVAL = float(clean_env_str(os.getenv("AGNES_VIDEO_POLL_INTE
 FAL_KEY = clean_env_str(os.getenv("FAL_KEY") or os.getenv("FAL_API_KEY"))
 FAL_IMAGE_MODEL = clean_env_str(os.getenv("FAL_IMAGE_MODEL"), "fal-ai/flux/schnell")
 FAL_IMAGE_EDIT_MODEL = clean_env_str(os.getenv("FAL_IMAGE_EDIT_MODEL"), "fal-ai/flux-kontext-pro")
+FAL_VIDEO_MODEL = clean_env_str(os.getenv("FAL_VIDEO_MODEL"), "fal-ai/fast-svd/text-to-video")
 
 
 def _fal_image_request(model: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
@@ -198,13 +199,44 @@ def fal_generate_image(prompt: str, size: str = "1024x1024") -> Dict[str, Any]:
 def fal_edit_image(prompt: str, image_url: str) -> Dict[str, Any]:
     if not prompt or not str(prompt).strip():
         return {"success": False, "url": None, "error": "empty_prompt", "model": FAL_IMAGE_EDIT_MODEL}
-    if not isinstance(image_url, str) or not image_url.startswith(("https://", "http://")):
+    is_remote_url = isinstance(image_url, str) and image_url.startswith(("https://", "http://"))
+    is_image_data_uri = isinstance(image_url, str) and bool(
+        re.match(r"^data:image/(?:png|jpeg|jpg|webp);base64,", image_url, re.IGNORECASE)
+    )
+    if not (is_remote_url or is_image_data_uri):
         return {"success": False, "url": None, "error": "invalid_image_url", "model": FAL_IMAGE_EDIT_MODEL}
     return _fal_image_request(FAL_IMAGE_EDIT_MODEL, {
         "prompt": str(prompt).strip(),
         "image_url": image_url,
         "num_images": 1,
     })
+
+ 
+def fal_generate_video(prompt: str, aspect_ratio: str = "16:9") -> Dict[str, Any]:
+    """Generate a short text-to-video clip through fal.ai and normalize its result."""
+    model = FAL_VIDEO_MODEL
+    if not prompt or not str(prompt).strip():
+        return {"success": False, "url": None, "video_id": None, "error": "empty_prompt", "model": model}
+    if not FAL_KEY:
+        return {"success": False, "url": None, "video_id": None, "error": "fal_not_configured", "model": model}
+    try:
+        if not os.getenv("FAL_KEY"):
+            os.environ["FAL_KEY"] = FAL_KEY
+        import fal_client
+        result = fal_client.subscribe(
+            model,
+            arguments={"prompt": str(prompt).strip()},
+            with_logs=False,
+        )
+        video = result.get("video") if isinstance(result, dict) else None
+        url = video.get("url") if isinstance(video, dict) else None
+        if not url and isinstance(result, dict):
+            url = result.get("video_url") or result.get("url")
+        if not isinstance(url, str) or not url.startswith(("https://", "http://")):
+            return {"success": False, "url": None, "video_id": None, "error": "fal_response_missing_video_url", "model": model, "provider": "fal"}
+        return {"success": True, "url": url, "video_id": None, "error": None, "model": model, "provider": "fal"}
+    except Exception as exc:
+        return {"success": False, "url": None, "video_id": None, "error": _redact_secrets(str(exc))[:200], "model": model, "provider": "fal"}
 
 
 # =========================================================
@@ -2071,12 +2103,13 @@ class AIEngine:
             )
         agnes_ok = bool(AGNES_API_KEY)
         acedata_ok = bool(ACEDATA_API_KEY)
+        fal_ok = bool(FAL_KEY)
 
-        if not agnes_ok and not acedata_ok:
-            logger.warning("Media intent detected but neither AGNES_API_KEY nor ACEDATA_API_KEY is set")
+        if not agnes_ok and not acedata_ok and not fal_ok:
+            logger.warning("Media intent detected but AGNES_API_KEY, ACEDATA_API_KEY, and FAL_KEY are all unset")
             return (
                 "🎨 I'd love to make that for you, but image/video generation isn't configured on this server yet. "
-                "Ask the admin to set `AGNES_API_KEY` (primary) and/or `ACEDATA_API_KEY` (fallback) on Railway. "
+                "Ask the admin to set `AGNES_API_KEY`, `ACEDATA_API_KEY`, or `FAL_KEY` on Railway. "
                 "Meanwhile, I'm still here for trading, alerts, news, and chat."
             )
 
@@ -2090,6 +2123,8 @@ class AIEngine:
                         logger.warning(f"Agnes image generation failed ({result.get('error')}) - falling back to Ace Data Cloud")
                 if not result.get("success") and acedata_ok:
                     result = acedata_generate_image(prompt=intent["prompt"])
+                if not result.get("success") and fal_ok:
+                    result = fal_generate_image(prompt=intent["prompt"], size=intent.get("size", "1024x1024"))
                 if result.get("success") and result.get("url"):
                     url = result["url"]
                     provider = result.get("provider", "agnes")
@@ -2118,6 +2153,8 @@ class AIEngine:
                         logger.warning(f"Agnes image edit failed ({result.get('error')}) - falling back to Ace Data Cloud")
                 if not result.get("success") and acedata_ok:
                     result = acedata_edit_image(prompt=intent["prompt"], image_url=data_uri)
+                if not result.get("success") and fal_ok:
+                    result = fal_edit_image(prompt=intent["prompt"], image_url=data_uri)
                 if result.get("success") and result.get("url"):
                     url = result["url"]
                     provider = result.get("provider", "agnes")
@@ -2139,17 +2176,22 @@ class AIEngine:
                         used_provider = "agnes"
                     else:
                         logger.warning(f"Agnes video task creation failed ({task.get('error')}) - falling back to Ace Data Cloud")
-                if not (task.get("success") and task.get("video_id")) and acedata_ok:
+                if not (task.get("success") and (task.get("video_id") or task.get("url"))) and acedata_ok:
                     task = acedata_create_video(prompt=intent["prompt"], aspect_ratio=intent.get("aspect_ratio", "16:9"))
-                    if task.get("success"):
+                    if task.get("success") and (task.get("video_id") or task.get("url")):
                         used_provider = "acedata"
+                if not (task.get("success") and (task.get("video_id") or task.get("url"))) and fal_ok:
+                    task = fal_generate_video(prompt=intent["prompt"], aspect_ratio=intent.get("aspect_ratio", "16:9"))
+                    if task.get("success") and task.get("url"):
+                        used_provider = "fal"
                 if not task.get("success") or (not task.get("video_id") and not task.get("url")):
                     err = task.get("error") or "unknown_error"
                     logger.warning(f"Video task creation failed on all providers: {_redact_secrets(str(err))}")
                     return f"🎬 I couldn't start the video task ({err}). Try again in a moment."
-                if used_provider == "acedata" and task.get("url"):
+                if used_provider in ("acedata", "fal") and task.get("url"):
                     url = task["url"]
-                    reply = f"🎬 Your video is ready!\n\n[▶ Watch Video]({url})\n\n**Direct link:** {url}\n_Model: {ACEDATA_VIDEO_MODEL} (acedata)_"
+                    model_name = FAL_VIDEO_MODEL if used_provider == "fal" else ACEDATA_VIDEO_MODEL
+                    reply = f"🎬 Your video is ready!\n\n[▶ Watch Video]({url})\n\n**Direct link:** {url}\n_Model: {model_name} ({used_provider})_"
                     self._save_memory(user_id, prompt, f"[video generated] {url}")
                     return reply
                 video_id = task["video_id"]
@@ -2184,6 +2226,14 @@ class AIEngine:
                             reply = f"🎬 Your video is ready!\n\n[▶ Watch Video]({url})\n\n**Direct link:** {url}\n_Model: {ACEDATA_VIDEO_MODEL} (acedata fallback)_"
                             self._save_memory(user_id, prompt, f"[video generated] {url}")
                             return reply
+                if fal_ok and used_provider != "fal":
+                    logger.info("Configured primary video task failed; attempting fal.ai fallback")
+                    fal_fallback = fal_generate_video(prompt=intent["prompt"], aspect_ratio=intent.get("aspect_ratio", "16:9"))
+                    if fal_fallback.get("success") and fal_fallback.get("url"):
+                        url = fal_fallback["url"]
+                        reply = f"🎬 Your video is ready!\n\n[▶ Watch Video]({url})\n\n**Direct link:** {url}\n_Model: {FAL_VIDEO_MODEL} (fal)_"
+                        self._save_memory(user_id, prompt, f"[video generated] {url}")
+                        return reply
                 logger.warning(f"Video task failed on all providers: {_redact_secrets(str(err))}")
                 return f"🎬 The video task failed ({err}). Try again or shorten the prompt."
 
@@ -3148,7 +3198,9 @@ class AIEngine:
             "acedata": bool(ACEDATA_API_KEY),
             "acedata_image": ACEDATA_IMAGE_MODEL,
             "acedata_video": ACEDATA_VIDEO_MODEL,
-            "media_failover_active": bool(AGNES_API_KEY) and bool(ACEDATA_API_KEY),
+            "fal": bool(FAL_KEY),
+            "fal_video": FAL_VIDEO_MODEL,
+            "media_failover_active": sum(bool(x) for x in (AGNES_API_KEY, ACEDATA_API_KEY, FAL_KEY)) > 1,
             "tavily": bool(self._tavily_module and getattr(self._tavily_module, "is_tavily_configured", lambda: False)()),
             "gdelt": True,
             "gdelt_endpoint": GDELT_DOC_API_URL,
@@ -3193,8 +3245,14 @@ class AIEngine:
             if result.get("success"):
                 return result
         if ACEDATA_API_KEY:
-            return acedata_create_video(prompt=prompt, aspect_ratio=aspect_ratio)
-        return {"success": False, "video_id": None, "error": "no_provider_configured"}
+            result = acedata_create_video(prompt=prompt, aspect_ratio=aspect_ratio)
+            if result.get("success"):
+                return result
+        if FAL_KEY:
+            result = fal_generate_video(prompt=prompt, aspect_ratio=aspect_ratio)
+            if result.get("success"):
+                return result
+        return {"success": False, "video_id": None, "url": None, "error": "no_provider_succeeded"}
 
     def poll_video(self, video_id: str, max_wait: Optional[int] = None, provider: Optional[str] = None) -> Dict[str, Any]:
         if provider == "acedata":

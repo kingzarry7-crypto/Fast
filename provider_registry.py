@@ -68,16 +68,16 @@ KNOWN_PROVIDERS = {
     "fal": (
         "FAL AI",
         ["FAL_KEY", "FAL_API_KEY"],
-        ["image_generation", "video_generation"],
-        "partial",
-        "Image generation/editing now has an app-wide AIEngine fallback; Discord also has a video-generation path. Audio generation is not advertised as integrated, and live model/key access still needs verification.",
+        ["image_generation", "image_editing", "video_generation"],
+        "native",
+        "AIEngine supports image generation/editing and text-to-video fallback via FAL_VIDEO_MODEL; Discord has its own video path. Audio generation is not advertised as integrated, and live model/key access still needs verification.",
     ),
-    "agnes": ("Agnes AI", ["AGNES_API_KEY"], ["image_generation", "video_generation", "media_editing"], "native", "Media capability is already represented in the app."),
-    "acedata": ("AceData Cloud", ["ACEDATA_API_KEY"], ["image_generation", "video_generation"], "native", "Media capability is already represented in the app."),
+    "agnes": ("Agnes AI", ["AGNES_API_KEY"], ["image_generation", "image_editing", "video_generation"], "native", "Image generation/editing and video generation are wired; video-to-video editing is not advertised."),
+    "acedata": ("AceData Cloud", ["ACEDATA_API_KEY"], ["image_generation", "image_editing", "video_generation"], "native", "Image generation/editing and video generation are wired; video-to-video editing is not advertised."),
     "resend": (
         "Resend",
         ["RESEND_API_KEY"],
-        ["email_sending", "email_events", "contacts", "broadcasts", "domains", "webhooks", "inbound_email"],
+        ["email_sending", "broadcasts"],
         "native",
         "Resend is already called by api.py for account/workflow email and admin_email_broadcast.py for admin broadcasts; test real delivery and sender-domain configuration.",
     ),
@@ -138,17 +138,27 @@ def snapshot() -> Dict[str, Any]:
     providers = []
     for pid, (name, envs, skills, adapter, hint) in KNOWN_PROVIDERS.items():
         configured_keys = [e for e in envs if _env(e)]
-        if pid == "alpaca":
-            configured_by = configured_keys[0] if len(configured_keys) == len(envs) else None
+        # These providers require a credential pair. Other multi-name entries
+        # are aliases, where any one supported environment name is sufficient.
+        required_envs = envs if pid in ("shopify", "alpaca") else []
+        if required_envs:
+            if not configured_keys:
+                continue
+            missing = [key for key in required_envs if not _env(key)]
+            configured = not missing
+            configured_by = configured_keys[0]
         else:
             configured_by = configured_keys[0] if configured_keys else None
-        if not configured_by:
-            continue
+            if not configured_by:
+                continue
+            missing = []
+            configured = True
         providers.append({
             "id": pid,
             "name": name,
-            "configured": True,
+            "configured": configured,
             "env": configured_by,
+            "missing": missing,
             "adapter": adapter,
             "skills": list(skills),
             "needs_code": adapter not in ("native", "partial"),
@@ -217,7 +227,7 @@ def snapshot() -> Dict[str, Any]:
         "providers": providers,
         "service_credentials": service_credentials,
         "unknown_env_keys": unknown,
-        "configured_count": len(providers),
+        "configured_count": sum(1 for provider in providers if provider.get("configured", True)),
         "web_research": web_research,
         "universal_api_count": len(universal.get("providers", [])),
         "universal_api_tools": (
@@ -272,7 +282,12 @@ def format_admin_report(s: Dict[str, Any], first_run: bool = False) -> str:
         lines.append(f"🔌 Configured providers: <b>{s['configured_count']}</b>")
         for p in s["providers"]:
             skills = _skill_lines(p.get("skills", []))
-            if p.get("adapter") == "partial":
+            if not p.get("configured", True):
+                lines.append(f'🟠 <b>{p["name"]}</b> — credentials incomplete; provider not counted as configured')
+                if p.get("missing"):
+                    lines.append(f'   Missing: {", ".join(p["missing"])}')
+                lines.append(f'   Integration: {p.get("integration_hint", "Complete the required credentials before use.")}')
+            elif p.get("adapter") == "partial":
                 lines.append(f'🟠 <b>{p["name"]}</b> — partially wired; not all listed capabilities are available')
                 lines.append(f'   What it can do: <b>{p.get("what_it_can_do", skills)}</b>')
                 lines.append(f'   App status: partial integration; live request still needs verification')
