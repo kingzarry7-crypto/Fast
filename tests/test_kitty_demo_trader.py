@@ -22,6 +22,7 @@ class KittyDemoTraderSafetyTests(unittest.TestCase):
         self.env.start()
         with demo._settings_lock:
             demo._settings.update({"enabled": False, "order_btc": 0.0001, "max_notional_usd": 25.0})
+        demo._settings_loaded = False
 
     def tearDown(self):
         self.env.stop()
@@ -41,6 +42,36 @@ class KittyDemoTraderSafetyTests(unittest.TestCase):
             self.assertTrue(demo._trading_status()["ready"])
         with patch.dict(os.environ, {"TRADING_MODE": "live", "AGENT_TRADING_KILL_SWITCH": "false"}):
             self.assertFalse(demo._trading_status()["ready"])
+
+    def test_settings_survive_process_restart(self):
+        with patch.dict(os.environ, {"AGENT_TRADING_KILL_SWITCH": "false"}):
+            demo._init_db()
+            with demo._settings_lock:
+                demo._settings.update({"enabled": True, "order_btc": 0.0002, "max_notional_usd": 20.0})
+            demo._persist_settings()
+            with demo._settings_lock:
+                demo._settings.update({"enabled": False, "order_btc": 0.0001, "max_notional_usd": 25.0})
+            demo._settings_loaded = False
+            demo._restore_settings()
+        self.assertTrue(demo._settings["enabled"])
+        self.assertEqual(demo._settings["order_btc"], 0.0002)
+        self.assertEqual(demo._settings["max_notional_usd"], 20.0)
+
+    def test_startup_restores_enabled_worker_only_when_demo_ready(self):
+        with patch.dict(os.environ, {"AGENT_TRADING_KILL_SWITCH": "false"}):
+            demo._init_db()
+            with demo._settings_lock:
+                demo._settings.update({"enabled": True, "order_btc": 0.0001, "max_notional_usd": 25.0})
+            demo._persist_settings()
+            demo._settings_loaded = False
+            with patch.object(demo, "start_worker") as start_worker:
+                demo.initialize_worker()
+                start_worker.assert_called_once()
+        with patch.dict(os.environ, {"TRADING_MODE": "live", "AGENT_TRADING_KILL_SWITCH": "false"}):
+            demo._settings_loaded = False
+            with patch.object(demo, "start_worker") as start_worker:
+                demo.initialize_worker()
+                start_worker.assert_not_called()
 
 
 if __name__ == "__main__":
