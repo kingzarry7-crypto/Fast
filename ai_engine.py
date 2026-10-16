@@ -162,6 +162,10 @@ def _fal_image_request(model: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
     if not FAL_KEY:
         return {"success": False, "url": None, "error": "fal_not_configured", "model": model}
     try:
+        # fal-client reads FAL_KEY from the environment; normalize the supported
+        # FAL_API_KEY alias without logging or returning the credential.
+        if not os.getenv("FAL_KEY"):
+            os.environ["FAL_KEY"] = FAL_KEY
         import fal_client
         result = fal_client.subscribe(
             model,
