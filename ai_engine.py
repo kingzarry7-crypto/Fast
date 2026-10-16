@@ -115,14 +115,12 @@ CLOUDFLARE_AI_TOKEN = clean_env_str(os.getenv("CLOUDFLARE_AI_TOKEN"))
 AI_PROVIDER_TIMEOUT = max(8, int(clean_env_str(os.getenv("AI_PROVIDER_TIMEOUT"), "12")))
 AI_PROVIDER_RETRIES = max(0, int(clean_env_str(os.getenv("AI_PROVIDER_RETRIES"), "0")))
 
-XAI_API_KEY = clean_env_str(os.getenv("XAI_API_KEY") or os.getenv("GROQ_API_KEY"))
+# xAI must use its own credential. Never silently send a Groq key to xAI.
+XAI_API_KEY = clean_env_str(os.getenv("XAI_API_KEY"))
 XAI_MODEL = clean_env_str(os.getenv("XAI_MODEL") or os.getenv("GROK_MODEL"), "grok-4")
-XAI_URL = clean_env_str(os.getenv("XAI_BASE_URL") or os.getenv("GROQ_BASE_URL"), "https://api.x.ai/v1/chat/completions")
-if "x.ai" not in XAI_URL and XAI_API_KEY:
-    if "groq" not in XAI_URL.lower():
-        XAI_URL = "https://api.x.ai/v1/chat/completions"
-    else:
-        XAI_URL = clean_env_str(os.getenv("XAI_BASE_URL"), "https://api.x.ai/v1/chat/completions")
+XAI_URL = clean_env_str(os.getenv("XAI_BASE_URL"), "https://api.x.ai/v1/chat/completions")
+if "x.ai" not in XAI_URL.lower():
+    XAI_URL = "https://api.x.ai/v1/chat/completions"
 
 AI_PROVIDER = clean_env_str(os.getenv("AI_PROVIDER"), "AUTO").upper()
 
