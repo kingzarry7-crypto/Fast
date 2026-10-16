@@ -27,6 +27,7 @@ _worker: threading.Thread | None = None
 _stop = threading.Event()
 _settings_lock = threading.RLock()
 _settings: dict[str, Any] = {"enabled": False, "order_btc": 0.0001, "max_notional_usd": 25.0}
+_settings_loaded = False
 SYMBOL = "BTC/USD"
 TIMEFRAME = "1d"
 
@@ -83,10 +84,79 @@ def _init_db() -> None:
                     updated_at TEXT NOT NULL
                 );
                 INSERT OR IGNORE INTO kitty_demo_position(id,quantity,updated_at) VALUES(1,0,'');
+                CREATE TABLE IF NOT EXISTS kitty_demo_settings (
+                    id INTEGER PRIMARY KEY CHECK(id=1),
+                    enabled INTEGER NOT NULL DEFAULT 0,
+                    order_btc REAL NOT NULL DEFAULT 0.0001,
+                    max_notional_usd REAL NOT NULL DEFAULT 25.0,
+                    updated_at TEXT NOT NULL
+                );
             """)
             conn.commit()
         finally:
             conn.close()
+
+
+def _persist_settings() -> None:
+    """Persist the opt-in setting so a process restart does not silently disable Kitty."""
+    _init_db()
+    with _settings_lock:
+        values = (
+            1 if bool(_settings["enabled"]) else 0,
+            float(_settings["order_btc"]),
+            float(_settings["max_notional_usd"]),
+            datetime.now(timezone.utc).isoformat(),
+        )
+    with _lock:
+        conn = _connect()
+        try:
+            conn.execute(
+                """INSERT INTO kitty_demo_settings(id,enabled,order_btc,max_notional_usd,updated_at)
+                   VALUES(1,?,?,?,?)
+                   ON CONFLICT(id) DO UPDATE SET enabled=excluded.enabled,
+                   order_btc=excluded.order_btc,max_notional_usd=excluded.max_notional_usd,
+                   updated_at=excluded.updated_at""",
+                values,
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def _restore_settings() -> None:
+    """Load persisted settings once per process; keep safe defaults if none exist."""
+    global _settings_loaded
+    if _settings_loaded:
+        return
+    _init_db()
+    with _lock:
+        conn = _connect()
+        try:
+            row = conn.execute(
+                "SELECT enabled,order_btc,max_notional_usd FROM kitty_demo_settings WHERE id=1"
+            ).fetchone()
+        finally:
+            conn.close()
+    if row:
+        with _settings_lock:
+            _settings.update({
+                "enabled": bool(row["enabled"]),
+                "order_btc": float(row["order_btc"]),
+                "max_notional_usd": float(row["max_notional_usd"]),
+            })
+    _settings_loaded = True
+
+
+def initialize_worker() -> None:
+    """Restore the opt-in state on API startup and resume only in safe demo mode."""
+    _restore_settings()
+    with _settings_lock:
+        enabled = bool(_settings["enabled"])
+    if enabled and _trading_status()["ready"]:
+        start_worker()
+        logger.info("Kitty Binance Spot Demo worker restored from persisted settings")
+    elif enabled:
+        logger.warning("Kitty demo setting is enabled but startup checks are not ready; worker remains stopped")
 
 
 def _require_user(request: Request) -> None:
@@ -132,6 +202,7 @@ def _trading_status() -> dict:
 
 
 def status() -> dict:
+    _restore_settings()
     _init_db()
     cfg = _trading_status()
     with _lock:
@@ -160,6 +231,7 @@ def _json_or_empty(value: str) -> dict:
 
 def run_cycle() -> dict:
     """Evaluate one completed daily candle; submit at most one demo order per candle."""
+    _restore_settings()
     with _settings_lock:
         enabled = bool(_settings["enabled"])
         order_btc = float(_settings["order_btc"])
@@ -295,15 +367,15 @@ def get_settings(request: Request):
 @router.put("/settings")
 def update_settings(request: Request, body: DemoSettingsRequest):
     _require_user(request)
+    _restore_settings()
     if body.enabled and not body.acknowledge_experimental_model:
         raise HTTPException(status_code=422, detail="Acknowledge that Kitty is experimental and its training symbol is unconfirmed.")
+    if body.enabled and not _trading_status()["ready"]:
+        raise HTTPException(status_code=409, detail="Binance Spot Demo is not ready. Verify TRADING_MODE=demo, Binance Spot Demo API keys and AGENT_TRADING_KILL_SWITCH=false. Live trading remains disabled.")
     with _settings_lock:
         _settings.update({"enabled": body.enabled, "order_btc": body.order_btc, "max_notional_usd": body.max_notional_usd})
+    _persist_settings()
     if body.enabled:
-        if not _trading_status()["ready"]:
-            with _settings_lock:
-                _settings["enabled"] = False
-            raise HTTPException(status_code=409, detail="Binance Spot Demo is not ready. Verify TRADING_MODE=demo, Binance Spot Demo API keys and AGENT_TRADING_KILL_SWITCH=false. Live trading remains disabled.")
         start_worker()
         initial_cycle = run_cycle()
     else:
