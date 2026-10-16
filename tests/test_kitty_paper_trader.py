@@ -55,6 +55,20 @@ class KittyPaperTraderTests(unittest.TestCase):
         self.assertAlmostEqual(state["quantity"], 0.001)
         self.assertAlmostEqual(state["cash"], 10_000 - 0.001 * (50_000 + 43 * 100))
 
+    def test_runtime_controls_override_enabled_and_tuning(self):
+        with paper._runtime_lock:
+            paper._runtime_settings.update({"enabled": False, "order_btc": 0.002, "max_notional_usd": 250.0})
+        try:
+            self.assertFalse(paper._enabled())
+            self.assertAlmostEqual(paper._quantity(), 0.002)
+            self.assertAlmostEqual(paper._max_notional(), 250.0)
+            with paper._runtime_lock:
+                paper._runtime_settings["enabled"] = True
+            self.assertTrue(paper._enabled())
+        finally:
+            with paper._runtime_lock:
+                paper._runtime_settings.update({"enabled": None, "order_btc": None, "max_notional_usd": None})
+
     def test_disabled_flag_prevents_cycles(self):
         with patch.dict(os.environ, {"KITTY_PAPER_TRADING_ENABLED": "false"}):
             result = paper.run_cycle()
