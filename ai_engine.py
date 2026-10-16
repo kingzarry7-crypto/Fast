@@ -126,7 +126,7 @@ AI_PROVIDER = clean_env_str(os.getenv("AI_PROVIDER"), "AUTO").upper()
 
 # Hugging Face Inference Providers OpenAI-compatible endpoint for the custom Zarry model.
 HF_TOKEN = clean_env_str(os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_API_KEY"))
-HF_MODEL_ID = clean_env_str(os.getenv("HF_MODEL_ID"), "KINGZARRY3/zarry-coder-model")
+HF_MODEL_ID = clean_env_str(os.getenv("HF_MODEL_ID"), "openai/gpt-oss-120b:cheapest")
 HF_FALLBACK_MODEL_ID = clean_env_str(os.getenv("HF_FALLBACK_MODEL_ID"), "openai/gpt-oss-120b:cheapest")
 HF_INFERENCE_URL = clean_env_str(os.getenv("HF_INFERENCE_URL"), "https://router.huggingface.co/v1/chat/completions")
 
