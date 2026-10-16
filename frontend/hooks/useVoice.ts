@@ -210,7 +210,7 @@ export function useVoice() {
         };
         audio.onerror = () => {
           setSpeaking(false);
-          speakBrowser(clean, mode);
+          setError("ElevenLabs playback failed. Check the ElevenLabs API key and voice configuration, then try again.");
         };
         await audio.play();
       } catch (err) {
@@ -218,10 +218,10 @@ export function useVoice() {
           setSpeaking(false);
           return;
         }
-        speakBrowser(clean, mode);
+        setError(err instanceof Error ? `ElevenLabs voice failed: ${err.message}` : "ElevenLabs voice failed. Check the API key and voice configuration.");
       }
     },
-    [stop, speakBrowser]
+    [stop]
   );
 
   const startBrowserRecording = useCallback(async (onResult: (text: string) => void) => {
