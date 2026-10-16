@@ -22,7 +22,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 logger = logging.getLogger("king_zarry_kitty_paper")
-router = APIRouter(prefix="/api/kitty/paper", tags=["Kitty Paper Trading"])
+router = APIRouter(prefix="/paper", tags=["Kitty Paper Trading"])
 _lock = threading.RLock()
 _worker_lock = threading.Lock()
 _worker: threading.Thread | None = None
