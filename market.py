@@ -1177,9 +1177,27 @@ def _alpaca_get_candles(symbol: str, timeframe: str = "15m", outputsize: int = 1
     if not alpaca_tf:
         raise RuntimeError(f"Unsupported Alpaca timeframe: {timeframe}")
     limit = max(15, min(int(outputsize or 150), 1000))
+    # Alpaca defaults the query window to the current day. That yields only a
+    # handful of 15m/1h bars for a historical request, causing false provider
+    # failures. Request an explicit interval large enough for the desired bars.
+    interval_minutes = {
+        "1m": 1, "1min": 1, "5m": 5, "5min": 5,
+        "15m": 15, "15min": 15, "30m": 30, "30min": 30,
+        "1h": 60, "1hour": 60, "2h": 120, "2hour": 120,
+        "4h": 240, "4hour": 240, "1d": 1440, "1day": 1440,
+    }.get(tf, 15)
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(minutes=interval_minutes * (limit + 10))
     data = _alpaca_request(
         "/v1beta3/crypto/us/bars",
-        {"symbols": alpaca_symbol, "timeframe": alpaca_tf, "limit": limit, "sort": "asc"},
+        {
+            "symbols": alpaca_symbol,
+            "timeframe": alpaca_tf,
+            "start": start.isoformat().replace("+00:00", "Z"),
+            "end": end.isoformat().replace("+00:00", "Z"),
+            "limit": limit,
+            "sort": "asc",
+        },
     )
     bars_by_symbol = data.get("bars") or {}
     bars = bars_by_symbol.get(alpaca_symbol) or []
