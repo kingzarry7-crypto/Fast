@@ -137,7 +137,14 @@ def status() -> Dict[str, Any]:
         and not kill_switch
         and provider in {"auto", "binance", "oanda"}
     )
-    if mode not in {"paper", "live"}:
+    demo_ready = bool(
+        mode == "demo"
+        and enabled
+        and not kill_switch
+        and provider in {"auto", "binance"}
+        and bool(all(_binance_credentials()))
+    )
+    if mode not in {"paper", "demo", "live"}:
         mode = "paper"
     return {
         "mode": mode,
@@ -148,6 +155,8 @@ def status() -> Dict[str, Any]:
         "max_trades_per_day": max_trades,
         "approved_symbols": list(APPROVED_SYMBOLS),
         "live_ready": live_ready,
+        "demo_ready": demo_ready,
+        "demo_note": "Demo mode is isolated to the Binance Spot Demo API and never falls back to live.",
         "live_note": (
             "Live execution is disabled until TRADING_ENABLED=true, "
             "the kill switch is off, and supported credentials/provider are configured."
@@ -203,7 +212,19 @@ def _binance_request(
         query = f"{query}&signature={signature}"
     else:
         query = urllib.parse.urlencode(params)
-    url = f"https://api.binance.com{path}"
+    mode = (os.getenv("TRADING_MODE") or "paper").strip().lower()
+    configured_base = (os.getenv("BINANCE_API_URL") or "").strip().rstrip("/")
+    if mode == "demo":
+        base = configured_base or "https://demo-api.binance.com"
+        if base.endswith("/api"):
+            base = base[:-4]
+        if base != "https://demo-api.binance.com":
+            raise RuntimeError("TRADING_MODE=demo only permits https://demo-api.binance.com")
+    else:
+        base = "https://api.binance.com"
+        if configured_base and configured_base != base:
+            logger.warning("BINANCE_API_URL is ignored outside demo mode")
+    url = f"{base}{path}"
     if query:
         url += f"?{query}"
     headers = {"X-MBX-APIKEY": api_key} if api_key else {}
@@ -284,6 +305,17 @@ def get_account() -> Dict[str, Any]:
             "balance": _paper_balance(),
             "positions": positions,
         }
+    if mode == "demo":
+        if provider not in {"auto", "binance"}:
+            return {"mode": "demo", "provider": provider, "ready": False, "positions": []}
+        data = _binance_request("GET", "/api/v3/account", signed=True)
+        balances = [
+            {"asset": b.get("asset"), "free": b.get("free"), "locked": b.get("locked")}
+            for b in (data.get("balances") or [])
+            if float(b.get("free") or 0) != 0 or float(b.get("locked") or 0) != 0
+        ]
+        return {"mode": "demo", "provider": "binance_demo", "ready": True, "balances": balances}
+
     if not cfg["live_ready"]:
         return {"mode": "live", "provider": provider, "ready": False, "positions": []}
 
@@ -385,8 +417,29 @@ def place_market_order(symbol: str, side: str, quantity: float, price: Optional[
     if notional > float(cfg["max_notional"]):
         raise ValueError(f"order notional {notional:.2f} exceeds TRADING_MAX_NOTIONAL")
     if cfg["mode"] == "paper":
-        # Paper mode is isolated from live-account execution.
         return _paper_place(symbol, side, quantity, price)
+
+    if cfg["mode"] == "demo":
+        if cfg["kill_switch"]:
+            raise RuntimeError("Agent trading kill switch is ON")
+        if not cfg["demo_ready"]:
+            raise RuntimeError("Binance demo trading requires TRADING_ENABLED=true, kill switch off, and Binance credentials")
+        if _provider_for(symbol) != "binance":
+            raise RuntimeError("Demo mode supports Binance Spot Demo only")
+        market_symbol = _CRYPTO_BINANCE.get(symbol)
+        if not market_symbol:
+            raise RuntimeError(f"{symbol} is not supported by the Binance Spot Demo connector")
+        data = _binance_request("POST", "/api/v3/order", params={
+            "symbol": market_symbol, "side": side, "type": "MARKET",
+            "quantity": f"{quantity:.8f}".rstrip("0").rstrip("."),
+            "newOrderRespType": "FULL",
+        }, signed=True)
+        return {
+            "mode": "demo", "provider": "binance_demo",
+            "status": "FILLED" if data.get("status") == "FILLED" else str(data.get("status") or "ACCEPTED"),
+            "order_id": data.get("orderId"), "symbol": symbol, "side": side,
+            "quantity": quantity, "raw": data,
+        }
 
     if cfg["kill_switch"]:
         raise RuntimeError("Agent trading kill switch is ON")
