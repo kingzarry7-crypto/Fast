@@ -56,12 +56,12 @@ function cleanForSpeech(text: string): string {
 
 function pickVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
   if (!voices.length) return null;
+  // Bella is ElevenLabs' voice; when that service is unavailable, prefer a
+  // feminine English browser voice rather than the old male-first selection.
   return (
-    voices.find((v) =>
-      /daniel|google uk english male|microsoft david/i.test(v.name)
-    ) ||
-    voices.find((v) => /male/i.test(v.name) && v.lang.startsWith("en")) ||
-    voices.find((v) => v.lang.startsWith("en")) ||
+    voices.find((v) => /female|samantha|victoria|karen|moira|zira|aria|jenny|susan|google uk english female|google us english/i.test(v.name) && v.lang.toLowerCase().startsWith("en")) ||
+    voices.find((v) => v.lang.toLowerCase().startsWith("en") && !/male|daniel|david|guy|alex/i.test(v.name)) ||
+    voices.find((v) => v.lang.toLowerCase().startsWith("en")) ||
     voices[0] ||
     null
   );
