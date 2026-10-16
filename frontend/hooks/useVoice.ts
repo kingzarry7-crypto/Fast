@@ -178,16 +178,45 @@ export function useVoice() {
     setProvider("browser");
   }, []);
 
-  // Low-latency speech path for live voice calls.
-  // Browser speech starts as soon as the text arrives instead of waiting
-  // for a complete ElevenLabs audio file to download.
+  // Keep the low-latency entry point on the selected TTS voice too.
+  // Previously this always bypassed ElevenLabs and used a browser voice,
+  // which could sound male even when Bella was selected.
   const speakInstant = useCallback(
-    (text: string, overrideStyle?: VoiceStyle) => {
+    async (text: string, overrideStyle?: VoiceStyle) => {
       const clean = cleanForSpeech(text);
       if (!clean) return;
       const mode = overrideStyle || styleRef.current;
       stop();
-      speakBrowser(clean, mode);
+      const controller = new AbortController();
+      abortRef.current = controller;
+      try {
+        setSpeaking(true);
+        setProvider("elevenlabs");
+        const blob = await api.synthesizeSpeech(clean, mode, controller.signal, voiceRef.current);
+        if (controller.signal.aborted) return;
+        const url = URL.createObjectURL(blob);
+        objectUrlRef.current = url;
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        audio.onended = () => {
+          setSpeaking(false);
+          if (objectUrlRef.current) {
+            URL.revokeObjectURL(objectUrlRef.current);
+            objectUrlRef.current = null;
+          }
+        };
+        audio.onerror = () => {
+          setSpeaking(false);
+          speakBrowser(clean, mode);
+        };
+        await audio.play();
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          setSpeaking(false);
+          return;
+        }
+        speakBrowser(clean, mode);
+      }
     },
     [stop, speakBrowser]
   );
