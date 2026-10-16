@@ -68,9 +68,9 @@ KNOWN_PROVIDERS = {
     "fal": (
         "FAL AI",
         ["FAL_KEY", "FAL_API_KEY"],
-        ["image_generation", "video_generation"],
-        "partial",
-        "Image generation/editing now has an app-wide AIEngine fallback; Discord also has a video-generation path. Audio generation is not advertised as integrated, and live model/key access still needs verification.",
+        ["image_generation", "image_editing", "video_generation"],
+        "native",
+        "AIEngine supports image generation/editing and text-to-video fallback via FAL_VIDEO_MODEL; Discord has its own video path. Audio generation is not advertised as integrated, and live model/key access still needs verification.",
     ),
     "agnes": ("Agnes AI", ["AGNES_API_KEY"], ["image_generation", "video_generation", "media_editing"], "native", "Media capability is already represented in the app."),
     "acedata": ("AceData Cloud", ["ACEDATA_API_KEY"], ["image_generation", "video_generation"], "native", "Media capability is already represented in the app."),
