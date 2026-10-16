@@ -90,6 +90,56 @@ class FalMediaAdapterTests(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertEqual(result["error"], "fal_response_missing_video_url")
 
+    def test_shared_media_router_uses_fal_when_video_providers_are_unavailable(self):
+        engine = ai_engine.AIEngine.__new__(ai_engine.AIEngine)
+        engine._save_memory = lambda *args, **kwargs: None
+        with patch.object(ai_engine, "AGNES_API_KEY", ""), patch.object(
+            ai_engine, "ACEDATA_API_KEY", ""
+        ), patch.object(ai_engine, "FAL_KEY", "test-key"), patch.object(
+            ai_engine, "fal_generate_video",
+            return_value={
+                "success": True,
+                "url": "https://cdn.example.test/fallback.mp4",
+                "model": "fal-test-model",
+                "provider": "fal",
+            },
+        ) as generate:
+            reply = engine._route_media_request(
+                "user-1",
+                "make a video of a forest",
+                {"kind": "video", "prompt": "a forest moving in the wind"},
+                None,
+            )
+
+        self.assertIn("https://cdn.example.test/fallback.mp4", reply)
+        self.assertIn("(fal)", reply)
+        generate.assert_called_once()
+
+    def test_shared_media_router_uses_fal_when_image_providers_are_unavailable(self):
+        engine = ai_engine.AIEngine.__new__(ai_engine.AIEngine)
+        engine._save_memory = lambda *args, **kwargs: None
+        with patch.object(ai_engine, "AGNES_API_KEY", ""), patch.object(
+            ai_engine, "ACEDATA_API_KEY", ""
+        ), patch.object(ai_engine, "FAL_KEY", "test-key"), patch.object(
+            ai_engine, "fal_generate_image",
+            return_value={
+                "success": True,
+                "url": "https://cdn.example.test/fallback.png",
+                "model": "fal-test-model",
+                "provider": "fal",
+            },
+        ) as generate:
+            reply = engine._route_media_request(
+                "user-1",
+                "make an image of a forest",
+                {"kind": "image", "prompt": "a forest"},
+                None,
+            )
+
+        self.assertIn("https://cdn.example.test/fallback.png", reply)
+        self.assertIn("(fal)", reply)
+        generate.assert_called_once()
+
 
 class ProviderCredentialClassificationTests(unittest.TestCase):
     def test_groq_key_does_not_make_xai_appear_configured(self):
