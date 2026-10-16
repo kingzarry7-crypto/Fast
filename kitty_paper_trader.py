@@ -400,8 +400,10 @@ def update_paper_settings(request: Request, body: KittyPaperSettingsRequest):
         _runtime_settings["enabled"] = body.enabled
         _runtime_settings["order_btc"] = body.order_btc
         _runtime_settings["max_notional_usd"] = body.max_notional_usd
+    initial_cycle = None
     if body.enabled:
         start_worker()
+        initial_cycle = run_cycle()
     return {
         "status": "success",
         "enabled": _enabled(),
@@ -409,6 +411,7 @@ def update_paper_settings(request: Request, body: KittyPaperSettingsRequest):
         "order_btc": _quantity(),
         "max_notional_usd": _max_notional(),
         "broker_orders_enabled": False,
+        "initial_cycle": initial_cycle,
         "message": "Kitty paper settings updated. This does not submit Binance demo or live orders.",
     }
 
