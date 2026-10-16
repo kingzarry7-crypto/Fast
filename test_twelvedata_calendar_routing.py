@@ -32,6 +32,10 @@ class TwelveDataCalendarRoutingTests(unittest.TestCase):
         self.assertNotIn("twelvedata", status["calendar_keyed_configured"])
         self.assertNotIn("twelvedata", status["calendar_configured"])
 
+    def test_explicit_twelvedata_event_fetch_fails_without_network_request(self):
+        with self.assertRaisesRegex(RuntimeError, "not a supported macroeconomic-calendar provider"):
+            news.get_economic_events(provider="TWELVEDATA")
+
 
 if __name__ == "__main__":
     unittest.main()
