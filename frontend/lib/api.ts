@@ -768,6 +768,33 @@ export async function saveChatBehaviorPreferences(
   );
 }
 
+export type KittyPaperSettings = {
+  status?: string;
+  enabled: boolean;
+  mode: "paper_only";
+  order_btc: number;
+  max_notional_usd: number;
+  poll_seconds?: number;
+  broker_orders_enabled: false;
+  settings_persistence?: string;
+  message?: string;
+};
+
+export async function getKittyPaperSettings(signal?: AbortSignal): Promise<KittyPaperSettings> {
+  return request<KittyPaperSettings>("/api/kitty/paper/settings", { method: "GET", signal });
+}
+
+export async function saveKittyPaperSettings(
+  settings: Pick<KittyPaperSettings, "enabled" | "order_btc" | "max_notional_usd">,
+  signal?: AbortSignal,
+): Promise<KittyPaperSettings> {
+  return request<KittyPaperSettings>("/api/kitty/paper/settings", {
+    method: "PUT",
+    body: settings,
+    signal,
+  });
+}
+
 export async function createMemoryLinkCode(signal?: AbortSignal) {
   return request<{ status?: string; code: string; expires_in_minutes: number; instructions?: string }>(
     "/api/memory/link-code",
@@ -803,7 +830,7 @@ export const api = {
   getMarkets, getMarketDetail, getSignals, getNews,
   getAgentStatus, runAgentGoal, generateMorningBrief, getLatestMorningBrief, listAgentJobs, approveAgentJob,
   getAgentLearning, getAgentV2, getAgentIntelligence, getAgentPreferences, updateAgentPreferences,
-  getAgentActionStatus, listAgentActions, approveAgentAction, getKZAgentStatus, transcribeAudio,
+  getAgentActionStatus, listAgentActions, approveAgentAction, getKZAgentStatus, transcribeAudio, getKittyPaperSettings, saveKittyPaperSettings,
 };
 
 export type { AuthUser, AuthResponse, MeResponse, ChatResponse, ApiErrorData } from "@/types";
