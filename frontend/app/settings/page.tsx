@@ -268,7 +268,7 @@ export default function SettingsPage() {
               <section className="kz-panel p-5 sm:p-6">
                 <SectionTitle title="KITTY V3" subtitle="PAPER TRADING · RESEARCH CONTROLS" />
                 <p className="mt-3 text-xs leading-relaxed text-cyan-100/55">
-                  These controls start or pause Kitty's simulated BTC/USD paper trader and tune its simulated order size. They do not place Binance Demo or live orders.
+                  These controls start or pause Kitty&apos;s simulated BTC/USD paper trader and tune its simulated order size. They do not place Binance Demo or live orders.
                 </p>
                 {kittyLoading && <p className="mt-4 text-xs text-cyan-200/60">Loading Kitty settings…</p>}
                 {kittyError && <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-amber-200/80">{kittyError}</div>}
@@ -307,7 +307,7 @@ export default function SettingsPage() {
                       {kittyNotice && <span className="text-xs text-emerald-300">{kittyNotice}</span>}
                     </div>
                     <p className="mt-3 text-[10px] leading-relaxed text-amber-200/60">
-                      Tuning currently applies to this running backend process and resets on a backend restart unless environment defaults are also updated. Kitty V3's training symbol is not yet confirmed, so keep this in paper mode while validating the model.
+                      Tuning currently applies to this running backend process and resets on a backend restart unless environment defaults are also updated. Kitty V3&apos;s training symbol is not yet confirmed, so keep this in paper mode while validating the model.
                     </p>
                   </>
                 )}
