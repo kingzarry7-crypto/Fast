@@ -9,7 +9,7 @@ Separated:
   CALENDAR_PROVIDER = economic calendar providers
 
 Headline order AUTO: Currents -> NewsData -> NewsAPI -> EODHD (fallback)
-Calendar order AUTO: EODHD -> TradingEconomics -> Finnhub -> TwelveData -> ForexFactory
+Calendar order AUTO: EODHD -> TradingEconomics -> Finnhub -> ForexFactory
 
 Env:
   NEWS_PROVIDER=AUTO
@@ -106,14 +106,12 @@ def provider_status() -> Dict[str, Any]:
         "eodhd": bool(EODHD_API_KEY),
         "tradingeconomics": bool(TRADING_ECONOMICS_API_KEY),
         "finnhub": bool(FINNHUB_API_KEY),
-        "twelvedata": bool(TWELVE_DATA_API_KEY),
     }
     # Full config including public fallback
     calendar_configured = {
         "eodhd": bool(EODHD_API_KEY),
         "tradingeconomics": bool(TRADING_ECONOMICS_API_KEY),
         "finnhub": bool(FINNHUB_API_KEY),
-        "twelvedata": bool(TWELVE_DATA_API_KEY),
         "forexfactory": True,  # public no-key fallback - exists, but not proof of working
     }
 
@@ -430,24 +428,11 @@ def get_tradingeconomics_events(start_date=None, end_date=None) -> List[Dict[str
     return [normalize_event(event, "TRADINGECONOMICS") for event in events if isinstance(event, dict)]
 
 def get_twelvedata_events(start_date=None, end_date=None) -> List[Dict[str, Any]]:
-    if not TWELVE_DATA_API_KEY:
-        raise RuntimeError("TWELVE_DATA_API_KEY is missing.")
-    response = requests.get(f"{TWELVE_DATA_URL}/calendar", params={"apikey": TWELVE_DATA_API_KEY, "interval": "1day"}, timeout=20)
-    if response.status_code != 200:
-        raise RuntimeError(f"TwelveData HTTP {response.status_code}: {response.text[:500]}")
-    data = response.json()
-    cal_events = data.get("calendar") or data.get("events") or []
-    normalized = []
-    for ev in cal_events[:30]:
-        if not isinstance(ev, dict):
-            continue
-        event_time = ev.get("datetime")
-        if event_time is None:
-            event_time = ev.get("date")
-        if event_time is None:
-            event_time = ""
-        normalized.append(normalize_event({"event": ev.get("event") or ev.get("name") or "Economic Event", "country": ev.get("country") or "", "currency": ev.get("currency") or "USD", "date": event_time, "impact": ev.get("importance") or ev.get("impact") or "Medium", "actual": ev.get("actual") if ev.get("actual") is not None else None, "forecast": ev.get("forecast") if ev.get("forecast") is not None else None, "previous": ev.get("previous") if ev.get("previous") is not None else None}, "TWELVEDATA"))
-    return normalized
+    """Deprecated compatibility stub: Twelve Data has no macroeconomic /calendar endpoint."""
+    raise RuntimeError(
+        "Twelve Data does not provide the /calendar macroeconomic endpoint; "
+        "it must not be used as an economic-calendar provider."
+    )
 
 def get_forexfactory_events() -> List[Dict[str, Any]]:
     try:
@@ -475,7 +460,7 @@ def get_forexfactory_events() -> List[Dict[str, Any]]:
 
 def get_available_calendar_provider() -> str:
     effective_provider = CALENDAR_PROVIDER
-    if effective_provider == "AUTO" and NEWS_PROVIDER in ["EODHD", "TRADINGECONOMICS", "FINNHUB", "TWELVEDATA", "FOREXFACTORY"]:
+    if effective_provider == "AUTO" and NEWS_PROVIDER in ["EODHD", "TRADINGECONOMICS", "FINNHUB", "FOREXFACTORY"]:
         effective_provider = NEWS_PROVIDER
     if effective_provider != "AUTO":
         if effective_provider == "EODHD" and EODHD_API_KEY:
@@ -484,8 +469,8 @@ def get_available_calendar_provider() -> str:
             return "TRADINGECONOMICS"
         if effective_provider == "FINNHUB" and FINNHUB_API_KEY:
             return "FINNHUB"
-        if effective_provider == "TWELVEDATA" and TWELVE_DATA_API_KEY:
-            return "TWELVEDATA"
+        if effective_provider == "TWELVEDATA":
+            raise RuntimeError("Twelve Data is not a supported macroeconomic-calendar provider; use it for market data only.")
         if effective_provider == "FOREXFACTORY":
             return "FOREXFACTORY"
         if effective_provider not in ["FOREXFACTORY"]:
@@ -496,8 +481,6 @@ def get_available_calendar_provider() -> str:
         return "TRADINGECONOMICS"
     if FINNHUB_API_KEY:
         return "FINNHUB"
-    if TWELVE_DATA_API_KEY:
-        return "TWELVEDATA"
     return "FOREXFACTORY"
 
 def get_available_provider() -> str:
@@ -549,8 +532,6 @@ def get_economic_events(days: int = 7, provider: Optional[str] = None) -> List[D
             providers.append("TRADINGECONOMICS")
         if FINNHUB_API_KEY:
             providers.append("FINNHUB")
-        if TWELVE_DATA_API_KEY:
-            providers.append("TWELVEDATA")
         providers.append("FOREXFACTORY")
         if provider and provider in providers:
             providers = [provider] + [p for p in providers if p != provider]
@@ -569,8 +550,6 @@ def get_economic_events(days: int = 7, provider: Optional[str] = None) -> List[D
                 events = get_finnhub_events(start_date, end_date)
             elif current_provider == "TRADINGECONOMICS":
                 events = get_tradingeconomics_events(start_date, end_date)
-            elif current_provider == "TWELVEDATA":
-                events = get_twelvedata_events(start_date, end_date)
             elif current_provider == "FOREXFACTORY":
                 events = get_forexfactory_events()
                 if not events:
@@ -958,7 +937,7 @@ class NewsEngineSingleton:
                     logger.warning(f"NEWS_PROVIDER={NEWS_PROVIDER} not configured, fallback AUTO")
                     return configured
             else:
-                if NEWS_PROVIDER in ["EODHD", "TRADINGECONOMICS", "FINNHUB", "TWELVEDATA", "FOREXFACTORY"]:
+                if NEWS_PROVIDER in ["EODHD", "TRADINGECONOMICS", "FINNHUB", "FOREXFACTORY"]:
                     logger.info(f"NEWS_PROVIDER={NEWS_PROVIDER} is calendar provider, using AUTO for headlines")
                     return configured
                 logger.warning(f"Unknown NEWS_PROVIDER={NEWS_PROVIDER}, using AUTO")
@@ -1225,7 +1204,6 @@ def news_health() -> Dict[str, Any]:
             bool(EODHD_API_KEY),
             bool(TRADING_ECONOMICS_API_KEY),
             bool(FINNHUB_API_KEY),
-            bool(TWELVE_DATA_API_KEY),
         ])
         # ForexFactory considered configured (no key) but not necessarily working
         forex_configured = True  # public endpoint exists
