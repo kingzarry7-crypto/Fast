@@ -495,7 +495,7 @@ def get_available_provider() -> str:
     It explicitly documents that it resolves CALENDAR provider, not headline provider.
     New code should use get_available_calendar_provider() directly.
 
-    Returns: calendar provider name (EODHD, TRADINGECONOMICS, FINNHUB, TWELVEDATA, FOREXFACTORY)
+    Returns: calendar provider name (EODHD, TRADINGECONOMICS, FINNHUB, FOREXFACTORY)
     """
     try:
         return get_available_calendar_provider()
@@ -514,8 +514,6 @@ def get_available_provider() -> str:
             return "TRADINGECONOMICS"
         if FINNHUB_API_KEY:
             return "FINNHUB"
-        if TWELVE_DATA_API_KEY:
-            return "TWELVEDATA"
         return "FOREXFACTORY"
 
 def get_economic_events(days: int = 7, provider: Optional[str] = None) -> List[Dict[str, Any]]:
