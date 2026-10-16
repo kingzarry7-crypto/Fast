@@ -357,3 +357,10 @@ def paper_cycle():
     except Exception as exc:
         logger.exception("Kitty paper cycle failed")
         raise HTTPException(status_code=503, detail="Paper cycle failed: " + type(exc).__name__)
+
+
+@router.on_event("startup")
+def _start_paper_worker_on_api_startup() -> None:
+    # FastAPI starts this only when the router is mounted; opt-out is explicit.
+    # The worker only writes to the isolated paper ledger and never submits broker orders.
+    start_worker()
