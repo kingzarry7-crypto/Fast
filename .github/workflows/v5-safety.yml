@@ -41,6 +41,6 @@ jobs:
       - name: Install backend test dependencies
         run: python -m pip install "openai==1.54.4" "fastapi==0.142.4" "requests==2.33.0"
       - name: Test Coding Agent routing and provider configuration
-        run: python -m unittest test_coding_request test_llm_client test_fal_media_adapter test_alpaca_bars_window test_twelvedata_calendar_routing -v
+        run: python -m unittest test_coding_request test_llm_client test_fal_media_adapter test_alpaca_bars_window test_twelvedata_calendar_routing test_calendar_live_health_status -v
       - name: Test Zarry streaming project context
         run: python -m unittest test_streaming_chat_context -v
