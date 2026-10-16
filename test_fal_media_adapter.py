@@ -51,6 +51,45 @@ class FalMediaAdapterTests(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertEqual(result["error"], "fal_response_missing_image_url")
 
+    def test_video_generation_returns_valid_video_url(self):
+        fake_client = types.SimpleNamespace(
+            subscribe=lambda model, arguments, with_logs=False: {
+                "video": {"url": "https://cdn.example.test/generated.mp4"}
+            }
+        )
+        with patch.object(ai_engine, "FAL_KEY", "test-key"), patch.dict(
+            sys.modules, {"fal_client": fake_client}
+        ):
+            result = ai_engine.fal_generate_video("a river flowing through a forest")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["url"], "https://cdn.example.test/generated.mp4")
+        self.assertEqual(result["provider"], "fal")
+
+    def test_missing_fal_key_does_not_call_video_provider(self):
+        fake_client = types.SimpleNamespace(
+            subscribe=lambda *args, **kwargs: self.fail("fal client must not be called")
+        )
+        with patch.object(ai_engine, "FAL_KEY", "") , patch.dict(
+            sys.modules, {"fal_client": fake_client}
+        ):
+            result = ai_engine.fal_generate_video("a river flowing through a forest")
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"], "fal_not_configured")
+
+    def test_malformed_fal_video_response_is_not_reported_as_success(self):
+        fake_client = types.SimpleNamespace(
+            subscribe=lambda model, arguments, with_logs=False: {"video": {}}
+        )
+        with patch.object(ai_engine, "FAL_KEY", "test-key"), patch.dict(
+            sys.modules, {"fal_client": fake_client}
+        ):
+            result = ai_engine.fal_generate_video("a river flowing through a forest")
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"], "fal_response_missing_video_url")
+
 
 class ProviderCredentialClassificationTests(unittest.TestCase):
     def test_groq_key_does_not_make_xai_appear_configured(self):
