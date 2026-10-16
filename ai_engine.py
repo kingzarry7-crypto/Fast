@@ -199,7 +199,11 @@ def fal_generate_image(prompt: str, size: str = "1024x1024") -> Dict[str, Any]:
 def fal_edit_image(prompt: str, image_url: str) -> Dict[str, Any]:
     if not prompt or not str(prompt).strip():
         return {"success": False, "url": None, "error": "empty_prompt", "model": FAL_IMAGE_EDIT_MODEL}
-    if not isinstance(image_url, str) or not image_url.startswith(("https://", "http://")):
+    is_remote_url = isinstance(image_url, str) and image_url.startswith(("https://", "http://"))
+    is_image_data_uri = isinstance(image_url, str) and bool(
+        re.match(r"^data:image/(?:png|jpeg|jpg|webp);base64,", image_url, re.IGNORECASE)
+    )
+    if not (is_remote_url or is_image_data_uri):
         return {"success": False, "url": None, "error": "invalid_image_url", "model": FAL_IMAGE_EDIT_MODEL}
     return _fal_image_request(FAL_IMAGE_EDIT_MODEL, {
         "prompt": str(prompt).strip(),
@@ -2102,7 +2106,7 @@ class AIEngine:
         fal_ok = bool(FAL_KEY)
 
         if not agnes_ok and not acedata_ok and not fal_ok:
-            logger.warning("Media intent detected but neither AGNES_API_KEY nor ACEDATA_API_KEY is set")
+            logger.warning("Media intent detected but AGNES_API_KEY, ACEDATA_API_KEY, and FAL_KEY are all unset")
             return (
                 "🎨 I'd love to make that for you, but image/video generation isn't configured on this server yet. "
                 "Ask the admin to set `AGNES_API_KEY`, `ACEDATA_API_KEY`, or `FAL_KEY` on Railway. "
