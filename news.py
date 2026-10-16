@@ -126,8 +126,10 @@ def provider_status() -> Dict[str, Any]:
     # True only if:
     #   - at least one keyed provider configured, OR
     #   - engine cache has recent successful calendar data (proving fallback actually produced usable data)
-    calendar_available = has_keyed_calendar  # base: keyed provider configured
-    # If no keyed provider, check cache for evidence that fallback produced usable data
+    # Credentials prove configuration only, not that a provider accepted them or
+    # returned usable data. Report calendar availability only after a recent
+    # successful fetch has populated the cache with real events.
+    calendar_available = False
     if not calendar_available:
         try:
             engine = NewsEngineSingleton._instance
