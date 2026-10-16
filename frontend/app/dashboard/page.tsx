@@ -129,7 +129,7 @@ export default function DashboardPage() {
                     <p className="mt-1 text-xs leading-relaxed text-zinc-500">Your tools and workspace, kept out of the way until you need them.</p>
                   </div>
                   <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                    {EXPLORE.map(item => <Link key={item.href} href={item.href} onClick={() => setExploreOpen(false)}
+                    {EXPLORE.map(item => <Link key={item.href} href={item.href} target={item.href === "/social-booster" ? "_blank" : undefined} rel={item.href === "/social-booster" ? "noopener noreferrer" : undefined} onClick={() => setExploreOpen(false)}
                       className="flex items-start gap-3 rounded-xl p-3 transition hover:bg-white/[0.06]">
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-base text-cyan-200">{item.icon}</span>
                       <span className="min-w-0"><span className="block text-sm font-medium text-zinc-100">{item.label}</span><span className="mt-1 block text-[11px] leading-relaxed text-zinc-500">{item.detail}</span></span>
