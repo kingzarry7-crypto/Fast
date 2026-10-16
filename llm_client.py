@@ -25,7 +25,7 @@ PROVIDERS = [
     ("chutes", "CHUTES_API_KEY", "https://llm.chutes.ai/v1", "CHUTES_MODEL", "google/gemma-4-31B-turbo-TEE", "CHUTES_URL"),
     ("openrouter", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1", "OPENROUTER_MODEL", "openrouter/free", "OPENROUTER_BASE_URL"),
     ("cloudflare", "CLOUDFLARE_AI_TOKEN", "https://kingzarry-ai-inference.kingzarry7.workers.dev/v1", "CLOUDFLARE_AI_MODEL", "@cf/meta/llama-3.3-70b-instruct-fp8-fast", "CLOUDFLARE_AI_URL"),
-    ("huggingface", "HF_TOKEN", "https://router.huggingface.co/v1", "HF_MODEL_ID", "KINGZARRY3/zarry-coder-model", "HF_INFERENCE_URL"),
+    ("huggingface", "HF_TOKEN", "https://router.huggingface.co/v1", "HF_MODEL_ID", "openai/gpt-oss-120b:cheapest", "HF_INFERENCE_URL"),
 ]
 HF_ROUTER_BASE_URL = "https://router.huggingface.co/v1"
 DEFAULT_HF_FALLBACK_MODEL = "openai/gpt-oss-120b:cheapest"
