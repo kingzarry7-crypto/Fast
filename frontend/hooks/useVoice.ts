@@ -54,26 +54,13 @@ function cleanForSpeech(text: string): string {
     .slice(0, 2000);
 }
 
-function pickVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
-  if (!voices.length) return null;
-  // Bella is ElevenLabs' voice; when that service is unavailable, prefer a
-  // feminine English browser voice rather than the old male-first selection.
-  return (
-    voices.find((v) => /female|samantha|victoria|karen|moira|zira|aria|jenny|susan|google uk english female|google us english/i.test(v.name) && v.lang.toLowerCase().startsWith("en")) ||
-    voices.find((v) => v.lang.toLowerCase().startsWith("en") && !/male|daniel|david|guy|alex/i.test(v.name)) ||
-    voices.find((v) => v.lang.toLowerCase().startsWith("en")) ||
-    voices[0] ||
-    null
-  );
-}
-
 export function useVoice() {
   const [speaking, setSpeaking] = useState(false);
   const [listening, setListening] = useState(false);
   const [supported, setSupported] = useState(true);
   const [style, setStyle] = useState<VoiceStyle>("human");
   const [voiceCharacter, setVoiceCharacter] = useState<TtsVoice>("bella");
-  const [provider, setProvider] = useState<"elevenlabs" | "browser">("elevenlabs");
+  const [provider, setProvider] = useState<"elevenlabs">("elevenlabs");
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -88,15 +75,7 @@ export function useVoice() {
   voiceRef.current = voiceCharacter;
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
     setSupported(true);
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.getVoices();
-      const onVoices = () => window.speechSynthesis.getVoices();
-      window.speechSynthesis.addEventListener("voiceschanged", onVoices);
-      return () =>
-        window.speechSynthesis.removeEventListener("voiceschanged", onVoices);
-    }
   }, []);
 
   useEffect(() => {
@@ -114,10 +93,9 @@ export function useVoice() {
       const saved = localStorage.getItem("kz_voice_style") as VoiceStyle | null;
       if (saved && RATE_MAP[saved] != null) setStyle(saved);
       const savedVoice = localStorage.getItem("kz_voice_character") as TtsVoice | null;
-      if (savedVoice === "bella" || savedVoice === "male") {
-        setVoiceCharacter(savedVoice);
-        voiceRef.current = savedVoice;
-      }
+      setVoiceCharacter("bella");
+      voiceRef.current = "bella";
+      try { localStorage.setItem("kz_voice_character", "bella"); } catch { /* ignore */ }
     } catch {
       /* ignore */
     }
@@ -133,14 +111,10 @@ export function useVoice() {
     }
   }, []);
 
-  const setVoice = useCallback((v: TtsVoice) => {
-    setVoiceCharacter(v);
-    voiceRef.current = v;
-    try {
-      localStorage.setItem("kz_voice_character", v);
-    } catch {
-      /* ignore */
-    }
+  const setVoice = useCallback((_v: TtsVoice) => {
+    setVoiceCharacter("bella");
+    voiceRef.current = "bella";
+    try { localStorage.setItem("kz_voice_character", "bella"); } catch { /* ignore */ }
   }, []);
 
   const stop = useCallback(() => {
@@ -161,23 +135,6 @@ export function useVoice() {
     setSpeaking(false);
   }, []);
 
-  const speakBrowser = useCallback((text: string, mode: VoiceStyle) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = RATE_MAP[mode] ?? 1;
-    utterance.pitch = PITCH_MAP[mode] ?? 1;
-    utterance.volume = 1;
-    utterance.lang = "en-US";
-    const preferred = pickVoice(window.speechSynthesis.getVoices());
-    if (preferred) utterance.voice = preferred;
-    utterance.onstart = () => setSpeaking(true);
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => setSpeaking(false);
-    window.speechSynthesis.speak(utterance);
-    setProvider("browser");
-  }, []);
-
   // Keep the low-latency entry point on the selected TTS voice too.
   // Previously this always bypassed ElevenLabs and used a browser voice,
   // which could sound male even when Bella was selected.
@@ -192,7 +149,7 @@ export function useVoice() {
       try {
         setSpeaking(true);
         setProvider("elevenlabs");
-        const blob = await api.synthesizeSpeech(clean, mode, controller.signal, voiceRef.current);
+        const blob = await api.synthesizeSpeech(clean, mode, controller.signal, "bella");
         if (controller.signal.aborted) return;
         const url = URL.createObjectURL(blob);
         objectUrlRef.current = url;
@@ -207,7 +164,7 @@ export function useVoice() {
         };
         audio.onerror = () => {
           setSpeaking(false);
-          speakBrowser(clean, mode);
+          setError("ElevenLabs playback failed. Check the ElevenLabs API key and voice configuration, then try again.");
         };
         await audio.play();
       } catch (err) {
@@ -215,10 +172,10 @@ export function useVoice() {
           setSpeaking(false);
           return;
         }
-        speakBrowser(clean, mode);
+        setError(err instanceof Error ? `ElevenLabs voice failed: ${err.message}` : "ElevenLabs voice failed. Check the API key and voice configuration.");
       }
     },
-    [stop, speakBrowser]
+    [stop]
   );
 
   const speak = useCallback(
@@ -238,7 +195,7 @@ export function useVoice() {
           clean,
           mode,
           abortRef.current.signal,
-          voiceRef.current
+          "bella"
         );
         const url = URL.createObjectURL(blob);
         objectUrlRef.current = url;
