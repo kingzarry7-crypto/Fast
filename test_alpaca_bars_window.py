@@ -36,5 +36,20 @@ class AlpacaBarsWindowTests(unittest.TestCase):
         self.assertEqual(params["sort"], "asc")
 
 
+    def test_unsupported_bnb_skips_alpaca_and_uses_fallback(self):
+        candles = [{"datetime": "2026-10-16T00:00:00Z", "open": "1", "high": "1", "low": "1", "close": "1", "volume": "1"}] * 15
+        with (
+            patch.object(market, "_should_try_alpaca_market_data", return_value=True),
+            patch.object(market, "_alpaca_get_candles") as alpaca,
+            patch.object(market, "_should_try_massive_market_data", return_value=False),
+            patch.object(market, "binance_pair", return_value="BNBUSDT"),
+            patch.object(market, "_binance_get_candles", return_value=candles),
+        ):
+            result = market.get_candles("BNB/USD", "15m", 15)
+
+        alpaca.assert_not_called()
+        self.assertEqual(len(result), 15)
+
+
 if __name__ == "__main__":
     unittest.main()
