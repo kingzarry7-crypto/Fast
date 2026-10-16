@@ -168,3 +168,8 @@ router.include_router(kitty_paper_router)
 # Explicit opt-in Binance Spot Demo execution is separate from the paper simulator.
 from kitty_demo_trader import router as kitty_demo_trader_router
 router.include_router(kitty_demo_trader_router)
+
+@router.on_event("startup")
+def _restore_kitty_demo_worker_on_startup() -> None:
+    from kitty_demo_trader import initialize_worker
+    initialize_worker()
