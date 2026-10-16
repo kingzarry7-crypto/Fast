@@ -11,7 +11,7 @@ import {
   setVipLocal,
   type MembershipSnapshot,
 } from "@/lib/membership";
-import { api, type ChatBehaviorPreferences, type PlatformStatus, type KittyPaperSettings } from "@/lib/api";
+import { api, type ChatBehaviorPreferences, type PlatformStatus, type KittyPaperSettings, type KittyDemoSettings } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 
 type Preferences = {
@@ -46,6 +46,12 @@ export default function SettingsPage() {
   const [kittySaving, setKittySaving] = useState(false);
   const [kittyError, setKittyError] = useState("");
   const [kittyNotice, setKittyNotice] = useState("");
+  const [kittyDemoSettings, setKittyDemoSettings] = useState<KittyDemoSettings | null>(null);
+  const [kittyDemoLoading, setKittyDemoLoading] = useState(true);
+  const [kittyDemoSaving, setKittyDemoSaving] = useState(false);
+  const [kittyDemoError, setKittyDemoError] = useState("");
+  const [kittyDemoNotice, setKittyDemoNotice] = useState("");
+  const [kittyDemoAcknowledged, setKittyDemoAcknowledged] = useState(false);
 
   const refreshMembership = () =>
     setMembership(getMembershipSnapshot(user?.id, user?.is_subscribed));
@@ -93,6 +99,36 @@ export default function SettingsPage() {
       });
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.getKittyDemoSettings()
+      .then((result) => { if (!cancelled) setKittyDemoSettings(result); })
+      .catch((error) => { if (!cancelled) setKittyDemoError(error instanceof Error ? error.message : "Could not load Kitty demo controls."); })
+      .finally(() => { if (!cancelled) setKittyDemoLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const saveKittyDemoSettings = async () => {
+    if (!kittyDemoSettings) return;
+    setKittyDemoSaving(true);
+    setKittyDemoError("");
+    setKittyDemoNotice("");
+    try {
+      const result = await api.saveKittyDemoSettings({
+        enabled: kittyDemoSettings.enabled,
+        order_btc: Number(kittyDemoSettings.order_btc),
+        max_notional_usd: Number(kittyDemoSettings.max_notional_usd),
+        acknowledge_experimental_model: kittyDemoAcknowledged,
+      });
+      setKittyDemoSettings(result);
+      setKittyDemoNotice(result.message || (result.enabled ? "Kitty demo trading enabled." : "Kitty demo trading paused."));
+    } catch (error) {
+      setKittyDemoError(error instanceof Error ? error.message : "Could not apply Kitty demo settings.");
+    } finally {
+      setKittyDemoSaving(false);
+    }
+  };
 
   const saveKittySettings = async () => {
     if (!kittySettings) return;
@@ -309,6 +345,73 @@ export default function SettingsPage() {
                     <p className="mt-3 text-[10px] leading-relaxed text-amber-200/60">
                       Tuning currently applies to this running backend process and resets on a backend restart unless environment defaults are also updated. Kitty V3&apos;s training symbol is not yet confirmed, so keep this in paper mode while validating the model.
                     </p>
+                  </>
+                )}
+              </section>
+
+              <section className="kz-panel p-5 sm:p-6">
+                <SectionTitle title="KITTY V3" subtitle="BINANCE SPOT DEMO · REAL DEMO ORDERS" />
+                <p className="mt-3 text-xs leading-relaxed text-amber-100/70">
+                  This is a separate, opt-in Binance Spot Demo worker, not paper simulation. It can submit demo-market orders only; it cannot route orders to Binance live. Kitty&apos;s training symbol is unconfirmed and this model is experimental, so use demo funds only.
+                </p>
+                {kittyDemoLoading && <p className="mt-4 text-xs text-cyan-200/60">Checking demo trading readiness…</p>}
+                {kittyDemoError && <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-amber-200/80">{kittyDemoError}</div>}
+                {kittyDemoSettings && (
+                  <>
+                    <div className="mt-4 rounded-xl border border-cyan-500/15 bg-black/20 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-bold tracking-wider text-white">BINANCE SPOT DEMO STATUS</span>
+                        <span className={kittyDemoSettings.ready ? "rounded-full border border-emerald-400/30 px-3 py-1 text-[10px] text-emerald-300" : "rounded-full border border-amber-400/30 px-3 py-1 text-[10px] text-amber-200"}>{kittyDemoSettings.ready ? "READY" : "NOT READY"}</span>
+                      </div>
+                      <p className="mt-2 text-xs text-cyan-100/55">
+                        {kittyDemoSettings.enabled ? "AUTO DEMO TRADING ARMED" : "AUTO DEMO TRADING OFF"} · tracked Kitty position: {Number(kittyDemoSettings.position_btc || 0).toFixed(6)} BTC · poll interval: {kittyDemoSettings.poll_seconds || 900}s
+                      </p>
+                      {!kittyDemoSettings.ready && <p className="mt-2 text-xs text-amber-200/80">Check Railway: TRADING_MODE=demo, Binance Spot Demo API key/secret, and AGENT_TRADING_KILL_SWITCH=false. Keep TRADING_ENABLED=false; Kitty has a separate safety gate.</p>}
+                      <SettingToggle
+                        title="Enable Kitty Binance Demo auto-trading"
+                        description={kittyDemoSettings.enabled ? "ON — Kitty may place capped BTCUSDT market orders after each new completed daily candle." : "OFF — no Binance orders will be submitted."}
+                        checked={kittyDemoSettings.enabled}
+                        onChange={(checked) => setKittyDemoSettings({ ...kittyDemoSettings, enabled: checked })}
+                      />
+                      <div className="grid gap-4 border-t border-cyan-500/10 pt-4 sm:grid-cols-2">
+                        <label className="block text-xs text-cyan-100/65">
+                          BTC per entry
+                          <input type="number" min="0.000001" max="0.001" step="0.0001" value={kittyDemoSettings.order_btc}
+                            onChange={(event) => setKittyDemoSettings({ ...kittyDemoSettings, order_btc: Number(event.target.value) })}
+                            className="mt-2 w-full rounded-lg border border-cyan-500/20 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400/50" />
+                          <span className="mt-1 block text-[10px] text-cyan-100/35">Hard cap: 0.001 BTC per entry.</span>
+                        </label>
+                        <label className="block text-xs text-cyan-100/65">
+                          Maximum order value (USD)
+                          <input type="number" min="1" max="25" step="1" value={kittyDemoSettings.max_notional_usd}
+                            onChange={(event) => setKittyDemoSettings({ ...kittyDemoSettings, max_notional_usd: Number(event.target.value) })}
+                            className="mt-2 w-full rounded-lg border border-cyan-500/20 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400/50" />
+                          <span className="mt-1 block text-[10px] text-cyan-100/35">Hard cap: $25 per entry.</span>
+                        </label>
+                      </div>
+                      <label className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-amber-100/70">
+                        <input type="checkbox" checked={kittyDemoAcknowledged} onChange={(event) => setKittyDemoAcknowledged(event.target.checked)} className="mt-0.5 accent-cyan-400" />
+                        I understand Kitty is experimental, its training symbol is unconfirmed, and these are Binance demo orders only.
+                      </label>
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                      <button type="button" onClick={() => void saveKittyDemoSettings()}
+                        disabled={kittyDemoSaving || kittyDemoLoading || kittyDemoSettings.order_btc <= 0 || kittyDemoSettings.order_btc > 0.001 || kittyDemoSettings.max_notional_usd <= 0 || kittyDemoSettings.max_notional_usd > 25 || (kittyDemoSettings.enabled && !kittyDemoAcknowledged)}
+                        className="rounded-lg bg-cyan-400 px-4 py-2 font-mono-tech text-[10px] font-bold tracking-widest text-[#001018] transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50">
+                        {kittyDemoSaving ? "APPLYING…" : kittyDemoSettings.enabled ? "ENABLE DEMO AUTO-TRADING" : "SAVE / PAUSE DEMO TRADING"}
+                      </button>
+                      {kittyDemoNotice && <span className="text-xs text-emerald-300">{kittyDemoNotice}</span>}
+                    </div>
+                    {kittyDemoSettings.recent_cycles && kittyDemoSettings.recent_cycles.length > 0 && (
+                      <div className="mt-4 space-y-2">
+                        <p className="text-[10px] font-bold tracking-widest text-cyan-100/45">RECENT DEMO CYCLES</p>
+                        {kittyDemoSettings.recent_cycles.slice(0, 4).map((cycle, index) => (
+                          <div key={String(cycle.candle_time || index)} className="rounded-lg border border-cyan-500/10 px-3 py-2 text-[10px] text-cyan-100/60">
+                            {String(cycle.candle_time || "—")} · {String(cycle.status || "unknown")} · {String(cycle.signal || "no signal")} {cycle.side ? "· " + String(cycle.side) : ""}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </>
                 )}
               </section>
