@@ -158,3 +158,8 @@ def kitty_market_predict(
             status_code=503,
             detail="Live market inference failed: " + type(exc).__name__ + ": " + str(exc)[:180],
         )
+
+
+# Paper-trading endpoints are isolated from the live broker connector.
+from kitty_paper_trader import router as kitty_paper_router
+router.include_router(kitty_paper_router)
