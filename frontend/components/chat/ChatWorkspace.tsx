@@ -674,7 +674,26 @@ export default function ChatWorkspace({
               <>
                   <button
                     type="button"
-                    onClick={() => (listening ? stopListening() : listen((t) => setInput(t)))}
+                    onClick={() => {
+                      if (listening) {
+                        stopListening();
+                        return;
+                      }
+                      // Voice-message mode submits the final transcript and reads the reply aloud.
+                      setAutoSpeak(true);
+                      listen((transcript) => {
+                        const spokenPrompt = transcript.trim();
+                        if (!spokenPrompt) return;
+                        setInput("");
+                        void send(spokenPrompt, capability).then((result) => {
+                          if (result && (result as { conversation_id?: string }).conversation_id) {
+                            const cid = (result as { conversation_id: string }).conversation_id;
+                            setConversationId(cid);
+                            void refreshConversations();
+                          }
+                        });
+                      });
+                    }}
                     className={"flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300 " + (listening ? "border-red-400/40 bg-red-400/10 text-red-300 shadow-[0_0_16px_rgba(248,113,113,.15)]" : "border-white/[0.08] text-zinc-300 hover:border-cyan-300/40 hover:bg-cyan-300/[0.08] hover:text-cyan-100")}
                     title={listening ? "Stop recording" : "Record a voice message"}
                     aria-label={listening ? "Stop recording" : "Record a voice message"}
