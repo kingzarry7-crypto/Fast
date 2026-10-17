@@ -63,6 +63,7 @@ on:
       - "isolated_code_runner.py"
       - "tests/test_engineering_executor.py"
       - "tests/test_isolated_code_runner.py"
+      - "sandbox_runner/**"
       - "test_coding_request.py"
       - "ai_engine.py"
       - "email_draft_safety.py"
