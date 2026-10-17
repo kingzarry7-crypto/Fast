@@ -34,12 +34,17 @@ def generate_project(goal: str) -> dict[str, Any]:
     from llm_client import ask
 
     prompt = (
-        "You are a senior web engineer. Create a useful, responsive website project "
-        "for the user's request. Return ONLY valid JSON with shape "
-        '{"files":[{"path":"index.html","content":"..."}],"summary":"..."} . '
-        "Include all files needed for a self-contained frontend (HTML/CSS/JS as appropriate). "
-        "Use relative paths, no external secrets, no deployment, no backend credentials. "
-        "Keep total output concise and do not use markdown fences.\nUSER REQUEST:\n" + goal[:3500]
+        "You are a senior software engineer. Build the project the user actually requested; "
+        "do not assume every request is a website. First infer the appropriate project type and stack "
+        "(for example static website, React/TypeScript frontend, Python tool/API, or full-stack prototype), "
+        "then return a coherent set of source files and a concise README with setup/test instructions. "
+        "Return ONLY valid JSON with shape "
+        '{"files":[{"path":"relative/path.ext","content":"..."}],"summary":"..."} . '
+        "Include a minimal test when practical and a package/dependency manifest when needed. "
+        "Use relative paths. Never include secrets, .env files, credentials, or real user data. "
+        "Do not claim external services are connected, production deployment happened, or features work "
+        "without implementation. Do not include shell scripts or instructions that execute commands on the API server. "
+        "Keep the project focused, complete, and within the file/character limits. No markdown fences.\nUSER REQUEST:\n" + goal[:3500]
     )
     raw = ask([
         {"role": "system", "content": "Return strict JSON only. Never include secrets or instructions to execute shell commands."},
