@@ -44,6 +44,28 @@ def _ema(values, period):
     return result
 
 
+def _validate_candles(candles, timeframe, symbol):
+    from datetime import datetime, timezone, timedelta
+    if not isinstance(candles, list) or len(candles) < 35:
+        raise ValueError(symbol + ': insufficient candles')
+    raw = candles[-1].get('datetime') or candles[-1].get('time') or candles[-1].get('timestamp')
+    if isinstance(raw, (int, float)):
+        stamp = datetime.fromtimestamp(raw / (1000 if raw > 10000000000 else 1), tz=timezone.utc)
+    elif isinstance(raw, str):
+        stamp = datetime.fromisoformat(raw.replace('Z', '+00:00'))
+        if stamp.tzinfo is None: stamp = stamp.replace(tzinfo=timezone.utc)
+    else:
+        raise ValueError(symbol + ': missing latest candle timestamp')
+    age = datetime.now(timezone.utc) - stamp.astimezone(timezone.utc)
+    limit = timedelta(days=3) if timeframe == '1d' else timedelta(hours=6)
+    if age < timedelta(minutes=-10) or age > limit:
+        raise ValueError(symbol + ': stale or future candle timestamp')
+    for candle in candles[-35:]:
+        for key in ('open', 'high', 'low', 'close'):
+            value = float(candle[key])
+            if not isfinite(value) or value <= 0: raise ValueError(symbol + ': invalid candle price')
+    return stamp.astimezone(timezone.utc).isoformat()
+
 def _gold_features(candles):
     closes = [float(c["close"]) for c in candles]
     if len(closes) < 35:
@@ -97,13 +119,14 @@ def kitty_gold_features(timeframe: str = Query(default="15m", pattern="^(1m|5m|1
     try:
         from market import get_candles
         candles = get_candles("XAU/USD", timeframe=timeframe, outputsize=150)
+        latest_candle_time = _validate_candles(candles, timeframe, "XAU/USD")
         features = _gold_features(candles)
         latest = candles[-1]
         return {
             "symbol": "XAU/USD",
             "timeframe": timeframe,
             "candle_count": len(candles),
-            "latest_candle_time": latest.get("datetime"),
+            "latest_candle_time": latest_candle_time,
             "features": {key: round(value, 8) for key, value in features.items()},
             "prediction_available": False,
             "reason": (
@@ -132,13 +155,14 @@ def kitty_market_predict(
     try:
         from market import get_candles
         candles = get_candles(symbol, timeframe="1d", outputsize=150)
+        latest_candle_time = _validate_candles(candles, "1d", symbol)
         features = _gold_features(candles)
         prediction = kitty_v3.predict_features(features)
         return {
             "symbol": symbol,
             "timeframe": "1d",
             "candle_count": len(candles),
-            "latest_candle_time": candles[-1].get("datetime"),
+            "latest_candle_time": latest_candle_time,
             "prediction_available": True,
             "prediction_mode": "experimental_unvalidated",
             "training_symbol_confirmed": False,
