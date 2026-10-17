@@ -34,7 +34,37 @@ def is_coding_request(message: str) -> bool:
     return bool(_CODE_VERB.search(text) and _CODE_TARGET.search(text))
 
 
-def _format_project(project: dict[str, Any], max_chars: int = 16000) -> str:
+def _build_html_preview(files: list[dict[str, Any]]) -> str:
+    """Bundle local CSS/JS into index.html for the in-app sandboxed preview."""
+    by_path = {str(x.get("path") or "").replace("\\", "/").lstrip("./"): str(x.get("content") or "")
+               for x in files if isinstance(x, dict)}
+    html = by_path.get("index.html", "")
+    if not html or "<html" not in html.lower():
+        return ""
+
+    def asset(path: str) -> str:
+        path = path.split("?", 1)[0].split("#", 1)[0].replace("\\", "/").lstrip("./")
+        if not path or path.startswith("/") or "://" in path or path.startswith("data:"):
+            return ""
+        if path in by_path:
+            return by_path[path]
+        matches = [value for name, value in by_path.items() if name.rsplit("/", 1)[-1] == path.rsplit("/", 1)[-1]]
+        return matches[0] if len(matches) == 1 else ""
+
+    def css(match: re.Match[str]) -> str:
+        value = asset(match.group(1))
+        return "<style>\n" + value + "\n</style>" if value else match.group(0)
+
+    def js(match: re.Match[str]) -> str:
+        value = asset(match.group(1))
+        return "<script>\n" + value + "\n</script>" if value else match.group(0)
+
+    html = re.sub(r"<link\b[^>]*?href=[\"']([^\"']+\.css(?:[?#][^\"']*)?)[\"'][^>]*?/?>", css, html, flags=re.I)
+    html = re.sub(r"<script\b[^>]*?src=[\"']([^\"']+\.js(?:[?#][^\"']*)?)[\"'][^>]*>\s*</script\s*>", js, html, flags=re.I)
+    return html
+
+
+def _format_project(project: dict[str, Any], max_chars: int = 48000) -> str:
     files = project.get("files") or []
     names = [str(item.get("path") or "unnamed") for item in files if isinstance(item, dict)]
     lines = [
@@ -51,6 +81,15 @@ def _format_project(project: dict[str, Any], max_chars: int = 16000) -> str:
     for check in project.get("checks") or []:
         if isinstance(check, dict):
             lines.append(f"- {check.get('status', 'unknown')}: {check.get('name', 'check')}")
+    lines.extend(["", "Project preview:"])
+    preview_html = _build_html_preview(files)
+    if preview_html and len(preview_html) <= 12000:
+        preview_runs = [len(match.group(0)) for match in re.finditer(r"`+", preview_html)]
+        preview_fence = "`" * max(3, max(preview_runs, default=0) + 1)
+        lines.append("**Live website preview — index.html with local CSS and JavaScript bundled**")
+        lines.append(f"{preview_fence}html-preview\n{preview_html}\n{preview_fence}")
+    else:
+        lines.append("Bundled preview omitted: no valid index.html or preview source exceeds 12,000 characters.")
     lines.extend(["", "Project source files:"])
     remaining = max_chars - sum(len(line) + 1 for line in lines)
     language_by_suffix = {
