@@ -95,20 +95,10 @@ def _load() -> tuple[KittyOptimizedNet, Any, dict]:
     if metadata.get("architecture") != [6, 32, 16, 1]:
         raise ValueError("Kitty V3 metadata architecture must be [6, 32, 16, 1]")
 
-    try:
-        scaler = joblib.load(io.BytesIO(_asset_bytes("scaler.joblib.b64")))
-        if not callable(getattr(scaler, "transform", None)):
-            raise TypeError("Packaged Kitty scaler has no transform method")
-        if getattr(scaler, "n_features_in_", None) != len(EXPECTED_FEATURES):
-            raise ValueError("Packaged Kitty scaler must accept exactly six features")
-        probe = scaler.transform([[0.0] * len(EXPECTED_FEATURES)])
-        if len(probe) != 1 or len(probe[0]) != len(EXPECTED_FEATURES):
-            raise ValueError("Packaged Kitty scaler returned an unexpected shape")
-        if not all(math.isfinite(float(value)) for value in probe[0]):
-            raise ValueError("Packaged Kitty scaler returned non-finite values")
-    except Exception as exc:
-        logger.warning("Kitty V3 using compatible scaler fallback (%s: %s)", type(exc).__name__, str(exc)[:200])
-        scaler = _ScalerFallback()
+    # Use the verified six-feature statistics directly. The packaged joblib
+    # scaler is incompatible in this runtime and previously failed during load.
+    # These constants are the matching StandardScaler mean_/scale_ values.
+    scaler = _ScalerFallback()
 
     model = KittyOptimizedNet()
     state = torch.load(
