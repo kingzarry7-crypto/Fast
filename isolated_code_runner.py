@@ -17,7 +17,7 @@ MAX_FILES = 12
 MAX_FILE_CHARS = 18000
 MAX_OUTPUT_CHARS = 12000
 MAX_TIMEOUT_SECONDS = 60
-ALLOWED_SUFFIXES = {'.html', '.css', '.js', '.jsx', '.ts', '.tsx', '.json', '.md', '.svg', '.py'}
+ALLOWED_SUFFIXES = {'.html', '.css', '.js', '.jsx', '.ts', '.tsx', '.json', '.md', '.svg', '.py', '.txt', '.toml', '.yaml', '.yml', '.sql', '.xml'}
 ALLOWED_COMMANDS = {'python', 'python3', 'pytest', 'node', 'npm', 'npx'}
 
 

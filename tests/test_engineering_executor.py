@@ -31,11 +31,33 @@ class EngineeringExecutorTests(unittest.TestCase):
         })
         self.assertTrue(result["success"])
         self.assertEqual(result["file_count"], 1)
-        self.assertEqual(result["execution_status"], "draft_generated")
+        self.assertEqual(result["execution_status"], "generated_not_executed")
         self.assertTrue(any(
-            item.get("name") == "Generated code execution" and item.get("status") == "not_run"
+            item.get("name") == "Isolated execution status" and item.get("status") == "not_run"
             for item in result["checks"]
         ))
+
+
+    def test_uses_remote_isolated_runner_for_python_validation(self):
+        fake_llm = types.ModuleType("llm_client")
+        fake_llm.ask = lambda *args, **kwargs: json.dumps({
+            "summary": "Python project",
+            "files": [{"path": "main.py", "content": "print('safe')"}],
+        })
+        fake_runner = types.ModuleType("isolated_code_runner")
+        fake_runner.RunnerUnavailable = type("RunnerUnavailable", (RuntimeError,), {})
+        calls = []
+        fake_runner.execute_project = lambda files, **kwargs: (
+            calls.append((files, kwargs)) or {
+                "status": "passed", "exit_code": 0, "stdout": "compiled",
+                "stderr": "", "runner": "remote_isolated", "execution": "executed",
+            }
+        )
+        with patch.dict(sys.modules, {"llm_client": fake_llm, "isolated_code_runner": fake_runner}):
+            result = engineering_executor.generate_project("Build a Python project")
+        self.assertEqual(result["execution_status"], "validated")
+        self.assertEqual(calls[0][1]["command"], ["python", "-m", "compileall", "-q", "."])
+        self.assertTrue(any(item["name"] == "Isolated Python compile check" and item["status"] == "passed" for item in result["checks"]))
 
     def test_rejects_duplicate_paths(self):
         with self.assertRaisesRegex(ValueError, "Duplicate generated path"):

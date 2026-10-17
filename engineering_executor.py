@@ -12,7 +12,7 @@ from typing import Any
 MAX_FILES = 12
 MAX_FILE_CHARS = 18000
 MAX_TOTAL_CHARS = 60000
-ALLOWED_SUFFIXES = {".html", ".css", ".js", ".jsx", ".ts", ".tsx", ".json", ".md", ".svg", ".py"}
+ALLOWED_SUFFIXES = {".html", ".css", ".js", ".jsx", ".ts", ".tsx", ".json", ".md", ".svg", ".py", ".txt", ".toml", ".yaml", ".yml", ".sql", ".xml"}
 
 
 def _safe_path(value: Any) -> str:
@@ -34,12 +34,17 @@ def generate_project(goal: str) -> dict[str, Any]:
     from llm_client import ask
 
     prompt = (
-        "You are a senior web engineer. Create a useful, responsive website project "
-        "for the user's request. Return ONLY valid JSON with shape "
-        '{"files":[{"path":"index.html","content":"..."}],"summary":"..."} . '
-        "Include all files needed for a self-contained frontend (HTML/CSS/JS as appropriate). "
-        "Use relative paths, no external secrets, no deployment, no backend credentials. "
-        "Keep total output concise and do not use markdown fences.\nUSER REQUEST:\n" + goal[:3500]
+        "You are a senior software engineer. Build the project the user actually requested; "
+        "do not assume every request is a website. First infer the appropriate project type and stack "
+        "(for example static website, React/TypeScript frontend, Python tool/API, or full-stack prototype), "
+        "then return a coherent set of source files and a concise README with setup/test instructions. "
+        "Return ONLY valid JSON with shape "
+        '{"files":[{"path":"relative/path.ext","content":"..."}],"summary":"..."} . '
+        "Include a minimal test when practical and a package/dependency manifest when needed. "
+        "Use relative paths. Never include secrets, .env files, credentials, or real user data. "
+        "Do not claim external services are connected, production deployment happened, or features work "
+        "without implementation. Do not include shell scripts or instructions that execute commands on the API server. "
+        "Keep the project focused, complete, and within the file/character limits. No markdown fences.\nUSER REQUEST:\n" + goal[:3500]
     )
     raw = ask([
         {"role": "system", "content": "Return strict JSON only. Never include secrets or instructions to execute shell commands."},
@@ -81,12 +86,14 @@ def generate_project(goal: str) -> dict[str, Any]:
 
     checks = []
     index = files.get("index.html", "")
-    html_ok = bool(index and "<html" in index.lower() and "</html>" in index.lower())
-    checks.append({
-        "name": "HTML document structure",
-        "status": "passed" if html_ok else "failed",
-        "note": None if html_ok else "index.html must contain both opening and closing html tags.",
-    })
+    web_project = any(path.lower().endswith((".html", ".css", ".js", ".jsx", ".ts", ".tsx", ".svg")) for path in files)
+    if web_project:
+        html_ok = bool(index and "<html" in index.lower() and "</html>" in index.lower())
+        checks.append({
+            "name": "HTML document structure",
+            "status": "passed" if html_ok else "failed",
+            "note": None if html_ok else "Web projects must include index.html with opening and closing html tags.",
+        })
     for path, content in files.items():
         if path.endswith((".js", ".jsx", ".ts", ".tsx")):
             # This is a lightweight guard, not a JavaScript runtime test.
@@ -96,20 +103,72 @@ def generate_project(goal: str) -> dict[str, Any]:
                 "status": "passed" if balanced else "warning",
                 "note": None if balanced else "Delimiter counts differ; this is a heuristic, not a parser.",
             })
-    checks.append({
-        "name": "Generated code execution",
+    # Execute only through the separate authenticated sandbox gateway. Never fall
+    # back to local execution when the runner is missing or unavailable.
+    execution: dict[str, Any] = {
         "status": "not_run",
-        "note": "Generated code is not executed on the API server for safety.",
+        "note": "Isolated runner is not configured; generated source has not been executed.",
+    }
+    try:
+        from isolated_code_runner import RunnerUnavailable, execute_project
+
+        try:
+            # Compile Python source without running application entrypoints. For
+            # non-Python projects, stage files only; don't invent a test result.
+            python_paths = [path for path in files if path.lower().endswith(".py")]
+            command = ["python", "-m", "compileall", "-q", "."] if python_paths else None
+            execution = execute_project(
+                [{"path": path, "content": content} for path, content in files.items()],
+                command=command,
+                timeout_seconds=30,
+            )
+            if execution.get("status") == "failed":
+                checks.append({
+                    "name": "Isolated project validation",
+                    "status": "failed",
+                    "note": str(execution.get("stderr") or "Isolated validation failed")[:500],
+                })
+            elif execution.get("runner") == "remote_isolated" and command:
+                checks.append({
+                    "name": "Isolated Python compile check",
+                    "status": "passed",
+                    "note": str(execution.get("stdout") or "Python compilation completed in the isolated runner.")[:500],
+                })
+            else:
+                checks.append({
+                    "name": "Isolated project staging",
+                    "status": "not_run",
+                    "note": "Files reached the isolated runner, but no runtime test was run for this project type.",
+                })
+        except RunnerUnavailable as exc:
+            execution = {"status": "not_run", "note": str(exc)[:300]}
+    except Exception as exc:
+        # Optional runner failures must never cause unsafe local execution.
+        execution = {"status": "not_run", "note": f"Isolated validation unavailable ({type(exc).__name__})."}
+
+    structural_passed = not any(item["status"] == "failed" for item in checks)
+    execution_status = "generated_not_executed"
+    if execution.get("status") == "failed":
+        execution_status = "validation_failed"
+    elif execution.get("runner") == "remote_isolated" and execution.get("status") == "passed":
+        execution_status = "validated" if execution.get("execution") != "staged_only" else "staged_only"
+    passed = structural_passed and execution_status != "validation_failed"
+    checks.append({
+        "name": "Isolated execution status",
+        "status": "passed" if execution_status == "validated" else ("failed" if execution_status == "validation_failed" else "not_run"),
+        "note": str(execution.get("note") or execution.get("stderr") or execution.get("stdout") or execution_status)[:500],
     })
-    # A draft must not be reported as successful when a required structural check fails.
-    passed = all(item["status"] != "failed" for item in checks)
     return {
         "success": passed,
-        "summary": str(data.get("summary") or "Generated project draft"),
+        "summary": str(data.get("summary") or "Generated project"),
         "files": [{"path": path, "content": content} for path, content in files.items()],
         "file_count": len(files),
         "total_characters": total,
         "checks": checks,
-        "execution_status": "draft_generated" if passed else "draft_needs_revision",
-        "note": "Files are included in this workflow result. No live repository, deployment, or production service was changed.",
+        "execution": execution,
+        "execution_status": execution_status if structural_passed else "draft_needs_revision",
+        "note": (
+            "Generated files are returned for review. No GitHub repository or production deployment was changed. "
+            "Execution and tests are reported only when the separately configured isolated runner provides evidence."
+        ),
     }

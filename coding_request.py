@@ -38,11 +38,13 @@ def _format_project(project: dict[str, Any], max_chars: int = 16000) -> str:
     files = project.get("files") or []
     names = [str(item.get("path") or "unnamed") for item in files if isinstance(item, dict)]
     lines = [
-        "CODING AGENT — WEBSITE DRAFT GENERATED",
+        "CODING AGENT — PROJECT GENERATION RESULT",
         "",
         str(project.get("summary") or "Project draft generated."),
         f"Files created: {len(files)}",
         *[f"- {name}" for name in names],
+        "",
+        f"Execution status: {project.get('execution_status') or 'unknown'}",
         "",
         "Validation:",
     ]
@@ -62,9 +64,12 @@ def _format_project(project: dict[str, Any], max_chars: int = 16000) -> str:
             continue
         lines.append(block)
         remaining -= len(block)
+    execution = project.get("execution") or {}
     lines.extend([
         "",
-        "This is a generated draft, not a deployed website. The server did not execute the generated code or change a live repository."
+        str(project.get("note") or "No live repository or deployment was changed."),
+        f"Runner result: {execution.get('status', 'not_run')}. {execution.get('note', '')}".strip(),
+        "A generated project is not considered deployed. GitHub changes and production deployments require their own configured integration and verification.",
     ])
     return "\n".join(lines)[:max_chars + 1200]
 
@@ -101,8 +106,16 @@ def handle_coding_request(message: str) -> Optional[dict[str, Any]]:
             ),
             "project": None,
         }
+    execution_status = str(project.get("execution_status") or "generated_not_executed")
+    response_status = (
+        "error" if not project.get("success")
+        else "completed" if execution_status == "validated"
+        else "generated_not_executed" if execution_status in {"generated_not_executed", "staged_only"}
+        else "needs_revision" if execution_status == "validation_failed"
+        else "generated"
+    )
     return {
-        "status": "completed" if project.get("success") else "needs_revision",
+        "status": response_status,
         "provider": "coding_agent",
         "operation": "generate_project",
         "reply": _format_project(project),
