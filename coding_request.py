@@ -53,14 +53,28 @@ def _format_project(project: dict[str, Any], max_chars: int = 16000) -> str:
             lines.append(f"- {check.get('status', 'unknown')}: {check.get('name', 'check')}")
     lines.extend(["", "Project source files:"])
     remaining = max_chars - sum(len(line) + 1 for line in lines)
+    language_by_suffix = {
+        ".html": "html", ".htm": "html", ".css": "css", ".js": "javascript",
+        ".jsx": "jsx", ".ts": "typescript", ".tsx": "tsx", ".py": "python",
+        ".json": "json", ".md": "markdown", ".svg": "xml", ".xml": "xml",
+        ".sql": "sql", ".yaml": "yaml", ".yml": "yaml", ".toml": "toml",
+        ".txt": "text",
+    }
     for item in files:
         if not isinstance(item, dict):
             continue
         path = str(item.get("path") or "file.txt")
         content = str(item.get("content") or "")
-        block = f"\n--- {path} ---\n\n{content}\n"
+        suffix = "." + path.rsplit(".", 1)[-1].lower() if "." in path else ""
+        language = language_by_suffix.get(suffix, "text")
+        # MessageContent.tsx renders its code controls and HTML preview only for
+        # fenced blocks. Choose a fence longer than any run inside generated
+        # content so source files cannot accidentally terminate their own block.
+        backtick_runs = [len(match.group(0)) for match in re.finditer(r"`+", content)]
+        fence = "`" * max(3, max(backtick_runs, default=0) + 1)
+        block = f"\n**{path}**\n\n{fence}{language}\n{content}\n{fence}\n"
         if len(block) > remaining:
-            lines.append(f"\n--- {path} ---\n[Source omitted from chat because the response size limit was reached.]")
+            lines.append(f"\n**{path}**\n[Source omitted from chat because the response size limit was reached.]")
             continue
         lines.append(block)
         remaining -= len(block)
