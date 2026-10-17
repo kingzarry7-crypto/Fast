@@ -30,6 +30,8 @@ class CodingRequestTests(unittest.TestCase):
         generate.assert_called_once_with("build Facebook")
         self.assertEqual(result["provider"], "coding_agent")
         self.assertIn("index.html", result["reply"])
+        self.assertIn("```html", result["reply"])
+        self.assertIn("<html></html>", result["reply"])
         self.assertEqual(result["project"], project)
 
     def test_generation_error_is_explicit_and_does_not_claim_success(self):
