@@ -37,14 +37,15 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
   const [running, setRunning] = useState(false);
   const [output, setOutput] = useState("");
   const [preview, setPreview] = useState(false);
+  const [expandedPreview, setExpandedPreview] = useState(false);
   const copy = async () => {
     try { await navigator.clipboard.writeText(code); setCopied(true); window.setTimeout(() => setCopied(false), 1500); } catch { setOutput("Copy failed. Check browser clipboard permissions."); }
   };
   const normalizedLanguage = language.toLowerCase();
   const isPython = ["python", "py"].includes(normalizedLanguage);
-  const isHtml = ["html", "htm"].includes(normalizedLanguage);
+  const isHtml = ["html", "htm", "html-preview"].includes(normalizedLanguage);
   const extMap: Record<string, string> = { tsx: "tsx", typescript: "ts", ts: "ts", jsx: "jsx", javascript: "js", js: "js", python: "py", py: "py", html: "html", css: "css", json: "json", bash: "sh", sh: "sh", sql: "sql", yaml: "yml", yml: "yml", markdown: "md", md: "md", java: "java", go: "go", rust: "rs", c: "c", cpp: "cpp" };
-  const ext = extMap[normalizedLanguage] || "txt";
+  const ext = normalizedLanguage === "html-preview" ? "html" : (extMap[normalizedLanguage] || "txt");
   const download = () => {
     const blob = new Blob([code], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -93,12 +94,13 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
       <div className="flex flex-wrap gap-1">
         <button type="button" onClick={() => void copy()} className="rounded-md px-2 py-1 text-xs text-cyan-100/75 hover:bg-white/10">{copied ? "Copied" : "Copy code"}</button>
         {isPython ? <button type="button" disabled={running} onClick={() => void runPython()} className="rounded-md bg-sky-700 px-2 py-1 text-xs text-white hover:bg-sky-600 disabled:opacity-50">{running ? "Running…" : "▶ Run Python"}</button> : null}
-        {isHtml ? <button type="button" onClick={() => setPreview((value) => !value)} className="rounded-md px-2 py-1 text-xs text-cyan-100/75 hover:bg-white/10">{preview ? "Hide preview" : "Preview HTML"}</button> : null}
+        {isHtml ? <><button type="button" onClick={() => setPreview((value) => !value)} className="rounded-md px-2 py-1 text-xs text-cyan-100/75 hover:bg-white/10">{preview ? "Hide preview" : "Preview HTML"}</button><button type="button" onClick={() => setExpandedPreview(true)} className="rounded-md bg-cyan-700 px-2 py-1 text-xs text-white hover:bg-cyan-600">Open full screen</button></> : null}
         <button type="button" onClick={download} className="rounded-md px-2 py-1 text-xs text-cyan-100/75 hover:bg-white/10">Download .{ext}</button>
       </div>
     </div>
     <pre className="max-h-[min(65vh,720px)] overflow-auto p-4 text-[12px] leading-5 text-slate-100 sm:text-[13px]"><code>{code}</code></pre>
     {preview && isHtml ? <iframe title="HTML code preview" sandbox="allow-scripts" srcDoc={code} className="h-72 w-full border-t border-white/10 bg-white" /> : null}
+    {expandedPreview && isHtml ? <div role="dialog" aria-modal="true" aria-label="Full-screen website preview" className="fixed inset-0 z-[100] flex flex-col bg-slate-950/95 p-2 sm:p-4"><div className="flex shrink-0 items-center justify-between gap-3 border-b border-cyan-500/25 px-2 py-3"><div><div className="text-sm font-semibold text-cyan-100">King Zarry AI · Live Preview</div><div className="text-xs text-slate-400">Sandboxed HTML preview</div></div><button type="button" autoFocus onClick={() => setExpandedPreview(false)} className="rounded-lg border border-cyan-400/40 px-4 py-2 text-sm text-white hover:bg-white/10">Close preview ✕</button></div><iframe title="Full-screen HTML code preview" sandbox="allow-scripts" srcDoc={code} className="mt-3 min-h-0 flex-1 rounded-lg bg-white" /></div> : null}
     {output ? <div className="border-t border-white/10"><div className="bg-white/[0.035] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-cyan-100/60">Python output</div><pre role="status" aria-live="polite" className="max-h-72 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-xs text-emerald-200">{output}</pre></div> : null}
   </section>;
 }
