@@ -37,6 +37,13 @@ class IsolatedRunnerGatewayTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             runner.execute_project([{"path": "main.py", "content": "x"}], command=["python", "-c", "print(1)"])
 
+
+    def test_accepts_dependency_and_config_manifests(self):
+        with patch.dict(os.environ, {}, clear=True):
+            for path in ("requirements.txt", "pyproject.toml", "config.yaml", "schema.sql"):
+                with self.subTest(path=path), self.assertRaises(runner.RunnerUnavailable):
+                    runner.execute_project([{"path": path, "content": "valid: true"}])
+
     @patch("isolated_code_runner.requests.post")
     def test_captures_actual_remote_exit_code_and_output(self, post):
         response = Mock()
