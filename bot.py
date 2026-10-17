@@ -2362,16 +2362,10 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE):
     from kitty_api import _gold_features
     import kitty_v3
 
-    # These are the requested markets. Each prediction remains experimental:
-    # the packaged model's original training symbol is not confirmed.
-    assets = (
-        ("BTC/USDT", "BTC/USDT"),
-        ("ETH/USDT", "ETH/USDT"),
-        ("SOL/USDT", "SOL/USDT"),
-        ("BNB/USDT", "BNB/USDT"),
-        ("XRP/USDT", "XRP/USDT"),
-        ("XAU/USD", "XAU/USD"),
-    )
+    # This packaged model is a six-feature daily binary classifier. Keep its
+    # automated watcher BTC-only; do not transfer its output to other assets.
+    # Gold/FX and other crypto pairs need their own training and validation.
+    assets = (("BTC/USDT", "BTC/USDT"),)
     fingerprints = context.application.bot_data.setdefault("kitty_telegram_last_fingerprints", {})
 
     for symbol, label in assets:
