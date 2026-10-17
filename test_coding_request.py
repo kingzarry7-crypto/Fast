@@ -41,8 +41,8 @@ class CodingRequestTests(unittest.TestCase):
             {"path": "styles.css", "content": "body { color: red; }"},
             {"path": "script.js", "content": 'console.log("preview works");'},
         ])
-        self.assertIn("<style>\\nbody { color: red; }\\n</style>", preview)
-        self.assertIn('<script>\\nconsole.log("preview works");\\n</script>', preview)
+        self.assertIn("<style>\nbody { color: red; }\n</style>", preview)
+        self.assertIn('<script>\nconsole.log("preview works");\n</script>', preview)
         self.assertNotIn('href="styles.css"', preview)
         self.assertNotIn('src="script.js"', preview)
 
