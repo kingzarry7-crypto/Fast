@@ -12,7 +12,7 @@ from typing import Any
 MAX_FILES = 12
 MAX_FILE_CHARS = 18000
 MAX_TOTAL_CHARS = 60000
-ALLOWED_SUFFIXES = {".html", ".css", ".js", ".jsx", ".ts", ".tsx", ".json", ".md", ".svg", ".py"}
+ALLOWED_SUFFIXES = {".html", ".css", ".js", ".jsx", ".ts", ".tsx", ".json", ".md", ".svg", ".py", ".txt", ".toml", ".yaml", ".yml", ".sql", ".xml"}
 
 
 def _safe_path(value: Any) -> str:
