@@ -96,20 +96,72 @@ def generate_project(goal: str) -> dict[str, Any]:
                 "status": "passed" if balanced else "warning",
                 "note": None if balanced else "Delimiter counts differ; this is a heuristic, not a parser.",
             })
-    checks.append({
-        "name": "Generated code execution",
+    # Execute only through the separate authenticated sandbox gateway. Never fall
+    # back to local execution when the runner is missing or unavailable.
+    execution: dict[str, Any] = {
         "status": "not_run",
-        "note": "Generated code is not executed on the API server for safety.",
+        "note": "Isolated runner is not configured; generated source has not been executed.",
+    }
+    try:
+        from isolated_code_runner import RunnerUnavailable, execute_project
+
+        try:
+            # Compile Python source without running application entrypoints. For
+            # non-Python projects, stage files only; don't invent a test result.
+            python_paths = [path for path in files if path.lower().endswith(".py")]
+            command = ["python", "-m", "compileall", "-q", "."] if python_paths else None
+            execution = execute_project(
+                [{"path": path, "content": content} for path, content in files.items()],
+                command=command,
+                timeout_seconds=30,
+            )
+            if execution.get("status") == "failed":
+                checks.append({
+                    "name": "Isolated project validation",
+                    "status": "failed",
+                    "note": str(execution.get("stderr") or "Isolated validation failed")[:500],
+                })
+            elif execution.get("runner") == "remote_isolated" and command:
+                checks.append({
+                    "name": "Isolated Python compile check",
+                    "status": "passed",
+                    "note": str(execution.get("stdout") or "Python compilation completed in the isolated runner.")[:500],
+                })
+            else:
+                checks.append({
+                    "name": "Isolated project staging",
+                    "status": "not_run",
+                    "note": "Files reached the isolated runner, but no runtime test was run for this project type.",
+                })
+        except RunnerUnavailable as exc:
+            execution = {"status": "not_run", "note": str(exc)[:300]}
+    except Exception as exc:
+        # Optional runner failures must never cause unsafe local execution.
+        execution = {"status": "not_run", "note": f"Isolated validation unavailable ({type(exc).__name__})."}
+
+    structural_passed = not any(item["status"] == "failed" for item in checks)
+    execution_status = "generated_not_executed"
+    if execution.get("status") == "failed":
+        execution_status = "validation_failed"
+    elif execution.get("runner") == "remote_isolated" and execution.get("status") == "passed":
+        execution_status = "validated" if execution.get("execution") != "staged_only" else "staged_only"
+    passed = structural_passed and execution_status != "validation_failed"
+    checks.append({
+        "name": "Isolated execution status",
+        "status": "passed" if execution_status == "validated" else ("failed" if execution_status == "validation_failed" else "not_run"),
+        "note": str(execution.get("note") or execution.get("stderr") or execution.get("stdout") or execution_status)[:500],
     })
-    # A draft must not be reported as successful when a required structural check fails.
-    passed = all(item["status"] != "failed" for item in checks)
     return {
         "success": passed,
-        "summary": str(data.get("summary") or "Generated project draft"),
+        "summary": str(data.get("summary") or "Generated project"),
         "files": [{"path": path, "content": content} for path, content in files.items()],
         "file_count": len(files),
         "total_characters": total,
         "checks": checks,
-        "execution_status": "draft_generated" if passed else "draft_needs_revision",
-        "note": "Files are included in this workflow result. No live repository, deployment, or production service was changed.",
+        "execution": execution,
+        "execution_status": execution_status if structural_passed else "draft_needs_revision",
+        "note": (
+            "Generated files are returned for review. No GitHub repository or production deployment was changed. "
+            "Execution and tests are reported only when the separately configured isolated runner provides evidence."
+        ),
     }
