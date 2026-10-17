@@ -40,7 +40,7 @@ class IsolatedRunnerGatewayTests(unittest.TestCase):
 
     def test_accepts_dependency_and_config_manifests(self):
         with patch.dict(os.environ, {}, clear=True):
-            for path in ("requirements.txt", "pyproject.toml", "config.yaml", "schema.sql"):
+            for path in ("requirements.txt", "pyproject.toml", "config.yaml", "config.yml", "schema.sql", "schema.xml"):
                 with self.subTest(path=path), self.assertRaises(runner.RunnerUnavailable):
                     runner.execute_project([{"path": path, "content": "valid: true"}])
 

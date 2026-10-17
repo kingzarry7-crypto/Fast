@@ -4,13 +4,12 @@ Separate Railway service for code execution. This API does not run submitted cod
 
 ## Deploy as a separate Railway service
 
-1. In Railway, open the existing King Zarry project.
-2. Create a **new service from this GitHub repository**, branch `feat/kz-isolated-runner-service` while testing, or `main` after merging the PR.
-3. Set the service **Root Directory** to `/sandbox_runner`. Its Dockerfile is `Dockerfile` in that directory.
-4. Generate a long random token and set `KZ_SANDBOX_RUNNER_TOKEN` on the runner service.
-5. Create an E2B account at https://e2b.dev/ and copy its API key into runner variable `E2B_API_KEY`. Do not put this key in GitHub or the main API.
-6. Deploy and generate a Railway HTTPS domain for this runner. Check `https://YOUR-RUNNER-DOMAIN/health`.
-7. On the existing main `Fast` API service, set `KZ_SANDBOX_RUNNER_URL=https://YOUR-RUNNER-DOMAIN` and set `KZ_SANDBOX_RUNNER_TOKEN` to the exact same random token. Redeploy the main API.
+1. Use the **existing E2B runner service** in Railway; do not create a duplicate if it is already deployed.
+2. Confirm its source is this GitHub repository on `main`, its **Root Directory** is `/sandbox_runner`, and its Dockerfile is `Dockerfile` in that directory.
+3. Confirm the runner has `E2B_API_KEY` and `KZ_SANDBOX_RUNNER_TOKEN` configured. Keep the E2B key only on the runner service.
+4. Confirm the runner has a Railway HTTPS domain and test `https://YOUR-RUNNER-DOMAIN/health`; the expected JSON includes `"status":"ok"` and `"provider":"e2b"`.
+5. On the existing main `Fast` API service, set `KZ_SANDBOX_RUNNER_URL` to that exact HTTPS domain (no extra path) and set `KZ_SANDBOX_RUNNER_TOKEN` to the exact same token as the runner. Redeploy the main API after any change.
+6. Test an authenticated `POST /v1/execute` with a harmless Python expression, then verify both the response and runner logs before enabling coding/testing workflows.
 
 ## API contract
 

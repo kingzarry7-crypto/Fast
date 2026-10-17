@@ -19,7 +19,7 @@ MAX_FILES = 12
 MAX_FILE_CHARS = 18_000
 MAX_TOTAL_CHARS = 60_000
 MAX_TIMEOUT = 60
-ALLOWED_SUFFIXES = {".html", ".css", ".js", ".jsx", ".ts", ".tsx", ".json", ".md", ".svg", ".py"}
+ALLOWED_SUFFIXES = {".html", ".css", ".js", ".jsx", ".ts", ".tsx", ".json", ".md", ".svg", ".py", ".txt", ".toml", ".yaml", ".yml", ".sql", ".xml"}
 ALLOWED_COMMANDS = {"python", "python3", "pytest", "node", "npm", "npx"}
 SHELL_TOKENS = {"sh", "bash", "-c", "/bin/sh", "/bin/bash", "&&", "||", ";", "|", ">", "<", "`"}
 
