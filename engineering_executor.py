@@ -81,12 +81,14 @@ def generate_project(goal: str) -> dict[str, Any]:
 
     checks = []
     index = files.get("index.html", "")
-    html_ok = bool(index and "<html" in index.lower() and "</html>" in index.lower())
-    checks.append({
-        "name": "HTML document structure",
-        "status": "passed" if html_ok else "failed",
-        "note": None if html_ok else "index.html must contain both opening and closing html tags.",
-    })
+    web_project = any(path.lower().endswith((".html", ".css", ".js", ".jsx", ".ts", ".tsx", ".svg")) for path in files)
+    if web_project:
+        html_ok = bool(index and "<html" in index.lower() and "</html>" in index.lower())
+        checks.append({
+            "name": "HTML document structure",
+            "status": "passed" if html_ok else "failed",
+            "note": None if html_ok else "Web projects must include index.html with opening and closing html tags.",
+        })
     for path, content in files.items():
         if path.endswith((".js", ".jsx", ".ts", ".tsx")):
             # This is a lightweight guard, not a JavaScript runtime test.
