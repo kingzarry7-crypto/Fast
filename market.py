@@ -1385,14 +1385,19 @@ def get_price(symbol):
 
 
 def get_candles(symbol, timeframe="15m", outputsize=150):
-    """OHLC: Alpaca crypto when credentials are set, then Binance/Bybit, gold providers, or Twelve."""
+    """Return non-empty OHLC candles; try public/no-key sources when keyed feeds fail."""
     if _is_gold_symbol(symbol):
-        return _gold_free_get_candles(symbol, timeframe, outputsize)
+        candles = _gold_free_get_candles(symbol, timeframe, outputsize)
+        if candles:
+            return candles
+        logger.warning("Free gold candle sources returned no data for %s; trying remaining providers", symbol)
     if _should_try_alpaca_market_data() and _alpaca_supports_symbol(symbol):
         try:
             candles = _alpaca_get_candles(symbol, timeframe, outputsize)
-            logger.debug("candles %s via Alpaca tf=%s n=%s", symbol, timeframe, len(candles))
-            return candles
+            if candles:
+                logger.debug("candles %s via Alpaca tf=%s n=%s", symbol, timeframe, len(candles))
+                return candles
+            logger.warning("Alpaca returned zero candles for %s tf=%s; trying fallback providers", symbol, timeframe)
         except Exception as e:
             reason = str(e)[:180]
             _key, _secret = _alpaca_credentials()
@@ -1403,19 +1408,26 @@ def get_candles(symbol, timeframe="15m", outputsize=150):
     if _should_try_massive_market_data():
         try:
             candles = _massive_get_candles(symbol, timeframe, outputsize)
-            logger.debug("candles %s via Massive tf=%s n=%s", symbol, timeframe, len(candles))
-            return candles
+            if candles:
+                logger.debug("candles %s via Massive tf=%s n=%s", symbol, timeframe, len(candles))
+                return candles
+            logger.warning("Massive returned zero candles for %s tf=%s; trying fallback providers", symbol, timeframe)
         except Exception as e:
             logger.warning("Massive candles unavailable for %s (%s); trying fallback providers", symbol, type(e).__name__)
     pair = binance_pair(symbol)
     if pair:
         try:
             candles = _binance_get_candles(pair, timeframe, outputsize)
-            logger.debug("candles %s via Binance %s tf=%s n=%s", symbol, pair, timeframe, len(candles))
-            return candles
+            if candles:
+                logger.debug("candles %s via Binance %s tf=%s n=%s", symbol, pair, timeframe, len(candles))
+                return candles
+            logger.warning("Binance returned zero candles for %s (%s); trying Twelve Data", symbol, pair)
         except Exception as e:
             logger.warning("Binance candles failed for %s (%s): %s — trying Twelve Data", symbol, pair, e)
-    return _twelve_get_candles(symbol, timeframe, outputsize)
+    candles = _twelve_get_candles(symbol, timeframe, outputsize)
+    if candles:
+        return candles
+    raise RuntimeError(f"No candle provider returned data for {symbol} ({timeframe}); refusing to use an empty/stale dataset.")
 
 def calculate_ema(values, period):
     if not values:
