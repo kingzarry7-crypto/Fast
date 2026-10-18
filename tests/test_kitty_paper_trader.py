@@ -42,10 +42,11 @@ class KittyPaperTraderTests(unittest.TestCase):
         rows = candles()
         rows[-2]["datetime"] = "2026-10-14T00:00:00Z"
         with patch("market.get_candles", return_value=rows), \
-             patch("kitty_v3.predict_features", return_value={
-                 "probability_next_close_up": 0.9,
-                 "signal": "BUY_BIAS",
-                 "thresholds": {"sell_below": 0.47, "buy_above": 0.53},
+             patch("kitty_v3_retrained.predict_features", return_value={
+                 "confidence": 0.9,
+                 "signal": "LONG",
+                 "probabilities": {"SHORT": 0.02, "NO TRADE": 0.08, "LONG": 0.9},
+                 "research_only": True,
                  "warning": "experimental",
              }), \
              patch("trading_connector.place_market_order", side_effect=AssertionError("live connector must never be called")):
@@ -57,7 +58,7 @@ class KittyPaperTraderTests(unittest.TestCase):
         self.assertEqual(second["status"], "already_processed")
         state = paper.status()["state"]
         self.assertAlmostEqual(state["quantity"], 0.001)
-        self.assertAlmostEqual(state["cash"], 10_000 - 0.001 * (50_000 + 43 * 100))
+        self.assertAlmostEqual(state["cash"], 10_000 - 0.001 * (50_000 + 58 * 100))
 
     def test_runtime_controls_override_enabled_and_tuning(self):
         with paper._runtime_lock:
