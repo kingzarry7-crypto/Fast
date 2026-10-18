@@ -32,7 +32,7 @@ _runtime_lock = threading.RLock()
 _runtime_settings: dict[str, Any] = {"enabled": None, "order_btc": None, "max_notional_usd": None}
 
 SYMBOL = "BTC/USD"
-TIMEFRAME = "1d"
+TIMEFRAME = "1h"
 DEFAULT_STARTING_CASH = 10_000.0
 DEFAULT_QUANTITY = 0.001
 DEFAULT_MAX_NOTIONAL = 100.0
@@ -155,7 +155,7 @@ def status() -> dict[str, Any]:
         "mode": "paper_only",
         "symbol": SYMBOL,
         "timeframe": TIMEFRAME,
-        "model": "Kitty V3 (experimental; training symbol not confirmed in metadata)",
+        "model": "Kitty V3 retrained (hourly BTC research model)",
         "live_trading_enabled": False,
         "broker_connector_used": False,
         "starting_cash_usd": DEFAULT_STARTING_CASH,
@@ -207,39 +207,9 @@ def _float_env(name: str, default: float) -> float:
 
 
 def _features(candles: list[dict[str, Any]]) -> dict[str, float]:
-    closes = [float(item["close"]) for item in candles]
-    if len(closes) < 35 or any(not math.isfinite(x) or x <= 0 for x in closes):
-        raise ValueError("At least 35 valid positive daily closes are required")
-    close = closes[-1]
-    window = closes[-20:]
-    sma = sum(window) / len(window)
-    variance = sum((x - sma) ** 2 for x in window) / len(window)
-    gains, losses = [], []
-    for previous, current in zip(closes[-15:-1], closes[-14:]):
-        change = current - previous
-        gains.append(max(change, 0.0))
-        losses.append(max(-change, 0.0))
-    avg_gain = sum(gains) / 14.0
-    avg_loss = sum(losses) / 14.0
-    rsi = 100.0 if avg_loss == 0 and avg_gain > 0 else (
-        50.0 if avg_loss == 0 else 100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
-    )
-
-    def ema(values: list[float], period: int) -> float:
-        alpha = 2.0 / (period + 1.0)
-        result = values[0]
-        for value in values[1:]:
-            result = alpha * value + (1.0 - alpha) * result
-        return result
-
-    return {
-        "Close": close,
-        "SMA_20": sma,
-        "RSI_14": rsi,
-        "BB_Upper": sma + 2.0 * math.sqrt(variance),
-        "BB_Lower": sma - 2.0 * math.sqrt(variance),
-        "MACD": ema(closes, 12) - ema(closes, 26),
-    }
+    """Use the same 18-feature builder as the retrained Kitty model."""
+    from kitty_api import _kitty_features
+    return _kitty_features(candles)
 
 
 def run_cycle() -> dict[str, Any]:
@@ -249,12 +219,12 @@ def run_cycle() -> dict[str, Any]:
     _init_db()
     try:
         from market import get_candles
-        import kitty_v3
+        import kitty_v3_retrained as kitty_v3
 
         # Treat the newest candle as potentially still forming; use the prior candle.
         candles = get_candles(SYMBOL, timeframe=TIMEFRAME, outputsize=160)
         if not isinstance(candles, list) or len(candles) < 36:
-            raise ValueError("Market provider returned fewer than 36 daily candles")
+            raise ValueError("Market provider returned fewer than 56 hourly candles")
         closed_candles = candles[:-1]
         candle = closed_candles[-1]
         candle_time = str(candle.get("datetime") or candle.get("time") or "")
@@ -262,7 +232,7 @@ def run_cycle() -> dict[str, Any]:
             raise ValueError("Latest completed candle has no timestamp")
         features = _features(closed_candles)
         prediction = kitty_v3.predict_features(features)
-        probability = float(prediction["probability_next_close_up"])
+        probability = float(prediction["confidence"])
         signal = str(prediction["signal"])
         price = float(features["Close"])
         if not (math.isfinite(price) and price > 0 and math.isfinite(probability) and 0 <= probability <= 1):
@@ -298,12 +268,12 @@ def run_cycle() -> dict[str, Any]:
             # Long-only spot-style paper portfolio. BUY opens one capped position;
             # SELL_BIAS exits it. HOLD does nothing; no leverage or shorting.
             order_qty = _quantity()
-            if signal == "BUY_BIAS" and position <= 0 and order_qty * price <= _max_notional() and cash >= order_qty * price:
+            if signal == "LONG" and position <= 0 and order_qty * price <= _max_notional() and cash >= order_qty * price:
                 side, quantity, notional = "BUY", order_qty, order_qty * price
                 cash -= notional
                 avg_entry = price
                 position += quantity
-            elif signal == "SELL_BIAS" and position > 0:
+            elif signal == "SHORT" and position > 0:
                 quantity = position
                 side, notional = "SELL", position * price
                 cash += notional
