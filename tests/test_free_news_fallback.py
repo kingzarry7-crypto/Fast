@@ -56,6 +56,16 @@ class FreeNewsFallbackTests(unittest.TestCase):
         self.assertTrue(ordered)
         self.assertEqual(ordered[0].name, "gdelt")
 
+    def test_selected_provider_still_has_free_fallback(self):
+        with (
+            patch.object(news, "NEWS_PROVIDER", "CURRENTS"),
+            patch.object(news, "CURRENTS_API_KEY", "test-key"),
+        ):
+            engine = news.NewsEngineSingleton()
+            ordered = engine._get_news_provider_order()
+        self.assertEqual(ordered[0].name, "currents")
+        self.assertIn("gdelt", [provider.name for provider in ordered])
+
 
 if __name__ == "__main__":
     unittest.main()
