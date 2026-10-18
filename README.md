@@ -65,7 +65,7 @@ King Zarry AI is a private VIP trading assistant built in Python, with a Next.js
 - Protected routes: `/dashboard`, `/chat`, `/markets`, `/signals`, `/news`, `/settings`
 - Voice input (Web Speech API) and AI voice read-out in chat
 - Session auth via HttpOnly cookies
-- Production frontend: `https://fast.kingzarry7.workers.dev/` (Cloudflare Workers)
+- Production frontend: `https://kingzarry.bid/` (Cloudflare custom domain; workers.dev remains the fallback)
 - API/backend: `https://fast-production-0eba.up.railway.app` (Railway)
 
 ### 🔌 Web API (`api.py`, FastAPI on Railway)

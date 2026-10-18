@@ -8,8 +8,8 @@ Cloudflare Workers is the only production frontend target for King Zarry AI. Rai
 - Backend: Railway FastAPI
 - Telegram/Discord workers: Railway
 - Shared memory: Neon
-- Production frontend: https://fast.kingzarry7.workers.dev/
-- Optional custom domain configured in Wrangler: https://kingzarry.bid
+- Canonical production frontend: https://kingzarry.bid/
+- Cloudflare Workers fallback hostname: https://fast.kingzarry7.workers.dev/
 
 The Next.js frontend proxies `/api/*` and `/health` to Railway through `next.config.ts`. The backend accepts the Cloudflare production origin; it does not need a Vercel deployment.
 
