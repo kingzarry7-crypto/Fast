@@ -1,8 +1,8 @@
-"""Isolated loader for the Colab Kitty V3 retraining checkpoint.
+"""Inference for Kitty's retrained 18-feature BTC classifier.
 
-The checkpoint bundles a PyTorch state dict and a fitted sklearn scaler.
-Only load this trusted repository artifact: loading a bundled sklearn object
-requires pickle deserialization. This module never places trades.
+Research-only: this checkpoint was trained on hourly BTC features. Reusing it
+on other symbols or candle intervals is exploratory, not a validated strategy.
+This module never places trades.
 """
 from __future__ import annotations
 
@@ -44,15 +44,11 @@ class KittyV3RetrainedNet(nn.Module):
 def _load() -> tuple[KittyV3RetrainedNet, Any, dict[str, Any]]:
     if not CHECKPOINT_PATH.is_file():
         raise FileNotFoundError(f"Missing checkpoint: {CHECKPOINT_PATH.name}")
-    # weights_only=False is required because this trusted checkpoint bundles a
-    # StandardScaler object. Never use this loader for an untrusted file.
-    checkpoint = torch.load(
-        CHECKPOINT_PATH, map_location="cpu", weights_only=False
-    )
+    # This is a trusted repository artifact, not a user-uploaded checkpoint.
+    checkpoint = torch.load(CHECKPOINT_PATH, map_location="cpu", weights_only=False)
     if not isinstance(checkpoint, dict):
         raise ValueError("Checkpoint must be a dictionary bundle")
-    features = checkpoint.get("features")
-    if features != EXPECTED_FEATURES:
+    if checkpoint.get("features") != EXPECTED_FEATURES:
         raise ValueError("Checkpoint feature order does not match the 18-feature contract")
     if checkpoint.get("architecture") != [18, 64, 32, 3]:
         raise ValueError("Unexpected model architecture")
@@ -81,19 +77,24 @@ def _load() -> tuple[KittyV3RetrainedNet, Any, dict[str, Any]]:
 
 def status() -> dict[str, Any]:
     try:
-        model, scaler, checkpoint = _load()
+        _, scaler, checkpoint = _load()
         return {
             "available": True,
             "model": "Kitty V3 BTC retrained",
             "num_features": 18,
+            "features": EXPECTED_FEATURES,
             "classes": CLASS_MAPPING,
             "scaler_features": int(scaler.n_features_in_),
             "best_epoch": checkpoint.get("best_epoch"),
             "validation_accuracy": checkpoint.get("validation_accuracy"),
+            "validation_metrics": checkpoint.get("validation_metrics"),
+            "test_metrics": checkpoint.get("test_metrics"),
+            "training_timeframe": "1h",
+            "training_symbol": "BTC (training dataset convention; runtime symbol metadata still needs confirmation)",
             "research_only": True,
-            "prediction_enabled": False,
+            "prediction_enabled": True,
             "automatic_order_execution_enabled": False,
-            "reason": "Target/execution alignment and realistic paper-trading validation remain unverified.",
+            "warning": "Experimental classification only. Historical holdout metrics do not establish profitability.",
         }
     except Exception as exc:
         return {
@@ -106,9 +107,47 @@ def status() -> dict[str, Any]:
 
 
 def predict_features(features: dict[str, float]) -> dict[str, Any]:
-    # Explicitly fail closed: good classification scores alone do not authorize
-    # predictions or trades until target timing and trading validation are audited.
-    raise RuntimeError(
-        "Kitty V3 retrained inference is disabled pending target/execution alignment "
-        "and paper-trading validation. No orders are placed."
-    )
+    model, scaler, checkpoint = _load()
+    missing = [name for name in EXPECTED_FEATURES if name not in features]
+    if missing:
+        raise ValueError("Missing required Kitty features: " + ", ".join(missing))
+    values = []
+    for name in EXPECTED_FEATURES:
+        try:
+            value = float(features[name])
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(f"Feature {name} must be a finite number") from exc
+        if not math.isfinite(value):
+            raise ValueError(f"Feature {name} must be a finite number")
+        values.append(value)
+    scaled = np.asarray(scaler.transform(np.asarray([values], dtype=np.float64)), dtype=np.float32)
+    if scaled.shape != (1, 18) or not np.isfinite(scaled).all():
+        raise ValueError("Scaler returned invalid values; expected one row of 18 finite features")
+    with torch.inference_mode():
+        logits = model(torch.from_numpy(scaled))
+        probs = torch.softmax(logits, dim=1)[0].cpu().numpy().astype(float)
+    if probs.shape != (3,) or not np.isfinite(probs).all() or abs(float(probs.sum()) - 1.0) > 1e-4:
+        raise ValueError("Kitty returned invalid class probabilities")
+    ranked = np.argsort(probs)
+    best = int(ranked[-1])
+    confidence = float(probs[best])
+    margin = confidence - float(probs[int(ranked[-2])])
+    # Conservative guardrails; these are operating filters, not optimized trading thresholds.
+    if best == 1 or confidence < 0.50 or margin < 0.10:
+        signal = "NO TRADE"
+    else:
+        signal = CLASS_MAPPING[str(best)]
+    return {
+        "model": "Kitty V3 BTC retrained",
+        "signal": signal,
+        "class_prediction": CLASS_MAPPING[str(best)],
+        "confidence": round(confidence, 6),
+        "margin_over_second_class": round(margin, 6),
+        "probabilities": {CLASS_MAPPING[str(i)]: round(float(probs[i]), 6) for i in range(3)},
+        "features": {name: float(features[name]) for name in EXPECTED_FEATURES},
+        "best_epoch": checkpoint.get("best_epoch"),
+        "research_only": True,
+        "training_timeframe": "1h",
+        "trading_enabled": False,
+        "warning": "Research signal only. Multi-timeframe and non-hourly predictions are unvalidated; no orders are placed.",
+    }
