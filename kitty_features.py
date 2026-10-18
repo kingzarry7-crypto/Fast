@@ -14,6 +14,16 @@ FEATURE_NAMES = (
 )
 
 
+def _ema_series(values, period):
+    if not values:
+        return []
+    alpha = 2.0 / (period + 1.0)
+    result = [float(values[0])]
+    for value in values[1:]:
+        result.append(alpha * float(value) + (1.0 - alpha) * result[-1])
+    return result
+
+
 def compute_kitty_features(candles):
     """Build the exact 18-feature contract expected by the retrained BTC model."""
     import math
