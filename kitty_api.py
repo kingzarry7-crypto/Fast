@@ -8,7 +8,7 @@ from math import isfinite
 from typing import Dict
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
-import kitty_v3
+import kitty_v3_retrained as kitty_model
 
 router = APIRouter(prefix="/api/kitty", tags=["Kitty V3"])
 
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/kitty", tags=["Kitty V3"])
 class KittyPredictionRequest(BaseModel):
     features: Dict[str, float] = Field(
         ...,
-        description="Exact six Kitty features: Close, SMA_20, RSI_14, BB_Upper, BB_Lower, MACD",
+        description="Exact 18-feature Kitty V3 retrained input contract; normally use /market-predict or /multi-timeframe.",
     )
 
 
@@ -88,11 +88,118 @@ def _gold_features(candles):
     }
 
 
+def _ema_series(values, period):
+    if not values:
+        return []
+    alpha = 2.0 / (period + 1.0)
+    result = [float(values[0])]
+    for value in values[1:]:
+        result.append(alpha * float(value) + (1.0 - alpha) * result[-1])
+    return result
+
+
+def _kitty_features(candles):
+    """Build the exact 18-feature contract expected by the retrained BTC model."""
+    import math
+    closes = [float(c["close"]) for c in candles]
+    opens = [float(c["open"]) for c in candles]
+    highs = [float(c["high"]) for c in candles]
+    lows = [float(c["low"]) for c in candles]
+    if len(closes) < 55:
+        raise ValueError(f"At least 55 candles are required for Kitty V3; received {len(closes)}")
+    arrays = closes + opens + highs + lows
+    if not all(math.isfinite(v) and v > 0 for v in arrays):
+        raise ValueError("Candles contain invalid OHLC prices")
+    def ret(period):
+        return closes[-1] / closes[-1-period] - 1.0
+    def sma(period, end=None):
+        seq = closes if end is None else closes[:end]
+        return sum(seq[-period:]) / period
+    sma6, sma20, sma50 = sma(6), sma(20), sma(50)
+    changes = [closes[i] / closes[i-1] - 1.0 for i in range(1, len(closes))]
+    gains = [max(v, 0.0) for v in changes[-14:]]
+    losses = [max(-v, 0.0) for v in changes[-14:]]
+    avg_gain = sum(gains) / 14.0
+    avg_loss = sum(losses) / 14.0
+    rsi = 100.0 if avg_loss == 0 and avg_gain > 0 else (50.0 if avg_loss == 0 else 100.0 - 100.0 / (1.0 + avg_gain / avg_loss))
+    ema12, ema26 = _ema_series(closes, 12), _ema_series(closes, 26)
+    macd_series = [a - b for a, b in zip(ema12, ema26)]
+    macd_signal_series = _ema_series(macd_series, 9)
+    macd = macd_series[-1] / closes[-1]
+    macd_signal = macd_signal_series[-1] / closes[-1]
+    macd_hist = (macd_series[-1] - macd_signal_series[-1]) / closes[-1]
+    returns = changes
+    vol6 = (sum((v - sum(returns[-6:]) / 6.0) ** 2 for v in returns[-6:]) / 6.0) ** 0.5
+    vol24 = (sum((v - sum(returns[-24:]) / 24.0) ** 2 for v in returns[-24:]) / 24.0) ** 0.5
+    candle_range = highs[-1] - lows[-1]
+    return {
+        "ret_1h": ret(1), "ret_3h": ret(3), "ret_6h": ret(6),
+        "ret_12h": ret(12), "ret_24h": ret(24),
+        "close_vs_sma6": closes[-1] / sma6 - 1.0,
+        "close_vs_sma20": closes[-1] / sma20 - 1.0,
+        "close_vs_sma50": closes[-1] / sma50 - 1.0,
+        "sma6_vs_sma20": sma6 / sma20 - 1.0,
+        "rsi_14": rsi / 100.0,
+        "macd_norm": macd, "macd_signal_norm": macd_signal,
+        "macd_hist_norm": macd_hist, "volatility_6h": vol6,
+        "volatility_24h": vol24,
+        "range_pct": candle_range / closes[-1],
+        "body_pct": (closes[-1] - opens[-1]) / opens[-1],
+        "close_position": (closes[-1] - lows[-1]) / candle_range if candle_range > 0 else 0.5,
+    }
+
+
+@router.get("/multi-timeframe")
+def kitty_multi_timeframe(
+    symbol: str = Query(default="BTC/USD", pattern="^(BTC/USD|BTC/USDT)$"),
+    timeframes: str = Query(default="15m,1h,4h,1d"),
+):
+    """Compare research-only classifier outputs across supported candle intervals."""
+    from market import get_candles
+    allowed = {"1m", "5m", "15m", "30m", "1h", "2h", "4h", "1d"}
+    requested = list(dict.fromkeys(item.strip() for item in timeframes.split(",") if item.strip()))
+    if not requested or any(item not in allowed for item in requested):
+        raise HTTPException(status_code=422, detail="timeframes must be comma-separated values from: " + ", ".join(sorted(allowed)))
+    results = []
+    for timeframe in requested:
+        try:
+            candles = get_candles(symbol, timeframe=timeframe, outputsize=160)
+            latest_time = _validate_candles(candles, timeframe, symbol)
+            features = _kitty_features(candles)
+            prediction = kitty_model.predict_features(features)
+            results.append({
+                "timeframe": timeframe, "available": True,
+                "latest_candle_time": latest_time, "close": float(candles[-1]["close"]),
+                "prediction": prediction,
+                "timeframe_validated": timeframe == "1h",
+            })
+        except Exception as exc:
+            results.append({
+                "timeframe": timeframe, "available": False,
+                "error": type(exc).__name__ + ": " + str(exc)[:160],
+            })
+    votes = [row["prediction"]["signal"] for row in results if row.get("available")]
+    directional = [vote for vote in votes if vote in {"LONG", "SHORT"}]
+    if len(directional) >= 2 and len(set(directional)) == 1 and len(directional) == len(votes):
+        combined = directional[0]
+    else:
+        combined = "NO TRADE"
+    return {
+        "symbol": symbol, "requested_timeframes": requested, "results": results,
+        "combined_signal": combined,
+        "timeframes_available": len(votes), "timeframes_failed": len(results) - len(votes),
+        "agreement": (len(directional) / len(votes)) if votes else 0.0,
+        "research_only": True, "trading_enabled": False,
+        "warning": "The checkpoint was trained on hourly BTC features. Applying it to other intervals is exploratory and unvalidated; combined output is not a proven profitable signal.",
+    }
+
+
 @router.get("/status")
 def kitty_status():
-    result = kitty_v3.status()
+    result = kitty_model.status()
     if not result.get("available"):
         raise HTTPException(status_code=503, detail=result)
+    result["legacy_six_feature_model_retired"] = True
     result["gold_prediction_ready"] = False
     result["gold_prediction_note"] = (
         "The packaged model metadata does not identify gold-specific training data. "
@@ -104,7 +211,7 @@ def kitty_status():
 @router.post("/predict")
 def kitty_predict(request: KittyPredictionRequest):
     try:
-        return kitty_v3.predict_features(request.features)
+        return kitty_model.predict_features(request.features)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except ValueError as exc:
@@ -156,16 +263,18 @@ def kitty_market_predict(
         from market import get_candles
         candles = get_candles(symbol, timeframe="1d", outputsize=150)
         latest_candle_time = _validate_candles(candles, "1d", symbol)
-        features = _gold_features(candles)
-        prediction = kitty_v3.predict_features(features)
+        features = _kitty_features(candles)
+        prediction = kitty_model.predict_features(features)
         return {
             "symbol": symbol,
             "timeframe": "1d",
             "candle_count": len(candles),
             "latest_candle_time": latest_candle_time,
             "prediction_available": True,
-            "prediction_mode": "experimental_unvalidated",
+            "prediction_mode": "research_only_hourly_model_applied_to_daily_candles",
             "training_symbol_confirmed": False,
+            "training_timeframe": "1h",
+            "timeframe_validated": False,
             "features": {key: round(value, 8) for key, value in features.items()},
             "prediction": prediction,
             "warning": (
