@@ -121,7 +121,19 @@ def provider_status() -> Dict[str, Any]:
         "forexfactory": True,  # public no-key fallback - exists, but not proof of working
     }
 
-    headlines_available = any(headline_configured.values())
+    # A configured public endpoint is not proof of live availability. Report
+    # available only after a recent successful fetch has populated the cache.
+    headlines_available = False
+    try:
+        engine = NewsEngineSingleton._instance
+        if engine:
+            for key, cached in engine.cache.items():
+                if key.startswith("headlines_") and engine._is_cache_valid(key):
+                    if isinstance(cached, dict) and cached.get("available") and cached.get("headlines"):
+                        headlines_available = True
+                        break
+    except Exception:
+        pass
 
     # calendar_configured = keyed OR fallback exists
     has_keyed_calendar = any(calendar_keyed_configured.values())
@@ -797,83 +809,19 @@ def get_eodhd_news(limit: int = 20) -> List[Dict[str, Any]]:
     return results
 
 def get_global_news(limit: int = 20) -> List[Dict[str, Any]]:
+    """Return cached global headlines, preferring the no-key GDELT source.
+
+    NewsEngineSingleton applies the provider cooldowns and a ten-minute positive
+    cache, so repeated API/Telegram/Discord requests do not hammer upstreams.
     """
-    Respects NEWS_PROVIDER ordering:
-    AUTO -> GDELT (no key) -> Currents -> NewsData -> NewsAPI -> EODHD
-    Configured keyed providers remain available as fallbacks.
-    """
-    # Build ordered list based on NEWS_PROVIDER
-    def _order():
-        if NEWS_PROVIDER == "AUTO":
-            order = ["GDELT", "CURRENTS", "NEWSDATA", "NEWSAPI", "EODHD"]
-        elif NEWS_PROVIDER == "CURRENTS":
-            order = ["CURRENTS", "GDELT", "NEWSDATA", "NEWSAPI", "EODHD"]
-        elif NEWS_PROVIDER == "NEWSDATA":
-            order = ["NEWSDATA", "GDELT", "CURRENTS", "NEWSAPI", "EODHD"]
-        elif NEWS_PROVIDER == "NEWSAPI":
-            order = ["NEWSAPI", "GDELT", "CURRENTS", "NEWSDATA", "EODHD"]
-        elif NEWS_PROVIDER == "EODHD":
-            order = ["EODHD", "GDELT", "CURRENTS", "NEWSDATA", "NEWSAPI"]
-        else:
-            order = ["CURRENTS", "NEWSDATA", "NEWSAPI", "EODHD"]
-        return order
-
-    order = _order()
-    errors: List[str] = []
-    for prov in order:
-        try:
-            if prov == "GDELT":
-                engine = NewsEngineSingleton._instance
-                if engine:
-                    gdelt = engine.news_providers.get("gdelt")
-                    if gdelt:
-                        headlines = gdelt.fetch_headlines("finance", limit)
-                        if headlines:
-                            return headlines
-            elif prov == "EODHD" and EODHD_API_KEY:
-                return get_eodhd_news(limit)
-            elif prov == "CURRENTS" and CURRENTS_API_KEY:
-                engine = NewsEngineSingleton._instance
-                if engine:
-                    # Use dedicated provider instance
-                    cp = engine.news_providers.get("currents")
-                    if cp and cp.is_configured():
-                        headlines = cp.fetch_headlines("finance", limit)
-                        if headlines:
-                            return headlines
-            elif prov == "NEWSDATA" and NEWSDATA_API_KEY:
-                engine = NewsEngineSingleton._instance
-                if engine:
-                    nd = engine.news_providers.get("newsdata")
-                    if nd and nd.is_configured():
-                        headlines = nd.fetch_headlines("finance", limit)
-                        if headlines:
-                            return headlines
-            elif prov == "NEWSAPI" and NEWS_API_KEY:
-                engine = NewsEngineSingleton._instance
-                if engine:
-                    na = engine.news_providers.get("newsapi")
-                    if na and na.is_configured():
-                        headlines = na.fetch_headlines("finance", limit)
-                        if headlines:
-                            return headlines
-        except Exception as e:
-            errors.append(f"{prov}: {e}")
-            continue
-
-    # Final fallback using general engine fallback (respects AUTO ordering internally)
-    try:
-        engine = NewsEngineSingleton._instance
-        if engine:
-            headlines = engine.fetch_headlines_with_fallback("finance", limit)
-            if headlines["available"]:
-                return headlines["headlines"]
-    except Exception as e:
-        errors.append(f"fallback: {e}")
-
+    engine = NewsEngineSingleton._instance or NewsEngineSingleton()
+    result = engine.fetch_headlines_with_fallback("finance", limit=max(1, min(int(limit or 20), 100)))
+    headlines = result.get("headlines") or []
+    if headlines:
+        return headlines
     raise RuntimeError(
-        "No news provider returned general news. GDELT (no key) and configured keyed providers were tried. Errors: "
-        + "; ".join(errors)
+        "No news source returned general news. GDELT (no key) and configured keyed providers were tried. "
+        + str(result.get("error") or "")
     )
 
 def get_gold_news(days: int = 7, minimum_relevance: str = "MEDIUM") -> List[Dict[str, Any]]:
