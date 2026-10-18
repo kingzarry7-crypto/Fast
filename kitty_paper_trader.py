@@ -207,7 +207,7 @@ def _float_env(name: str, default: float) -> float:
 
 
 def _features(candles: list[dict[str, Any]]) -> dict[str, float]:
-    """Use the same 18-feature builder as the retrained Kitty model."""
+    """Use the retrained model's exact 18-feature input contract."""
     from kitty_api import _kitty_features
     return _kitty_features(candles)
 
