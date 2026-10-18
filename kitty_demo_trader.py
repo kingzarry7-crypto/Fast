@@ -315,7 +315,7 @@ def run_cycle() -> dict:
                 conn.close()
         return {"status": "demo_order_submitted", "mode": "binance_spot_demo_only", "symbol": SYMBOL,
                 "side": side, "quantity": quantity, "reference_price": price, "order_id": result.get("order_id"),
-                "signal": signal, "probability_next_close_up": probability, "warning": prediction.get("warning")}
+                "signal": signal, "confidence": probability, "warning": prediction.get("warning")}
     except Exception as exc:
         logger.exception("Kitty Binance demo order failed")
         with _lock:
