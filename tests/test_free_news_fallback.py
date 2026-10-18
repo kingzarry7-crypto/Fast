@@ -50,7 +50,7 @@ class FreeNewsFallbackTests(unittest.TestCase):
         self.assertEqual(request.call_count, 1)
 
 
-    @patch("news.requests.get", side_effect=requests.exceptions.Timeout("simulated timeout"))
+    @patch("news.requests.get", side_effect=news.requests.exceptions.Timeout("simulated timeout"))
     def test_gdelt_network_error_sets_short_cooldown_across_queries(self, request):
         provider = news.GDELTNewsProvider()
         self.assertEqual(provider.fetch_headlines("bitcoin", 5), [])
