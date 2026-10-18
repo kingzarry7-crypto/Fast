@@ -2359,36 +2359,34 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE):
         return
 
     from market import get_candles
-    from kitty_api import _gold_features
-    import kitty_v3
+    from kitty_api import _kitty_features
+    import kitty_v3_retrained as kitty_model
 
-    # This packaged model is a six-feature daily binary classifier. Keep its
-    # automated watcher BTC-only; do not transfer its output to other assets.
-    # Gold/FX and other crypto pairs need their own training and validation.
+    # Research-only hourly BTC model. Do not apply it to other assets or timeframes.
     assets = (("BTC/USDT", "BTC/USDT"),)
     fingerprints = context.application.bot_data.setdefault("kitty_telegram_last_fingerprints", {})
 
     for symbol, label in assets:
         try:
             candles = await asyncio.to_thread(
-                get_candles, symbol, timeframe="1d", outputsize=150
+                get_candles, symbol, timeframe="1h", outputsize=160
             )
-            if not isinstance(candles, list) or len(candles) < 35:
-                raise ValueError(f"Need at least 35 daily candles; received {len(candles) if isinstance(candles, list) else 'non-list data'}")
+            if not isinstance(candles, list) or len(candles) < 56:
+                raise ValueError(f"Need at least 56 hourly candles; received {len(candles) if isinstance(candles, list) else 'non-list data'}")
 
-            features = _gold_features(candles)
-            prediction = await asyncio.to_thread(kitty_v3.predict_features, features)
+            features = _kitty_features(candles[:-1])
+            prediction = await asyncio.to_thread(kitty_model.predict_features, features)
             candle_time = str(candles[-1].get("datetime") or candles[-1].get("time") or "latest")
-            signal = str(prediction.get("signal") or "HOLD").upper()
-            probability = float(prediction["probability_next_close_up"])
-            fingerprint = f"{symbol}|1d|{candle_time}|{signal}"
+            signal = str(prediction.get("signal") or "NO TRADE").upper()
+            probability = float(prediction["confidence"])
+            fingerprint = f"{symbol}|1h|{candle_time}|{signal}"
             if fingerprints.get(symbol) == fingerprint:
                 logger.debug("Kitty watcher: no new daily candle for %s (%s)", symbol, signal)
                 continue
 
-            if signal == "BUY_BIAS":
+            if signal == "LONG":
                 interpretation = "UPWARD BIAS"
-            elif signal == "SELL_BIAS":
+            elif signal == "SHORT":
                 interpretation = "DOWNWARD BIAS"
             else:
                 interpretation = "HOLD / NO CLEAR BIAS"
@@ -2396,12 +2394,12 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE):
             message = "\n".join([
                 "🐈 <b>KING ZARRY AI • KITTY V3 MODEL ALERT</b>",
                 "",
-                f"Asset: <b>{html.escape(label)}</b> · Timeframe: <b>1D</b>",
+                f"Asset: <b>{html.escape(label)}</b> · Timeframe: <b>1H</b>",
                 f"Kitty output: <b>{html.escape(signal)}</b> ({interpretation})",
-                f"Probability next daily close is higher: <b>{probability * 100.0:.2f}%</b>",
+                f"Top-class confidence: <b>{probability * 100.0:.2f}%</b>",
                 f"Latest candle: <code>{html.escape(candle_time)}</code>",
                 "",
-                "⚠️ <b>Experimental only:</b> Kitty's original training symbol is unconfirmed; this is not a validated trading signal.",
+                "⚠️ <b>Experimental only:</b> Kitty is research-only; this is not a validated trading signal.",
                 "No entry, stop-loss, or take-profit is implied. No trades are placed.",
             ])
             sent = 0
