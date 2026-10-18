@@ -958,7 +958,15 @@ class NewsEngineSingleton:
             if key in self.news_providers:
                 provider = self.news_providers[key]
                 if provider.is_configured():
-                    return [provider]
+                    # Honor the selected provider first, but still fall back when
+                    # its free quota is exhausted or it returns no usable articles.
+                    fallback_priority = ["gdelt", "currents", "newsdata", "newsapi", "eodhd"]
+                    ordered = [provider]
+                    for name in fallback_priority:
+                        candidate = self.news_providers.get(name)
+                        if candidate and candidate is not provider and candidate.is_configured():
+                            ordered.append(candidate)
+                    return ordered
                 else:
                     logger.warning(f"NEWS_PROVIDER={NEWS_PROVIDER} not configured, fallback AUTO")
                     return configured
