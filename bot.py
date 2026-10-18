@@ -2376,7 +2376,7 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE):
 
             features = _kitty_features(candles[:-1])
             prediction = await asyncio.to_thread(kitty_model.predict_features, features)
-            candle_time = str(candles[-1].get("datetime") or candles[-1].get("time") or "latest")
+            candle_time = str(candles[-2].get("datetime") or candles[-2].get("time") or "latest")
             signal = str(prediction.get("signal") or "NO TRADE").upper()
             probability = float(prediction["confidence"])
             fingerprint = f"{symbol}|1h|{candle_time}|{signal}"
