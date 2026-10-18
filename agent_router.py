@@ -250,12 +250,12 @@ def route_agent_request(message: str, user_id: str) -> Optional[Dict[str, Any]]:
             if kitty_context.get("status") == "unavailable":
                 lines.append("Kitty V3 daily BTC model: unavailable for this request (optional check failed).")
             else:
-                probability = kitty_context.get("probability_next_close_up")
+                probability = kitty_context.get("confidence")
                 probability_text = f"{float(probability) * 100:.2f}%" if isinstance(probability, (int, float)) else "not provided"
                 lines.append(
-                    f"Kitty V3 daily BTC model (experimental): {kitty_context['signal']}; "
-                    f"estimated next-daily-close-up probability: {probability_text}. "
-                    "Training symbol is unconfirmed, so this is context only and does not validate the setup."
+                    f"Kitty V3 hourly BTC research output: {kitty_context['signal']}; "
+                    f"top-class confidence: {probability_text}. "
+                    "This is experimental context only and does not validate the setup."
                 )
         reasons = analysis.get("reasons") or []
         if isinstance(reasons, str):
