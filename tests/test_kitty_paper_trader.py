@@ -35,7 +35,7 @@ class KittyPaperTraderTests(unittest.TestCase):
 
     def test_feature_contract_and_finite_values(self):
         values = paper._features(candles())
-        self.assertEqual(set(values), {"Close", "SMA_20", "RSI_14", "BB_Upper", "BB_Lower", "MACD"})
+        self.assertEqual(set(values), set(__import__("kitty_v3_retrained").EXPECTED_FEATURES))
         self.assertTrue(all(map(lambda x: isinstance(x, float), values.values())))
 
     def test_paper_cycle_isolated_from_live_connector_and_deduplicates_candle(self):
