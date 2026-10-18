@@ -50,3 +50,7 @@ jobs:
         run: python -m unittest test_streaming_chat_context -v
       - name: Test Kitty demo trading persistence and safety
         run: python -m unittest discover -s tests -p "test_kitty_demo_trader.py" -v
+      - name: Test free news and empty market-data fallbacks
+        run: |
+          python -m unittest discover -s tests -p "test_free_news_fallback.py" -v
+          python -m unittest discover -s tests -p "test_market_empty_fallback.py" -v
