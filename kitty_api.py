@@ -254,31 +254,31 @@ def kitty_gold_features(timeframe: str = Query(default="15m", pattern="^(1m|5m|1
 def kitty_market_predict(
     symbol: str = Query(default="BTC/USDT", pattern="^(BTC/USDT|BTC/USD)$"),
 ):
-    """Run experimental Kitty V3 inference on live daily BTC candles.
+    """Run research-only Kitty V3 inference on live hourly BTC candles.
 
-    The packaged metadata does not record the training symbol, so this endpoint
-    is an inference smoke test and must not be presented as a validated signal.
+    The checkpoint contract is hourly. Other candle intervals are exposed only
+    through the explicitly unvalidated multi-timeframe comparison endpoint.
     """
     try:
         from market import get_candles
-        candles = get_candles(symbol, timeframe="1d", outputsize=150)
-        latest_candle_time = _validate_candles(candles, "1d", symbol)
+        candles = get_candles(symbol, timeframe="1h", outputsize=160)
+        latest_candle_time = _validate_candles(candles, "1h", symbol)
         features = _kitty_features(candles)
         prediction = kitty_model.predict_features(features)
         return {
             "symbol": symbol,
-            "timeframe": "1d",
+            "timeframe": "1h",
             "candle_count": len(candles),
             "latest_candle_time": latest_candle_time,
             "prediction_available": True,
-            "prediction_mode": "research_only_hourly_model_applied_to_daily_candles",
+            "prediction_mode": "research_only_hourly_model",
             "training_symbol_confirmed": False,
             "training_timeframe": "1h",
             "timeframe_validated": False,
             "features": {key: round(value, 8) for key, value in features.items()},
             "prediction": prediction,
             "warning": (
-                "Kitty V3 produced an inference from live daily BTC candles, but its "
+                "Kitty V3 produced an inference from live hourly BTC candles, but its "
                 "training metadata does not identify the training symbol. Treat this "
                 "as an experimental model test, not a validated trading signal. "
                 "No trades are placed."
