@@ -49,6 +49,20 @@ class FreeNewsFallbackTests(unittest.TestCase):
         self.assertEqual(provider.fetch_headlines("world news", 5), [])
         self.assertEqual(request.call_count, 1)
 
+    @patch("news.requests.get")
+    def test_gdelt_429_cooldown_applies_across_different_asset_queries(self, request):
+        response = Mock()
+        response.status_code = 429
+        request.return_value = response
+        provider = news.GDELTNewsProvider()
+
+        self.assertEqual(provider.fetch_headlines("Bitcoin BTC", 5), [])
+        self.assertEqual(provider.fetch_headlines("Gold XAU/USD", 5), [])
+        self.assertEqual(provider.fetch_headlines("EUR/USD forex", 5), [])
+
+        # Cooldown is provider-wide, not scoped to the query string.
+        self.assertEqual(request.call_count, 1)
+
     def test_auto_news_order_starts_with_no_key_provider(self):
         with patch.object(news, "NEWS_PROVIDER", "AUTO"):
             engine = news.NewsEngineSingleton()
