@@ -313,7 +313,7 @@ def run_cycle() -> dict[str, Any]:
     return {
         "status": "simulated_order" if side else "no_action",
         "mode": "paper_only", "symbol": SYMBOL, "candle_time": candle_time,
-        "signal": signal, "probability_next_close_up": probability,
+        "signal": signal, "confidence": probability,
         "simulated_side": side, "simulated_quantity_btc": quantity,
         "price": price, "notional_usd": notional,
         "live_trading_enabled": False,
