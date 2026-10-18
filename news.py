@@ -8,7 +8,7 @@ Separated:
   NEWS_PROVIDER = headline providers
   CALENDAR_PROVIDER = economic calendar providers
 
-Headline order AUTO: Currents -> NewsData -> NewsAPI -> EODHD (fallback)
+Headline order AUTO: GDELT (no key) -> keyed providers as fallback
 Calendar order AUTO: EODHD -> TradingEconomics -> Finnhub -> ForexFactory
 
 Env:
@@ -101,6 +101,7 @@ def provider_status() -> Dict[str, Any]:
     ForexFactory True alone does NOT make calendar_available=True when no provider has produced usable data
     """
     headline_configured = {
+        "gdelt": True,  # public no-key news search endpoint; availability is verified on fetch
         "currents": bool(CURRENTS_API_KEY),
         "newsdata": bool(NEWSDATA_API_KEY),
         "newsapi": bool(NEWS_API_KEY),
@@ -609,6 +610,61 @@ class BaseNewsProvider:
     def fetch_headlines(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         return []
 
+class GDELTNewsProvider(BaseNewsProvider):
+    """Public GDELT DOC API adapter; no API key required."""
+    name = "gdelt"
+
+    def is_configured(self) -> bool:
+        return True
+
+    def fetch_headlines(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        if _provider_cooldown_active(self.name):
+            return []
+        safe_limit = max(1, min(int(limit or 5), 25))
+        search_query = re.sub(r"""[^\w\s"'-]""", " ", str(query or "world news"))[:180].strip()
+        params = {
+            "query": search_query or "world news",
+            "mode": "ArtList",
+            "format": "json",
+            "maxrecords": safe_limit,
+            "sort": "DateDesc",
+        }
+        try:
+            response = requests.get(
+                "https://api.gdeltproject.org/api/v2/doc/doc",
+                params=params,
+                timeout=12,
+                headers={"User-Agent": "KingZarryAI/1.0 (public news aggregation)"},
+            )
+            if response.status_code != 200:
+                if response.status_code in (402, 429, 500, 502, 503, 504):
+                    _set_provider_cooldown(self.name, response.status_code)
+                logger.warning("GDELT news HTTP %s", response.status_code)
+                return []
+            payload = response.json()
+            articles = payload.get("articles", []) if isinstance(payload, dict) else []
+            results = []
+            for article in articles:
+                if not isinstance(article, dict) or not article.get("title") or not article.get("url"):
+                    continue
+                results.append({
+                    "title": article.get("title"),
+                    "source": article.get("domain") or article.get("sourceCountry") or "GDELT",
+                    "published": article.get("seendate"),
+                    "url": article.get("url"),
+                    "provider": "gdelt",
+                    "content": article.get("socialimage") or "",
+                })
+                if len(results) >= safe_limit:
+                    break
+            if results:
+                _clear_provider_cooldown(self.name)
+            return results
+        except Exception as exc:
+            logger.info("GDELT news unavailable: %s", type(exc).__name__)
+            return []
+
+
 class CurrentsProvider(BaseNewsProvider):
     name = "currents"
     def is_configured(self) -> bool:
@@ -743,21 +799,21 @@ def get_eodhd_news(limit: int = 20) -> List[Dict[str, Any]]:
 def get_global_news(limit: int = 20) -> List[Dict[str, Any]]:
     """
     Respects NEWS_PROVIDER ordering:
-    AUTO -> Currents -> NewsData -> NewsAPI -> EODHD
-    CURRENTS/NEWSDATA/NEWSAPI/EODHD -> respective first, then fallback
+    AUTO -> GDELT (no key) -> Currents -> NewsData -> NewsAPI -> EODHD
+    Configured keyed providers remain available as fallbacks.
     """
     # Build ordered list based on NEWS_PROVIDER
     def _order():
         if NEWS_PROVIDER == "AUTO":
-            order = ["CURRENTS", "NEWSDATA", "NEWSAPI", "EODHD"]
+            order = ["GDELT", "CURRENTS", "NEWSDATA", "NEWSAPI", "EODHD"]
         elif NEWS_PROVIDER == "CURRENTS":
-            order = ["CURRENTS", "NEWSDATA", "NEWSAPI", "EODHD"]
+            order = ["CURRENTS", "GDELT", "NEWSDATA", "NEWSAPI", "EODHD"]
         elif NEWS_PROVIDER == "NEWSDATA":
-            order = ["NEWSDATA", "CURRENTS", "NEWSAPI", "EODHD"]
+            order = ["NEWSDATA", "GDELT", "CURRENTS", "NEWSAPI", "EODHD"]
         elif NEWS_PROVIDER == "NEWSAPI":
-            order = ["NEWSAPI", "CURRENTS", "NEWSDATA", "EODHD"]
+            order = ["NEWSAPI", "GDELT", "CURRENTS", "NEWSDATA", "EODHD"]
         elif NEWS_PROVIDER == "EODHD":
-            order = ["EODHD", "CURRENTS", "NEWSDATA", "NEWSAPI"]
+            order = ["EODHD", "GDELT", "CURRENTS", "NEWSDATA", "NEWSAPI"]
         else:
             order = ["CURRENTS", "NEWSDATA", "NEWSAPI", "EODHD"]
         return order
@@ -766,7 +822,15 @@ def get_global_news(limit: int = 20) -> List[Dict[str, Any]]:
     errors: List[str] = []
     for prov in order:
         try:
-            if prov == "EODHD" and EODHD_API_KEY:
+            if prov == "GDELT":
+                engine = NewsEngineSingleton._instance
+                if engine:
+                    gdelt = engine.news_providers.get("gdelt")
+                    if gdelt:
+                        headlines = gdelt.fetch_headlines("finance", limit)
+                        if headlines:
+                            return headlines
+            elif prov == "EODHD" and EODHD_API_KEY:
                 return get_eodhd_news(limit)
             elif prov == "CURRENTS" and CURRENTS_API_KEY:
                 engine = NewsEngineSingleton._instance
@@ -808,7 +872,7 @@ def get_global_news(limit: int = 20) -> List[Dict[str, Any]]:
         errors.append(f"fallback: {e}")
 
     raise RuntimeError(
-        "No news provider available for general news. Add EODHD_API_KEY, CURRENTS_API_KEY, NEWSDATA_API_KEY or NEWS_API_KEY. Errors: "
+        "No news provider returned general news. GDELT (no key) and configured keyed providers were tried. Errors: "
         + "; ".join(errors)
     )
 
@@ -917,7 +981,7 @@ class NewsEngineSingleton:
     def __init__(self):
         self.cache: Dict[str, Any] = {}
         self.cache_expiry: Dict[str, datetime] = {}
-        self.news_providers: Dict[str, BaseNewsProvider] = {"currents": CurrentsProvider(), "newsdata": NewsDataProvider(), "newsapi": NewsAPIProvider(), "eodhd": EODHDNewsProvider()}
+        self.news_providers: Dict[str, BaseNewsProvider] = {"gdelt": GDELTNewsProvider(), "currents": CurrentsProvider(), "newsdata": NewsDataProvider(), "newsapi": NewsAPIProvider(), "eodhd": EODHDNewsProvider()}
         NewsEngineSingleton._instance = self
         logger.info(f"NewsEngine init: NEWS={NEWS_PROVIDER} CAL={CALENDAR_PROVIDER}")
 
@@ -932,7 +996,7 @@ class NewsEngineSingleton:
         if not configured:
             return []
         if NEWS_PROVIDER == "AUTO":
-            priority = ["currents", "newsdata", "newsapi", "eodhd"]
+            priority = ["gdelt", "currents", "newsdata", "newsapi", "eodhd"]
             ordered: List[BaseNewsProvider] = []
             for name in priority:
                 if name in self.news_providers and self.news_providers[name].is_configured():
