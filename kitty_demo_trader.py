@@ -29,7 +29,7 @@ _settings_lock = threading.RLock()
 _settings: dict[str, Any] = {"enabled": False, "order_btc": 0.0001, "max_notional_usd": 25.0}
 _settings_loaded = False
 SYMBOL = "BTC/USD"
-TIMEFRAME = "1d"
+TIMEFRAME = "1h"
 
 
 def _db_path() -> str:
@@ -230,7 +230,7 @@ def _json_or_empty(value: str) -> dict:
 
 
 def run_cycle() -> dict:
-    """Evaluate one completed daily candle; submit at most one demo order per candle."""
+    """Evaluate an hourly candle; research-only model outputs never authorize demo orders."""
     _restore_settings()
     with _settings_lock:
         enabled = bool(_settings["enabled"])
@@ -243,22 +243,24 @@ def run_cycle() -> dict:
         return {"status": "blocked", "reason": "Binance Spot Demo is not ready; check mode, demo credentials and kill switch", "mode": cfg["mode"]}
     try:
         from market import get_candles
-        import kitty_v3
-        from kitty_paper_trader import _features
+        import kitty_v3_retrained as kitty_v3
+        from kitty_api import _kitty_features
 
         candles = get_candles(SYMBOL, timeframe=TIMEFRAME, outputsize=160)
-        if not isinstance(candles, list) or len(candles) < 36:
-            raise ValueError("Market provider returned fewer than 36 daily candles")
+        if not isinstance(candles, list) or len(candles) < 56:
+            raise ValueError("Market provider returned fewer than 56 hourly candles")
         closed = candles[:-1]
         candle = closed[-1]
         candle_time = str(candle.get("datetime") or candle.get("time") or "")
         if not candle_time:
             raise ValueError("Latest completed candle has no timestamp")
-        features = _features(closed)
+        features = _kitty_features(closed)
         prediction = kitty_v3.predict_features(features)
-        probability = float(prediction["probability_next_close_up"])
+        if prediction.get("research_only", True) or not prediction.get("trading_enabled", False):
+            return {"status": "blocked", "reason": "Kitty is research-only; validation is required before demo orders are allowed", "mode": "binance_spot_demo_only", "trading_enabled": False}
+        probability = float(prediction["confidence"])
         signal = str(prediction["signal"])
-        price = float(features["Close"])
+        price = float(closed[-1]["close"])
         if not (math.isfinite(price) and price > 0 and math.isfinite(probability) and 0 <= probability <= 1):
             raise ValueError("Model or market returned invalid values")
     except Exception as exc:
@@ -276,9 +278,9 @@ def run_cycle() -> dict:
             position = float(row["quantity"])
             side = None
             quantity = 0.0
-            if signal == "BUY_BIAS" and position <= 0 and order_btc * price <= max_notional:
+            if signal == "LONG" and position <= 0 and order_btc * price <= max_notional:
                 side, quantity = "BUY", order_btc
-            elif signal == "SELL_BIAS" and position > 0:
+            elif signal == "SHORT" and position > 0:
                 side, quantity = "SELL", position
             now = datetime.now(timezone.utc).isoformat()
             # Reserve the candle before calling the exchange to prevent concurrent duplicate orders.
@@ -295,7 +297,7 @@ def run_cycle() -> dict:
             conn.close()
 
     if not side:
-        return {"status": "no_action", "candle_time": candle_time, "signal": signal, "probability_next_close_up": probability, "mode": "binance_spot_demo_only"}
+        return {"status": "no_action", "candle_time": candle_time, "signal": signal, "confidence": probability, "mode": "binance_spot_demo_only"}
 
     try:
         import trading_connector
