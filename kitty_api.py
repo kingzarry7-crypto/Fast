@@ -171,7 +171,8 @@ def kitty_multi_timeframe(
                 "timeframe": timeframe, "available": True,
                 "latest_candle_time": latest_time, "close": float(candles[-1]["close"]),
                 "prediction": prediction,
-                "timeframe_validated": timeframe == "1h",
+                "model_timeframe_match": timeframe == "1h",
+                "timeframe_validated": False,
             })
         except Exception as exc:
             results.append({
@@ -180,17 +181,17 @@ def kitty_multi_timeframe(
             })
     votes = [row["prediction"]["signal"] for row in results if row.get("available")]
     directional = [vote for vote in votes if vote in {"LONG", "SHORT"}]
-    if len(directional) >= 2 and len(set(directional)) == 1 and len(directional) == len(votes):
-        combined = directional[0]
-    else:
-        combined = "NO TRADE"
+    # One hourly checkpoint is not a validated ensemble of timeframe-specific models.
+    # Never convert agreement among out-of-timeframe predictions into an actionable signal.
+    combined = "NO TRADE"
     return {
         "symbol": symbol, "requested_timeframes": requested, "results": results,
         "combined_signal": combined,
         "timeframes_available": len(votes), "timeframes_failed": len(results) - len(votes),
         "agreement": (len(directional) / len(votes)) if votes else 0.0,
+        "combined_signal_reason": "No timeframe-specific model ensemble has passed validation; consensus is intentionally disabled.",
         "research_only": True, "trading_enabled": False,
-        "warning": "The checkpoint was trained on hourly BTC features. Applying it to other intervals is exploratory and unvalidated; combined output is not a proven profitable signal.",
+        "warning": "The checkpoint was trained on hourly features, and the training symbol metadata is not fully confirmed. Other timeframes are exploratory only; this endpoint never emits an actionable combined signal.",
     }
 
 
