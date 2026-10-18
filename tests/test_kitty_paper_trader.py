@@ -6,11 +6,15 @@ from unittest.mock import patch
 import kitty_paper_trader as paper
 
 
-def candles(count=45):
+def candles(count=60):
     result = []
     for i in range(count):
         close = 50_000 + i * 100
-        result.append({"datetime": f"2026-01-{(i % 28) + 1:02d}T00:00:00Z", "close": close})
+        result.append({
+            "datetime": f"2026-01-{(i % 28) + 1:02d}T00:00:00Z",
+            "open": close - 25, "high": close + 100,
+            "low": close - 100, "close": close, "volume": 10,
+        })
     return result
 
 
