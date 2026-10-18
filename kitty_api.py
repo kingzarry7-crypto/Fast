@@ -139,7 +139,7 @@ def _kitty_features(candles):
         "close_vs_sma20": closes[-1] / sma20 - 1.0,
         "close_vs_sma50": closes[-1] / sma50 - 1.0,
         "sma6_vs_sma20": sma6 / sma20 - 1.0,
-        "rsi_14": rsi / 100.0,
+        "rsi_14": rsi,
         "macd_norm": macd, "macd_signal_norm": macd_signal,
         "macd_hist_norm": macd_hist, "volatility_6h": vol6,
         "volatility_24h": vol24,
