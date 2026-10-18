@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Secrets and local configuration (keep examples)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Local databases and SQLite sidecars
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+
+# Frontend build/install artifacts
+node_modules/
+frontend/.next/
+frontend/.open-next/
+frontend/.wrangler/
+frontend/out/
+dist/
+build/
+coverage/
+
+# Local test and tooling output
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.DS_Store
+Thumbs.db
