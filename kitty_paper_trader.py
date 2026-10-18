@@ -213,7 +213,7 @@ def _features(candles: list[dict[str, Any]]) -> dict[str, float]:
 
 
 def run_cycle() -> dict[str, Any]:
-    """Evaluate the latest completed daily candle; record once; simulate only."""
+    """Evaluate the latest completed hourly candle; record once; simulate only."""
     if not _enabled():
         return {"status": "disabled", "mode": "paper_only", "live_trading_enabled": False}
     _init_db()
@@ -223,7 +223,7 @@ def run_cycle() -> dict[str, Any]:
 
         # Treat the newest candle as potentially still forming; use the prior candle.
         candles = get_candles(SYMBOL, timeframe=TIMEFRAME, outputsize=160)
-        if not isinstance(candles, list) or len(candles) < 36:
+        if not isinstance(candles, list) or len(candles) < 56:
             raise ValueError("Market provider returned fewer than 56 hourly candles")
         closed_candles = candles[:-1]
         candle = closed_candles[-1]
@@ -234,7 +234,7 @@ def run_cycle() -> dict[str, Any]:
         prediction = kitty_v3.predict_features(features)
         probability = float(prediction["confidence"])
         signal = str(prediction["signal"])
-        price = float(features["Close"])
+        price = float(candle["close"])
         if not (math.isfinite(price) and price > 0 and math.isfinite(probability) and 0 <= probability <= 1):
             raise ValueError("Model or market returned invalid values")
     except Exception as exc:
