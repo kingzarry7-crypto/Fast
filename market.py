@@ -1387,10 +1387,13 @@ def get_price(symbol):
 def get_candles(symbol, timeframe="15m", outputsize=150):
     """Return non-empty OHLC candles; try public/no-key sources when keyed feeds fail."""
     if _is_gold_symbol(symbol):
-        candles = _gold_free_get_candles(symbol, timeframe, outputsize)
-        if candles:
-            return candles
-        logger.warning("Free gold candle sources returned no data for %s; trying remaining providers", symbol)
+        try:
+            candles = _gold_free_get_candles(symbol, timeframe, outputsize)
+            if candles:
+                return candles
+            logger.warning("Free gold candle sources returned no data for %s; trying remaining providers", symbol)
+        except Exception as e:
+            logger.warning("Free gold candle sources failed for %s (%s); trying remaining providers", symbol, type(e).__name__)
     if _should_try_alpaca_market_data() and _alpaca_supports_symbol(symbol):
         try:
             candles = _alpaca_get_candles(symbol, timeframe, outputsize)
