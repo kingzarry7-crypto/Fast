@@ -192,14 +192,15 @@ def route_agent_request(message: str, user_id: str) -> Optional[Dict[str, Any]]:
         if symbol == "BTC/USD":
             try:
                 from market import get_candles
-                from kitty_api import _gold_features
-                import kitty_v3
-                btc_candles = get_candles("BTC/USDT", timeframe="1d", outputsize=150)
-                btc_features = _gold_features(btc_candles)
-                kitty_prediction = kitty_v3.predict_features(btc_features)
+                from kitty_api import _kitty_features
+                import kitty_v3_retrained as kitty_model
+                btc_candles = get_candles("BTC/USDT", timeframe="1h", outputsize=160)
+                btc_features = _kitty_features(btc_candles)
+                kitty_prediction = kitty_model.predict_features(btc_features)
                 kitty_context = {
                     "signal": str(kitty_prediction.get("signal") or "UNKNOWN").upper(),
-                    "probability_next_close_up": kitty_prediction.get("probability_next_close_up"),
+                    "confidence": kitty_prediction.get("confidence"),
+                    "research_only": True,
                     "latest_candle_time": btc_candles[-1].get("datetime"),
                 }
             except Exception as kitty_exc:
