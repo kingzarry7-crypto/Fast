@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/kitty-retrain-research.yml"
+      - "prepare_kitty_fx_market_dataset.py"
+      - "tests/test_prepare_kitty_fx_market_dataset.py"
+      - "train_kitty_v3_retrained.py"
+      - "prepare_kitty_market_dataset.py"
   workflow_dispatch:
     inputs:
       limit:
@@ -94,11 +98,7 @@ jobs:
         run: python -m pip install --upgrade pip numpy pandas scikit-learn torch requests
       - name: Run gold and forex dataset tests
         run: python -m unittest discover -s tests -p 'test_prepare_kitty_fx_market_dataset.py' -v
-      - name: Explain missing market data secret
-        if: env.TWELVEDATA_API_KEY == ''
-        run: echo "Skipped XAU/FX training because repository secret TWELVEDATA_API_KEY is not configured. The key exists in Railway as TWELVE_DATA_API_KEY, but GitHub Actions cannot read Railway variables. Add the same key as a GitHub Actions secret named TWELVEDATA_API_KEY or TWELVE_DATA_API_KEY."
-      - name: Build hourly dataset from Twelve Data
-        if: env.TWELVEDATA_API_KEY != ''
+      - name: Build hourly dataset from Twelve Data or free Yahoo Finance fallback
         env:
           LIMIT: ${{ github.event.inputs.limit || '5000' }}
           THRESHOLD: ${{ github.event.inputs.threshold || '0.003' }}
@@ -106,7 +106,6 @@ jobs:
           mkdir -p "kitty-training-output/${{ matrix.symbol }}"
           python prepare_kitty_fx_market_dataset.py --symbol "${{ matrix.symbol }}" --limit "$LIMIT" --threshold "$THRESHOLD" --output "kitty-training-output/${{ matrix.symbol }}/hourly_features.csv"
       - name: Train isolated research candidate and holdout evaluation
-        if: env.TWELVEDATA_API_KEY != ''
         run: |
           python train_kitty_v3_retrained.py --symbol "${{ matrix.symbol }}" --csv "kitty-training-output/${{ matrix.symbol }}/hourly_features.csv" --output-dir "kitty-training-output/${{ matrix.symbol }}/candidates" --epochs 100 --patience 10 --batch-size 128 --purge 6 --round-trip-cost 0.001
       - name: Publish gold and forex research artifacts
