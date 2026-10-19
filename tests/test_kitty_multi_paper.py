@@ -144,5 +144,32 @@ class KittyMultiPaperTests(unittest.TestCase):
         self.assertEqual(paper._settings["timeframe"], "15m")
 
 
+    def test_current_signals_work_when_paper_simulator_is_disabled_and_create_no_orders(self):
+        rows = candles()
+        closed = rows[-2]
+        def technical_signal(candle_rows, symbol, timeframe):
+            return {
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "signal": "BUY",
+                "price": float(candle_rows[-1]["close"]),
+                "completed_candle_time": candle_rows[-1]["datetime"],
+                "confidence_score": 0.62,
+                "reasons": ["test fixture"],
+            }
+        with paper._settings_lock:
+            paper._settings.update({"enabled": False, "symbols": ["BTC/USD"], "timeframe": "1h"})
+        with patch.object(paper, "_require_user"), \
+             patch("market.get_candles", return_value=rows), \
+             patch.object(self.kitty_api_stub, "_technical_signal", side_effect=technical_signal):
+            result = paper.current_signals(object(), symbols="BTC/USD,XAU/USD", timeframe="1h")
+        self.assertEqual(result["mode"], "read_only")
+        self.assertEqual(result["available_markets"], 2)
+        self.assertEqual([row["signal"]["signal"] for row in result["results"]], ["BUY", "BUY"])
+        self.assertFalse(result["live_trading_enabled"])
+        self.assertFalse(result["paper_orders_created"])
+        self.assertEqual(paper.status()["recent_orders"], [])
+
+
 if __name__ == "__main__":
     unittest.main()
