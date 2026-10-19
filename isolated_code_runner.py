@@ -15,6 +15,7 @@ import requests
 
 MAX_FILES = 12
 MAX_FILE_CHARS = 18000
+MAX_TOTAL_CHARS = 60000
 MAX_OUTPUT_CHARS = 12000
 MAX_TIMEOUT_SECONDS = 60
 ALLOWED_SUFFIXES = {'.html', '.css', '.js', '.jsx', '.ts', '.tsx', '.json', '.md', '.svg', '.py', '.txt', '.toml', '.yaml', '.yml', '.sql', '.xml'}
@@ -45,6 +46,7 @@ def execute_project(files: list[dict[str, Any]], *, command: list[str] | None = 
         raise ValueError(f"timeout_seconds must be between 1 and {MAX_TIMEOUT_SECONDS}")
     normalized = []
     seen = set()
+    total_chars = 0
     for item in files:
         if not isinstance(item, dict):
             raise ValueError("Each file must be an object")
@@ -52,7 +54,7 @@ def execute_project(files: list[dict[str, Any]], *, command: list[str] | None = 
         if not isinstance(path, str) or not path or path.startswith("/") or "\\" in path or any(part in ("", ".", "..") for part in path.split("/")):
             raise ValueError("Invalid project path")
         parts = path.split("/")
-        if parts[0].lower() in {".git", ".env", "node_modules", "__pycache__"} or any(part.lower() == ".env" or part.lower().startswith(".env.") for part in parts):
+        if any(part.lower() in {".git", "node_modules", "__pycache__"} for part in parts) or any(part.lower() == ".env" or part.lower().startswith(".env.") for part in parts):
             raise ValueError("Restricted project path")
         suffix = "." + parts[-1].rsplit(".", 1)[-1].lower() if "." in parts[-1] else ""
         if suffix not in ALLOWED_SUFFIXES:
@@ -61,6 +63,9 @@ def execute_project(files: list[dict[str, Any]], *, command: list[str] | None = 
             raise ValueError(f"Duplicate project path: {path}")
         if not isinstance(content, str) or len(content) > MAX_FILE_CHARS:
             raise ValueError(f"Invalid or oversized content for {path}")
+        total_chars += len(content)
+        if total_chars > MAX_TOTAL_CHARS:
+            raise ValueError(f"Project exceeds total size limit of {MAX_TOTAL_CHARS} characters")
         seen.add(path)
         normalized.append({"path": path, "content": content})
     if command is not None:
@@ -69,7 +74,7 @@ def execute_project(files: list[dict[str, Any]], *, command: list[str] | None = 
         # Restrict the executable itself; the runner must enforce this independently.
         if command[0] not in ALLOWED_COMMANDS:
             raise ValueError("Command executable is not permitted")
-        if any(arg in {"sh", "bash", "-c", "/bin/sh", "/bin/bash", "&&", "||", ";", "|", ">", "<"} for arg in command):
+        if any(arg in {"sh", "bash", "-c", "/bin/sh", "/bin/bash", "&&", "||", ";", "|", ">", "<", "`"} or arg.startswith(("--eval", "-c")) for arg in command[1:]):
             raise ValueError("Shell execution is not permitted")
     base_url, token = _runner_config()
     payload = {"files": normalized, "command": command, "timeout_seconds": timeout_seconds}
