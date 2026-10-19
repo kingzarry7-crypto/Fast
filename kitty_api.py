@@ -432,11 +432,8 @@ def kitty_technical_signal(
         )
 
 
-# BTC classifier paper simulation remains isolated from all broker connectors.
-from kitty_paper_trader import router as kitty_paper_router
-router.include_router(kitty_paper_router)
-
-# Multi-market technical signals feed an isolated paper ledger only. Do not mount
-# the Binance exchange-demo order router in the web UI/API; keep testing paper-only.
+# One paper engine only: multi-market technical confluence into an isolated
+# SQLite ledger. Do not mount the legacy BTC classifier worker or Binance demo
+# order router; neither is part of this paper-only workflow.
 from kitty_multi_paper import router as kitty_multi_paper_router
 router.include_router(kitty_multi_paper_router)
