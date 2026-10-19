@@ -30,7 +30,7 @@ These are research candidates, not production-ready checkpoints. The experimenta
 
 ## Automated historical retraining workflow
 
-The GitHub Actions workflow `.github/workflows/kitty-retrain-research.yml` runs on relevant changes to the training pipeline, can be launched manually, and runs weekly. It downloads up to 5,000 completed hourly public candles per asset for BTC, ETH, SOL, and BNB, trying Binance first and falling back to CryptoCompare if Binance blocks the hosted runner, creates the same 18 features used by Kitty inference, labels the return from the next hourly candle open to the close six hours after that entry, and trains separate candidates per asset.
+The GitHub Actions workflow `.github/workflows/kitty-retrain-research.yml` runs on relevant changes to the training pipeline, can be launched manually, and runs weekly. It downloads up to 5,000 completed hourly public candles per asset for BTC, ETH, SOL, and BNB, trying Binance first and falling back to Yahoo Finance if Binance blocks the hosted runner, creates the same 18 features used by Kitty inference, labels the return from the next hourly candle open to the close six hours after that entry, and trains separate candidates per asset.
 
 - The target uses a realistic timing convention: signal after candle t closes, entry at candle t+1 open, exit at candle t+7 close. The six-hour label horizon is purged at train/validation/test boundaries to reduce overlapping-label leakage.
 - The candidate report includes a single untouched chronological holdout evaluation plus a diagnostic paper-return simulation that subtracts an assumed 0.10% round-trip fee/slippage cost.
