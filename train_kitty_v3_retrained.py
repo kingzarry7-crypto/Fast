@@ -347,7 +347,13 @@ def main() -> None:
             "min_confidence": confidence_threshold,
             **trial,
         })
-    eligible_trials = [trial for trial in threshold_trials if trial["trade_count"] >= 10]
+    eligible_trials = [
+        trial for trial in threshold_trials
+        if trial["trade_count"] >= 10
+        and trial["compounded_net_return"] > 0.0
+        and trial["average_net_return"] is not None
+        and trial["average_net_return"] > 0.0
+    ]
     if eligible_trials:
         selected_trial = max(
             eligible_trials,
@@ -357,10 +363,14 @@ def main() -> None:
             ),
         )
         selected_confidence = float(selected_trial["min_confidence"])
-        threshold_selection_note = "best_validation_compounded_net_return_with_at_least_10_trades"
+        threshold_selection_note = "best_positive_validation_net_return_with_at_least_10_trades"
     else:
-        selected_confidence = 0.60
-        threshold_selection_note = "fallback_0.60_because_validation_had_fewer_than_10_trades_at_all_thresholds"
+        # Do not pick the least-bad losing threshold. A value above 1.0 is an
+        # explicit abstention sentinel: no softmax class can meet it, so this
+        # candidate emits zero eligible paper trades until validation shows an
+        # edge with enough trades. This is safer than promoting a losing setup.
+        selected_confidence = 1.01
+        threshold_selection_note = "signals_disabled_no_validation_threshold_with_positive_net_return_and_at_least_10_trades"
 
     test_metrics = evaluate(winning_model, x_test, y_test)
     paper_metrics = evaluate_paper_returns(
@@ -372,6 +382,7 @@ def main() -> None:
     test_metrics["selected_min_confidence_from_validation"] = selected_confidence
     test_metrics["validation_threshold_trials"] = threshold_trials
     test_metrics["threshold_selection_note"] = threshold_selection_note
+    test_metrics["signals_disabled_for_no_validated_edge"] = selected_confidence > 1.0
     # Reference points make it harder to mistake a weak classifier for a useful
     # trading model. These are diagnostics, not competing deployable models.
     test_metrics["majority_class_baseline_accuracy"] = float(
