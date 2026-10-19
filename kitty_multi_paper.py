@@ -196,15 +196,16 @@ def _persist_settings() -> None:
 
 
 def _require_user(request: Request) -> None:
-    # This simulator uses no broker and no real funds; require a web session,
-    # but do not VIP-gate a no-money paper account.
+    # Settings mutate one shared paper ledger, so retain the app's established
+    # VIP authorization gate even though the ledger itself never sends orders.
     try:
         import api as web_api
-        web_api._require_current_user(request)
+        user_row = web_api._require_current_user(request)
+        web_api._require_web_vip(user_row)
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=401, detail="Sign in to control Kitty paper trading") from exc
+        raise HTTPException(status_code=401, detail="Sign in with a VIP account to control Kitty paper trading") from exc
 
 
 def _settings_snapshot() -> dict[str, Any]:
