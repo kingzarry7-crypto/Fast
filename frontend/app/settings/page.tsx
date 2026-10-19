@@ -11,7 +11,7 @@ import {
   setVipLocal,
   type MembershipSnapshot,
 } from "@/lib/membership";
-import { api, type ChatBehaviorPreferences, type PlatformStatus, type KittyPaperSettings, type KittyDemoSettings } from "@/lib/api";
+import { api, type ChatBehaviorPreferences, type PlatformStatus, type KittyPaperSettings, type KittyDemoSettings, type KittyTechnicalSignal } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 
 type Preferences = {
@@ -52,6 +52,11 @@ export default function SettingsPage() {
   const [kittyDemoError, setKittyDemoError] = useState("");
   const [kittyDemoNotice, setKittyDemoNotice] = useState("");
   const [kittyDemoAcknowledged, setKittyDemoAcknowledged] = useState(false);
+  const [kittySignalSymbol, setKittySignalSymbol] = useState("BTC/USD");
+  const [kittySignalTimeframe, setKittySignalTimeframe] = useState("1h");
+  const [kittySignal, setKittySignal] = useState<KittyTechnicalSignal | null>(null);
+  const [kittySignalLoading, setKittySignalLoading] = useState(false);
+  const [kittySignalError, setKittySignalError] = useState("");
 
   const refreshMembership = () =>
     setMembership(getMembershipSnapshot(user?.id, user?.is_subscribed));
@@ -108,6 +113,20 @@ export default function SettingsPage() {
       .finally(() => { if (!cancelled) setKittyDemoLoading(false); });
     return () => { cancelled = true; };
   }, []);
+
+  const loadKittySignal = async () => {
+    setKittySignalLoading(true);
+    setKittySignalError("");
+    setKittySignal(null);
+    try {
+      const result = await api.getKittyTechnicalSignal(kittySignalSymbol, kittySignalTimeframe);
+      setKittySignal(result);
+    } catch (error) {
+      setKittySignalError(error instanceof Error ? error.message : "Live technical signal unavailable for this symbol/timeframe.");
+    } finally {
+      setKittySignalLoading(false);
+    }
+  };
 
   const saveKittyDemoSettings = async () => {
     if (!kittyDemoSettings) return;
@@ -299,6 +318,46 @@ export default function SettingsPage() {
                     Live status check failed: {platformError}. The platform buttons remain real external destinations; refresh after the backend is available.
                   </div>
                 )}
+              </section>
+
+              <section className="kz-panel p-5 sm:p-6">
+                <SectionTitle title="KITTY MARKET SIGNALS" subtitle="CRYPTO · GOLD · FOREX · COMPLETED CANDLES" />
+                <p className="mt-3 text-xs leading-relaxed text-cyan-100/55">
+                  Choose a supported market and timeframe to calculate a transparent EMA/RSI/MACD confluence signal. This is not Kitty&apos;s trained BTC classifier and has not been proven profitable. It never places orders.
+                </p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_140px_auto]">
+                  <label className="block text-xs text-cyan-100/65">Market
+                    <select value={kittySignalSymbol} onChange={(event) => setKittySignalSymbol(event.target.value)} className="mt-2 w-full rounded-lg border border-cyan-500/20 bg-black/30 px-3 py-2 text-sm text-white">
+                      <option value="BTC/USD">BTC/USD</option><option value="BTC/USDT">BTC/USDT</option><option value="ETH/USD">ETH/USD</option><option value="ETH/USDT">ETH/USDT</option><option value="SOL/USD">SOL/USD</option><option value="BNB/USD">BNB/USD</option><option value="XAU/USD">Gold · XAU/USD</option><option value="EUR/USD">EUR/USD</option><option value="GBP/USD">GBP/USD</option><option value="USD/JPY">USD/JPY</option><option value="AUD/USD">AUD/USD</option>
+                    </select>
+                  </label>
+                  <label className="block text-xs text-cyan-100/65">Timeframe
+                    <select value={kittySignalTimeframe} onChange={(event) => setKittySignalTimeframe(event.target.value)} className="mt-2 w-full rounded-lg border border-cyan-500/20 bg-black/30 px-3 py-2 text-sm text-white">
+                      <option value="15m">15 minutes</option><option value="30m">30 minutes</option><option value="1h">1 hour</option><option value="2h">2 hours</option><option value="4h">4 hours</option><option value="1d">1 day</option>
+                    </select>
+                  </label>
+                  <button type="button" onClick={() => void loadKittySignal()} disabled={kittySignalLoading} className="self-end rounded-lg bg-cyan-400 px-4 py-2 font-mono-tech text-[10px] font-bold tracking-widest text-[#001018] transition hover:bg-cyan-300 disabled:opacity-50">{kittySignalLoading ? "ANALYZING…" : "GET SIGNAL"}</button>
+                </div>
+                {kittySignalError && <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200/80">{kittySignalError}</p>}
+                {kittySignal && <div className="mt-4 rounded-xl border border-cyan-500/15 bg-black/20 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-bold tracking-wider text-white">{kittySignal.symbol} · {kittySignal.timeframe}</span>
+                    <span className={kittySignal.signal === "BUY" ? "rounded-full border border-emerald-400/30 px-3 py-1 text-xs font-bold text-emerald-300" : kittySignal.signal === "SELL" ? "rounded-full border border-rose-400/30 px-3 py-1 text-xs font-bold text-rose-300" : "rounded-full border border-amber-400/30 px-3 py-1 text-xs font-bold text-amber-200"}>{kittySignal.signal}</span>
+                  </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                    <Row label="LATEST PRICE" value={String(kittySignal.price)} />
+                    <Row label="CONFIRMATIONS" value={kittySignal.confirmation_count + " / " + kittySignal.confirmations_required} />
+                    <Row label="RSI (14)" value={String(kittySignal.indicators.rsi_14)} />
+                  </div>
+                  <p className="mt-3 text-[10px] text-cyan-100/50">Completed candle: {kittySignal.completed_candle_time} · {Math.round(kittySignal.confidence_score * 100)}% rule confirmations (not a probability of profit).</p>
+                  <div className="mt-3 space-y-1">{kittySignal.reasons.map((reason) => <p key={reason} className="text-xs text-cyan-100/65">• {reason}</p>)}</div>
+                  {kittySignal.signal !== "NO TRADE" && <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                    <Row label="STOP REFERENCE" value={kittySignal.risk_levels.stop_reference == null ? "—" : String(kittySignal.risk_levels.stop_reference)} />
+                    <Row label="TARGET 1 REFERENCE" value={kittySignal.risk_levels.target_1_reference == null ? "—" : String(kittySignal.risk_levels.target_1_reference)} />
+                    <Row label="TARGET 2 REFERENCE" value={kittySignal.risk_levels.target_2_reference == null ? "—" : String(kittySignal.risk_levels.target_2_reference)} />
+                  </div>}
+                  <p className="mt-3 text-[10px] leading-relaxed text-amber-100/60">{kittySignal.warning}</p>
+                </div>}
               </section>
 
               <section className="kz-panel p-5 sm:p-6">
