@@ -37,3 +37,21 @@ The GitHub Actions workflow `.github/workflows/kitty-retrain-research.yml` runs 
 - The current runtime loader is BTC-only. ETH/SOL/BNB outputs are research candidates, not live model integrations.
 - Gold and forex are intentionally not trained from crypto data. They need their own verified historical price source and separate evaluation.
 - Artifacts are retained in GitHub Actions for 30 days. This workflow does **not** overwrite the production checkpoint or enable order execution. A candidate must be reviewed against existing baseline metrics and paper trading before promotion.
+
+
+## Paper-trade outcome feedback
+
+The BTC paper simulator now records every completed-candle prediction in its
+SQLite ledger and settles the prediction only after the next candle open and
+six-hour exit candle are available. It records the realized forward return,
+the threshold-derived outcome label, whether the original signal matched that
+label, and summary accuracy by signal. The API exposes the summary at
+`GET /paper/feedback`; `GET /paper/status` also includes it.
+
+This is evaluation feedback, not online learning: it does not modify model
+weights, automatically retrain from recent outcomes, or promote a checkpoint.
+Review a meaningful sample of settled outcomes and run a time-separated
+retraining/holdout evaluation before considering any model update. Outcomes
+are stored in the paper simulator's configured SQLite database, so durability
+depends on the backend's persistent-volume configuration.
+
