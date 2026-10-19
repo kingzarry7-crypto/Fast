@@ -120,8 +120,9 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
             continue
         gross = -float(raw_return) if side_class == 0 else float(raw_return)
         trades.append(gross - round_trip_cost)
-        # Labels represent six-hour forward returns: never stack overlapping trades.
-        next_entry_index = index + 6
+        # A signal at candle t enters at t+1 open and exits at t+7 close.
+        # Do not allow another signal until the previous six-hour trade has exited.
+        next_entry_index = index + 7
     if not trades:
         return {
             "trade_count": 0, "win_rate": None, "average_net_return": None,
@@ -346,7 +347,7 @@ def main() -> None:
         "feature_order": FEATURES,
         "chronological_split": {"train": len(y_train), "validation": len(y_val), "test": len(y_test), "purged_rows_per_boundary": args.purge},
         "selection": {"candidate": winner["checkpoint"], "rule": winner["selected_by"], "holdout_test_evaluations": 1, "production_architecture_compatible": True},
-        "note": "Only the validation-selected candidate is evaluated on the holdout test set. The reported paper backtest skips overlapping six-hour trades and is a preliminary diagnostic, not an executable portfolio backtest. Inspect walk-forward results, realistic fills, funding, calibration, and drawdown before production use.",
+        "note": "Only the validation-selected candidate is evaluated on the holdout test set. Targets enter at the next hourly open and exit six hours after entry; the reported return simulation subtracts assumed costs and skips overlapping trades. It is a preliminary diagnostic, not an executable portfolio backtest. Inspect walk-forward results, realistic fills, funding, calibration, and drawdown before production use.",
         "results": results,
     }
     report_path = args.output_dir / "comparison_report.json"
