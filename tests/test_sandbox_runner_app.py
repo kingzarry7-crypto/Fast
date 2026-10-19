@@ -70,6 +70,29 @@ class SandboxRunnerValidationTests(unittest.TestCase):
         sdk.Sandbox.create.assert_called_once()
         sandbox.files.write.assert_called_once_with("/home/user/main.py", "print(2 + 2)")
         sandbox.commands.run.assert_called_once()
+        self.assertFalse(sdk.Sandbox.create.call_args.kwargs["allow_internet_access"])
+        sandbox.kill.assert_called_once()
+
+    def test_runs_allowlisted_command_steps_sequentially(self):
+        sandbox = Mock()
+        sandbox.commands.run.side_effect = [
+            types.SimpleNamespace(exit_code=0, stdout="installed", stderr=""),
+            types.SimpleNamespace(exit_code=0, stdout="built", stderr=""),
+        ]
+        sdk = types.SimpleNamespace(Sandbox=Mock())
+        sdk.Sandbox.create.return_value = sandbox
+        req = runner_app.ExecuteRequest(
+            files=[runner_app.ProjectFile(path="package.json", content='{"scripts":{"build":"next build"}}')],
+            commands=[["npm", "install"], ["npm", "run", "build"]],
+            timeout_seconds=20,
+        )
+        with patch.dict(os.environ, {"KZ_SANDBOX_RUNNER_TOKEN": "token", "E2B_API_KEY": "e2b-test"}, clear=False), \
+             patch.dict(sys.modules, {"e2b_code_interpreter": sdk}):
+            result = runner_app.execute(req, "Bearer token")
+        self.assertEqual(result["exit_code"], 0)
+        self.assertEqual(result["commands_run"], 2)
+        self.assertTrue(sdk.Sandbox.create.call_args.kwargs["allow_internet_access"])
+        self.assertEqual(sandbox.commands.run.call_count, 2)
         sandbox.kill.assert_called_once()
 
     def test_invalid_auth_never_creates_sandbox(self):

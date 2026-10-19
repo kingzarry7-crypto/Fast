@@ -32,6 +32,7 @@ class ProjectFile(BaseModel):
 class ExecuteRequest(BaseModel):
     files: list[ProjectFile] = Field(min_length=1, max_length=MAX_FILES)
     command: list[str] | None = Field(default=None, max_length=8)
+    commands: list[list[str]] | None = Field(default=None, max_length=4)
     timeout_seconds: int = Field(default=30, ge=1, le=MAX_TIMEOUT)
 
 
@@ -60,9 +61,13 @@ def _validate(req: ExecuteRequest) -> list[dict[str, str]]:
         rows.append({"path": path, "content": f.content})
     if total > MAX_TOTAL_CHARS:
         raise HTTPException(413, "Project exceeds total size limit")
-    cmd = req.command
-    if cmd is not None:
-        if not cmd or any(not isinstance(a, str) or len(a) > 200 for a in cmd):
+    if req.command is not None and req.commands is not None:
+        raise HTTPException(400, "Provide command or commands, not both")
+    command_list = [req.command] if req.command is not None else (req.commands or [])
+    if len(command_list) > 4:
+        raise HTTPException(400, "Too many command steps")
+    for cmd in command_list:
+        if not cmd or len(cmd) > 8 or any(not isinstance(a, str) or len(a) > 200 for a in cmd):
             raise HTTPException(400, "Invalid command")
         if cmd[0] not in ALLOWED_COMMANDS:
             raise HTTPException(400, "Command executable is not permitted")
@@ -97,32 +102,47 @@ def execute(req: ExecuteRequest, authorization: str | None = Header(default=None
     try:
         # E2B supplies the isolation boundary; never run generated code in this API process.
         from e2b_code_interpreter import Sandbox
-        sandbox = Sandbox.create(timeout=max(10, req.timeout_seconds + 5), api_key=api_key)
+        requested_commands = req.commands or ([req.command] if req.command is not None else [])
+        needs_package_network = any(cmd and cmd[0] in {"npm", "npx"} for cmd in requested_commands)
+        sandbox = Sandbox.create(
+            timeout=max(10, req.timeout_seconds + 5),
+            api_key=api_key,
+            allow_internet_access=needs_package_network,
+        )
         for row in rows:
             safe_path = "/home/user/" + row["path"]
             sandbox.files.write(safe_path, row["content"])
-        command = req.command
-        if command is None:
+        commands = req.commands or ([req.command] if req.command is not None else [])
+        if not commands:
             py_files = [r["path"] for r in rows if r["path"].lower().endswith(".py")]
-            if not py_files:
+            if py_files:
+                commands = [["python", py_files[0]]]
+            else:
                 return {
                     "exit_code": 0, "stdout": "Files staged in isolated sandbox; no executable test command was requested.",
                     "stderr": "", "duration_ms": int((time.monotonic() - started) * 1000),
                     "runner": "e2b", "execution": "staged_only",
                 }
-            command = ["python", py_files[0]]
-        # Use the provider sandbox's command API, not subprocess in this service.
-        result = sandbox.commands.run(
-            " ".join(__import__("shlex").quote(part) for part in command),
-            cwd="/home/user",
-            timeout=req.timeout_seconds,
-        )
+        stdout_parts, stderr_parts = [], []
+        exit_code = 0
+        for command in commands:
+            result = sandbox.commands.run(
+                " ".join(__import__("shlex").quote(part) for part in command),
+                cwd="/home/user",
+                timeout=req.timeout_seconds,
+            )
+            stdout_parts.append(str(getattr(result, "stdout", "")))
+            stderr_parts.append(str(getattr(result, "stderr", "")))
+            exit_code = int(getattr(result, "exit_code", 1))
+            if exit_code != 0:
+                break
         return {
-            "exit_code": int(getattr(result, "exit_code", 1)),
-            "stdout": str(getattr(result, "stdout", ""))[:12000],
-            "stderr": str(getattr(result, "stderr", ""))[:12000],
+            "exit_code": exit_code,
+            "stdout": "\\n".join(part for part in stdout_parts if part)[-12000:],
+            "stderr": "\\n".join(part for part in stderr_parts if part)[-12000:],
             "duration_ms": int((time.monotonic() - started) * 1000),
             "runner": "e2b",
+            "commands_run": len(stdout_parts),
         }
     except Exception as exc:
         # Avoid returning provider internals, credentials, or environment details.

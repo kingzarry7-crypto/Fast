@@ -69,5 +69,23 @@ class IsolatedRunnerGatewayTests(unittest.TestCase):
         self.assertFalse(post.call_args.kwargs["allow_redirects"])
 
 
+    @patch("isolated_code_runner.requests.post")
+    def test_forwards_sequential_command_plan_to_runner(self, post):
+        response = Mock()
+        response.status_code = 200
+        response.is_redirect = False
+        response.json.return_value = {"exit_code": 0, "stdout": "built", "stderr": "", "duration_ms": 120}
+        post.return_value = response
+        commands = [["npm", "install", "--ignore-scripts"], ["npm", "run", "build"]]
+        with patch.dict(os.environ, {"KZ_SANDBOX_RUNNER_URL": "https://runner.example", "KZ_SANDBOX_RUNNER_TOKEN": "secret"}):
+            result = runner.execute_project(
+                [{"path": "package.json", "content": '{"scripts":{"build":"next build"}}'}],
+                commands=commands, timeout_seconds=60,
+            )
+        self.assertEqual(result["status"], "passed")
+        self.assertEqual(post.call_args.kwargs["json"]["commands"], commands)
+        self.assertIsNone(post.call_args.kwargs["json"]["command"])
+
+
 if __name__ == "__main__":
     unittest.main()

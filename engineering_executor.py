@@ -113,14 +113,43 @@ def generate_project(goal: str) -> dict[str, Any]:
         from isolated_code_runner import RunnerUnavailable, execute_project
 
         try:
-            # Compile Python source without running application entrypoints. For
-            # non-Python projects, stage files only; don't invent a test result.
+            # Compile Python without running app entrypoints. For JavaScript
+            # projects, execute an explicit build/test script when the manifest
+            # declares one. All commands run in the separate E2B sandbox.
             python_paths = [path for path in files if path.lower().endswith(".py")]
+            js_paths = [path for path in files if path.lower().endswith(".js")]
             command = ["python", "-m", "compileall", "-q", "."] if python_paths else None
+            commands = []
+            validation_name = "Isolated Python compile check" if python_paths else "Isolated project validation"
+            manifest = files.get("package.json")
+            if manifest:
+                try:
+                    package_data = json.loads(manifest)
+                    scripts = package_data.get("scripts", {}) if isinstance(package_data, dict) else {}
+                except Exception:
+                    scripts = {}
+                if isinstance(scripts, dict) and isinstance(scripts.get("build"), str):
+                    commands = [
+                        ["npm", "install", "--ignore-scripts", "--no-audit", "--no-fund"],
+                        ["npm", "run", "build"],
+                    ]
+                    command = None
+                    validation_name = "Isolated JavaScript build"
+                elif isinstance(scripts, dict) and isinstance(scripts.get("test"), str):
+                    commands = [
+                        ["npm", "install", "--ignore-scripts", "--no-audit", "--no-fund"],
+                        ["npm", "test"],
+                    ]
+                    command = None
+                    validation_name = "Isolated JavaScript tests"
+            elif js_paths and not python_paths:
+                command = ["node", "--check", js_paths[0]]
+                validation_name = "Isolated JavaScript syntax check"
             execution = execute_project(
                 [{"path": path, "content": content} for path, content in files.items()],
                 command=command,
-                timeout_seconds=30,
+                commands=commands or None,
+                timeout_seconds=60 if commands else 30,
             )
             if execution.get("status") == "failed":
                 checks.append({
@@ -128,11 +157,11 @@ def generate_project(goal: str) -> dict[str, Any]:
                     "status": "failed",
                     "note": str(execution.get("stderr") or "Isolated validation failed")[:500],
                 })
-            elif execution.get("runner") == "remote_isolated" and command:
+            elif execution.get("runner") == "remote_isolated" and (command or commands):
                 checks.append({
-                    "name": "Isolated Python compile check",
+                    "name": validation_name,
                     "status": "passed",
-                    "note": str(execution.get("stdout") or "Python compilation completed in the isolated runner.")[:500],
+                    "note": str(execution.get("stdout") or "The isolated validation command completed successfully.")[:500],
                 })
             else:
                 checks.append({

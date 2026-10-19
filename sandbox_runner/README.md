@@ -18,12 +18,12 @@ Separate Railway service for code execution. This API does not run submitted cod
 {"files":[{"path":"main.py","content":"print(1 + 1)"}],"command":["python","main.py"],"timeout_seconds":10}
 ```
 
-The response includes `exit_code`, `stdout`, `stderr`, and `duration_ms`. A request without a command stages files only; if Python files are present it defaults to running the first Python file. Other languages require the selected runtime to exist in the E2B sandbox.
+The response includes `exit_code`, `stdout`, `stderr`, and `duration_ms`. Use either `command` for one allowlisted command or `commands` for up to four sequential allowlisted commands. The runner stops at the first nonzero exit code. A request without a command stages files only; if Python files are present it defaults to running the first Python file. Other languages require the selected runtime to exist in the E2B sandbox.
 
 ## Security and rollout notes
 
 - This service must remain separate from the main API and must not receive the main API's credentials.
 - Keep Coding and Testing skills disabled until a live positive test, negative test, timeout test, and network-isolation review are complete.
-- The gateway currently allows a small command allowlist. This service repeats basic validation but it is not a full shell parser; the provider sandbox is the isolation boundary. Do not treat command allowlisting as the security boundary.
+- The gateway and runner both enforce a small executable allowlist and reject shell operators; this is defense in depth, not the isolation boundary. Ordinary Python/Node checks disable outbound internet in the E2B VM. Explicit `npm`/`npx` steps enable internet for package installation/building, so do not treat that mode as network-isolated. No application credentials are passed into the VM.
 - Do not expose the runner without a strong random bearer token and HTTPS.
 - Check E2B plan, usage limits, and sandbox defaults before production use.

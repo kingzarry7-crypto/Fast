@@ -2,7 +2,7 @@
 
 This API process never executes generated code locally. The remote service must
 provide the documented POST /v1/execute contract and run each job in a disposable,
-resource-limited sandbox with network disabled and no application secrets mounted.
+resource-limited sandbox with no application secrets mounted. Ordinary code checks disable outbound networking; npm/npx steps explicitly require egress.
 """
 from __future__ import annotations
 
@@ -38,6 +38,7 @@ def _runner_config() -> tuple[str, str]:
 
 
 def execute_project(files: list[dict[str, Any]], *, command: list[str] | None = None,
+                    commands: list[list[str]] | None = None,
                     timeout_seconds: int = 30) -> dict[str, Any]:
     """Send project files to an external sandbox; never fall back to local execution."""
     if not isinstance(files, list) or not files or len(files) > MAX_FILES:
@@ -68,16 +69,20 @@ def execute_project(files: list[dict[str, Any]], *, command: list[str] | None = 
             raise ValueError(f"Project exceeds total size limit of {MAX_TOTAL_CHARS} characters")
         seen.add(path)
         normalized.append({"path": path, "content": content})
-    if command is not None:
-        if not isinstance(command, list) or not command or len(command) > 8 or any(not isinstance(arg, str) or len(arg) > 200 for arg in command):
-            raise ValueError("command must be a short list of strings")
-        # Restrict the executable itself; the runner must enforce this independently.
-        if command[0] not in ALLOWED_COMMANDS:
+    if command is not None and commands is not None:
+        raise ValueError("Provide command or commands, not both")
+    command_list = [command] if command is not None else (commands or [])
+    if len(command_list) > 4:
+        raise ValueError("At most four isolated command steps are permitted")
+    for cmd in command_list:
+        if not isinstance(cmd, list) or not cmd or len(cmd) > 8 or any(not isinstance(arg, str) or len(arg) > 200 for arg in cmd):
+            raise ValueError("Each command must be a short list of strings")
+        if cmd[0] not in ALLOWED_COMMANDS:
             raise ValueError("Command executable is not permitted")
-        if any(arg in {"sh", "bash", "-c", "/bin/sh", "/bin/bash", "&&", "||", ";", "|", ">", "<", "`"} or arg.startswith(("--eval", "-c")) for arg in command[1:]):
+        if any(arg in {"sh", "bash", "-c", "/bin/sh", "/bin/bash", "&&", "||", ";", "|", ">", "<", "`"} or arg.startswith(("--eval", "-c")) for arg in cmd[1:]):
             raise ValueError("Shell execution is not permitted")
     base_url, token = _runner_config()
-    payload = {"files": normalized, "command": command, "timeout_seconds": timeout_seconds}
+    payload = {"files": normalized, "command": command, "commands": commands, "timeout_seconds": timeout_seconds}
     try:
         response = requests.post(
             base_url + "/v1/execute",

@@ -59,6 +59,34 @@ class EngineeringExecutorTests(unittest.TestCase):
         self.assertEqual(calls[0][1]["command"], ["python", "-m", "compileall", "-q", "."])
         self.assertTrue(any(item["name"] == "Isolated Python compile check" and item["status"] == "passed" for item in result["checks"]))
 
+    def test_runs_npm_build_for_javascript_projects_with_build_script(self):
+        fake_llm = types.ModuleType("llm_client")
+        fake_llm.ask = lambda *args, **kwargs: json.dumps({
+            "summary": "Web project",
+            "files": [
+                {"path": "package.json", "content": '{"scripts":{"build":"next build"},"dependencies":{"next":"15.5.27"}}'},
+                {"path": "index.html", "content": "<html><body>Preview</body></html>"},
+                {"path": "index.js", "content": "console.log('hello')"},
+            ],
+        })
+        fake_runner = types.ModuleType("isolated_code_runner")
+        fake_runner.RunnerUnavailable = type("RunnerUnavailable", (RuntimeError,), {})
+        calls = []
+        fake_runner.execute_project = lambda files, **kwargs: (
+            calls.append((files, kwargs)) or {
+                "status": "passed", "exit_code": 0, "stdout": "build successful",
+                "stderr": "", "runner": "remote_isolated", "execution": "executed",
+            }
+        )
+        with patch.dict(sys.modules, {"llm_client": fake_llm, "isolated_code_runner": fake_runner}):
+            result = engineering_executor.generate_project("Build a web app")
+        self.assertEqual(result["execution_status"], "validated")
+        self.assertEqual(calls[0][1]["commands"], [
+            ["npm", "install", "--ignore-scripts", "--no-audit", "--no-fund"],
+            ["npm", "run", "build"],
+        ])
+        self.assertTrue(any(item["name"] == "Isolated JavaScript build" and item["status"] == "passed" for item in result["checks"]))
+
     def test_rejects_duplicate_paths(self):
         with self.assertRaisesRegex(ValueError, "Duplicate generated path"):
             self._generate({"files": [
