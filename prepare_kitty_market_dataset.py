@@ -25,59 +25,52 @@ FEATURES = [
 BINANCE_SYMBOLS = {"BTC": "BTCUSDT", "ETH": "ETHUSDT", "SOL": "SOLUSDT", "BNB": "BNBUSDT"}
 
 
-def fetch_cryptocompare_hourly(symbol: str, limit: int = 5000) -> pd.DataFrame:
-    """Fallback provider for CI runners where Binance returns regional HTTP 451."""
+def fetch_yahoo_hourly(symbol: str, limit: int = 5000) -> pd.DataFrame:
+    """No-key fallback source for hosted runners blocked from Binance."""
     if symbol not in BINANCE_SYMBOLS:
         raise ValueError(f"Unsupported crypto symbol {symbol!r}")
     if not 500 <= limit <= 5000:
         raise ValueError("limit must be between 500 and 5000")
-    base = symbol
-    rows: list[dict] = []
-    to_ts = None
-    session = requests.Session()
-    while len(rows) < limit:
-        batch_limit = min(2000, limit - len(rows))
-        params = {"fsym": base, "tsym": "USD", "limit": batch_limit}
-        if to_ts is not None:
-            params["toTs"] = to_ts
-        response = session.get(
-            "https://min-api.cryptocompare.com/data/v2/histohour",
-            params=params, timeout=25,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, dict) or payload.get("Response") == "Error":
-            message = payload.get("Message", "Unexpected CryptoCompare response") if isinstance(payload, dict) else "Unexpected response"
-            raise RuntimeError(f"CryptoCompare historical request failed: {message}")
-        batch = payload.get("Data", {}).get("Data", [])
-        if not isinstance(batch, list) or not batch:
-            break
-        rows.extend(batch)
-        earliest = min(int(item["time"]) for item in batch if "time" in item)
-        to_ts = earliest - 1
-        if len(batch) < batch_limit:
-            break
-        time.sleep(0.15)
-    unique = {int(row["time"]): row for row in rows if "time" in row}
-    rows = [unique[key] for key in sorted(unique)][-limit:]
-    frame = pd.DataFrame(rows)
+    yahoo_symbol = f"{symbol}-USD"
+    now = int(datetime.now(timezone.utc).timestamp())
+    start = now - (limit + 48) * 3600
+    response = requests.get(
+        f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}",
+        params={"period1": start, "period2": now, "interval": "1h", "events": "history"},
+        headers={"User-Agent": "Mozilla/5.0 (compatible; KittyResearch/1.0)"},
+        timeout=30,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    chart = payload.get("chart", {}) if isinstance(payload, dict) else {}
+    results = chart.get("result") if isinstance(chart, dict) else None
+    if chart.get("error") or not results:
+        detail = chart.get("error") or "No hourly candles returned"
+        raise RuntimeError(f"Yahoo Finance historical request failed for {yahoo_symbol}: {detail}")
+    result = results[0]
+    timestamps = result.get("timestamp") or []
+    quotes = (result.get("indicators", {}).get("quote") or [{}])[0]
+    if not timestamps or any(name not in quotes for name in ("open", "high", "low", "close")):
+        raise RuntimeError(f"Yahoo Finance response is missing hourly OHLC values for {yahoo_symbol}")
+    frame = pd.DataFrame({"timestamp": pd.to_datetime(timestamps, unit="s", utc=True)})
+    for name in ("open", "high", "low", "close", "volume"):
+        values = quotes.get(name)
+        if values is not None:
+            frame[name] = values
+        elif name == "volume":
+            frame[name] = 0.0
+        else:
+            raise RuntimeError(f"Yahoo Finance response is missing {name} values for {yahoo_symbol}")
+    for name in ("open", "high", "low", "close", "volume"):
+        frame[name] = pd.to_numeric(frame[name], errors="coerce")
+    frame = frame.dropna(subset=["open", "high", "low", "close"])
+    frame["volume"] = frame["volume"].fillna(0.0)
+    frame = frame[frame["timestamp"] + pd.Timedelta(hours=1) <= pd.Timestamp.now(tz="UTC")]
+    frame = frame.sort_values("timestamp").drop_duplicates("timestamp").tail(limit).reset_index(drop=True)
     if len(frame) < 500:
-        raise RuntimeError(f"Only {len(frame)} completed hourly candles returned for {symbol} by fallback provider")
-    frame["timestamp"] = pd.to_datetime(frame["time"], unit="s", utc=True)
-    frame = frame.rename(columns={"volumefrom": "volume"})
-    for name in ("open", "high", "low", "close"):
-        frame[name] = pd.to_numeric(frame[name], errors="raise")
-    if "volume" not in frame.columns:
-        frame["volume"] = 0.0
-    frame["volume"] = pd.to_numeric(frame["volume"], errors="coerce").fillna(0.0)
-    # The latest candle may still be forming; exclude it by its hourly close time.
-    now = pd.Timestamp.now(tz="UTC")
-    frame = frame[frame["timestamp"] + pd.Timedelta(hours=1) <= now]
-    frame = frame.sort_values("timestamp").drop_duplicates("timestamp").reset_index(drop=True)
-    if len(frame) < 500:
-        raise RuntimeError(f"Only {len(frame)} completed hourly candles returned for {symbol} after filtering")
+        raise RuntimeError(f"Only {len(frame)} completed hourly candles returned for {yahoo_symbol}")
+    frame.attrs["data_source"] = "Yahoo Finance fallback"
     return frame[["timestamp", "open", "high", "low", "close", "volume"]]
-
 
 def fetch_hourly_klines(symbol: str, limit: int = 5000) -> pd.DataFrame:
     if symbol not in BINANCE_SYMBOLS:
@@ -107,13 +100,13 @@ def fetch_hourly_klines(symbol: str, limit: int = 5000) -> pd.DataFrame:
         # Binance blocks some hosted runners with HTTP 451. Fall back to a
         # second public hourly source instead of failing every scheduled run.
         try:
-            frame = fetch_cryptocompare_hourly(symbol, limit)
+            frame = fetch_yahoo_hourly(symbol, limit)
             frame.attrs["data_source"] = "CryptoCompare fallback"
-            print(f"Binance unavailable ({type(exc).__name__}); using CryptoCompare historical candles for {symbol}.")
+            print(f"Binance unavailable ({type(exc).__name__}); using Yahoo Finance historical candles for {symbol}.")
             return frame
         except Exception as fallback_exc:
             raise RuntimeError(
-                f"Both Binance and CryptoCompare historical data requests failed for {symbol}: "
+                f"Both Binance and Yahoo Finance historical data requests failed for {symbol}: "
                 f"{type(exc).__name__}; fallback {type(fallback_exc).__name__}: {fallback_exc}"
             ) from fallback_exc
     unique = {int(row[0]): row for row in rows}
