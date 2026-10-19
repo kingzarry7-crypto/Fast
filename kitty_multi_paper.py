@@ -399,7 +399,8 @@ class MultiPaperSettingsRequest(BaseModel):
 
 
 @router.get("/status")
-def get_status():
+def get_status(request: Request):
+    _require_user(request)
     return status()
 
 
