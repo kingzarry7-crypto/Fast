@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger("king_zarry_kitty_multi_paper")
@@ -363,6 +363,75 @@ def run_cycle(symbol: str | None = None) -> dict[str, Any]:
         "status": "completed" if any(row["status"] != "unavailable" for row in results) else "unavailable",
         "mode": "paper_only", "results": results,
         "live_trading_enabled": False, "exchange_connector_used": False,
+    }
+
+
+
+@router.get("/signals")
+def current_signals(
+    request: Request,
+    symbols: str | None = Query(default=None, description="Comma-separated market symbols; defaults to all supported Kitty markets"),
+    timeframe: str | None = Query(default=None, description="Candle timeframe; defaults to the saved paper-trading timeframe"),
+):
+    """Return current completed-candle technical signals without enabling or placing paper orders."""
+    _require_user(request)
+    cfg = _settings_snapshot()
+    selected_timeframe = timeframe or cfg["timeframe"]
+    if selected_timeframe not in ALLOWED_TIMEFRAMES:
+        raise HTTPException(status_code=422, detail="Unsupported timeframe")
+    try:
+        selected_symbols = _normalize_symbols(
+            [item.strip() for item in symbols.split(",") if item.strip()]
+            if symbols is not None else sorted(ALLOWED_SYMBOLS)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    from market import get_candles
+    from kitty_api import _technical_signal, _validate_candles
+
+    results = []
+    for market_symbol in selected_symbols:
+        try:
+            candles = get_candles(market_symbol, timeframe=selected_timeframe, outputsize=180)
+            _validate_candles(candles, selected_timeframe, market_symbol)
+            if len(candles) < 56:
+                raise ValueError("At least 56 candles are required to exclude the forming candle")
+            closed_candles = candles[:-1]
+            latest_time = _validate_candles(closed_candles, selected_timeframe, market_symbol)
+            signal = _technical_signal(closed_candles, market_symbol, selected_timeframe)
+            price = float(signal["price"])
+            if not math.isfinite(price) or price <= 0:
+                raise ValueError("Signal provider returned an invalid price")
+            results.append({
+                "symbol": market_symbol,
+                "status": "available",
+                "timeframe": selected_timeframe,
+                "completed_candle_time": latest_time,
+                "signal": signal,
+                "signal_type": "technical_rule_based",
+                "model_validated_for_market": False,
+                "trading_enabled": False,
+            })
+        except Exception as exc:
+            logger.warning("Kitty current signal unavailable for %s: %s", market_symbol, type(exc).__name__)
+            results.append({
+                "symbol": market_symbol,
+                "status": "unavailable",
+                "timeframe": selected_timeframe,
+                "error": type(exc).__name__ + ": " + str(exc)[:160],
+                "trading_enabled": False,
+            })
+    return {
+        "status": "completed" if any(row["status"] == "available" for row in results) else "unavailable",
+        "mode": "read_only",
+        "timeframe": selected_timeframe,
+        "results": results,
+        "available_markets": sum(row["status"] == "available" for row in results),
+        "unavailable_markets": sum(row["status"] != "available" for row in results),
+        "live_trading_enabled": False,
+        "paper_orders_created": False,
+        "warning": "These are experimental rule-based technical signals, not validated per-market ML predictions or a promise of profitability.",
     }
 
 
