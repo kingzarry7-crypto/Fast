@@ -54,7 +54,7 @@ class KittyTrainingExperimentTests(unittest.TestCase):
             FixedModel(), np.zeros((3, 18), dtype=np.float32),
             np.asarray([-0.01, 0.02, 0.01]), round_trip_cost=0.001,
         )
-        self.assertEqual(result["trade_count"], 2)
+        self.assertEqual(result["trade_count"], 1)
         self.assertAlmostEqual(result["win_rate"], 1.0)
         self.assertAlmostEqual(result["average_net_return"], 0.009)
 
