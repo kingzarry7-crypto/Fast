@@ -55,3 +55,30 @@ retraining/holdout evaluation before considering any model update. Outcomes
 are stored in the paper simulator's configured SQLite database, so durability
 depends on the backend's persistent-volume configuration.
 
+
+
+## Gold and forex research pipeline
+
+`prepare_kitty_fx_market_dataset.py` uses Twelve Data hourly candles for XAU/USD,
+EUR/USD, GBP/USD and USD/JPY, then applies the same 18-feature contract and
+six-hour outcome definition as the crypto research builder. Add a repository
+Actions secret named `TWELVEDATA_API_KEY` to enable these market jobs. Without
+that secret, the workflow runs the source tests and clearly skips market downloads.
+Provider plan limits or unsupported symbols can still make a market job fail; no
+synthetic or crypto candles are substituted for missing gold/FX data.
+
+The target timing is signal after candle t closes, entry at candle t+1 open, and
+exit at candle t+7 close. The label builder and paper feedback use the same
+entry/exit convention. Each gold/FX model is a separate research candidate and
+must not be loaded into the BTC production inference path.
+
+## Scheduled learning and promotion controls
+
+The weekly GitHub Actions workflow refreshes historical candles, reruns tests,
+trains candidate checkpoints and emits validation/holdout reports. This is
+automated research retraining, not online weight mutation. The paper ledger
+settles actual forward outcomes for monitoring, but its Railway SQLite data is
+not currently exported into GitHub Actions, so it is not directly used as
+training rows. Production weights are not overwritten automatically: the
+existing Kitty holdout/backtest results have not established an edge after costs.
+Review candidate reports and paper outcomes before any explicit promotion.
