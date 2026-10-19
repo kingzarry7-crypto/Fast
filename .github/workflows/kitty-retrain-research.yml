@@ -9,6 +9,7 @@ on:
       - "tests/test_prepare_kitty_fx_market_dataset.py"
       - "train_kitty_v3_retrained.py"
       - "prepare_kitty_market_dataset.py"
+      - "tests/test_prepare_kitty_market_dataset.py"
   workflow_dispatch:
     inputs:
       limit:
