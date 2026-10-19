@@ -36,6 +36,28 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         self.assertLess(validation[0][-1, 0], test[0][0, 0])
 
 
+    def test_chronological_split_purges_overlapping_forward_labels(self):
+        x = np.arange(300 * 18, dtype=np.float32).reshape(300, 18)
+        y = np.arange(300, dtype=np.int64) % 3
+        train, validation, test = kitty.split_chronologically(x, y, purge=6)
+        self.assertEqual(len(train[0]), 204)
+        self.assertEqual(len(validation[0]), 39)
+        self.assertEqual(len(test[0]), 45)
+        self.assertLess(train[0][-1, 0], validation[0][0, 0])
+        self.assertLess(validation[0][-1, 0], test[0][0, 0])
+
+    def test_paper_return_evaluation_subtracts_costs_and_skips_no_trade(self):
+        class FixedModel(torch.nn.Module):
+            def forward(self, x):
+                return torch.tensor([[0.9, 0.05, 0.05], [0.05, 0.9, 0.05], [0.05, 0.05, 0.9]], dtype=torch.float32)
+        result = kitty.evaluate_paper_returns(
+            FixedModel(), np.zeros((3, 18), dtype=np.float32),
+            np.asarray([-0.01, 0.02, 0.01]), round_trip_cost=0.001,
+        )
+        self.assertEqual(result["trade_count"], 2)
+        self.assertAlmostEqual(result["win_rate"], 1.0)
+        self.assertAlmostEqual(result["average_net_return"], 0.009)
+
     def test_training_tracks_learning_rate_for_scheduler(self):
         rng = np.random.default_rng(7)
         x_train = rng.normal(size=(84, 18)).astype(np.float32)
