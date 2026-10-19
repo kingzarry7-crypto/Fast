@@ -25,11 +25,20 @@ class IsolatedRunnerGatewayTests(unittest.TestCase):
                 runner.execute_project([{"path": path, "content": "x"}])
         with self.assertRaises(ValueError):
             runner.execute_project([{"path": "main.py", "content": "x"}], command=["bash", "-c", "id"])
+        with self.assertRaises(ValueError):
+            runner.execute_project([{"path": "main.py", "content": "x"}], command=["node", "--eval=process.env"])
+        with self.assertRaises(ValueError):
+            runner.execute_project([{"path": "folder/.git/config.txt", "content": "x"}])
 
     def test_rejects_unsupported_file_types_and_env_files(self):
         for path in ("main.exe", "folder/.env.production", ".env.local"):
             with self.subTest(path=path), self.assertRaises(ValueError):
                 runner.execute_project([{"path": path, "content": "x"}])
+
+    def test_rejects_projects_over_total_size_limit(self):
+        files = [{"path": f"file-{i}.txt", "content": "x" * 18000} for i in range(4)]
+        with self.assertRaisesRegex(ValueError, "total size limit"):
+            runner.execute_project(files)
 
     def test_rejects_unapproved_command_executable(self):
         with self.assertRaises(ValueError):
