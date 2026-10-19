@@ -77,7 +77,7 @@ class ProviderTransientError(RuntimeError):
     pass
 
 # Env
-GROQ_API_KEY = clean_env_str(os.getenv("GROQ_API_KEY"))
+GROQ_API_KEY = clean_env_str(os.getenv("GROQ_API_KEY") or os.getenv("GROQ_API_KEY "))
 GROQ_MODEL = clean_env_str(os.getenv("GROQ_MODEL"), "openai/gpt-oss-20b")
 GROQ_VISION_MODEL = clean_env_str(os.getenv("GROQ_VISION_MODEL"), "qwen/qwen3.8-27b")
 GROQ_URL = clean_env_str(os.getenv("GROQ_URL"), "https://api.groq.com/openai/v1/chat/completions")
@@ -133,7 +133,7 @@ HF_INFERENCE_URL = clean_env_str(os.getenv("HF_INFERENCE_URL"), "https://router.
 ELEVENLABS_API_KEY = clean_env_str(os.getenv("ELEVENLABS_API_KEY"))
 ELEVENLABS_VOICE_ID = clean_env_str(os.getenv("ELEVENLABS_VOICE_ID"), "hpp4J3VqNfWAUOO0d1Us")
 ELEVENLABS_MODEL_ID = clean_env_str(
-    os.getenv("ELEVENLABS_MODEL_ID") or os.getenv("ELEVENLABS_MODEL"),
+    os.getenv("ELEVENLABS_MODEL_ID") or os.getenv("ELEVENLABS_MODEL_ID ") or os.getenv("ELEVENLABS_MODEL"),
     "eleven_v3"
 )
 ELEVENLABS_MODEL = ELEVENLABS_MODEL_ID
@@ -152,7 +152,7 @@ AGNES_VIDEO_POLL_INTERVAL = float(clean_env_str(os.getenv("AGNES_VIDEO_POLL_INTE
 # =========================================================
 # FAL AI CONFIG (image generation/editing fallback)
 # =========================================================
-FAL_KEY = clean_env_str(os.getenv("FAL_KEY") or os.getenv("FAL_API_KEY"))
+FAL_KEY = clean_env_str(os.getenv("FAL_KEY") or os.getenv("FAL_KEY ") or os.getenv("FAL_API_KEY"))
 FAL_IMAGE_MODEL = clean_env_str(os.getenv("FAL_IMAGE_MODEL"), "fal-ai/flux/schnell")
 FAL_IMAGE_EDIT_MODEL = clean_env_str(os.getenv("FAL_IMAGE_EDIT_MODEL"), "fal-ai/flux-kontext-pro")
 FAL_VIDEO_MODEL = clean_env_str(os.getenv("FAL_VIDEO_MODEL"), "fal-ai/fast-svd/text-to-video")
