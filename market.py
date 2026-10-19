@@ -1128,9 +1128,11 @@ def _alpaca_supports_symbol(symbol: str) -> bool:
         base = _alpaca_symbol(symbol).split("/", 1)[0].upper()
     except Exception:
         return False
-    # Runtime logs show Alpaca returns no historical BNB/USD bars. Avoid
-    # repeated empty responses and let Massive/Binance/Twelve Data handle it.
-    return base not in {"BNB"}
+    # Runtime production logs show Alpaca repeatedly returns no historical bars
+    # for these assets. Skip the known-empty symbols and let Massive/Binance/
+    # Twelve Data handle them instead of retrying a predictably empty feed.
+    known_empty_assets = {"BNB", "ATOM", "NEAR", "APT"}
+    return base not in known_empty_assets
 
 
 def _alpaca_request(path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
