@@ -101,7 +101,9 @@ def fetch_hourly_klines(symbol: str, limit: int = 5000) -> pd.DataFrame:
         # second public hourly source instead of failing every scheduled run.
         try:
             frame = fetch_yahoo_hourly(symbol, limit)
-            frame.attrs["data_source"] = "CryptoCompare fallback"
+            # Keep artifact provenance truthful: this fallback is Yahoo Finance,
+            # not CryptoCompare. Downstream reports rely on this metadata.
+            frame.attrs["data_source"] = "Yahoo Finance fallback"
             print(f"Binance unavailable ({type(exc).__name__}); using Yahoo Finance historical candles for {symbol}.")
             return frame
         except Exception as fallback_exc:
