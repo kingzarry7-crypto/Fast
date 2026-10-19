@@ -11,7 +11,7 @@ import {
   setVipLocal,
   type MembershipSnapshot,
 } from "@/lib/membership";
-import { api, type ChatBehaviorPreferences, type PlatformStatus, type KittyPaperSettings, type KittyDemoSettings, type KittyTechnicalSignal } from "@/lib/api";
+import { api, type ChatBehaviorPreferences, type PlatformStatus, type KittyMultiPaperSettings, type KittyMultiPaperStatus, type KittyTechnicalSignal } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 
 type Preferences = {
@@ -30,6 +30,7 @@ const DEFAULT_PREFERENCES: Preferences = {
 
 const TELEGRAM_FALLBACK = "https://t.me/KingZarryAI_bot";
 const DISCORD_FALLBACK = "https://discord.com/channels/1537104053207568394";
+const KITTY_MARKET_OPTIONS = ["BTC/USD", "BTC/USDT", "ETH/USD", "ETH/USDT", "SOL/USD", "BNB/USD", "XAU/USD", "EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD"];
 
 export default function SettingsPage() {
   const { user, logout, refresh: refreshAuth } = useAuth();
@@ -41,17 +42,13 @@ export default function SettingsPage() {
   const [savingPreferences, setSavingPreferences] = useState(false);
   const [settingsError, setSettingsError] = useState("");
   const [preferences, setPreferences] = useState<Preferences>(DEFAULT_PREFERENCES);
-  const [kittySettings, setKittySettings] = useState<KittyPaperSettings | null>(null);
-  const [kittyLoading, setKittyLoading] = useState(true);
-  const [kittySaving, setKittySaving] = useState(false);
-  const [kittyError, setKittyError] = useState("");
-  const [kittyNotice, setKittyNotice] = useState("");
-  const [kittyDemoSettings, setKittyDemoSettings] = useState<KittyDemoSettings | null>(null);
-  const [kittyDemoLoading, setKittyDemoLoading] = useState(true);
-  const [kittyDemoSaving, setKittyDemoSaving] = useState(false);
-  const [kittyDemoError, setKittyDemoError] = useState("");
-  const [kittyDemoNotice, setKittyDemoNotice] = useState("");
-  const [kittyDemoAcknowledged, setKittyDemoAcknowledged] = useState(false);
+  const [kittyMultiSettings, setKittyMultiSettings] = useState<KittyMultiPaperSettings | null>(null);
+  const [kittyMultiStatus, setKittyMultiStatus] = useState<KittyMultiPaperStatus | null>(null);
+  const [kittyMultiLoading, setKittyMultiLoading] = useState(true);
+  const [kittyMultiSaving, setKittyMultiSaving] = useState(false);
+  const [kittyMultiRunning, setKittyMultiRunning] = useState(false);
+  const [kittyMultiError, setKittyMultiError] = useState("");
+  const [kittyMultiNotice, setKittyMultiNotice] = useState("");
   const [kittySignalSymbol, setKittySignalSymbol] = useState("BTC/USD");
   const [kittySignalTimeframe, setKittySignalTimeframe] = useState("1h");
   const [kittySignal, setKittySignal] = useState<KittyTechnicalSignal | null>(null);
@@ -92,25 +89,19 @@ export default function SettingsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    void api.getKittyPaperSettings()
-      .then((result) => {
-        if (!cancelled) setKittySettings(result);
+    Promise.all([api.getKittyMultiPaperSettings(), api.getKittyMultiPaperStatus()])
+      .then(([settings, status]) => {
+        if (!cancelled) {
+          setKittyMultiSettings(settings);
+          setKittyMultiStatus(status);
+        }
       })
       .catch((error) => {
-        if (!cancelled) setKittyError(error instanceof Error ? error.message : "Could not load Kitty controls. VIP sign-in may be required.");
+        if (!cancelled) setKittyMultiError(error instanceof Error ? error.message : "Could not load multi-market paper controls.");
       })
       .finally(() => {
-        if (!cancelled) setKittyLoading(false);
+        if (!cancelled) setKittyMultiLoading(false);
       });
-    return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    void api.getKittyDemoSettings()
-      .then((result) => { if (!cancelled) setKittyDemoSettings(result); })
-      .catch((error) => { if (!cancelled) setKittyDemoError(error instanceof Error ? error.message : "Could not load Kitty demo controls."); })
-      .finally(() => { if (!cancelled) setKittyDemoLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
@@ -128,44 +119,54 @@ export default function SettingsPage() {
     }
   };
 
-  const saveKittyDemoSettings = async () => {
-    if (!kittyDemoSettings) return;
-    setKittyDemoSaving(true);
-    setKittyDemoError("");
-    setKittyDemoNotice("");
+  const saveKittyMultiSettings = async () => {
+    if (!kittyMultiSettings) return;
+    setKittyMultiSaving(true);
+    setKittyMultiError("");
+    setKittyMultiNotice("");
     try {
-      const result = await api.saveKittyDemoSettings({
-        enabled: kittyDemoSettings.enabled,
-        order_btc: Number(kittyDemoSettings.order_btc),
-        max_notional_usd: Number(kittyDemoSettings.max_notional_usd),
-        acknowledge_experimental_model: kittyDemoAcknowledged,
+      const result = await api.saveKittyMultiPaperSettings({
+        enabled: kittyMultiSettings.enabled,
+        symbols: kittyMultiSettings.symbols,
+        timeframe: kittyMultiSettings.timeframe,
+        max_order_notional_usd: Number(kittyMultiSettings.max_order_notional_usd),
       });
-      setKittyDemoSettings(result);
-      setKittyDemoNotice(result.message || (result.enabled ? "Kitty demo trading enabled." : "Kitty demo trading paused."));
+      setKittyMultiSettings({
+        enabled: result.enabled,
+        symbols: result.symbols,
+        timeframe: result.timeframe,
+        max_order_notional_usd: result.max_order_notional_usd,
+        mode: "paper_only",
+        live_trading_enabled: false,
+        message: result.message,
+      });
+      setKittyMultiStatus(result);
+      setKittyMultiNotice(result.message || (result.enabled ? "Paper simulator enabled." : "Paper simulator paused."));
     } catch (error) {
-      setKittyDemoError(error instanceof Error ? error.message : "Could not apply Kitty demo settings.");
+      setKittyMultiError(error instanceof Error ? error.message : "Could not save paper settings.");
     } finally {
-      setKittyDemoSaving(false);
+      setKittyMultiSaving(false);
     }
   };
 
-  const saveKittySettings = async () => {
-    if (!kittySettings) return;
-    setKittySaving(true);
-    setKittyError("");
-    setKittyNotice("");
+  const runKittyMultiCycle = async () => {
+    if (!kittyMultiSettings?.enabled) {
+      setKittyMultiError("Enable and save the paper simulator before running a cycle.");
+      return;
+    }
+    setKittyMultiRunning(true);
+    setKittyMultiError("");
+    setKittyMultiNotice("");
     try {
-      const result = await api.saveKittyPaperSettings({
-        enabled: kittySettings.enabled,
-        order_btc: Number(kittySettings.order_btc),
-        max_notional_usd: Number(kittySettings.max_notional_usd),
-      });
-      setKittySettings(result);
-      setKittyNotice(result.message || "Kitty paper settings applied.");
+      const result = await api.runKittyMultiPaperCycle();
+      const status = await api.getKittyMultiPaperStatus();
+      setKittyMultiStatus(status);
+      const available = result.results?.filter((row) => row.status !== "unavailable").length || 0;
+      setKittyMultiNotice(`Paper cycle finished: ${available} market(s) processed; see results below.`);
     } catch (error) {
-      setKittyError(error instanceof Error ? error.message : "Could not apply Kitty settings.");
+      setKittyMultiError(error instanceof Error ? error.message : "Could not run a paper cycle.");
     } finally {
-      setKittySaving(false);
+      setKittyMultiRunning(false);
     }
   };
 
@@ -361,116 +362,95 @@ export default function SettingsPage() {
               </section>
 
               <section className="kz-panel p-5 sm:p-6">
-                <SectionTitle title="KITTY V3" subtitle="BINANCE SPOT DEMO · REAL DEMO ORDERS" />
-                <p className="mt-3 text-xs leading-relaxed text-amber-100/70">
-                  This is a separate, opt-in Binance Spot Demo worker, not paper simulation. It can submit demo-market orders only; it cannot route orders to Binance live. Kitty&apos;s training symbol is unconfirmed and this model is experimental, so use demo funds only.
+                <SectionTitle title="KITTY MULTI-MARKET PAPER TRADING" subtitle="BTC · GOLD · CRYPTO · FOREX · SIMULATED ONLY" />
+                <p className="mt-3 text-xs leading-relaxed text-cyan-100/55">
+                  Kitty evaluates completed candles and records simulated buys/sells in an isolated paper ledger. No broker, exchange, Binance demo, or live-order connector is called. The signal rules are experimental; this panel is for testing and collecting paper results, not claiming profitability.
                 </p>
-                {kittyDemoLoading && <p className="mt-4 text-xs text-cyan-200/60">Checking demo trading readiness…</p>}
-                {kittyDemoError && <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-amber-200/80">{kittyDemoError}</div>}
-                {kittyDemoSettings && (
+                {kittyMultiLoading && <p className="mt-4 text-xs text-cyan-200/60">Loading paper trading controls…</p>}
+                {kittyMultiError && <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-amber-200/80">{kittyMultiError}</div>}
+                {kittyMultiSettings && (
                   <>
                     <div className="mt-4 rounded-xl border border-cyan-500/15 bg-black/20 p-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-xs font-bold tracking-wider text-white">BINANCE SPOT DEMO STATUS</span>
-                        <span className={kittyDemoSettings.ready ? "rounded-full border border-emerald-400/30 px-3 py-1 text-[10px] text-emerald-300" : "rounded-full border border-amber-400/30 px-3 py-1 text-[10px] text-amber-200"}>{kittyDemoSettings.ready ? "READY" : "NOT READY"}</span>
-                      </div>
-                      <p className="mt-2 text-xs text-cyan-100/55">
-                        {kittyDemoSettings.enabled ? "AUTO DEMO TRADING ARMED" : "AUTO DEMO TRADING OFF"} · tracked Kitty position: {Number(kittyDemoSettings.position_btc || 0).toFixed(6)} BTC · poll interval: {kittyDemoSettings.poll_seconds || 900}s
-                      </p>
-                      {!kittyDemoSettings.ready && <p className="mt-2 text-xs text-amber-200/80">Check Railway: TRADING_MODE=demo, Binance Spot Demo API key/secret, and AGENT_TRADING_KILL_SWITCH=false. Keep TRADING_ENABLED=false; Kitty has a separate safety gate.</p>}
                       <SettingToggle
-                        title="Enable Kitty Binance Demo auto-trading"
-                        description={kittyDemoSettings.enabled ? "ON — Kitty may place capped BTCUSDT market orders after each new completed daily candle." : "OFF — no Binance orders will be submitted."}
-                        checked={kittyDemoSettings.enabled}
-                        onChange={(checked) => setKittyDemoSettings({ ...kittyDemoSettings, enabled: checked })}
+                        title="Enable multi-market paper simulator"
+                        description={kittyMultiSettings.enabled ? "ON — the background worker checks the selected markets at the chosen timeframe." : "OFF — no automatic paper cycles will run until you enable and save."}
+                        checked={kittyMultiSettings.enabled}
+                        onChange={(checked) => setKittyMultiSettings({ ...kittyMultiSettings, enabled: checked })}
                       />
-                      <div className="grid gap-4 border-t border-cyan-500/10 pt-4 sm:grid-cols-2">
+                      <div className="border-t border-cyan-500/10 pt-4">
+                        <p className="mb-3 text-xs text-cyan-100/65">Markets to paper trade</p>
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                          {KITTY_MARKET_OPTIONS.map((symbol) => (
+                            <label key={symbol} className="flex items-center gap-2 text-xs text-cyan-100/70">
+                              <input
+                                type="checkbox"
+                                checked={kittyMultiSettings.symbols.includes(symbol)}
+                                onChange={(event) => {
+                                  const symbols = event.target.checked
+                                    ? [...kittyMultiSettings.symbols, symbol]
+                                    : kittyMultiSettings.symbols.filter((item) => item !== symbol);
+                                  setKittyMultiSettings({ ...kittyMultiSettings, symbols });
+                                }}
+                                className="accent-cyan-400"
+                              />
+                              {symbol === "XAU/USD" ? "Gold · XAU/USD" : symbol}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="mt-4 grid gap-4 border-t border-cyan-500/10 pt-4 sm:grid-cols-2">
                         <label className="block text-xs text-cyan-100/65">
-                          BTC per entry
-                          <input type="number" min="0.000001" max="0.001" step="0.0001" value={kittyDemoSettings.order_btc}
-                            onChange={(event) => setKittyDemoSettings({ ...kittyDemoSettings, order_btc: Number(event.target.value) })}
-                            className="mt-2 w-full rounded-lg border border-cyan-500/20 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400/50" />
-                          <span className="mt-1 block text-[10px] text-cyan-100/35">Hard cap: 0.001 BTC per entry.</span>
+                          Candle timeframe
+                          <select value={kittyMultiSettings.timeframe} onChange={(event) => setKittyMultiSettings({ ...kittyMultiSettings, timeframe: event.target.value })}
+                            className="mt-2 w-full rounded-lg border border-cyan-500/20 bg-black/30 px-3 py-2 text-sm text-white">
+                            <option value="15m">15 minutes</option><option value="30m">30 minutes</option><option value="1h">1 hour</option><option value="2h">2 hours</option><option value="4h">4 hours</option><option value="1d">1 day</option>
+                          </select>
                         </label>
                         <label className="block text-xs text-cyan-100/65">
-                          Maximum order value (USD)
-                          <input type="number" min="1" max="25" step="1" value={kittyDemoSettings.max_notional_usd}
-                            onChange={(event) => setKittyDemoSettings({ ...kittyDemoSettings, max_notional_usd: Number(event.target.value) })}
+                          Max simulated order notional (USD)
+                          <input type="number" min="1" max="250" step="5" value={kittyMultiSettings.max_order_notional_usd}
+                            onChange={(event) => setKittyMultiSettings({ ...kittyMultiSettings, max_order_notional_usd: Number(event.target.value) })}
                             className="mt-2 w-full rounded-lg border border-cyan-500/20 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400/50" />
-                          <span className="mt-1 block text-[10px] text-cyan-100/35">Hard cap: $25 per entry.</span>
+                          <span className="mt-1 block text-[10px] text-cyan-100/35">Hard cap: $250 per simulated entry.</span>
                         </label>
                       </div>
-                      <label className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-amber-100/70">
-                        <input type="checkbox" checked={kittyDemoAcknowledged} onChange={(event) => setKittyDemoAcknowledged(event.target.checked)} className="mt-0.5 accent-cyan-400" />
-                        I understand Kitty is experimental, its training symbol is unconfirmed, and these are Binance demo orders only.
-                      </label>
                     </div>
                     <div className="mt-4 flex flex-wrap items-center gap-3">
-                      <button type="button" onClick={() => void saveKittyDemoSettings()}
-                        disabled={kittyDemoSaving || kittyDemoLoading || kittyDemoSettings.order_btc <= 0 || kittyDemoSettings.order_btc > 0.001 || kittyDemoSettings.max_notional_usd <= 0 || kittyDemoSettings.max_notional_usd > 25 || (kittyDemoSettings.enabled && !kittyDemoAcknowledged)}
+                      <button type="button" onClick={() => void saveKittyMultiSettings()}
+                        disabled={kittyMultiSaving || kittyMultiLoading || kittyMultiSettings.symbols.length === 0 || kittyMultiSettings.max_order_notional_usd <= 0 || kittyMultiSettings.max_order_notional_usd > 250}
                         className="rounded-lg bg-cyan-400 px-4 py-2 font-mono-tech text-[10px] font-bold tracking-widest text-[#001018] transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50">
-                        {kittyDemoSaving ? "APPLYING…" : kittyDemoSettings.enabled ? "ENABLE DEMO AUTO-TRADING" : "SAVE / PAUSE DEMO TRADING"}
+                        {kittyMultiSaving ? "SAVING…" : "SAVE PAPER SETTINGS"}
                       </button>
-                      {kittyDemoNotice && <span className="text-xs text-emerald-300">{kittyDemoNotice}</span>}
+                      <button type="button" onClick={() => void runKittyMultiCycle()}
+                        disabled={kittyMultiRunning || kittyMultiLoading || !kittyMultiSettings.enabled}
+                        className="rounded-lg border border-cyan-500/30 px-4 py-2 font-mono-tech text-[10px] font-bold tracking-widest text-cyan-200 transition hover:bg-cyan-500/10 disabled:cursor-not-allowed disabled:opacity-50">
+                        {kittyMultiRunning ? "RUNNING…" : "RUN PAPER CYCLE NOW"}
+                      </button>
+                      {kittyMultiNotice && <span className="text-xs text-emerald-300">{kittyMultiNotice}</span>}
                     </div>
-                    {kittyDemoSettings.recent_cycles && kittyDemoSettings.recent_cycles.length > 0 && (
-                      <div className="mt-4 space-y-2">
-                        <p className="text-[10px] font-bold tracking-widest text-cyan-100/45">RECENT DEMO CYCLES</p>
-                        {kittyDemoSettings.recent_cycles.slice(0, 4).map((cycle, index) => (
-                          <div key={String(cycle.candle_time || index)} className="rounded-lg border border-cyan-500/10 px-3 py-2 text-[10px] text-cyan-100/60">
-                            {String(cycle.candle_time || "—")} · {String(cycle.status || "unknown")} · {String(cycle.signal || "no signal")} {cycle.side ? "· " + String(cycle.side) : ""}
+                    {kittyMultiStatus && (
+                      <div className="mt-4 rounded-xl border border-cyan-500/15 bg-black/20 p-4">
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <Row label="PAPER CASH" value={`$${Number(kittyMultiStatus.cash_usd).toFixed(2)}`} />
+                          <Row label="EQUITY" value={`$${Number(kittyMultiStatus.equity_usd).toFixed(2)}`} />
+                          <Row label="OPEN POSITIONS" value={String(kittyMultiStatus.positions.length)} />
+                        </div>
+                        <p className="mt-3 text-[10px] leading-relaxed text-amber-100/60">{kittyMultiStatus.warning}</p>
+                        {kittyMultiStatus.recent_orders.length > 0 && (
+                          <div className="mt-4 space-y-2">
+                            <p className="text-[10px] font-bold tracking-widest text-cyan-100/45">RECENT SIMULATED ORDERS</p>
+                            {kittyMultiStatus.recent_orders.slice(0, 6).map((order, index) => (
+                              <div key={String(order.id || index)} className="rounded-lg border border-cyan-500/10 px-3 py-2 text-[10px] text-cyan-100/60">
+                                {String(order.symbol)} · {String(order.side)} · {Number(order.quantity).toPrecision(5)} @ {Number(order.price).toFixed(5)} · fee ${Number(order.fee_usd).toFixed(3)}
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        )}
+                        {kittyMultiStatus.recent_cycles.some((cycle) => cycle.status === "unavailable") && (
+                          <p className="mt-3 text-[10px] text-amber-200/70">Some markets did not return enough fresh candles. They are skipped, not simulated with fake prices.</p>
+                        )}
                       </div>
                     )}
-                  </>
-                )}
-              </section>
-
-              <section className="kz-panel p-5 sm:p-6">
-                <SectionTitle title="KITTY V3" subtitle="PAPER SIMULATION ONLY · NO EXCHANGE ORDERS" />
-                <p className="mt-3 text-xs leading-relaxed text-cyan-100/55">
-                  This switch only simulates trades inside King Zarry AI. It does not send any Binance orders. To test actual exchange execution, use the separate Binance Spot Demo auto-trading panel immediately above.
-                </p>
-                {kittyLoading && <p className="mt-4 text-xs text-cyan-200/60">Loading Kitty settings…</p>}
-                {kittyError && <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-amber-200/80">{kittyError}</div>}
-                {kittySettings && (
-                  <>
-                    <div className="mt-4 rounded-xl border border-cyan-500/15 bg-black/20 p-4">
-                      <SettingToggle
-                        title="Enable Kitty paper trader"
-                        description={kittySettings.enabled ? "ON — Kitty may evaluate new completed daily candles in the simulator." : "OFF — no new paper-trading cycles will be processed."}
-                        checked={kittySettings.enabled}
-                        onChange={(checked) => setKittySettings({ ...kittySettings, enabled: checked })}
-                      />
-                      <div className="grid gap-4 border-t border-cyan-500/10 pt-4 sm:grid-cols-2">
-                        <label className="block text-xs text-cyan-100/65">
-                          Simulated BTC order quantity
-                          <input type="number" min="0.000001" max="0.01" step="0.0001" value={kittySettings.order_btc}
-                            onChange={(event) => setKittySettings({ ...kittySettings, order_btc: Number(event.target.value) })}
-                            className="mt-2 w-full rounded-lg border border-cyan-500/20 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400/50" />
-                          <span className="mt-1 block text-[10px] text-cyan-100/35">Hard cap: 0.01 BTC per simulated entry.</span>
-                        </label>
-                        <label className="block text-xs text-cyan-100/65">
-                          Maximum simulated order value (USD)
-                          <input type="number" min="1" max="500" step="5" value={kittySettings.max_notional_usd}
-                            onChange={(event) => setKittySettings({ ...kittySettings, max_notional_usd: Number(event.target.value) })}
-                            className="mt-2 w-full rounded-lg border border-cyan-500/20 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400/50" />
-                          <span className="mt-1 block text-[10px] text-cyan-100/35">Hard cap: $500 in the simulator.</span>
-                        </label>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex flex-wrap items-center gap-3">
-                      <button type="button" onClick={() => void saveKittySettings()}
-                        disabled={kittySaving || kittyLoading || kittySettings.order_btc <= 0 || kittySettings.order_btc > 0.01 || kittySettings.max_notional_usd <= 0 || kittySettings.max_notional_usd > 500}
-                        className="rounded-lg bg-cyan-400 px-4 py-2 font-mono-tech text-[10px] font-bold tracking-widest text-[#001018] transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50">
-                        {kittySaving ? "APPLYING…" : "SAVE & APPLY KITTY SETTINGS"}
-                      </button>
-                      {kittyNotice && <span className="text-xs text-emerald-300">{kittyNotice}</span>}
-                    </div>
-                    <p className="mt-3 text-[10px] leading-relaxed text-amber-200/60">
-                      Tuning currently applies to this running backend process and resets on a backend restart unless environment defaults are also updated. Kitty V3&apos;s training symbol is not yet confirmed, so keep this in paper mode while validating the model.
-                    </p>
                   </>
                 )}
               </section>
