@@ -17,19 +17,6 @@ on:
         options: ["0.002", "0.003", "0.004", "0.005"]
   schedule:
     - cron: "17 2 * * 0"
-  push:
-    branches: ["main"]
-    paths:
-      - "prepare_kitty_market_dataset.py"
-      - "prepare_kitty_fx_market_dataset.py"
-      - "tests/test_prepare_kitty_fx_market_dataset.py"
-      - "train_kitty_v3_retrained.py"
-      - "tests/test_prepare_kitty_market_dataset.py"
-      - "tests/test_train_kitty_v3_retrained.py"
-      - "kitty_paper_trader.py"
-      - "tests/test_kitty_paper_trader.py"
-      - ".github/workflows/kitty-retrain-research.yml"
-
 permissions:
   contents: read
 
