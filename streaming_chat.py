@@ -235,59 +235,77 @@ def _stream_zarry(messages: list):
 
 
 def _provider_streams(messages: list):
-    # Prefer the user's Colab-hosted Zarry model for streaming chat as well.
-    if os.getenv("ZARRY_API_URL", "").strip():
-        yield "zarry", _stream_zarry(messages)
-    if ai_engine.HF_TOKEN:
-        yield "huggingface", _stream_openai_compatible(
-            url=ai_engine.HF_INFERENCE_URL,
-            key=ai_engine.HF_TOKEN,
-            model=ai_engine.HF_MODEL_ID,
-            messages=messages,
-        )
-        # A configured/custom model may be missing or unavailable on the HF router.
-        # Try the known OpenAI-compatible fallback before moving to other providers.
-        fallback_model = (getattr(ai_engine, "HF_FALLBACK_MODEL_ID", "") or "").strip()
-        if fallback_model and fallback_model != ai_engine.HF_MODEL_ID:
-            yield "huggingface_fallback", _stream_openai_compatible(
+    """Yield configured streaming providers in the same preference order as normal chat.
+
+    The stream path supports only providers with an SSE-compatible adapter. A
+    requested AI_PROVIDER is attempted first, then the remaining configured
+    stream providers are tried as fallbacks.
+    """
+    preferred = os.getenv("AI_PROVIDER", "AUTO").strip().lower()
+    if preferred == "hf":
+        preferred = "huggingface"
+
+    default_order = ["zarry", "huggingface", "cloudflare", "openai", "groq", "openrouter", "chutes"]
+    if not os.getenv("ZARRY_API_URL", "").strip():
+        default_order = default_order[1:]
+    if not ai_engine.HF_TOKEN:
+        default_order = [p for p in default_order if p != "huggingface"]
+
+    # Match ai_engine's AUTO ordering: Zarry, then HF when configured, then
+    # Cloudflare, OpenAI, Groq, OpenRouter, and Chutes.
+    order = default_order
+    if preferred not in {"", "auto"} and preferred in default_order:
+        order = [preferred] + [p for p in default_order if p != preferred]
+
+    for provider in order:
+        if provider == "zarry" and os.getenv("ZARRY_API_URL", "").strip():
+            yield provider, _stream_zarry(messages)
+        elif provider == "huggingface" and ai_engine.HF_TOKEN:
+            yield provider, _stream_openai_compatible(
                 url=ai_engine.HF_INFERENCE_URL,
                 key=ai_engine.HF_TOKEN,
-                model=fallback_model,
+                model=ai_engine.HF_MODEL_ID,
                 messages=messages,
             )
-    # Cloudflare's Worker returns a complete JSON answer, so emit it as one SSE token.
-    if ai_engine.CLOUDFLARE_AI_TOKEN:
-        yield "cloudflare", _stream_cloudflare(messages)
-    if ai_engine.OPENAI_API_KEY:
-        yield "openai", _stream_openai_compatible(
-            url=ai_engine.OPENAI_URL,
-            key=ai_engine.OPENAI_API_KEY,
-            model=ai_engine.OPENAI_MODEL,
-            messages=messages,
-            token_parameter="max_completion_tokens",
-        )
-    if _GROQ_KEY:
-        yield "groq", _stream_openai_compatible(
-            url=_GROQ_URL,
-            key=_GROQ_KEY,
-            model=_GROQ_MODEL,
-            messages=messages,
-        )
-    if _OPENROUTER_KEY:
-        yield "openrouter", _stream_openai_compatible(
-            url=_OPENROUTER_URL,
-            key=_OPENROUTER_KEY,
-            model=_OPENROUTER_MODEL,
-            messages=messages,
-        )
-    if _CHUTES_KEY:
-        yield "chutes", _stream_openai_compatible(
-            url=_CHUTES_URL,
-            key=_CHUTES_KEY,
-            model=_CHUTES_MODEL,
-            messages=messages,
-        )
-
+            fallback_model = (getattr(ai_engine, "HF_FALLBACK_MODEL_ID", "") or "").strip()
+            if fallback_model and fallback_model != ai_engine.HF_MODEL_ID:
+                yield "huggingface_fallback", _stream_openai_compatible(
+                    url=ai_engine.HF_INFERENCE_URL,
+                    key=ai_engine.HF_TOKEN,
+                    model=fallback_model,
+                    messages=messages,
+                )
+        elif provider == "cloudflare" and ai_engine.CLOUDFLARE_AI_TOKEN:
+            yield provider, _stream_cloudflare(messages)
+        elif provider == "openai" and ai_engine.OPENAI_API_KEY:
+            yield provider, _stream_openai_compatible(
+                url=ai_engine.OPENAI_URL,
+                key=ai_engine.OPENAI_API_KEY,
+                model=ai_engine.OPENAI_MODEL,
+                messages=messages,
+                token_parameter="max_completion_tokens",
+            )
+        elif provider == "groq" and _GROQ_KEY:
+            yield provider, _stream_openai_compatible(
+                url=_GROQ_URL,
+                key=_GROQ_KEY,
+                model=_GROQ_MODEL,
+                messages=messages,
+            )
+        elif provider == "openrouter" and _OPENROUTER_KEY:
+            yield provider, _stream_openai_compatible(
+                url=_OPENROUTER_URL,
+                key=_OPENROUTER_KEY,
+                model=_OPENROUTER_MODEL,
+                messages=messages,
+            )
+        elif provider == "chutes" and _CHUTES_KEY:
+            yield provider, _stream_openai_compatible(
+                url=_CHUTES_URL,
+                key=_CHUTES_KEY,
+                model=_CHUTES_MODEL,
+                messages=messages,
+            )
 
 def _build_stream_generator(
     *,
