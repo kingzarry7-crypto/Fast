@@ -86,7 +86,9 @@ def build_dataset(frame: pd.DataFrame, threshold: float = 0.003, horizon: int = 
     ema26 = close.ewm(span=26, adjust=False).mean()
     macd_series = ema12 - ema26
     macd_signal = macd_series.ewm(span=9, adjust=False).mean()
-    delta = close.diff()
+    # Keep the feature contract numerically aligned with kitty_api._kitty_features:
+    # RSI and volatility are computed from fractional returns, not raw price deltas.
+    delta = changes
     gains = delta.clip(lower=0).rolling(14).mean()
     losses = (-delta.clip(upper=0)).rolling(14).mean()
     rs = gains / losses.replace(0, np.nan)
@@ -105,8 +107,8 @@ def build_dataset(frame: pd.DataFrame, threshold: float = 0.003, horizon: int = 
         "macd_norm": macd_series / close,
         "macd_signal_norm": macd_signal / close,
         "macd_hist_norm": (macd_series - macd_signal) / close,
-        "volatility_6h": changes.rolling(6).std(ddof=0),
-        "volatility_24h": changes.rolling(24).std(ddof=0),
+        "volatility_6h": changes.rolling(6).apply(lambda values: float(np.std(values, ddof=0)), raw=True),
+        "volatility_24h": changes.rolling(24).apply(lambda values: float(np.std(values, ddof=0)), raw=True),
         "range_pct": (high - low) / close,
         "body_pct": (close - opn) / opn,
         "close_position": ((close - low) / (high - low).replace(0, np.nan)).fillna(0.5),
