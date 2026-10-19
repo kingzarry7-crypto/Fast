@@ -14,9 +14,9 @@ on:
       limit:
         description: Hourly candles per market (500-5000)
         required: true
-        default: "5000"
+        default: "15000"
         type: choice
-        options: ["2000", "3000", "4000", "5000"]
+        options: ["2000", "5000", "10000", "15000"]
       threshold:
         description: Six-hour move threshold for SHORT/LONG labels
         required: true
@@ -60,7 +60,7 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_kitty_paper_trader.py' -v
       - name: Build hourly dataset from public historical candles
         env:
-          LIMIT: ${{ github.event.inputs.limit || '5000' }}
+          LIMIT: ${{ github.event.inputs.limit || '15000' }}
           THRESHOLD: ${{ github.event.inputs.threshold || '0.003' }}
         run: |
           mkdir -p "kitty-training-output/${{ matrix.symbol }}"
