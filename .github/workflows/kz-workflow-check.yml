@@ -3,8 +3,8 @@ name: KZ Workflow Engine Check
 on:
   push:
     paths:
-      - "account_agent.py"      - "tests/test_legacy_railway_env_names.py"
-
+      - "account_agent.py"
+      - "tests/test_legacy_railway_env_names.py"
       - "account_notifications.py"
       - "gmail_intelligence.py"
       - "test_account_notifications.py"
@@ -55,8 +55,8 @@ on:
 
   pull_request:
     paths:
-      - "tests/test_free_news_fallback.py"      - "tests/test_legacy_railway_env_names.py"
-
+      - "tests/test_free_news_fallback.py"
+      - "tests/test_legacy_railway_env_names.py"
       - "news.py"
       - "config.py"
       - "test_provider_config.py"
