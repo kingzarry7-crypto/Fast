@@ -77,7 +77,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY }}
+      TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY || secrets.TWELVE_DATA_API_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -92,7 +92,7 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_prepare_kitty_fx_market_dataset.py' -v
       - name: Explain missing market data secret
         if: env.TWELVEDATA_API_KEY == ''
-        run: echo "Skipped XAU/FX training because repository secret TWELVEDATA_API_KEY is not configured. Add it in GitHub Settings > Secrets and variables > Actions."
+        run: echo "Skipped XAU/FX training because repository secret TWELVEDATA_API_KEY is not configured. The key exists in Railway as TWELVE_DATA_API_KEY, but GitHub Actions cannot read Railway variables. Add the same key as a GitHub Actions secret named TWELVEDATA_API_KEY or TWELVE_DATA_API_KEY."
       - name: Build hourly dataset from Twelve Data
         if: env.TWELVEDATA_API_KEY != ''
         env:
