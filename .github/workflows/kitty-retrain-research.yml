@@ -24,6 +24,8 @@ on:
       - "train_kitty_v3_retrained.py"
       - "tests/test_prepare_kitty_market_dataset.py"
       - "tests/test_train_kitty_v3_retrained.py"
+      - "kitty_paper_trader.py"
+      - "tests/test_kitty_paper_trader.py"
       - ".github/workflows/kitty-retrain-research.yml"
 
 permissions:
@@ -50,11 +52,13 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install training dependencies
-        run: python -m pip install --upgrade pip numpy pandas scikit-learn torch requests
+        run: python -m pip install --upgrade pip numpy pandas scikit-learn torch requests fastapi pydantic
       - name: Run dataset builder tests
         run: python -m unittest discover -s tests -p 'test_prepare_kitty_market_dataset.py' -v
       - name: Run training contract and leakage tests
         run: python -m unittest discover -s tests -p 'test_train_kitty_v3_retrained.py' -v
+      - name: Run paper-trader feedback and safety tests
+        run: python -m unittest discover -s tests -p 'test_kitty_paper_trader.py' -v
       - name: Build hourly dataset from public historical candles
         env:
           LIMIT: ${{ github.event.inputs.limit || '5000' }}
