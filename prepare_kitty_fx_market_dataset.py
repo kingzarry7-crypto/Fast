@@ -1,7 +1,7 @@
-"""Research-only hourly gold/forex dataset builder using Twelve Data.
+"""Research-only hourly gold/forex dataset builder.
 
-Requires TWELVEDATA_API_KEY. Uses the same 18-feature/three-class target contract
-as Kitty V3, but keeps every market's dataset and checkpoint separate.
+Uses Twelve Data when configured and Yahoo Finance chart data as a no-key fallback.
+Every market remains isolated; generated datasets are research-only.
 """
 from __future__ import annotations
 
@@ -20,6 +20,42 @@ SYMBOLS = {
     "GBPUSD": "GBP/USD",
     "USDJPY": "USD/JPY",
 }
+YAHOO_SYMBOLS = {"XAUUSD": "XAUUSD=X", "EURUSD": "EURUSD=X", "GBPUSD": "GBPUSD=X", "USDJPY": "USDJPY=X"}
+
+
+def _fetch_yahoo_hourly_candles(symbol: str, outputsize: int) -> pd.DataFrame:
+    # Yahoo provides recent hourly history without requiring a paid API key.
+    import time
+    now = int(time.time())
+    response = requests.get(
+        f"https://query1.finance.yahoo.com/v8/finance/chart/{YAHOO_SYMBOLS[symbol]}",
+        params={"period1": now - 730 * 24 * 60 * 60, "period2": now,
+                "interval": "1h", "events": "history"},
+        headers={"User-Agent": "Mozilla/5.0"}, timeout=30,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    try:
+        result = payload["chart"]["result"][0]
+        timestamps = result["timestamp"]
+        quote = result["indicators"]["quote"][0]
+    except (KeyError, IndexError, TypeError) as exc:
+        chart = payload.get("chart", {}) if isinstance(payload, dict) else {}
+        error = chart.get("error") or "unexpected response"
+        raise RuntimeError(f"Yahoo Finance hourly data unavailable for {symbol}: {error}") from exc
+    frame = pd.DataFrame({"timestamp": pd.to_datetime(timestamps, unit="s", utc=True)})
+    for column in ("open", "high", "low", "close"):
+        values = quote.get(column)
+        if values is None:
+            raise RuntimeError(f"Yahoo Finance response is missing {column} prices for {symbol}")
+        frame[column] = pd.to_numeric(values, errors="coerce")
+    volume = quote.get("volume")
+    frame["volume"] = pd.to_numeric(volume, errors="coerce") if volume is not None else 0.0
+    frame = frame.dropna(subset=["timestamp", "open", "high", "low", "close"])
+    frame = frame.sort_values("timestamp").drop_duplicates("timestamp").tail(outputsize).reset_index(drop=True)
+    if len(frame) < 500:
+        raise RuntimeError(f"Only {len(frame)} Yahoo Finance hourly candles returned for {symbol}; refusing to train")
+    return frame[["timestamp", "open", "high", "low", "close", "volume"]]
 
 
 def fetch_hourly_candles(symbol: str, api_key: str | None = None, outputsize: int = 5000) -> pd.DataFrame:
@@ -29,7 +65,7 @@ def fetch_hourly_candles(symbol: str, api_key: str | None = None, outputsize: in
         raise ValueError("outputsize must be between 500 and 5000")
     key = (api_key or os.getenv("TWELVEDATA_API_KEY", "") or os.getenv("TWELVE_DATA_API_KEY", "")).strip()
     if not key:
-        raise RuntimeError("Twelve Data API key is missing. Set TWELVEDATA_API_KEY or TWELVE_DATA_API_KEY in this runtime; GitHub Actions needs its own repository secret.")
+        return _fetch_yahoo_hourly_candles(symbol, outputsize)
     response = requests.get(
         "https://api.twelvedata.com/time_series",
         params={"symbol": SYMBOLS[symbol], "interval": "1h", "outputsize": outputsize,
