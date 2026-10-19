@@ -117,7 +117,7 @@ def build_dataset(frame: pd.DataFrame, threshold: float = 0.003, horizon: int = 
     # same-close fill: enter at the next candle open and exit six hours after
     # entry, at the close of candle t + horizon.
     entry_price = opn.shift(-1)
-    exit_price = close.shift(-horizon)
+    exit_price = close.shift(-(horizon + 1))
     forward_return = exit_price / entry_price - 1.0
     dataset["entry_price_next_open"] = entry_price
     dataset["exit_price_after_6h"] = exit_price
@@ -129,7 +129,7 @@ def build_dataset(frame: pd.DataFrame, threshold: float = 0.003, horizon: int = 
     # Remove warm-up rows and rows without the next-open entry / six-hour exit.
     dataset = dataset.replace([np.inf, -np.inf], np.nan).dropna(subset=FEATURES + ["forward_return_6h"])
     dataset["target"] = dataset["target"].astype(int)
-    dataset = dataset[dataset["timestamp"] < frame["timestamp"].iloc[-horizon]].reset_index(drop=True)
+    dataset = dataset[dataset["timestamp"] < frame["timestamp"].iloc[-(horizon + 1)]].reset_index(drop=True)
     if set(dataset["target"].unique()) != {0, 1, 2}:
         raise ValueError("Dataset must contain SHORT, NO TRADE and LONG examples")
     if len(dataset) < 400:
