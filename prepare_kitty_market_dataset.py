@@ -25,6 +25,60 @@ FEATURES = [
 BINANCE_SYMBOLS = {"BTC": "BTCUSDT", "ETH": "ETHUSDT", "SOL": "SOLUSDT", "BNB": "BNBUSDT"}
 
 
+def fetch_cryptocompare_hourly(symbol: str, limit: int = 5000) -> pd.DataFrame:
+    """Fallback provider for CI runners where Binance returns regional HTTP 451."""
+    if symbol not in BINANCE_SYMBOLS:
+        raise ValueError(f"Unsupported crypto symbol {symbol!r}")
+    if not 500 <= limit <= 5000:
+        raise ValueError("limit must be between 500 and 5000")
+    base = symbol
+    rows: list[dict] = []
+    to_ts = None
+    session = requests.Session()
+    while len(rows) < limit:
+        batch_limit = min(2000, limit - len(rows))
+        params = {"fsym": base, "tsym": "USD", "limit": batch_limit}
+        if to_ts is not None:
+            params["toTs"] = to_ts
+        response = session.get(
+            "https://min-api.cryptocompare.com/data/v2/histohour",
+            params=params, timeout=25,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict) or payload.get("Response") == "Error":
+            message = payload.get("Message", "Unexpected CryptoCompare response") if isinstance(payload, dict) else "Unexpected response"
+            raise RuntimeError(f"CryptoCompare historical request failed: {message}")
+        batch = payload.get("Data", {}).get("Data", [])
+        if not isinstance(batch, list) or not batch:
+            break
+        rows.extend(batch)
+        earliest = min(int(item["time"]) for item in batch if "time" in item)
+        to_ts = earliest - 1
+        if len(batch) < batch_limit:
+            break
+        time.sleep(0.15)
+    unique = {int(row["time"]): row for row in rows if "time" in row}
+    rows = [unique[key] for key in sorted(unique)][-limit:]
+    frame = pd.DataFrame(rows)
+    if len(frame) < 500:
+        raise RuntimeError(f"Only {len(frame)} completed hourly candles returned for {symbol} by fallback provider")
+    frame["timestamp"] = pd.to_datetime(frame["time"], unit="s", utc=True)
+    frame = frame.rename(columns={"volumefrom": "volume"})
+    for name in ("open", "high", "low", "close"):
+        frame[name] = pd.to_numeric(frame[name], errors="raise")
+    if "volume" not in frame.columns:
+        frame["volume"] = 0.0
+    frame["volume"] = pd.to_numeric(frame["volume"], errors="coerce").fillna(0.0)
+    # The latest candle may still be forming; exclude it by its hourly close time.
+    now = pd.Timestamp.now(tz="UTC")
+    frame = frame[frame["timestamp"] + pd.Timedelta(hours=1) <= now]
+    frame = frame.sort_values("timestamp").drop_duplicates("timestamp").reset_index(drop=True)
+    if len(frame) < 500:
+        raise RuntimeError(f"Only {len(frame)} completed hourly candles returned for {symbol} after filtering")
+    return frame[["timestamp", "open", "high", "low", "close", "volume"]]
+
+
 def fetch_hourly_klines(symbol: str, limit: int = 5000) -> pd.DataFrame:
     if symbol not in BINANCE_SYMBOLS:
         raise ValueError(f"Unsupported public Binance symbol {symbol!r}")
@@ -33,21 +87,35 @@ def fetch_hourly_klines(symbol: str, limit: int = 5000) -> pd.DataFrame:
     rows: list[list] = []
     end_time = None
     session = requests.Session()
-    while len(rows) < limit:
-        batch_limit = min(1000, limit - len(rows))
-        params = {"symbol": BINANCE_SYMBOLS[symbol], "interval": "1h", "limit": batch_limit}
-        if end_time is not None:
-            params["endTime"] = end_time
-        response = session.get("https://api.binance.com/api/v3/klines", params=params, timeout=25)
-        response.raise_for_status()
-        batch = response.json()
-        if not isinstance(batch, list) or not batch:
-            break
-        rows = batch + rows
-        end_time = int(batch[0][0]) - 1
-        if len(batch) < batch_limit:
-            break
-        time.sleep(0.15)
+    try:
+        while len(rows) < limit:
+            batch_limit = min(1000, limit - len(rows))
+            params = {"symbol": BINANCE_SYMBOLS[symbol], "interval": "1h", "limit": batch_limit}
+            if end_time is not None:
+                params["endTime"] = end_time
+            response = session.get("https://api.binance.com/api/v3/klines", params=params, timeout=25)
+            response.raise_for_status()
+            batch = response.json()
+            if not isinstance(batch, list) or not batch:
+                break
+            rows = batch + rows
+            end_time = int(batch[0][0]) - 1
+            if len(batch) < batch_limit:
+                break
+            time.sleep(0.15)
+    except requests.RequestException as exc:
+        # Binance blocks some hosted runners with HTTP 451. Fall back to a
+        # second public hourly source instead of failing every scheduled run.
+        try:
+            frame = fetch_cryptocompare_hourly(symbol, limit)
+            frame.attrs["data_source"] = "CryptoCompare fallback"
+            print(f"Binance unavailable ({type(exc).__name__}); using CryptoCompare historical candles for {symbol}.")
+            return frame
+        except Exception as fallback_exc:
+            raise RuntimeError(
+                f"Both Binance and CryptoCompare historical data requests failed for {symbol}: "
+                f"{type(exc).__name__}; fallback {type(fallback_exc).__name__}: {fallback_exc}"
+            ) from fallback_exc
     unique = {int(row[0]): row for row in rows}
     rows = [unique[key] for key in sorted(unique)][-limit:]
     if len(rows) < 500:
@@ -59,12 +127,11 @@ def fetch_hourly_klines(symbol: str, limit: int = 5000) -> pd.DataFrame:
     frame["timestamp"] = pd.to_datetime(frame["open_time"], unit="ms", utc=True)
     for name in ("open", "high", "low", "close", "volume"):
         frame[name] = pd.to_numeric(frame[name], errors="raise")
-    # Never train on the newest candle while it may still be forming.
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
     frame = frame[frame["close_time"].astype("int64") < now_ms].copy()
     frame = frame.sort_values("timestamp").drop_duplicates("timestamp").reset_index(drop=True)
+    frame.attrs["data_source"] = "Binance public klines"
     return frame
-
 
 def build_dataset(frame: pd.DataFrame, threshold: float = 0.003, horizon: int = 6) -> pd.DataFrame:
     if not 0.0005 <= threshold <= 0.02:
