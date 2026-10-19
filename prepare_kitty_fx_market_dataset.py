@@ -97,7 +97,7 @@ def fetch_hourly_candles(symbol: str, api_key: str | None = None, outputsize: in
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--symbol", choices=sorted(SYMBOLS), required=True)
-    parser.add_argument("--limit", type=int, default=15000
+    parser.add_argument("--limit", type=int, default=15000)
     parser.add_argument("--threshold", type=float, default=0.003)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
