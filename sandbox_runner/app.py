@@ -138,8 +138,8 @@ def execute(req: ExecuteRequest, authorization: str | None = Header(default=None
                 break
         return {
             "exit_code": exit_code,
-            "stdout": "\\n".join(part for part in stdout_parts if part)[-12000:],
-            "stderr": "\\n".join(part for part in stderr_parts if part)[-12000:],
+            "stdout": "\n".join(part for part in stdout_parts if part)[-12000:],
+            "stderr": "\n".join(part for part in stderr_parts if part)[-12000:],
             "duration_ms": int((time.monotonic() - started) * 1000),
             "runner": "e2b",
             "commands_run": len(stdout_parts),

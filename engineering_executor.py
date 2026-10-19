@@ -1,7 +1,7 @@
 """Safe first-pass engineering executor for generated project drafts.
 
 Generated files are stored in the workflow result for the authenticated user.
-No generated code is deployed or executed as part of this step.
+When configured, generated code is validated only in the separate E2B sandbox; it is never executed on the API server or deployed by this step.
 """
 from __future__ import annotations
 
