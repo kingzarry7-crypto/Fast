@@ -8,7 +8,8 @@ def clean_env_str(value, default=None):
     return value or default
 
 
-# OpenRouter provides an OpenAI-compatible API.
+# OpenRouter and OpenAI use compatible request formats, but their credentials,
+# endpoints, and model names are independent. Never alias one provider to another.
 OPENROUTER_API_KEY = clean_env_str(os.getenv("OPENROUTER_API_KEY"))
 OPENROUTER_BASE_URL = clean_env_str(
     os.getenv("OPENROUTER_BASE_URL"),
@@ -19,7 +20,9 @@ OPENROUTER_MODEL = clean_env_str(
     "openrouter/free",
 )
 
-# Backwards-compatible OpenAI settings for code that still imports these names.
-OPENAI_API_KEY = OPENROUTER_API_KEY
-OPENAI_BASE_URL = OPENROUTER_BASE_URL
-OPENAI_MODEL = OPENROUTER_MODEL
+OPENAI_API_KEY = clean_env_str(os.getenv("OPENAI_API_KEY"))
+OPENAI_BASE_URL = clean_env_str(
+    os.getenv("OPENAI_BASE_URL"),
+    "https://api.openai.com/v1",
+)
+OPENAI_MODEL = clean_env_str(os.getenv("OPENAI_MODEL"), "gpt-5.4-nano")
