@@ -20,7 +20,7 @@ SYMBOLS = {
     "GBPUSD": "GBP/USD",
     "USDJPY": "USD/JPY",
 }
-YAHOO_SYMBOLS = {"XAUUSD": "XAUUSD=X", "EURUSD": "EURUSD=X", "GBPUSD": "GBPUSD=X", "USDJPY": "USDJPY=X"}
+YAHOO_SYMBOLS = {"XAUUSD": "GC=F", "EURUSD": "EURUSD=X", "GBPUSD": "GBPUSD=X", "USDJPY": "USDJPY=X"}
 
 
 def _fetch_yahoo_hourly_candles(symbol: str, outputsize: int) -> pd.DataFrame:
@@ -101,11 +101,14 @@ def main() -> None:
     parser.add_argument("--threshold", type=float, default=0.003)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    has_twelve_data_key = bool((os.getenv("TWELVEDATA_API_KEY", "") or os.getenv("TWELVE_DATA_API_KEY", "")).strip())
     candles = fetch_hourly_candles(args.symbol, outputsize=args.limit)
     dataset = build_dataset(candles, threshold=args.threshold)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     dataset.to_csv(args.output, index=False)
-    print({"symbol": args.symbol, "provider_symbol": SYMBOLS[args.symbol], "rows": len(dataset),
+    print({"symbol": args.symbol, "provider": "Twelve Data" if has_twelve_data_key else "Yahoo Finance",
+           "provider_symbol": SYMBOLS[args.symbol] if has_twelve_data_key else YAHOO_SYMBOLS[args.symbol],
+           "rows": len(dataset),
            "class_counts": dataset["target"].value_counts().sort_index().to_dict(),
            "start": str(dataset["timestamp"].iloc[0]), "end": str(dataset["timestamp"].iloc[-1]),
            "output": str(args.output), "research_only": True})
