@@ -61,8 +61,8 @@ def _fetch_yahoo_hourly_candles(symbol: str, outputsize: int) -> pd.DataFrame:
 def fetch_hourly_candles(symbol: str, api_key: str | None = None, outputsize: int = 5000) -> pd.DataFrame:
     if symbol not in SYMBOLS:
         raise ValueError(f"Unsupported Twelve Data symbol {symbol!r}; choose one of {sorted(SYMBOLS)}")
-    if not 500 <= outputsize <= 5000:
-        raise ValueError("outputsize must be between 500 and 5000")
+    if not 500 <= outputsize <= 15000:
+        raise ValueError("outputsize must be between 500 and 15000")
     key = (api_key or os.getenv("TWELVEDATA_API_KEY", "") or os.getenv("TWELVE_DATA_API_KEY", "")).strip()
     if not key:
         return _fetch_yahoo_hourly_candles(symbol, outputsize)
@@ -97,7 +97,7 @@ def fetch_hourly_candles(symbol: str, api_key: str | None = None, outputsize: in
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--symbol", choices=sorted(SYMBOLS), required=True)
-    parser.add_argument("--limit", type=int, default=5000)
+    parser.add_argument("--limit", type=int, default=15000
     parser.add_argument("--threshold", type=float, default=0.003)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
