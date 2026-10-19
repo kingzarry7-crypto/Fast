@@ -12,7 +12,6 @@ permissions:
 
 jobs:
   generate-lockfile:
-    if: ${{ hashFiles('frontend/package-lock.json') == '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,12 +20,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Check whether lockfile already exists
+        id: lockfile
+        run: |
+          if [ -s frontend/package-lock.json ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Use the repository-pinned npm version
+        if: steps.lockfile.outputs.exists == 'false'
         run: npm install --global npm@10.9.2
       - name: Generate lockfile without running package scripts
+        if: steps.lockfile.outputs.exists == 'false'
         working-directory: frontend
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund --legacy-peer-deps
       - name: Commit generated lockfile once
+        if: steps.lockfile.outputs.exists == 'false'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
