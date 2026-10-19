@@ -64,7 +64,7 @@ class KittyPaperTraderTests(unittest.TestCase):
         rows = candles(10)
         signal_time = datetime.fromisoformat(rows[0]["datetime"])
         entry_time = (signal_time + timedelta(hours=1)).isoformat()
-        exit_time = (signal_time + timedelta(hours=6)).isoformat()
+        exit_time = (signal_time + timedelta(hours=7)).isoformat()
         paper._init_db()
         conn = paper._connect()
         try:
