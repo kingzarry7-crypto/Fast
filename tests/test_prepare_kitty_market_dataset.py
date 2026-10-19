@@ -31,14 +31,14 @@ class KittyMarketDatasetTests(unittest.TestCase):
         source = frame.set_index("timestamp")
         first = dataset.iloc[0]
         entry_time = first["timestamp"] + timedelta(hours=1)
-        exit_time = first["timestamp"] + timedelta(hours=7)
+        exit_time = first["timestamp"] + timedelta(hours=6)
         expected_entry = float(source.loc[entry_time, "open"])
         expected_exit = float(source.loc[exit_time, "close"])
         expected_return = expected_exit / expected_entry - 1.0
         self.assertAlmostEqual(float(first["entry_price_next_open"]), expected_entry, places=10)
         self.assertAlmostEqual(float(first["exit_price_after_6h"]), expected_exit, places=10)
         self.assertAlmostEqual(float(first["forward_return_6h"]), expected_return, places=10)
-        self.assertTrue((dataset["timestamp"] < frame["timestamp"].iloc[-7]).all())
+        self.assertTrue((dataset["timestamp"] < frame["timestamp"].iloc[-6]).all())
 
     def test_rejects_short_and_unsupported_sources(self):
         with self.assertRaises(ValueError):
