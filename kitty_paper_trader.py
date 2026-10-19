@@ -15,7 +15,7 @@ import sqlite3
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -187,6 +187,7 @@ def status() -> dict[str, Any]:
             {**dict(row), "details": _json_or_empty(row["details_json"])}
             for row in cycles
         ],
+        "signal_feedback": feedback_summary(),
         "warning": "Research simulation only. No live orders are possible from this module; results do not establish profitability.",
     }
 
@@ -350,6 +351,8 @@ def run_cycle() -> dict[str, Any]:
     with _lock:
         conn = _connect()
         try:
+            # Settle earlier predictions from completed candles before evaluating the new one.
+            settled_feedback = _settle_signal_feedback(conn, closed_candles)
             prior = conn.execute(
                 "SELECT status, signal FROM kitty_paper_cycles WHERE candle_time=?",
                 (candle_time,),
@@ -393,6 +396,15 @@ def run_cycle() -> dict[str, Any]:
                 (str(uuid.uuid4()), candle_time, SYMBOL,
                  "simulated_order" if side else "no_action", signal, probability,
                  json.dumps(details, allow_nan=False), now),
+            )
+            signal_time = _parse_candle_time(candle_time)
+            conn.execute(
+                """INSERT INTO kitty_signal_feedback(
+                   id,candle_time,symbol,signal,confidence,entry_time,exit_time,created_at
+                   ) VALUES(?,?,?,?,?,?,?,?)""",
+                (str(uuid.uuid4()), candle_time, SYMBOL, signal, probability,
+                 (signal_time + timedelta(hours=1)).isoformat(),
+                 (signal_time + timedelta(hours=6)).isoformat(), now),
             )
             if side:
                 conn.execute(
@@ -511,6 +523,11 @@ def update_paper_settings(request: Request, body: KittyPaperSettingsRequest):
 @router.get("/status")
 def paper_status():
     return status()
+
+
+@router.get("/feedback")
+def paper_feedback():
+    return feedback_summary()
 
 
 @router.post("/cycle")
