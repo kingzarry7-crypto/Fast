@@ -55,6 +55,7 @@ class KittyMarketDatasetTests(unittest.TestCase):
         mock_fallback.return_value = fallback
         result = builder.fetch_hourly_klines("BTC", 500)
         self.assertEqual(len(result), 500)
+        self.assertEqual(result.attrs.get("data_source"), "Yahoo Finance fallback")
         mock_fallback.assert_called_once_with("BTC", 500)
 
     def test_rejects_short_and_unsupported_sources(self):
