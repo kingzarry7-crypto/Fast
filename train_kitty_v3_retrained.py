@@ -106,7 +106,12 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
     with torch.inference_mode():
         probs = torch.softmax(model(torch.from_numpy(x)), dim=1).cpu().numpy()
     trades = []
-    for probabilities, raw_return in zip(probs, forward_returns):
+    next_entry_index = 0
+    skipped_overlapping_signals = 0
+    for index, (probabilities, raw_return) in enumerate(zip(probs, forward_returns)):
+        if index < next_entry_index:
+            skipped_overlapping_signals += 1
+            continue
         if not np.isfinite(raw_return):
             continue
         side_class = int(np.argmax(probabilities))
@@ -115,10 +120,13 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
             continue
         gross = -float(raw_return) if side_class == 0 else float(raw_return)
         trades.append(gross - round_trip_cost)
+        # Labels represent six-hour forward returns: never stack overlapping trades.
+        next_entry_index = index + 6
     if not trades:
         return {
             "trade_count": 0, "win_rate": None, "average_net_return": None,
             "compounded_net_return": 0.0, "max_drawdown": 0.0,
+            "skipped_overlapping_signals": skipped_overlapping_signals,
             "round_trip_cost_assumption": round_trip_cost,
             "minimum_class_confidence": min_confidence,
         }
@@ -127,6 +135,7 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
     drawdowns = equity / peaks - 1.0
     return {
         "trade_count": len(trades),
+        "skipped_overlapping_signals": skipped_overlapping_signals,
         "win_rate": float(np.mean(np.asarray(trades) > 0)),
         "average_net_return": float(np.mean(trades)),
         "compounded_net_return": float(equity[-1] - 1.0),
@@ -337,7 +346,7 @@ def main() -> None:
         "feature_order": FEATURES,
         "chronological_split": {"train": len(y_train), "validation": len(y_val), "test": len(y_test), "purged_rows_per_boundary": args.purge},
         "selection": {"candidate": winner["checkpoint"], "rule": winner["selected_by"], "holdout_test_evaluations": 1, "production_architecture_compatible": True},
-        "note": "Only the validation-selected candidate is evaluated on the holdout test set. The reported paper backtest uses overlapping six-hour labels and is a preliminary diagnostic, not an executable portfolio backtest. Inspect walk-forward results, realistic fills, funding, calibration, and drawdown before production use.",
+        "note": "Only the validation-selected candidate is evaluated on the holdout test set. The reported paper backtest skips overlapping six-hour trades and is a preliminary diagnostic, not an executable portfolio backtest. Inspect walk-forward results, realistic fills, funding, calibration, and drawdown before production use.",
         "results": results,
     }
     report_path = args.output_dir / "comparison_report.json"
