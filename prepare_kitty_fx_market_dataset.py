@@ -29,7 +29,7 @@ def _fetch_yahoo_hourly_candles(symbol: str, outputsize: int) -> pd.DataFrame:
     now = int(time.time())
     response = requests.get(
         f"https://query1.finance.yahoo.com/v8/finance/chart/{YAHOO_SYMBOLS[symbol]}",
-        params={"period1": now - 730 * 24 * 60 * 60, "period2": now,
+        params={"period1": now - 700 * 24 * 60 * 60, "period2": now,
                 "interval": "1h", "events": "history"},
         headers={"User-Agent": "Mozilla/5.0"}, timeout=30,
     )
