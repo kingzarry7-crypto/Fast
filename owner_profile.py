@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 import threading
+import uuid
 from typing import Any, Dict
 
 _FIELDS = (
@@ -35,6 +36,15 @@ def _uid(user_id: Any) -> str:
     return _clean(user_id, 120)
 
 
+def _is_web_user_uuid(user_id: Any) -> bool:
+    """Only web-authenticated UUIDs may be used against UUID-backed web tables."""
+    try:
+        uuid.UUID(str(user_id).strip())
+        return True
+    except (TypeError, ValueError, AttributeError):
+        return False
+
+
 def _normalise(raw: Any) -> Dict[str, Any]:
     raw = raw if isinstance(raw, dict) else {}
     out = {key: _clean(raw.get(key), 1200 if key == "services" else 800) for key in _FIELDS}
@@ -45,6 +55,10 @@ def _normalise(raw: Any) -> Dict[str, Any]:
 
 
 def _db_get(user_id: str) -> Dict[str, Any]:
+    # Bot/service identities (e.g. telegram:123 or market_engine_mtf) are not
+    # web_users UUIDs. Never send them to PostgreSQL UUID columns.
+    if not _is_web_user_uuid(user_id):
+        return {}
     try:
         from database import get_db_cursor
         with get_db_cursor(commit=False) as cur:
@@ -95,6 +109,11 @@ def save_profile(user_id: Any, data: Dict[str, Any]) -> Dict[str, Any]:
     if merged["contact_email"] and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", merged["contact_email"]):
         raise ValueError("contact_email is not a valid email address.")
     with _LOCK:
+        # Keep non-web identities in process memory only; web_user_profiles.user_id
+        # is a UUID FK and must never receive platform/service IDs.
+        if not _is_web_user_uuid(uid):
+            _MEMORY[uid] = merged
+            return merged
         try:
             from database import get_db_cursor
             with get_db_cursor(commit=True) as cur:
