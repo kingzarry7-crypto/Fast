@@ -383,6 +383,8 @@ def main() -> None:
     winner_checkpoint = torch.load(winner_path, map_location="cpu", weights_only=False)
     winner_checkpoint["test_metrics"] = test_metrics
     winner_checkpoint["selected_by"] = winner["selected_by"]
+    winner_checkpoint["recommended_min_confidence"] = selected_confidence
+    winner_checkpoint["confidence_threshold_selection"] = threshold_selection_note
     torch.save(winner_checkpoint, winner_path)
     print(json.dumps({"selected_candidate": winner["checkpoint"], "selection_metric": winner["selected_by"], "test": test_metrics}))
     report = {
