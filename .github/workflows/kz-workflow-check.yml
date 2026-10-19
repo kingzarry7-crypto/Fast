@@ -51,6 +51,8 @@ on:
       - "frontend/**"
   pull_request:
     paths:
+      - "config.py"
+      - "test_provider_config.py"
       - "account_agent.py"
       - "account_notifications.py"
       - "gmail_intelligence.py"
