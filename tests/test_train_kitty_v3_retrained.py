@@ -89,6 +89,25 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         self.assertTrue(all("learning_rate" in item for item in training["history"]))
         self.assertTrue(all(item["learning_rate"] > 0 for item in training["history"]))
 
+    def test_confidence_selection_disables_signals_when_validation_edge_is_negative(self):
+        trials = [
+            {"min_confidence": 0.4, "trade_count": 30, "compounded_net_return": -0.08, "average_net_return": -0.003},
+            {"min_confidence": 0.5, "trade_count": 4, "compounded_net_return": 0.02, "average_net_return": 0.01},
+        ]
+        threshold, reason = kitty.select_confidence_threshold(trials)
+        self.assertGreater(threshold, 1.0)
+        self.assertIn("signals_disabled", reason)
+
+    def test_confidence_selection_uses_profitable_validation_threshold_with_enough_trades(self):
+        trials = [
+            {"min_confidence": 0.4, "trade_count": 30, "compounded_net_return": 0.02, "average_net_return": 0.001},
+            {"min_confidence": 0.5, "trade_count": 20, "compounded_net_return": 0.04, "average_net_return": 0.002},
+            {"min_confidence": 0.6, "trade_count": 2, "compounded_net_return": 0.10, "average_net_return": 0.05},
+        ]
+        threshold, reason = kitty.select_confidence_threshold(trials)
+        self.assertEqual(threshold, 0.5)
+        self.assertIn("best_positive", reason)
+
     def test_architecture_variants_return_three_class_logits(self):
         for variant in ("baseline", "batchnorm", "leaky_relu"):
             model = kitty.KittyExperimentNet(variant=variant)
