@@ -222,6 +222,7 @@ def evaluate(model: nn.Module, x: np.ndarray, y: np.ndarray) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--csv", required=True, type=Path, help="Historical feature dataset CSV")
+    parser.add_argument("--symbol", choices=("BTC", "ETH", "SOL", "BNB"), default="BTC", help="Market represented by this training dataset")
     parser.add_argument("--output-dir", type=Path, default=Path("kitty_v3_experiments"))
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--patience", type=int, default=10)
@@ -272,6 +273,10 @@ def main() -> None:
                 "model_variant": variant,
                 "optimizer": optimizer_name,
                 "seed": args.seed,
+                "training_symbol": args.symbol,
+                "training_timeframe": "1h",
+                "label_horizon_hours": 6,
+                "label_threshold": "dataset-defined",
                 "best_epoch": training["best_epoch"],
                 "best_validation_loss": training["best_validation_loss"],
                 "validation_metrics": val_metrics,
@@ -323,6 +328,9 @@ def main() -> None:
     print(json.dumps({"selected_candidate": winner["checkpoint"], "selection_metric": winner["selected_by"], "test": test_metrics}))
     report = {
         "model": "Kitty V3 retraining experiment",
+        "training_symbol": args.symbol,
+        "training_timeframe": "1h",
+        "label_horizon_hours": 6,
         "research_only": True,
         "production_ready": False,
         "dataset_sha256": dataset_sha256,
