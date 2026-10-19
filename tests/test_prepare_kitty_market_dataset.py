@@ -43,7 +43,7 @@ class KittyMarketDatasetTests(unittest.TestCase):
         self.assertTrue((dataset["timestamp"] < frame["timestamp"].iloc[-7]).all())
 
 
-    @unittest.mock.patch("prepare_kitty_market_dataset.fetch_cryptocompare_hourly")
+    @unittest.mock.patch("prepare_kitty_market_dataset.fetch_yahoo_hourly")
     @unittest.mock.patch("prepare_kitty_market_dataset.requests.Session.get", side_effect=requests.HTTPError("451 blocked"))
     def test_binance_http_451_uses_public_fallback(self, mock_get, mock_fallback):
         fallback = pd.DataFrame({
