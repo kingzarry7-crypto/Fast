@@ -232,7 +232,7 @@ def evaluate(model: nn.Module, x: np.ndarray, y: np.ndarray) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--csv", required=True, type=Path, help="Historical feature dataset CSV")
-    parser.add_argument("--symbol", choices=("BTC", "ETH", "SOL", "BNB"), default="BTC", help="Market represented by this training dataset")
+    parser.add_argument("--symbol", choices=("BTC", "ETH", "SOL", "BNB", "XAUUSD", "EURUSD", "GBPUSD", "USDJPY"), default="BTC", help="Market represented by this research dataset; every market requires its own data and evaluation")
     parser.add_argument("--output-dir", type=Path, default=Path("kitty_v3_experiments"))
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--patience", type=int, default=10)
