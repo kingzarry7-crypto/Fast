@@ -12,13 +12,13 @@ on:
   workflow_dispatch:
     inputs:
       limit:
-        description: Hourly candles per market (500-5000)
+        description: Hourly candles per market (500-15000)
         required: true
         default: "15000"
         type: choice
         options: ["2000", "5000", "10000", "15000"]
       threshold:
-        description: Six-hour move threshold for SHORT/LONG labels
+        description: Crypto six-hour move threshold for SHORT/LONG labels
         required: true
         default: "0.003"
         type: choice
@@ -102,13 +102,10 @@ jobs:
       - name: Build hourly dataset from Twelve Data or free Yahoo Finance fallback
         env:
           LIMIT: ${{ github.event.inputs.limit || '15000' }}
-          REQUESTED_THRESHOLD: ${{ github.event.inputs.threshold || '' }}
         run: |
           # A 0.30% six-hour target is too large for many FX moves and creates
           # a mostly-NO-TRADE dataset. Use market-specific targets by default.
-          if [ -n "$REQUESTED_THRESHOLD" ] && [ "$REQUESTED_THRESHOLD" != "0.003" ]; then
-            THRESHOLD="$REQUESTED_THRESHOLD"
-          elif [ "${{ matrix.symbol }}" = "XAUUSD" ]; then
+          if [ "${{ matrix.symbol }}" = "XAUUSD" ]; then
             THRESHOLD="0.0015"
           else
             THRESHOLD="0.0008"
