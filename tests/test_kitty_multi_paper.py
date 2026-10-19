@@ -107,10 +107,12 @@ class KittyMultiPaperTests(unittest.TestCase):
     def test_rejects_unsupported_symbols_and_timeframes(self):
         with self.assertRaises(ValueError):
             paper._normalize_symbols(["DOGE/USD"])
-        with patch.dict(os.environ, {"KITTY_MULTI_PAPER_DB_PATH": os.path.join(self.tmp.name, "validation.db")}):
-            from kitty_multi_paper import MultiPaperSettingsRequest
-            with self.assertRaises(Exception):
-                MultiPaperSettingsRequest(enabled=True, symbols=["BTC/USD"], timeframe="3m")
+        from kitty_multi_paper import MultiPaperSettingsRequest
+        from fastapi import HTTPException
+        request = object()
+        with patch.object(paper, "_require_user"):
+            with self.assertRaises(HTTPException):
+                paper.update_settings(request, MultiPaperSettingsRequest(enabled=True, symbols=["BTC/USD"], timeframe="3m"))
 
     def test_settings_persist_and_only_allow_approved_symbols(self):
         with paper._settings_lock:
