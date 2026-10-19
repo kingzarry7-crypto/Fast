@@ -92,7 +92,7 @@ def build_dataset(frame: pd.DataFrame, threshold: float = 0.003, horizon: int = 
     gains = delta.clip(lower=0).rolling(14).mean()
     losses = (-delta.clip(upper=0)).rolling(14).mean()
     rs = gains / losses.replace(0, np.nan)
-    rsi = (100 - 100 / (1 + rs)).where(losses != 0, 100.0).fillna(50.0)
+    rsi = (100 - 100 / (1 + rs)).where(losses != 0, np.where(gains > 0, 100.0, 50.0)).fillna(50.0)
     ret = lambda period: close / close.shift(period) - 1.0
     sma6, sma20, sma50 = close.rolling(6).mean(), close.rolling(20).mean(), close.rolling(50).mean()
     dataset = pd.DataFrame({
