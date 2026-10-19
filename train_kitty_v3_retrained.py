@@ -256,7 +256,14 @@ def main() -> None:
     forward_returns = pd.to_numeric(source_frame["forward_return_6h"], errors="raise").to_numpy(dtype=np.float64)
     if len(forward_returns) != len(x) or not np.isfinite(forward_returns).all():
         raise ValueError("forward_return_6h must contain one finite value per dataset row")
-    test_returns = forward_returns[int(len(x) * 0.85):]
+    # Match the exact chronological split, including purged rows, when slicing
+    # the forward-return series. The untouched test starts at the 85% boundary.
+    n_rows = len(x)
+    train_end, val_end = int(n_rows * 0.70), int(n_rows * 0.85)
+    val_returns = forward_returns[train_end:val_end - args.purge]
+    test_returns = forward_returns[val_end:]
+    if len(val_returns) != len(y_val) or len(test_returns) != len(y_test):
+        raise ValueError("Forward-return slices do not match the purged validation/test partitions")
     scaler = StandardScaler()
     x_train = scaler.fit_transform(x_train).astype(np.float32)
     x_val = scaler.transform(x_val).astype(np.float32)
@@ -325,9 +332,51 @@ def main() -> None:
     winner["promotion_compatible_architecture"] = True
     for candidate in results:
         candidate["promotion_compatible_architecture"] = candidate["variant"] == "baseline"
+    # Tune the abstention threshold on validation only. Never tune it on the
+    # final holdout. Require a minimum trade count to avoid selecting a threshold
+    # because of one or two lucky trades.
+    threshold_trials = []
+    for confidence_threshold in (0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75):
+        trial = evaluate_paper_returns(
+            winning_model, x_val, val_returns,
+            round_trip_cost=args.round_trip_cost,
+            min_confidence=confidence_threshold,
+        )
+        threshold_trials.append({
+            "min_confidence": confidence_threshold,
+            **trial,
+        })
+    eligible_trials = [trial for trial in threshold_trials if trial["trade_count"] >= 10]
+    if eligible_trials:
+        selected_trial = max(
+            eligible_trials,
+            key=lambda trial: (
+                trial["compounded_net_return"],
+                trial["average_net_return"] if trial["average_net_return"] is not None else -1e9,
+            ),
+        )
+        selected_confidence = float(selected_trial["min_confidence"])
+        threshold_selection_note = "best_validation_compounded_net_return_with_at_least_10_trades"
+    else:
+        selected_confidence = 0.60
+        threshold_selection_note = "fallback_0.60_because_validation_had_fewer_than_10_trades_at_all_thresholds"
+
     test_metrics = evaluate(winning_model, x_test, y_test)
-    paper_metrics = evaluate_paper_returns(winning_model, x_test, test_returns, round_trip_cost=args.round_trip_cost)
+    paper_metrics = evaluate_paper_returns(
+        winning_model, x_test, test_returns,
+        round_trip_cost=args.round_trip_cost,
+        min_confidence=selected_confidence,
+    )
     test_metrics["paper_backtest_after_assumed_costs"] = paper_metrics
+    test_metrics["selected_min_confidence_from_validation"] = selected_confidence
+    test_metrics["validation_threshold_trials"] = threshold_trials
+    test_metrics["threshold_selection_note"] = threshold_selection_note
+    # Reference points make it harder to mistake a weak classifier for a useful
+    # trading model. These are diagnostics, not competing deployable models.
+    test_metrics["majority_class_baseline_accuracy"] = float(
+        max(np.mean(y_test == class_id) for class_id in (0, 1, 2))
+    )
+    test_metrics["always_no_trade_baseline_trade_count"] = 0
     winner["test"] = test_metrics
     winner["selected_by"] = "validation_macro_f1_then_validation_log_loss"
     winner_path = Path(winner["checkpoint"])
@@ -347,7 +396,17 @@ def main() -> None:
         "feature_order": FEATURES,
         "chronological_split": {"train": len(y_train), "validation": len(y_val), "test": len(y_test), "purged_rows_per_boundary": args.purge},
         "selection": {"candidate": winner["checkpoint"], "rule": winner["selected_by"], "holdout_test_evaluations": 1, "production_architecture_compatible": True},
-        "note": "Only the validation-selected candidate is evaluated on the holdout test set. Targets enter at the next hourly open and exit at the close six hours after entry; the reported return simulation subtracts assumed costs and skips overlapping trades. It is a preliminary diagnostic, not an executable portfolio backtest. Inspect walk-forward results, realistic fills, funding, calibration, and drawdown before production use.",
+        "validation_threshold_selection": {
+            "chosen_min_confidence": selected_confidence,
+            "rule": threshold_selection_note,
+            "trials": threshold_trials,
+            "minimum_validation_trades": 10,
+        },
+        "baseline_checks": {
+            "majority_class_test_accuracy": test_metrics["majority_class_baseline_accuracy"],
+            "always_no_trade_trade_count": 0,
+        },
+        "note": "Candidate architecture is selected using validation classification metrics; the abstention threshold is tuned using validation-only net paper returns and a minimum trade count, then evaluated once on the untouched holdout. Targets enter at the next hourly open and exit at the close six hours after entry; the return simulation subtracts assumed costs and skips overlapping trades. This is still a preliminary single-holdout diagnostic, not a walk-forward or executable portfolio backtest. Inspect several chronological test windows, realistic spreads/fills/funding, calibration, and drawdown before production use.",
         "results": results,
     }
     report_path = args.output_dir / "comparison_report.json"
