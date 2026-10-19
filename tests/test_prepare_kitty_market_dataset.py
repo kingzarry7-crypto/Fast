@@ -27,8 +27,12 @@ class KittyMarketDatasetTests(unittest.TestCase):
         self.assertTrue(np.isfinite(dataset[builder.FEATURES].to_numpy()).all())
         self.assertEqual(set(dataset["target"].unique()), {0, 1, 2})
         self.assertLess(dataset["timestamp"].iloc[0], dataset["timestamp"].iloc[-1])
-        expected = dataset["close"] if "close" in dataset else None
         self.assertTrue(np.isfinite(dataset["forward_return_6h"]).all())
+        source = frame.set_index("timestamp")["close"]
+        first = dataset.iloc[0]
+        future_time = first["timestamp"] + timedelta(hours=6)
+        expected_return = float(source.loc[future_time] / source.loc[first["timestamp"]] - 1.0)
+        self.assertAlmostEqual(float(first["forward_return_6h"]), expected_return, places=10)
         self.assertTrue((dataset["timestamp"] < frame["timestamp"].iloc[-6]).all())
 
     def test_rejects_short_and_unsupported_sources(self):
