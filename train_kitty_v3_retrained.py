@@ -146,6 +146,27 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
     }
 
 
+def select_confidence_threshold(threshold_trials: list[dict], min_trades: int = 10) -> tuple[float, str]:
+    """Select only a validation threshold with positive net returns and enough trades."""
+    eligible = [
+        trial for trial in threshold_trials
+        if trial["trade_count"] >= min_trades
+        and trial["compounded_net_return"] > 0.0
+        and trial["average_net_return"] is not None
+        and trial["average_net_return"] > 0.0
+    ]
+    if not eligible:
+        return 1.01, "signals_disabled_no_validation_threshold_with_positive_net_return_and_at_least_10_trades"
+    selected = max(
+        eligible,
+        key=lambda trial: (
+            trial["compounded_net_return"],
+            trial["average_net_return"] if trial["average_net_return"] is not None else -1e9,
+        ),
+    )
+    return float(selected["min_confidence"]), "best_positive_validation_net_return_with_at_least_10_trades"
+
+
 def train_one(
     x_train: np.ndarray, y_train: np.ndarray,
     x_val: np.ndarray, y_val: np.ndarray,
@@ -347,30 +368,8 @@ def main() -> None:
             "min_confidence": confidence_threshold,
             **trial,
         })
-    eligible_trials = [
-        trial for trial in threshold_trials
-        if trial["trade_count"] >= 10
-        and trial["compounded_net_return"] > 0.0
-        and trial["average_net_return"] is not None
-        and trial["average_net_return"] > 0.0
-    ]
-    if eligible_trials:
-        selected_trial = max(
-            eligible_trials,
-            key=lambda trial: (
-                trial["compounded_net_return"],
-                trial["average_net_return"] if trial["average_net_return"] is not None else -1e9,
-            ),
-        )
-        selected_confidence = float(selected_trial["min_confidence"])
-        threshold_selection_note = "best_positive_validation_net_return_with_at_least_10_trades"
-    else:
-        # Do not pick the least-bad losing threshold. A value above 1.0 is an
-        # explicit abstention sentinel: no softmax class can meet it, so this
-        # candidate emits zero eligible paper trades until validation shows an
-        # edge with enough trades. This is safer than promoting a losing setup.
-        selected_confidence = 1.01
-        threshold_selection_note = "signals_disabled_no_validation_threshold_with_positive_net_return_and_at_least_10_trades"
+    selected_confidence, threshold_selection_note = select_confidence_threshold(threshold_trials)
+
 
     test_metrics = evaluate(winning_model, x_test, y_test)
     paper_metrics = evaluate_paper_returns(
