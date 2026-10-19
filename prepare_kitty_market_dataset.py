@@ -129,7 +129,7 @@ def build_dataset(frame: pd.DataFrame, threshold: float = 0.003, horizon: int = 
     # Remove warm-up rows and rows without the next-open entry / six-hour exit.
     dataset = dataset.replace([np.inf, -np.inf], np.nan).dropna(subset=FEATURES + ["forward_return_6h"])
     dataset["target"] = dataset["target"].astype(int)
-    dataset = dataset[dataset["timestamp"] < frame["timestamp"].iloc[-(horizon + 1)]].reset_index(drop=True
+    dataset = dataset[dataset["timestamp"] < frame["timestamp"].iloc[-(horizon + 1)]].reset_index(drop=True)
     if set(dataset["target"].unique()) != {0, 1, 2}:
         raise ValueError("Dataset must contain SHORT, NO TRADE and LONG examples")
     if len(dataset) < 400:
