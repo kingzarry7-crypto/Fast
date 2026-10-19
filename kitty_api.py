@@ -164,12 +164,18 @@ def kitty_multi_timeframe(
     for timeframe in requested:
         try:
             candles = get_candles(symbol, timeframe=timeframe, outputsize=160)
-            latest_time = _validate_candles(candles, timeframe, symbol)
-            features = _kitty_features(candles)
+            # Exclude the newest candle because the provider may return a live,
+            # incomplete interval. This endpoint is exploratory outside 1h.
+            _validate_candles(candles, timeframe, symbol)
+            if len(candles) < 56:
+                raise ValueError(symbol + ": at least 56 candles are required to exclude the forming candle")
+            closed_candles = candles[:-1]
+            latest_time = _validate_candles(closed_candles, timeframe, symbol)
+            features = _kitty_features(closed_candles)
             prediction = kitty_model.predict_features(features)
             results.append({
                 "timeframe": timeframe, "available": True,
-                "latest_candle_time": latest_time, "close": float(candles[-1]["close"]),
+                "latest_candle_time": latest_time, "close": float(closed_candles[-1]["close"]),
                 "prediction": prediction,
                 "model_timeframe_match": timeframe == "1h",
                 "timeframe_validated": False,
@@ -263,8 +269,14 @@ def kitty_market_predict(
     try:
         from market import get_candles
         candles = get_candles(symbol, timeframe="1h", outputsize=160)
-        latest_candle_time = _validate_candles(candles, "1h", symbol)
-        features = _kitty_features(candles)
+        # Providers may include the still-forming candle. Validate the feed, then
+        # infer only from completed candles to match the paper-trading convention.
+        _validate_candles(candles, "1h", symbol)
+        if len(candles) < 56:
+            raise ValueError(symbol + ": at least 56 candles are required to exclude the forming candle")
+        closed_candles = candles[:-1]
+        latest_candle_time = _validate_candles(closed_candles, "1h", symbol)
+        features = _kitty_features(closed_candles)
         prediction = kitty_model.predict_features(features)
         return {
             "symbol": symbol,
