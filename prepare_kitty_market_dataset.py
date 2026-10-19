@@ -113,16 +113,23 @@ def build_dataset(frame: pd.DataFrame, threshold: float = 0.003, horizon: int = 
         "body_pct": (close - opn) / opn,
         "close_position": ((close - low) / (high - low).replace(0, np.nan)).fillna(0.5),
     })
-    forward_return = close.shift(-horizon) / close - 1.0
+    # A signal is only available after candle t closes. Avoid an impossible
+    # same-close fill: enter at the next candle open and exit six hours after
+    # entry, at the close of candle t + horizon + 1.
+    entry_price = opn.shift(-1)
+    exit_price = close.shift(-(horizon + 1))
+    forward_return = exit_price / entry_price - 1.0
+    dataset["entry_price_next_open"] = entry_price
+    dataset["exit_price_after_6h"] = exit_price
     dataset["forward_return_6h"] = forward_return
     dataset["target"] = np.select(
         [forward_return <= -threshold, forward_return >= threshold],
         [0, 2], default=1,
     )
-    # Remove warm-up rows and the final six rows with unknown future outcomes.
+    # Remove warm-up rows and rows without the next-open entry / six-hour exit.
     dataset = dataset.replace([np.inf, -np.inf], np.nan).dropna(subset=FEATURES + ["forward_return_6h"])
     dataset["target"] = dataset["target"].astype(int)
-    dataset = dataset[dataset["timestamp"] < frame["timestamp"].iloc[-horizon]].reset_index(drop=True)
+    dataset = dataset[dataset["timestamp"] < frame["timestamp"].iloc[-(horizon + 1)]].reset_index(drop=True
     if set(dataset["target"].unique()) != {0, 1, 2}:
         raise ValueError("Dataset must contain SHORT, NO TRADE and LONG examples")
     if len(dataset) < 400:
