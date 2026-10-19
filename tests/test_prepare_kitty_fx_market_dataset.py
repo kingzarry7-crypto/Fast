@@ -8,10 +8,12 @@ import prepare_kitty_fx_market_dataset as builder
 
 
 class KittyFxDatasetTests(unittest.TestCase):
-    def test_rejects_missing_api_key_and_unsupported_symbol(self):
-        with patch.dict(os.environ, {"TWELVEDATA_API_KEY": ""}):
-            with self.assertRaisesRegex(RuntimeError, "TWELVEDATA_API_KEY"):
-                builder.fetch_hourly_candles("XAUUSD")
+    def test_falls_back_without_api_key_and_rejects_unsupported_symbol(self):
+        expected = pd.DataFrame({"timestamp": [pd.Timestamp("2024-01-01", tz="UTC")]})
+        with patch.dict(os.environ, {"TWELVEDATA_API_KEY": "", "TWELVE_DATA_API_KEY": ""}):
+            with patch.object(builder, "_fetch_yahoo_hourly_candles", return_value=expected) as fallback:
+                self.assertIs(builder.fetch_hourly_candles("XAUUSD"), expected)
+                fallback.assert_called_once_with("XAUUSD", 5000)
         with self.assertRaises(ValueError):
             builder.fetch_hourly_candles("AUDCAD", api_key="test-key")
 
