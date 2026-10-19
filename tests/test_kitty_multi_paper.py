@@ -1,6 +1,8 @@
 import os
 import tempfile
 import unittest
+import sys
+import types
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
@@ -29,6 +31,19 @@ class KittyMultiPaperTests(unittest.TestCase):
             "KITTY_MULTI_PAPER_POLL_SECONDS": "900",
         })
         self.env.start()
+        self.kitty_api_stub = types.ModuleType("kitty_api")
+        def validate_candles(rows, timeframe, symbol):
+            if not isinstance(rows, list) or len(rows) < 35:
+                raise ValueError("insufficient candles")
+            for row in rows[-35:]:
+                for key in ("open", "high", "low", "close"):
+                    value = float(row[key])
+                    if not value > 0:
+                        raise ValueError("invalid candle")
+            return str(rows[-1].get("datetime") or rows[-1].get("time"))
+        self.kitty_api_stub._validate_candles = validate_candles
+        self.modules = patch.dict(sys.modules, {"kitty_api": self.kitty_api_stub})
+        self.modules.start()
         paper._loaded = False
         paper._settings.update({
             "enabled": False,
@@ -42,6 +57,7 @@ class KittyMultiPaperTests(unittest.TestCase):
         with paper._settings_lock:
             paper._settings["enabled"] = False
         paper._loaded = False
+        self.modules.stop()
         self.env.stop()
         self.tmp.cleanup()
 
@@ -63,7 +79,7 @@ class KittyMultiPaperTests(unittest.TestCase):
         with paper._settings_lock:
             paper._settings.update({"enabled": True, "symbols": ["BTC/USD"], "timeframe": "1h", "max_order_notional_usd": 25.0})
         with patch("market.get_candles", return_value=rows), \
-             patch("kitty_api._technical_signal", return_value=signal), \
+             patch.object(self.kitty_api_stub, "_technical_signal", return_value=signal), \
              patch("trading_connector.place_market_order", side_effect=AssertionError("paper must never call broker")):
             first = paper.run_cycle()
             second = paper.run_cycle()
