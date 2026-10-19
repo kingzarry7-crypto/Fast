@@ -238,7 +238,7 @@ def _parse_candle_time(value: str) -> datetime:
 
 
 def _settle_signal_feedback(conn: sqlite3.Connection, candles: list[dict[str, Any]]) -> int:
-    """Settle saved predictions only when both the next-open entry and exit candles exist."""
+    """Settle saved predictions only when the next-open entry and six-hour-later exit candles exist."""
     by_time: dict[datetime, dict[str, Any]] = {}
     for candle in candles:
         stamp = candle.get("datetime") or candle.get("time")
@@ -310,7 +310,8 @@ def feedback_summary() -> dict[str, Any]:
         "direction_label_accuracy": (correct / settled) if settled else None,
         "by_signal": [dict(row) for row in by_signal],
         "automatic_model_updates": False,
-        "note": "Outcomes are recorded for evaluation. They do not alter model weights or promote checkpoints automatically.",
+        "research_retraining": "scheduled GitHub Actions research workflow; candidates remain artifacts pending review",
+        "note": "Outcomes are recorded for evaluation. Scheduled retraining uses fresh market history, not online weight mutation; checkpoints are never promoted automatically.",
     }
 
 
@@ -406,7 +407,7 @@ def run_cycle() -> dict[str, Any]:
                    ) VALUES(?,?,?,?,?,?,?,?)""",
                 (str(uuid.uuid4()), candle_time, SYMBOL, signal, probability,
                  (signal_time + timedelta(hours=1)).isoformat(),
-                 (signal_time + timedelta(hours=6)).isoformat(), now),
+                 (signal_time + timedelta(hours=7)).isoformat(), now),
             )
             if side:
                 conn.execute(
