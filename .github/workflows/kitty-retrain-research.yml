@@ -63,11 +63,12 @@ jobs:
           LIMIT: ${{ github.event.inputs.limit || '15000' }}
           THRESHOLD: ${{ github.event.inputs.threshold || '0.003' }}
         run: |
+          echo "MARKET_LABEL_THRESHOLD=$THRESHOLD" >> "$GITHUB_ENV"
           mkdir -p "kitty-training-output/${{ matrix.symbol }}"
           python prepare_kitty_market_dataset.py --symbol "${{ matrix.symbol }}" --limit "$LIMIT" --threshold "$THRESHOLD" --output "kitty-training-output/${{ matrix.symbol }}/hourly_features.csv"
       - name: Train candidate models and evaluate one holdout
         run: |
-          python train_kitty_v3_retrained.py --symbol "${{ matrix.symbol }}" --csv "kitty-training-output/${{ matrix.symbol }}/hourly_features.csv" --output-dir "kitty-training-output/${{ matrix.symbol }}/candidates" --epochs 100 --patience 10 --batch-size 128 --purge 6 --round-trip-cost 0.001
+          python train_kitty_v3_retrained.py --symbol "${{ matrix.symbol }}" --csv "kitty-training-output/${{ matrix.symbol }}/hourly_features.csv" --output-dir "kitty-training-output/${{ matrix.symbol }}/candidates" --epochs 100 --patience 10 --batch-size 128 --purge 6 --round-trip-cost 0.001 --label-threshold "$MARKET_LABEL_THRESHOLD"
       - name: Publish research artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -113,6 +114,7 @@ jobs:
             THRESHOLD="0.0008"
           fi
           echo "Research label threshold for ${{ matrix.symbol }}: $THRESHOLD"
+          echo "MARKET_LABEL_THRESHOLD=$THRESHOLD" >> "$GITHUB_ENV"
           mkdir -p "kitty-training-output/${{ matrix.symbol }}"
           python prepare_kitty_fx_market_dataset.py --symbol "${{ matrix.symbol }}" --limit "$LIMIT" --threshold "$THRESHOLD" --output "kitty-training-output/${{ matrix.symbol }}/hourly_features.csv"
       - name: Train isolated research candidate and holdout evaluation
@@ -121,7 +123,7 @@ jobs:
         run: |
           if [ "$MARKET_SYMBOL" = "XAUUSD" ]; then ROUND_TRIP_COST="0.0005"; else ROUND_TRIP_COST="0.0003"; fi
           echo "Assumed round-trip cost for $MARKET_SYMBOL: $ROUND_TRIP_COST"
-          python train_kitty_v3_retrained.py --symbol "$MARKET_SYMBOL" --csv "kitty-training-output/$MARKET_SYMBOL/hourly_features.csv" --output-dir "kitty-training-output/$MARKET_SYMBOL/candidates" --epochs 100 --patience 10 --batch-size 128 --purge 6 --round-trip-cost "$ROUND_TRIP_COST"
+          python train_kitty_v3_retrained.py --symbol "$MARKET_SYMBOL" --csv "kitty-training-output/$MARKET_SYMBOL/hourly_features.csv" --output-dir "kitty-training-output/$MARKET_SYMBOL/candidates" --epochs 100 --patience 10 --batch-size 128 --purge 6 --round-trip-cost "$ROUND_TRIP_COST" --label-threshold "$MARKET_LABEL_THRESHOLD"
       - name: Publish gold and forex research artifacts
         if: always()
         uses: actions/upload-artifact@v4
