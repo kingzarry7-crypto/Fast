@@ -306,6 +306,132 @@ def kitty_market_predict(
         )
 
 
+
+
+def _technical_signal(candles, symbol: str, timeframe: str) -> dict:
+    """Explainable, rule-based technical confluence for assets without a validated ML model."""
+    import math
+    from datetime import datetime, timezone
+    closes = [float(c["close"]) for c in candles]
+    highs = [float(c["high"]) for c in candles]
+    lows = [float(c["low"]) for c in candles]
+    if len(closes) < 55 or not all(math.isfinite(v) and v > 0 for v in closes + highs + lows):
+        raise ValueError("At least 55 valid completed candles are required")
+    def ema(values, period):
+        alpha = 2.0 / (period + 1.0)
+        result = float(values[0])
+        for value in values[1:]:
+            result = alpha * float(value) + (1.0 - alpha) * result
+        return result
+    def sma(values, period):
+        return sum(values[-period:]) / period
+    e9, e21, e50 = ema(closes, 9), ema(closes, 21), ema(closes, 50)
+    gains, losses = [], []
+    for previous, current in zip(closes[-15:-1], closes[-14:]):
+        change = current - previous
+        gains.append(max(change, 0.0))
+        losses.append(max(-change, 0.0))
+    avg_gain, avg_loss = sum(gains) / 14, sum(losses) / 14
+    rsi = 100.0 if avg_loss == 0 and avg_gain > 0 else (50.0 if avg_gain == 0 and avg_loss == 0 else (100.0 - 100.0 / (1.0 + avg_gain / max(avg_loss, 1e-12))))
+    ema12, ema26 = ema(closes, 12), ema(closes, 26)
+    macd_positive = ema12 > ema26
+    momentum = closes[-1] / closes[-7] - 1.0
+    # ATR(14) for volatility-aware levels; never place orders from this endpoint.
+    true_ranges = []
+    for i in range(-14, 0):
+        prev_close = closes[i - 1]
+        true_ranges.append(max(highs[i] - lows[i], abs(highs[i] - prev_close), abs(lows[i] - prev_close)))
+    atr = sum(true_ranges) / len(true_ranges)
+    bullish = [
+        e9 > e21 > e50,
+        closes[-1] > e21,
+        macd_positive,
+        50.0 < rsi < 68.0,
+        momentum > 0,
+    ]
+    bearish = [
+        e9 < e21 < e50,
+        closes[-1] < e21,
+        not macd_positive,
+        32.0 < rsi < 50.0,
+        momentum < 0,
+    ]
+    bull, bear = sum(bullish), sum(bearish)
+    if bull >= 4 and bull - bear >= 3:
+        signal = "BUY"
+        direction = 1
+        score = bull
+    elif bear >= 4 and bear - bull >= 3:
+        signal = "SELL"
+        direction = -1
+        score = bear
+    else:
+        signal = "NO TRADE"
+        direction = 0
+        score = max(bull, bear)
+    price = closes[-1]
+    # ATR levels are indicative risk references, not guarantees or executable orders.
+    stop = price - direction * 1.5 * atr if direction else None
+    target1 = price + direction * 1.5 * atr if direction else None
+    target2 = price + direction * 2.5 * atr if direction else None
+    raw_time = candles[-1].get("datetime") or candles[-1].get("time") or candles[-1].get("timestamp")
+    if isinstance(raw_time, (int, float)):
+        candle_time = datetime.fromtimestamp(raw_time / (1000 if raw_time > 10000000000 else 1), tz=timezone.utc).isoformat()
+    else:
+        candle_time = str(raw_time)
+    return {
+        "symbol": symbol, "timeframe": timeframe, "signal": signal,
+        "signal_type": "rule_based_technical_confluence",
+        "price": round(price, 8), "completed_candle_time": candle_time,
+        "confidence_score": round(score / 5.0, 2),
+        "confirmation_count": score, "confirmations_required": 4,
+        "indicators": {
+            "ema_9": round(e9, 8), "ema_21": round(e21, 8), "ema_50": round(e50, 8),
+            "rsi_14": round(rsi, 2), "macd_bias": "BULLISH" if macd_positive else "BEARISH",
+            "momentum_6_candles_pct": round(momentum * 100.0, 4), "atr_14": round(atr, 8),
+        },
+        "risk_levels": {
+            "stop_reference": round(stop, 8) if stop is not None else None,
+            "target_1_reference": round(target1, 8) if target1 is not None else None,
+            "target_2_reference": round(target2, 8) if target2 is not None else None,
+            "method": "1.5x ATR stop and 1.5x/2.5x ATR targets; indicative only",
+        },
+        "reasons": [
+            "EMA trend: " + ("bullish" if e9 > e21 > e50 else "bearish" if e9 < e21 < e50 else "mixed"),
+            "Price versus EMA21: " + ("above" if price > e21 else "below"),
+            "RSI(14): " + str(round(rsi, 2)),
+            "MACD bias: " + ("bullish" if macd_positive else "bearish"),
+            "Six-candle momentum: " + str(round(momentum * 100.0, 4)) + "%",
+        ],
+        "model_used": False,
+        "research_only": True, "trading_enabled": False,
+        "warning": "This is a transparent technical-rule signal, not a trained or validated prediction. No indicator can guarantee accuracy or profit. Confirm spread, news, session, and risk before any trade.",
+    }
+
+
+@router.get("/signal")
+def kitty_technical_signal(
+    symbol: str = Query(default="BTC/USD", min_length=3, max_length=24, pattern=r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$"),
+    timeframe: str = Query(default="1h", pattern="^(5m|15m|30m|1h|2h|4h|1d)$"),
+):
+    """Return a completed-candle technical confluence signal for supported market symbols."""
+    try:
+        from market import get_candles
+        symbol = symbol.upper().replace(" ", "")
+        candles = get_candles(symbol, timeframe=timeframe, outputsize=180)
+        _validate_candles(candles, timeframe, symbol)
+        if len(candles) < 56:
+            raise ValueError(symbol + ": at least 56 candles are required to exclude the possibly forming candle")
+        closed_candles = candles[:-1]
+        _validate_candles(closed_candles, timeframe, symbol)
+        return _technical_signal(closed_candles, symbol, timeframe)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Technical signal unavailable for " + symbol + ": " + type(exc).__name__ + ": " + str(exc)[:180],
+        )
+
+
 # Paper-trading endpoints are isolated from the live broker connector.
 from kitty_paper_trader import router as kitty_paper_router
 router.include_router(kitty_paper_router)
