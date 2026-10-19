@@ -353,6 +353,8 @@ def run_cycle() -> dict[str, Any]:
         try:
             # Settle earlier predictions from completed candles before evaluating the new one.
             settled_feedback = _settle_signal_feedback(conn, closed_candles)
+            if settled_feedback:
+                conn.commit()
             prior = conn.execute(
                 "SELECT status, signal FROM kitty_paper_cycles WHERE candle_time=?",
                 (candle_time,),
