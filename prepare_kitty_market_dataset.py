@@ -1,8 +1,8 @@
 """Build leak-free hourly OHLCV features and labels from public Binance candles.
 
 This is a research dataset builder, not an order executor. Binance public klines
-are used for crypto assets; unsupported symbols fail closed. The label is based
-on the close-to-close return over the next six hourly candles.
+are used for crypto assets; unsupported symbols fail closed. Targets enter at the
+next hourly candle open and exit at the close six hours after entry.
 """
 from __future__ import annotations
 
