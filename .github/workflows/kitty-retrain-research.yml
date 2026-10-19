@@ -1,6 +1,10 @@
 name: Kitty historical retraining (research only)
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/kitty-retrain-research.yml"
   workflow_dispatch:
     inputs:
       limit:
