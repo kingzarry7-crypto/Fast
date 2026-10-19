@@ -432,16 +432,11 @@ def kitty_technical_signal(
         )
 
 
-# Paper-trading endpoints are isolated from the live broker connector.
+# BTC classifier paper simulation remains isolated from all broker connectors.
 from kitty_paper_trader import router as kitty_paper_router
 router.include_router(kitty_paper_router)
 
-
-# Explicit opt-in Binance Spot Demo execution is separate from the paper simulator.
-from kitty_demo_trader import router as kitty_demo_trader_router
-router.include_router(kitty_demo_trader_router)
-
-@router.on_event("startup")
-def _restore_kitty_demo_worker_on_startup() -> None:
-    from kitty_demo_trader import initialize_worker
-    initialize_worker()
+# Multi-market technical signals feed an isolated paper ledger only. Do not mount
+# the Binance exchange-demo order router in the web UI/API; keep testing paper-only.
+from kitty_multi_paper import router as kitty_multi_paper_router
+router.include_router(kitty_multi_paper_router)
