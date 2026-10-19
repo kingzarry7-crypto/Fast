@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import kitty_paper_trader as paper
@@ -11,7 +12,7 @@ def candles(count=60):
     for i in range(count):
         close = 50_000 + i * 100
         result.append({
-            "datetime": f"2026-01-{(i % 28) + 1:02d}T00:00:00Z",
+            "datetime": (datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(hours=i)).isoformat(),
             "open": close - 25, "high": close + 100,
             "low": close - 100, "close": close, "volume": 10,
         })
@@ -40,7 +41,6 @@ class KittyPaperTraderTests(unittest.TestCase):
 
     def test_paper_cycle_isolated_from_live_connector_and_deduplicates_candle(self):
         rows = candles()
-        rows[-2]["datetime"] = "2026-10-14T00:00:00Z"
         with patch("market.get_candles", return_value=rows), \
              patch("kitty_v3_retrained.predict_features", return_value={
                  "confidence": 0.9,
@@ -59,6 +59,40 @@ class KittyPaperTraderTests(unittest.TestCase):
         state = paper.status()["state"]
         self.assertAlmostEqual(state["quantity"], 0.001)
         self.assertAlmostEqual(state["cash"], 10_000 - 0.001 * (50_000 + 58 * 100))
+
+    def test_prediction_feedback_settles_only_when_entry_and_exit_candles_exist(self):
+        rows = candles(10)
+        signal_time = datetime.fromisoformat(rows[0]["datetime"])
+        entry_time = (signal_time + timedelta(hours=1)).isoformat()
+        exit_time = (signal_time + timedelta(hours=6)).isoformat()
+        paper._init_db()
+        conn = paper._connect()
+        try:
+            conn.execute(
+                """INSERT INTO kitty_signal_feedback(
+                   id,candle_time,symbol,signal,confidence,entry_time,exit_time,created_at
+                   ) VALUES(?,?,?,?,?,?,?,?)""",
+                ("feedback-test", rows[0]["datetime"], paper.SYMBOL, "LONG", 0.9,
+                 entry_time, exit_time, paper._now()),
+            )
+            conn.commit()
+            self.assertEqual(paper._settle_signal_feedback(conn, rows[:5]), 0)
+            self.assertEqual(paper._settle_signal_feedback(conn, rows), 1)
+            row = conn.execute(
+                "SELECT * FROM kitty_signal_feedback WHERE id='feedback-test'"
+            ).fetchone()
+            self.assertIsNotNone(row["settled_at"])
+            self.assertEqual(row["actual_label"], "LONG")
+            self.assertEqual(row["correct"], 1)
+            self.assertGreater(row["forward_return"], 0)
+        finally:
+            conn.close()
+
+    def test_feedback_summary_starts_empty_and_never_updates_model_automatically(self):
+        summary = paper.feedback_summary()
+        self.assertEqual(summary["recorded_predictions"], 0)
+        self.assertEqual(summary["settled_predictions"], 0)
+        self.assertFalse(summary["automatic_model_updates"])
 
     def test_runtime_controls_override_enabled_and_tuning(self):
         with paper._runtime_lock:
