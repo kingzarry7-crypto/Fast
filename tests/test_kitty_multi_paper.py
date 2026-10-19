@@ -42,6 +42,7 @@ class KittyMultiPaperTests(unittest.TestCase):
                         raise ValueError("invalid candle")
             return str(rows[-1].get("datetime") or rows[-1].get("time"))
         self.kitty_api_stub._validate_candles = validate_candles
+        self.kitty_api_stub._technical_signal = lambda rows, symbol, timeframe: {}
         self.modules = patch.dict(sys.modules, {"kitty_api": self.kitty_api_stub})
         self.modules.start()
         paper._loaded = False
