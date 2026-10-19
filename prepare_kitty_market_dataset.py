@@ -29,8 +29,8 @@ def fetch_yahoo_hourly(symbol: str, limit: int = 5000) -> pd.DataFrame:
     """No-key fallback source for hosted runners blocked from Binance."""
     if symbol not in BINANCE_SYMBOLS:
         raise ValueError(f"Unsupported crypto symbol {symbol!r}")
-    if not 500 <= limit <= 5000:
-        raise ValueError("limit must be between 500 and 5000")
+    if not 500 <= limit <= 15000:
+        raise ValueError("limit must be between 500 and 15000")
     yahoo_symbol = f"{symbol}-USD"
     now = int(datetime.now(timezone.utc).timestamp())
     start = now - (limit + 48) * 3600
@@ -75,8 +75,8 @@ def fetch_yahoo_hourly(symbol: str, limit: int = 5000) -> pd.DataFrame:
 def fetch_hourly_klines(symbol: str, limit: int = 5000) -> pd.DataFrame:
     if symbol not in BINANCE_SYMBOLS:
         raise ValueError(f"Unsupported public Binance symbol {symbol!r}")
-    if not 500 <= limit <= 5000:
-        raise ValueError("limit must be between 500 and 5000")
+    if not 500 <= limit <= 15000:
+        raise ValueError("limit must be between 500 and 15000")
     rows: list[list] = []
     end_time = None
     session = requests.Session()
@@ -200,7 +200,7 @@ def build_dataset(frame: pd.DataFrame, threshold: float = 0.003, horizon: int = 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--symbol", choices=sorted(BINANCE_SYMBOLS), default="BTC")
-    parser.add_argument("--limit", type=int, default=5000)
+    parser.add_argument("--limit", type=int, default=15000)
     parser.add_argument("--threshold", type=float, default=0.003)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
