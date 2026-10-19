@@ -114,7 +114,7 @@ class KittyMultiPaperTests(unittest.TestCase):
         with paper._settings_lock:
             paper._settings.update({"enabled": True, "symbols": ["XAU/USD"], "timeframe": "1h", "max_order_notional_usd": 25.0})
         with patch("market.get_candles", return_value=rows), \
-             patch("kitty_api._technical_signal", return_value=signal), \
+             patch.object(self.kitty_api_stub, "_technical_signal", return_value=signal), \
              patch("trading_connector.place_market_order", side_effect=AssertionError("paper must never call broker")):
             result = paper.run_cycle()
         self.assertEqual(result["results"][0]["side"], "SELL")
