@@ -1,0 +1,68 @@
+name: Kitty historical retraining (research only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Hourly BTC candles to download (500-5000)"
+        required: true
+        default: "5000"
+        type: choice
+        options: ["2000", "3000", "4000", "5000"]
+      threshold:
+        description: "Six-hour move threshold for SHORT/LONG labels"
+        required: true
+        default: "0.003"
+        type: choice
+        options: ["0.002", "0.003", "0.004", "0.005"]
+  push:
+    branches: ["main"]
+    paths:
+      - "prepare_kitty_market_dataset.py"
+      - "train_kitty_v3_retrained.py"
+      - "tests/test_prepare_kitty_market_dataset.py"
+      - "tests/test_train_kitty_v3_retrained.py"
+      - ".github/workflows/kitty-retrain-research.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kitty-retraining-research
+  cancel-in-progress: false
+
+jobs:
+  retrain-btc-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install training dependencies
+        run: python -m pip install --upgrade pip numpy pandas scikit-learn torch requests
+      - name: Run dataset builder tests
+        run: python -m unittest discover -s tests -p 'test_prepare_kitty_market_dataset.py' -v
+      - name: Run training contract and leakage tests
+        run: python -m unittest discover -s tests -p 'test_train_kitty_v3_retrained.py' -v
+      - name: Build hourly BTC dataset from public historical candles
+        env:
+          LIMIT: ${{ inputs.limit || '5000' }}
+          THRESHOLD: ${{ inputs.threshold || '0.003' }}
+        run: |
+          python prepare_kitty_market_dataset.py --symbol BTC --limit "$LIMIT" --threshold "$THRESHOLD" --output kitty-training-output/btc_hourly_features.csv
+      - name: Train candidate models and evaluate one holdout
+        run: |
+          python train_kitty_v3_retrained.py --csv kitty-training-output/btc_hourly_features.csv --output-dir kitty-training-output/candidates --epochs 100 --patience 10 --batch-size 128 --purge 6 --round-trip-cost 0.001
+      - name: Publish research artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kitty-btc-retraining-${{ github.run_number }}
+          path: kitty-training-output/
+          if-no-files-found: warn
+          retention-days: 30
