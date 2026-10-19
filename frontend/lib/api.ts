@@ -768,6 +768,34 @@ export async function saveChatBehaviorPreferences(
   );
 }
 
+export type KittyTechnicalSignal = {
+  symbol: string;
+  timeframe: string;
+  signal: "BUY" | "SELL" | "NO TRADE";
+  signal_type: string;
+  price: number;
+  completed_candle_time: string;
+  confidence_score: number;
+  confirmation_count: number;
+  confirmations_required: number;
+  indicators: { ema_9: number; ema_21: number; ema_50: number; rsi_14: number; macd_bias: string; momentum_6_candles_pct: number; atr_14: number };
+  risk_levels: { stop_reference: number | null; target_1_reference: number | null; target_2_reference: number | null; method: string };
+  reasons: string[];
+  model_used: false;
+  research_only: true;
+  trading_enabled: false;
+  warning: string;
+};
+
+export async function getKittyTechnicalSignal(
+  symbol: string,
+  timeframe = "1h",
+  signal?: AbortSignal,
+): Promise<KittyTechnicalSignal> {
+  const query = new URLSearchParams({ symbol, timeframe });
+  return request<KittyTechnicalSignal>(`/api/kitty/signal?${query.toString()}`, { method: "GET", signal });
+}
+
 export type KittyPaperSettings = {
   status?: string;
   enabled: boolean;
@@ -861,7 +889,7 @@ export const api = {
   getMarkets, getMarketDetail, getSignals, getNews,
   getAgentStatus, runAgentGoal, generateMorningBrief, getLatestMorningBrief, listAgentJobs, approveAgentJob,
   getAgentLearning, getAgentV2, getAgentIntelligence, getAgentPreferences, updateAgentPreferences,
-  getAgentActionStatus, listAgentActions, approveAgentAction, getKZAgentStatus, transcribeAudio, getKittyPaperSettings, saveKittyPaperSettings, getKittyDemoSettings, saveKittyDemoSettings,
+  getAgentActionStatus, listAgentActions, approveAgentAction, getKZAgentStatus, transcribeAudio, getKittyPaperSettings, saveKittyPaperSettings, getKittyDemoSettings, saveKittyDemoSettings, getKittyTechnicalSignal,
 };
 
 export type { AuthUser, AuthResponse, MeResponse, ChatResponse, ApiErrorData } from "@/types";
