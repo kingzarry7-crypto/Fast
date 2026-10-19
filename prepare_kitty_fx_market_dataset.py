@@ -27,9 +27,9 @@ def fetch_hourly_candles(symbol: str, api_key: str | None = None, outputsize: in
         raise ValueError(f"Unsupported Twelve Data symbol {symbol!r}; choose one of {sorted(SYMBOLS)}")
     if not 500 <= outputsize <= 5000:
         raise ValueError("outputsize must be between 500 and 5000")
-    key = (api_key or os.getenv("TWELVEDATA_API_KEY", "")).strip()
+    key = (api_key or os.getenv("TWELVEDATA_API_KEY", "") or os.getenv("TWELVE_DATA_API_KEY", "")).strip()
     if not key:
-        raise RuntimeError("TWELVEDATA_API_KEY is required; add it as a GitHub Actions repository secret.")
+        raise RuntimeError("Twelve Data API key is missing. Set TWELVEDATA_API_KEY or TWELVE_DATA_API_KEY in this runtime; GitHub Actions needs its own repository secret.")
     response = requests.get(
         "https://api.twelvedata.com/time_series",
         params={"symbol": SYMBOLS[symbol], "interval": "1h", "outputsize": outputsize,
