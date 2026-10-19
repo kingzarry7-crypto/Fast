@@ -100,14 +100,28 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_prepare_kitty_fx_market_dataset.py' -v
       - name: Build hourly dataset from Twelve Data or free Yahoo Finance fallback
         env:
-          LIMIT: ${{ github.event.inputs.limit || '5000' }}
-          THRESHOLD: ${{ github.event.inputs.threshold || '0.003' }}
+          LIMIT: ${{ github.event.inputs.limit || '15000' }}
+          REQUESTED_THRESHOLD: ${{ github.event.inputs.threshold || '' }}
         run: |
+          # A 0.30% six-hour target is too large for many FX moves and creates
+          # a mostly-NO-TRADE dataset. Use market-specific targets by default.
+          if [ -n "$REQUESTED_THRESHOLD" ] && [ "$REQUESTED_THRESHOLD" != "0.003" ]; then
+            THRESHOLD="$REQUESTED_THRESHOLD"
+          elif [ "${{ matrix.symbol }}" = "XAUUSD" ]; then
+            THRESHOLD="0.0015"
+          else
+            THRESHOLD="0.0008"
+          fi
+          echo "Research label threshold for ${{ matrix.symbol }}: $THRESHOLD"
           mkdir -p "kitty-training-output/${{ matrix.symbol }}"
           python prepare_kitty_fx_market_dataset.py --symbol "${{ matrix.symbol }}" --limit "$LIMIT" --threshold "$THRESHOLD" --output "kitty-training-output/${{ matrix.symbol }}/hourly_features.csv"
       - name: Train isolated research candidate and holdout evaluation
+        env:
+          MARKET_SYMBOL: ${{ matrix.symbol }}
         run: |
-          python train_kitty_v3_retrained.py --symbol "${{ matrix.symbol }}" --csv "kitty-training-output/${{ matrix.symbol }}/hourly_features.csv" --output-dir "kitty-training-output/${{ matrix.symbol }}/candidates" --epochs 100 --patience 10 --batch-size 128 --purge 6 --round-trip-cost 0.001
+          if [ "$MARKET_SYMBOL" = "XAUUSD" ]; then ROUND_TRIP_COST="0.0005"; else ROUND_TRIP_COST="0.0003"; fi
+          echo "Assumed round-trip cost for $MARKET_SYMBOL: $ROUND_TRIP_COST"
+          python train_kitty_v3_retrained.py --symbol "$MARKET_SYMBOL" --csv "kitty-training-output/$MARKET_SYMBOL/hourly_features.csv" --output-dir "kitty-training-output/$MARKET_SYMBOL/candidates" --epochs 100 --patience 10 --batch-size 128 --purge 6 --round-trip-cost "$ROUND_TRIP_COST"
       - name: Publish gold and forex research artifacts
         if: always()
         uses: actions/upload-artifact@v4
