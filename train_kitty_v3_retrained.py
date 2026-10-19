@@ -294,13 +294,22 @@ def main() -> None:
 
     # Predeclare selection using validation macro-F1, then validation log loss.
     # The holdout test partition is evaluated exactly once, after selection.
+    # Keep the reported winner loadable by the current production inference
+    # contract. BatchNorm/LeakyReLU variants remain comparisons, not deployable
+    # checkpoints until the runtime loader is explicitly upgraded.
+    compatible_candidates = [
+        item for item in candidates if item[0]["variant"] == "baseline"
+    ]
     winner, winning_model = max(
-        candidates,
+        compatible_candidates,
         key=lambda item: (
             item[0]["validation"]["macro_f1"],
             -item[0]["validation"]["log_loss"],
         ),
     )
+    winner["promotion_compatible_architecture"] = True
+    for candidate in results:
+        candidate["promotion_compatible_architecture"] = candidate["variant"] == "baseline"
     test_metrics = evaluate(winning_model, x_test, y_test)
     paper_metrics = evaluate_paper_returns(winning_model, x_test, test_returns, round_trip_cost=args.round_trip_cost)
     test_metrics["paper_backtest_after_assumed_costs"] = paper_metrics
@@ -319,7 +328,7 @@ def main() -> None:
         "dataset_sha256": dataset_sha256,
         "feature_order": FEATURES,
         "chronological_split": {"train": len(y_train), "validation": len(y_val), "test": len(y_test), "purged_rows_per_boundary": args.purge},
-        "selection": {"candidate": winner["checkpoint"], "rule": winner["selected_by"], "holdout_test_evaluations": 1},
+        "selection": {"candidate": winner["checkpoint"], "rule": winner["selected_by"], "holdout_test_evaluations": 1, "production_architecture_compatible": True},
         "note": "Only the validation-selected candidate is evaluated on the holdout test set. The reported paper backtest uses overlapping six-hour labels and is a preliminary diagnostic, not an executable portfolio backtest. Inspect walk-forward results, realistic fills, funding, calibration, and drawdown before production use.",
         "results": results,
     }
