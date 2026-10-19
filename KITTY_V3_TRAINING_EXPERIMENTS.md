@@ -26,3 +26,14 @@ Artifacts are written to `kitty_v3_experiments/`: separate candidate checkpoints
 ## Safety and compatibility
 
 These are research candidates, not production-ready checkpoints. The experimental batch-normalization and LeakyReLU variants have different state-dict layouts from the current production loader. Do not copy them over the production checkpoint. Integration requires an explicit model-config-aware loader and passing the existing inference tests plus separate realistic paper-trading validation.
+
+
+## Automated historical retraining workflow
+
+The GitHub Actions workflow `.github/workflows/kitty-retrain-research.yml` runs on relevant changes to the training pipeline, can be launched manually, and runs weekly. It downloads up to 5,000 completed hourly public Binance candles per asset for BTC, ETH, SOL, and BNB, creates the same 18 features used by Kitty inference, labels the following six-hour return, and trains separate candidates per asset.
+
+- The six-hour label horizon is purged at train/validation/test boundaries to reduce overlapping-label leakage.
+- The candidate report includes a single untouched chronological holdout evaluation plus a diagnostic paper-return simulation that subtracts an assumed 0.10% round-trip fee/slippage cost.
+- The current runtime loader is BTC-only. ETH/SOL/BNB outputs are research candidates, not live model integrations.
+- Gold and forex are intentionally not trained from crypto data. They need their own verified historical price source and separate evaluation.
+- Artifacts are retained in GitHub Actions for 30 days. This workflow does **not** overwrite the production checkpoint or enable order execution. A candidate must be reviewed against existing baseline metrics and paper trading before promotion.
