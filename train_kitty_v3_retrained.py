@@ -80,12 +80,60 @@ def load_dataset(path: Path) -> tuple[np.ndarray, np.ndarray, str]:
     return x, y_array, digest
 
 
-def split_chronologically(x: np.ndarray, y: np.ndarray):
+def split_chronologically(x: np.ndarray, y: np.ndarray, purge: int = 0):
+    """Chronological 70/15/15 split, optionally purging overlapping label horizons."""
     n = len(x)
     train_end, val_end = int(n * 0.70), int(n * 0.85)
-    if min(train_end, val_end - train_end, n - val_end) < 1:
-        raise ValueError("Not enough rows for chronological splits.")
-    return (x[:train_end], y[:train_end]), (x[train_end:val_end], y[train_end:val_end]), (x[val_end:], y[val_end:])
+    if purge < 0:
+        raise ValueError("purge must be non-negative")
+    if min(train_end - purge, val_end - train_end - purge, n - val_end) < 1:
+        raise ValueError("Not enough rows for chronological splits with the requested purge.")
+    return (
+        (x[:train_end - purge], y[:train_end - purge]),
+        (x[train_end:val_end - purge], y[train_end:val_end - purge]),
+        (x[val_end:], y[val_end:]),
+    )
+
+
+def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.ndarray,
+                            round_trip_cost: float = 0.001, min_confidence: float = 0.50) -> dict:
+    """One-pass holdout simulation with fixed costs; no position overlap or leverage."""
+    if len(x) != len(forward_returns):
+        raise ValueError("Test features and forward returns must have equal lengths")
+    if not 0 <= round_trip_cost < 0.05:
+        raise ValueError("round_trip_cost must be between 0 and 5%")
+    model.eval()
+    with torch.inference_mode():
+        probs = torch.softmax(model(torch.from_numpy(x)), dim=1).cpu().numpy()
+    trades = []
+    for probabilities, raw_return in zip(probs, forward_returns):
+        if not np.isfinite(raw_return):
+            continue
+        side_class = int(np.argmax(probabilities))
+        confidence = float(probabilities[side_class])
+        if side_class == 1 or confidence < min_confidence:
+            continue
+        gross = -float(raw_return) if side_class == 0 else float(raw_return)
+        trades.append(gross - round_trip_cost)
+    if not trades:
+        return {
+            "trade_count": 0, "win_rate": None, "average_net_return": None,
+            "compounded_net_return": 0.0, "max_drawdown": 0.0,
+            "round_trip_cost_assumption": round_trip_cost,
+            "minimum_class_confidence": min_confidence,
+        }
+    equity = np.cumprod(1.0 + np.asarray(trades, dtype=np.float64))
+    peaks = np.maximum.accumulate(np.concatenate(([1.0], equity)))[1:]
+    drawdowns = equity / peaks - 1.0
+    return {
+        "trade_count": len(trades),
+        "win_rate": float(np.mean(np.asarray(trades) > 0)),
+        "average_net_return": float(np.mean(trades)),
+        "compounded_net_return": float(equity[-1] - 1.0),
+        "max_drawdown": float(np.min(drawdowns)),
+        "round_trip_cost_assumption": round_trip_cost,
+        "minimum_class_confidence": min_confidence,
+    }
 
 
 def train_one(
@@ -180,11 +228,24 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
+    parser.add_argument("--purge", type=int, default=6, help="Rows purged at split boundaries to prevent overlapping six-hour labels")
+    parser.add_argument("--round-trip-cost", type=float, default=0.001, help="Assumed fees plus slippage per completed trade, default 0.10%")
     args = parser.parse_args()
     if args.epochs < 1 or args.patience < 1 or args.batch_size < 2:
         parser.error("epochs/patience must be positive and batch-size must be at least 2")
     x, y, dataset_sha256 = load_dataset(args.csv)
-    (x_train, y_train), (x_val, y_val), (x_test, y_test) = split_chronologically(x, y)
+    (x_train, y_train), (x_val, y_val), (x_test, y_test) = split_chronologically(x, y, purge=args.purge)
+    source_frame = pd.read_csv(args.csv)
+    time_col = next((name for name in ("timestamp", "datetime", "date") if name in source_frame.columns), None)
+    if time_col:
+        source_frame[time_col] = pd.to_datetime(source_frame[time_col], errors="raise", utc=True)
+        source_frame = source_frame.sort_values(time_col, kind="stable").reset_index(drop=True)
+    if "forward_return_6h" not in source_frame.columns:
+        raise ValueError("Dataset must include forward_return_6h for a cost-aware holdout paper evaluation")
+    forward_returns = pd.to_numeric(source_frame["forward_return_6h"], errors="raise").to_numpy(dtype=np.float64)
+    if len(forward_returns) != len(x) or not np.isfinite(forward_returns).all():
+        raise ValueError("forward_return_6h must contain one finite value per dataset row")
+    test_returns = forward_returns[int(len(x) * 0.85):]
     scaler = StandardScaler()
     x_train = scaler.fit_transform(x_train).astype(np.float32)
     x_val = scaler.transform(x_val).astype(np.float32)
@@ -241,6 +302,8 @@ def main() -> None:
         ),
     )
     test_metrics = evaluate(winning_model, x_test, y_test)
+    paper_metrics = evaluate_paper_returns(winning_model, x_test, test_returns, round_trip_cost=args.round_trip_cost)
+    test_metrics["paper_backtest_after_assumed_costs"] = paper_metrics
     winner["test"] = test_metrics
     winner["selected_by"] = "validation_macro_f1_then_validation_log_loss"
     winner_path = Path(winner["checkpoint"])
@@ -255,9 +318,9 @@ def main() -> None:
         "production_ready": False,
         "dataset_sha256": dataset_sha256,
         "feature_order": FEATURES,
-        "chronological_split": {"train": len(y_train), "validation": len(y_val), "test": len(y_test)},
+        "chronological_split": {"train": len(y_train), "validation": len(y_val), "test": len(y_test), "purged_rows_per_boundary": args.purge},
         "selection": {"candidate": winner["checkpoint"], "rule": winner["selected_by"], "holdout_test_evaluations": 1},
-        "note": "Only the validation-selected candidate is evaluated on the holdout test set. Do not choose a model on accuracy alone. Inspect class-wise recall, trading costs, drawdown, calibration, and walk-forward results before any production use.",
+        "note": "Only the validation-selected candidate is evaluated on the holdout test set. The reported paper backtest uses overlapping six-hour labels and is a preliminary diagnostic, not an executable portfolio backtest. Inspect walk-forward results, realistic fills, funding, calibration, and drawdown before production use.",
         "results": results,
     }
     report_path = args.output_dir / "comparison_report.json"
