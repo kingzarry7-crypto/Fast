@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
+import requests
 
 import prepare_kitty_market_dataset as builder
 
@@ -39,6 +40,21 @@ class KittyMarketDatasetTests(unittest.TestCase):
         self.assertAlmostEqual(float(first["exit_price_after_6h"]), expected_exit, places=10)
         self.assertAlmostEqual(float(first["forward_return_6h"]), expected_return, places=10)
         self.assertTrue((dataset["timestamp"] < frame["timestamp"].iloc[-7]).all())
+
+
+    @unittest.mock.patch("prepare_kitty_market_dataset.fetch_cryptocompare_hourly")
+    @unittest.mock.patch("prepare_kitty_market_dataset.requests.Session.get", side_effect=requests.HTTPError("451 blocked"))
+    def test_binance_http_451_uses_public_fallback(self, mock_get, mock_fallback):
+        fallback = pd.DataFrame({
+            "timestamp": pd.date_range("2025-01-01", periods=500, freq="h", tz="UTC"),
+            "open": np.ones(500), "high": np.ones(500) * 1.01,
+            "low": np.ones(500) * 0.99, "close": np.ones(500),
+            "volume": np.ones(500),
+        })
+        mock_fallback.return_value = fallback
+        result = builder.fetch_hourly_klines("BTC", 500)
+        self.assertEqual(len(result), 500)
+        mock_fallback.assert_called_once_with("BTC", 500)
 
     def test_rejects_short_and_unsupported_sources(self):
         with self.assertRaises(ValueError):
