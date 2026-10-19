@@ -841,7 +841,13 @@ export async function runKittyMultiPaperCycle(signal?: AbortSignal): Promise<{
   live_trading_enabled: false;
   exchange_connector_used: false;
 }> {
-  return request("/api/kitty/multi-paper/cycle", { method: "POST", signal });
+  return request<{
+    status: string;
+    mode: "paper_only";
+    results?: Array<Record<string, unknown>>;
+    live_trading_enabled: false;
+    exchange_connector_used: false;
+  }>("/api/kitty/multi-paper/cycle", { method: "POST", signal });
 }
 
 export type KittyPaperSettings = {
