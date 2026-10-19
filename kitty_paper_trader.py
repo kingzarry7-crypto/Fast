@@ -126,6 +126,23 @@ def _init_db() -> None:
                     details_json TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS kitty_signal_feedback (
+                    id TEXT PRIMARY KEY,
+                    candle_time TEXT NOT NULL UNIQUE,
+                    symbol TEXT NOT NULL,
+                    signal TEXT NOT NULL,
+                    confidence REAL NOT NULL,
+                    entry_time TEXT NOT NULL,
+                    exit_time TEXT NOT NULL,
+                    entry_price REAL,
+                    exit_price REAL,
+                    forward_return REAL,
+                    actual_label TEXT,
+                    correct INTEGER,
+                    settled_at TEXT,
+                    created_at TEXT NOT NULL
+                );
+
             """)
             conn.execute(
                 "INSERT OR IGNORE INTO kitty_paper_state(id,cash,quantity,avg_entry,updated_at) VALUES(1,?,?,?,?)",
@@ -210,6 +227,90 @@ def _features(candles: list[dict[str, Any]]) -> dict[str, float]:
     """Use the retrained model's exact 18-feature input contract."""
     from kitty_api import _kitty_features
     return _kitty_features(candles)
+
+
+def _parse_candle_time(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _settle_signal_feedback(conn: sqlite3.Connection, candles: list[dict[str, Any]]) -> int:
+    """Settle saved predictions only when both the next-open entry and exit candles exist."""
+    by_time: dict[datetime, dict[str, Any]] = {}
+    for candle in candles:
+        stamp = candle.get("datetime") or candle.get("time")
+        if not stamp:
+            continue
+        try:
+            by_time[_parse_candle_time(str(stamp))] = candle
+        except (TypeError, ValueError, OverflowError):
+            continue
+    pending = conn.execute(
+        "SELECT * FROM kitty_signal_feedback WHERE settled_at IS NULL"
+    ).fetchall()
+    settled = 0
+    threshold = max(0.0005, min(_float_env("KITTY_FEEDBACK_LABEL_THRESHOLD", 0.003), 0.02))
+    for row in pending:
+        try:
+            entry = by_time.get(_parse_candle_time(row["entry_time"]))
+            exit_candle = by_time.get(_parse_candle_time(row["exit_time"]))
+            if not entry or not exit_candle:
+                continue
+            entry_price = float(entry["open"])
+            exit_price = float(exit_candle["close"])
+            if not (math.isfinite(entry_price) and entry_price > 0 and
+                    math.isfinite(exit_price) and exit_price > 0):
+                continue
+            forward_return = exit_price / entry_price - 1.0
+            actual = "SHORT" if forward_return <= -threshold else (
+                "LONG" if forward_return >= threshold else "NO TRADE"
+            )
+            conn.execute(
+                """UPDATE kitty_signal_feedback SET entry_price=?,exit_price=?,
+                   forward_return=?,actual_label=?,correct=?,settled_at=? WHERE id=?""",
+                (entry_price, exit_price, forward_return, actual,
+                 int(row["signal"] == actual), _now(), row["id"]),
+            )
+            settled += 1
+        except (TypeError, ValueError, KeyError, OverflowError):
+            logger.warning("Skipping malformed Kitty feedback row %s", row["id"])
+    return settled
+
+
+def feedback_summary() -> dict[str, Any]:
+    _init_db()
+    with _lock:
+        conn = _connect()
+        try:
+            totals = conn.execute(
+                """SELECT COUNT(*) AS total,
+                   SUM(CASE WHEN settled_at IS NOT NULL THEN 1 ELSE 0 END) AS settled,
+                   SUM(CASE WHEN settled_at IS NULL THEN 1 ELSE 0 END) AS pending,
+                   SUM(CASE WHEN settled_at IS NOT NULL AND correct=1 THEN 1 ELSE 0 END) AS correct
+                   FROM kitty_signal_feedback"""
+            ).fetchone()
+            by_signal = conn.execute(
+                """SELECT signal, COUNT(*) AS settled,
+                   AVG(CASE WHEN correct=1 THEN 1.0 ELSE 0.0 END) AS accuracy,
+                   AVG(forward_return) AS mean_forward_return
+                   FROM kitty_signal_feedback WHERE settled_at IS NOT NULL
+                   GROUP BY signal ORDER BY signal"""
+            ).fetchall()
+        finally:
+            conn.close()
+    settled = int(totals["settled"] or 0)
+    correct = int(totals["correct"] or 0)
+    return {
+        "recorded_predictions": int(totals["total"] or 0),
+        "settled_predictions": settled,
+        "pending_predictions": int(totals["pending"] or 0),
+        "direction_label_accuracy": (correct / settled) if settled else None,
+        "by_signal": [dict(row) for row in by_signal],
+        "automatic_model_updates": False,
+        "note": "Outcomes are recorded for evaluation. They do not alter model weights or promote checkpoints automatically.",
+    }
 
 
 def run_cycle() -> dict[str, Any]:
