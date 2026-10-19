@@ -1,12 +1,14 @@
 """Regression tests ensuring streaming chat uses specialist intent routing."""
 
 import json
+import os
 import unittest
 from unittest.mock import patch
 
 import coding_request
 
-from streaming_chat import _build_stream_generator
+import streaming_chat
+from streaming_chat import _build_stream_generator, _provider_streams
 
 
 class _Memory:
@@ -21,6 +23,40 @@ def _events(chunks):
             if line.startswith("data: "):
                 parsed.append(json.loads(line[6:]))
     return parsed
+
+
+class StreamingProviderPreferenceTests(unittest.TestCase):
+    def test_explicit_ai_provider_is_first_in_streaming_fallback_order(self):
+        with patch.dict(os.environ, {"AI_PROVIDER": "openrouter", "ZARRY_API_URL": ""}, clear=False), \
+             patch.object(streaming_chat.ai_engine, "HF_TOKEN", "hf-test"), \
+             patch.object(streaming_chat.ai_engine, "CLOUDFLARE_AI_TOKEN", "cf-test"), \
+             patch.object(streaming_chat.ai_engine, "OPENAI_API_KEY", "openai-test"), \
+             patch.object(streaming_chat, "_GROQ_KEY", "groq-test"), \
+             patch.object(streaming_chat, "_OPENROUTER_KEY", "router-test"), \
+             patch.object(streaming_chat, "_CHUTES_KEY", "chutes-test"), \
+             patch.object(streaming_chat, "_stream_openai_compatible", return_value=iter(["chunk"])), \
+             patch.object(streaming_chat, "_stream_cloudflare", return_value=iter(["chunk"])), \
+             patch.object(streaming_chat, "_stream_zarry", return_value=iter(["chunk"])):
+            providers = [name for name, _stream in _provider_streams([])]
+
+        self.assertEqual(providers[0], "openrouter")
+        self.assertIn("openai", providers)
+        self.assertIn("groq", providers)
+        self.assertIn("chutes", providers)
+
+    def test_auto_streaming_order_starts_with_cloudflare_when_zarry_and_hf_unset(self):
+        with patch.dict(os.environ, {"AI_PROVIDER": "AUTO", "ZARRY_API_URL": ""}, clear=False), \
+             patch.object(streaming_chat.ai_engine, "HF_TOKEN", ""), \
+             patch.object(streaming_chat.ai_engine, "CLOUDFLARE_AI_TOKEN", "cf-test"), \
+             patch.object(streaming_chat.ai_engine, "OPENAI_API_KEY", "openai-test"), \
+             patch.object(streaming_chat, "_GROQ_KEY", "groq-test"), \
+             patch.object(streaming_chat, "_OPENROUTER_KEY", "router-test"), \
+             patch.object(streaming_chat, "_CHUTES_KEY", "chutes-test"), \
+             patch.object(streaming_chat, "_stream_openai_compatible", return_value=iter(["chunk"])), \
+             patch.object(streaming_chat, "_stream_cloudflare", return_value=iter(["chunk"])):
+            providers = [name for name, _stream in _provider_streams([])]
+
+        self.assertEqual(providers[0], "cloudflare")
 
 
 class StreamingIntentRoutingTests(unittest.TestCase):
