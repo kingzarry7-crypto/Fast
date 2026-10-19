@@ -796,6 +796,54 @@ export async function getKittyTechnicalSignal(
   return request<KittyTechnicalSignal>(`/api/kitty/signal?${query.toString()}`, { method: "GET", signal });
 }
 
+export type KittyMultiPaperSettings = {
+  enabled: boolean;
+  symbols: string[];
+  timeframe: string;
+  max_order_notional_usd: number;
+  mode?: "paper_only";
+  live_trading_enabled?: false;
+  message?: string;
+};
+
+export type KittyMultiPaperStatus = KittyMultiPaperSettings & {
+  starting_cash_usd: number;
+  cash_usd: number;
+  open_positions_value_usd: number;
+  equity_usd: number;
+  positions: Array<{ symbol: string; quantity: number; avg_entry: number; mark_price: number; updated_at: string }>;
+  recent_orders: Array<Record<string, unknown>>;
+  recent_cycles: Array<Record<string, unknown>>;
+  exchange_connector_used: false;
+  warning?: string;
+  initial_cycle?: { status?: string; results?: Array<Record<string, unknown>> } | null;
+};
+
+export async function getKittyMultiPaperStatus(signal?: AbortSignal): Promise<KittyMultiPaperStatus> {
+  return request<KittyMultiPaperStatus>("/api/kitty/multi-paper/status", { method: "GET", signal });
+}
+
+export async function getKittyMultiPaperSettings(signal?: AbortSignal): Promise<KittyMultiPaperSettings> {
+  return request<KittyMultiPaperSettings>("/api/kitty/multi-paper/settings", { method: "GET", signal });
+}
+
+export async function saveKittyMultiPaperSettings(
+  settings: Pick<KittyMultiPaperSettings, "enabled" | "symbols" | "timeframe" | "max_order_notional_usd">,
+  signal?: AbortSignal,
+): Promise<KittyMultiPaperStatus> {
+  return request<KittyMultiPaperStatus>("/api/kitty/multi-paper/settings", { method: "PUT", body: settings, signal });
+}
+
+export async function runKittyMultiPaperCycle(signal?: AbortSignal): Promise<{
+  status: string;
+  mode: "paper_only";
+  results?: Array<Record<string, unknown>>;
+  live_trading_enabled: false;
+  exchange_connector_used: false;
+}> {
+  return request("/api/kitty/multi-paper/cycle", { method: "POST", signal });
+}
+
 export type KittyPaperSettings = {
   status?: string;
   enabled: boolean;
@@ -887,6 +935,7 @@ export const api = {
   getRealtimeStatus, startRealtimeCall, saveRealtimeTranscript, getPlatformStatus, getChatBehaviorPreferences, saveChatBehaviorPreferences, createMemoryLinkCode, createCheckoutSession, getBillingConfig,
   getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, adminEmailBroadcast, ttsSpeak, synthesizeSpeech,
   getMarkets, getMarketDetail, getSignals, getNews,
+  getKittyMultiPaperStatus, getKittyMultiPaperSettings, saveKittyMultiPaperSettings, runKittyMultiPaperCycle,
   getAgentStatus, runAgentGoal, generateMorningBrief, getLatestMorningBrief, listAgentJobs, approveAgentJob,
   getAgentLearning, getAgentV2, getAgentIntelligence, getAgentPreferences, updateAgentPreferences,
   getAgentActionStatus, listAgentActions, approveAgentAction, getKZAgentStatus, transcribeAudio, getKittyPaperSettings, saveKittyPaperSettings, getKittyDemoSettings, saveKittyDemoSettings, getKittyTechnicalSignal,
