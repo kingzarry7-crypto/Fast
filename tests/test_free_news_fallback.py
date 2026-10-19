@@ -1,5 +1,8 @@
 """Regression tests for the free, no-key news fallback."""
+import threading
+import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import Mock, patch
 
 import news
@@ -69,6 +72,27 @@ class FreeNewsFallbackTests(unittest.TestCase):
             ordered = engine._get_news_provider_order()
         self.assertTrue(ordered)
         self.assertEqual(ordered[0].name, "gdelt")
+
+    def test_concurrent_same_asset_cache_miss_only_fetches_once(self):
+        engine = news.NewsEngineSingleton()
+        call_count = 0
+        count_lock = threading.Lock()
+
+        def fetch(*args, **kwargs):
+            nonlocal call_count
+            with count_lock:
+                call_count += 1
+            time.sleep(0.05)
+            return {"headlines": [], "provider": "none", "available": False}
+
+        with patch.object(engine, "get_upcoming_events_cached", return_value=[]), \
+             patch.object(engine, "fetch_headlines_with_fallback", side_effect=fetch), \
+             patch.object(news, "get_available_calendar_provider", return_value="none"):
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                results = list(pool.map(engine.get_news_for_asset, ["BTC/USD"] * 4))
+
+        self.assertEqual(call_count, 1)
+        self.assertTrue(all(result["asset"] == "BTC/USD" for result in results))
 
     def test_selected_provider_still_has_free_fallback(self):
         with (
