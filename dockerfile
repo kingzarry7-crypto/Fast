@@ -3,7 +3,6 @@ FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV TZ=UTC
-ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright
 
 WORKDIR /app
 
@@ -36,9 +35,8 @@ COPY requirements.txt .
 RUN python -m pip install --no-cache-dir --upgrade pip && \
     python -m pip install --no-cache-dir -r requirements.txt
 
-RUN mkdir -p /app/.playwright && \
-    PLAYWRIGHT_BROWSERS_PATH=/app/.playwright python -m playwright install chromium
-
+# Reuse Debian's Chromium instead of downloading a second Playwright browser.
+# start.sh sets BROWSER_EXECUTABLE_PATH=/usr/bin/chromium at runtime.
 COPY . .
 
 RUN mkdir -p /app/data && \
@@ -47,7 +45,7 @@ RUN mkdir -p /app/data && \
 RUN echo "=== BROWSER BUILD CHECK ===" && \
     command -v chromium && \
     ls -l /usr/bin/chromium && \
-    PLAYWRIGHT_BROWSERS_PATH=/app/.playwright python -c "import shutil; from pathlib import Path; from playwright.sync_api import sync_playwright; p=shutil.which('chromium'); print('SYSTEM_CHROMIUM='+str(p)); assert p; pw=sync_playwright().start(); print('PLAYWRIGHT_CHROMIUM='+str(Path(pw.chromium.executable_path))); pw.stop()"
+    python -c "import shutil; from pathlib import Path; from playwright.sync_api import sync_playwright; p=shutil.which('chromium'); print('SYSTEM_CHROMIUM='+str(p)); assert p and Path(p).is_file(); pw=sync_playwright().start(); print('PLAYWRIGHT_DRIVER_OK='+str(Path(pw.chromium.executable_path))); pw.stop()"
 
 RUN chmod +x /app/start.sh
 
