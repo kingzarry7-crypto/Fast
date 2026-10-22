@@ -32,9 +32,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN adduser --disabled-password --gecos "" appuser
 
 COPY requirements.txt .
-RUN python -m pip install --no-cache-dir --upgrade pip && \
+RUN grep -vE "^[[:space:]]*torch([<=>!~].*)?$" requirements.txt > /tmp/requirements-runtime.txt && \
+    python -m pip install --no-cache-dir --upgrade pip && \
     python -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu "torch==2.14.1" && \
-    python -m pip install --no-cache-dir -r requirements.txt
+    python -m pip install --no-cache-dir -r /tmp/requirements-runtime.txt && \
+    rm -f /tmp/requirements-runtime.txt
 
 # Reuse Debian's Chromium instead of downloading a second Playwright browser.
 # start.sh sets BROWSER_EXECUTABLE_PATH=/usr/bin/chromium at runtime.
