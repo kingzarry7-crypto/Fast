@@ -42,6 +42,25 @@ class KittyMarketDatasetTests(unittest.TestCase):
         self.assertAlmostEqual(float(first["forward_return_6h"]), expected_return, places=10)
         self.assertTrue((dataset["timestamp"] < frame["timestamp"].iloc[-7]).all())
 
+    def test_excludes_forward_labels_that_cross_a_missing_hour(self):
+        rng = np.random.default_rng(2027)
+        count = 1200
+        returns = rng.normal(0.00005, 0.004, count)
+        closes = 60_000 * np.cumprod(1 + returns)
+        opens = np.concatenate(([closes[0] * (1 - returns[0]),], closes[:-1]))
+        frame = pd.DataFrame({
+            "timestamp": pd.date_range("2024-01-01", periods=count, freq="h", tz="UTC"),
+            "open": opens,
+            "high": np.maximum(opens, closes) * 1.001,
+            "low": np.minimum(opens, closes) * 0.999,
+            "close": closes,
+            "volume": np.ones(count),
+        }).drop(index=600).reset_index(drop=True)
+
+        dataset = builder.build_dataset(frame)
+        affected = pd.date_range("2024-01-25 17:00:00+00:00", periods=7, freq="h")
+        self.assertTrue(set(affected).isdisjoint(set(dataset["timestamp"])))
+
 
     @unittest.mock.patch("prepare_kitty_market_dataset.fetch_yahoo_hourly")
     @unittest.mock.patch("prepare_kitty_market_dataset.requests.Session.get", side_effect=requests.HTTPError("451 blocked"))

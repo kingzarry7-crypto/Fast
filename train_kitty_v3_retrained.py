@@ -273,6 +273,7 @@ def main() -> None:
     if time_col:
         source_frame[time_col] = pd.to_datetime(source_frame[time_col], errors="raise", utc=True)
         source_frame = source_frame.sort_values(time_col, kind="stable").reset_index(drop=True)
+    data_sources = sorted(set(source_frame["data_source"].dropna().astype(str))) if "data_source" in source_frame.columns else ["unspecified historical source"]
     if "forward_return_6h" not in source_frame.columns:
         raise ValueError("Dataset must include forward_return_6h for a cost-aware holdout paper evaluation")
     forward_returns = pd.to_numeric(source_frame["forward_return_6h"], errors="raise").to_numpy(dtype=np.float64)
@@ -313,6 +314,7 @@ def main() -> None:
                 "optimizer": optimizer_name,
                 "seed": args.seed,
                 "training_symbol": args.symbol,
+                "training_data_sources": data_sources,
                 "training_timeframe": "1h",
                 "label_horizon_hours": 6,
                 "label_threshold": args.label_threshold if args.label_threshold is not None else "dataset-defined",
@@ -401,6 +403,7 @@ def main() -> None:
     report = {
         "model": "Kitty V3 retraining experiment",
         "training_symbol": args.symbol,
+        "training_data_sources": data_sources,
         "training_timeframe": "1h",
         "label_horizon_hours": 6,
         "label_threshold": args.label_threshold if args.label_threshold is not None else "dataset-defined",

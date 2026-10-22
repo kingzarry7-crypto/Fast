@@ -111,6 +111,7 @@ def main() -> None:
     candles = fetch_hourly_candles(args.symbol, outputsize=args.limit)
     data_source = candles.attrs.get("data_source", "unknown historical source")
     dataset = build_dataset(candles, threshold=args.threshold)
+    dataset["data_source"] = data_source
     args.output.parent.mkdir(parents=True, exist_ok=True)
     dataset.to_csv(args.output, index=False)
     print({"symbol": args.symbol, "data_source": data_source,

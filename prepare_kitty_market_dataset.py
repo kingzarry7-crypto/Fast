@@ -188,8 +188,19 @@ def build_dataset(frame: pd.DataFrame, threshold: float = 0.003, horizon: int = 
         [forward_return <= -threshold, forward_return >= threshold],
         [0, 2], default=1,
     )
-    # Remove warm-up rows and rows without the next-open entry / six-hour exit.
+    # Labels are defined in elapsed hours, not just row offsets. Drop samples
+    # whose next-open entry or t+7 exit crosses a missing/non-hourly candle.
+    timestamps = pd.to_datetime(frame["timestamp"], utc=True)
+    next_time = timestamps.shift(-1)
+    exit_time = timestamps.shift(-(horizon + 1))
+    valid_label_window = (
+        ((next_time - timestamps) == pd.Timedelta(hours=1))
+        & ((exit_time - timestamps) == pd.Timedelta(hours=horizon + 1))
+    )
+    dataset["valid_label_window"] = valid_label_window
+    # Remove warm-up rows, non-finite rows, and labels spanning data gaps.
     dataset = dataset.replace([np.inf, -np.inf], np.nan).dropna(subset=FEATURES + ["forward_return_6h"])
+    dataset = dataset[dataset["valid_label_window"]].drop(columns=["valid_label_window"])
     dataset["target"] = dataset["target"].astype(int)
     dataset = dataset[dataset["timestamp"] < frame["timestamp"].iloc[-(horizon + 1)]].reset_index(drop=True)
     if set(dataset["target"].unique()) != {0, 1, 2}:
