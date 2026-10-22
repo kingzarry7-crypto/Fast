@@ -43,6 +43,36 @@ class KittyFxDatasetTests(unittest.TestCase):
 
 
     @patch("prepare_kitty_fx_market_dataset.requests.get")
+    def test_twelve_data_uses_utc_and_drops_incomplete_hour(self, mock_get):
+        now_hour = pd.Timestamp.now(tz="UTC").floor("h")
+        timestamps = [
+            now_hour - pd.Timedelta(hours=500 - i)
+            for i in range(501)
+        ]
+        values = []
+        for i, stamp in enumerate(timestamps):
+            price = 2300.0 + i * 0.1
+            values.append({
+                "datetime": stamp.strftime("%Y-%m-%d %H:%M:%S"),
+                "open": str(price), "high": str(price + 1),
+                "low": str(price - 1), "close": str(price + 0.2),
+            })
+        response = Mock()
+        response.json.return_value = {"values": values}
+        response.raise_for_status.return_value = None
+        mock_get.return_value = response
+
+        frame = builder.fetch_hourly_candles("XAUUSD", api_key="test-key", outputsize=501)
+
+        self.assertEqual(len(frame), 500)
+        self.assertEqual(mock_get.call_args.kwargs["params"]["timezone"], "UTC")
+        self.assertLess(frame["timestamp"].iloc[-1], now_hour)
+        self.assertEqual(
+            frame.attrs.get("data_source"),
+            "Twelve Data XAU/USD",
+        )
+
+    @patch("prepare_kitty_fx_market_dataset.requests.get")
     def test_uses_free_yahoo_hourly_data_when_twelve_data_key_is_missing(self, mock_get):
         with patch.dict(os.environ, {"TWELVEDATA_API_KEY": "", "TWELVE_DATA_API_KEY": ""}):
             timestamps = [1704067200 + i * 3600 for i in range(500)]
