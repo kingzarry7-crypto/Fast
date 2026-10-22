@@ -1,0 +1,41 @@
+name: One-time frontend lockfile repair
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/repair-frontend-lockfile.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate-lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Use repository-pinned npm
+        run: npm install --global npm@10.9.2
+      - name: Regenerate lockfile from package.json
+        working-directory: frontend
+        run: npm install --package-lock-only --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+      - name: Commit regenerated lockfile and remove one-time workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/package-lock.json
+          git rm .github/workflows/repair-frontend-lockfile.yml
+          if git diff --cached --quiet; then
+            echo "No lockfile changes were produced."
+            exit 1
+          fi
+          git commit -m "Regenerate frontend npm lockfile"
+          git push
