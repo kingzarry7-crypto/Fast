@@ -62,15 +62,21 @@ depends on the backend's persistent-volume configuration.
 `prepare_kitty_fx_market_dataset.py` uses Twelve Data hourly candles for XAU/USD,
 EUR/USD, GBP/USD and USD/JPY, then applies the same 18-feature contract and
 six-hour outcome definition as the crypto research builder. Add a repository
-Actions secret named `TWELVEDATA_API_KEY` to enable these market jobs. Without
-that secret, the workflow runs the source tests and clearly skips market downloads.
-Provider plan limits or unsupported symbols can still make a market job fail; no
-synthetic or crypto candles are substituted for missing gold/FX data.
+Actions secret named `TWELVEDATA_API_KEY` to train on the actual XAU/USD spot feed.
+Without that secret, the no-key Yahoo fallback uses `GC=F` COMEX gold futures for
+XAUUSD. That is a clearly labelled gold-futures proxy, **not XAU/USD spot**, and
+its candidate must not be promoted to the live spot prediction path. The dataset
+source is recorded in the candidate checkpoint/report. Provider plan limits or
+unsupported symbols can still make a market job fail; no synthetic or crypto
+candles are substituted for missing gold/FX data.
 
 The target timing is signal after candle t closes, entry at candle t+1 open, and
-exit at candle t+7 close. The label builder and paper feedback use the same
-entry/exit convention. Each gold/FX model is a separate research candidate and
-must not be loaded into the BTC production inference path.
+exit at candle t+7 close. Samples whose hourly window crosses missing candles are
+excluded so row gaps cannot silently change the holding period. The label builder
+and paper feedback use the same entry/exit convention. Each gold/FX model is a
+separate research candidate and must not be loaded into the BTC production inference
+path. The holdout gate disables signals unless at least 10 trades have positive
+average and compounded net returns after assumed costs.
 
 ## Scheduled learning and promotion controls
 
