@@ -64,13 +64,15 @@ def _fetch_yahoo_hourly_candles(symbol: str, outputsize: int) -> pd.DataFrame:
     return frame[["timestamp", "open", "high", "low", "close", "volume"]]
 
 
-def fetch_hourly_candles(symbol: str, api_key: str | None = None, outputsize: int = 5000) -> pd.DataFrame:
+def fetch_hourly_candles(symbol: str, api_key: str | None = None, outputsize: int = 5000, require_spot: bool = False) -> pd.DataFrame:
     if symbol not in SYMBOLS:
         raise ValueError(f"Unsupported Twelve Data symbol {symbol!r}; choose one of {sorted(SYMBOLS)}")
     if not 500 <= outputsize <= 15000:
         raise ValueError("outputsize must be between 500 and 15000")
     key = (api_key or os.getenv("TWELVEDATA_API_KEY", "") or os.getenv("TWELVE_DATA_API_KEY", "")).strip()
     if not key:
+        if require_spot and symbol == "XAUUSD":
+            raise RuntimeError("XAU/USD spot training requires TWELVEDATA_API_KEY or TWELVE_DATA_API_KEY; GC=F futures proxy is not accepted for Gold model training")
         return _fetch_yahoo_hourly_candles(symbol, outputsize)
     response = requests.get(
         "https://api.twelvedata.com/time_series",
@@ -107,8 +109,9 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=15000)
     parser.add_argument("--threshold", type=float, default=0.003)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--require-spot", action="store_true", help="Require actual Twelve Data XAU/USD spot history; reject Yahoo GC=F proxy")
     args = parser.parse_args()
-    candles = fetch_hourly_candles(args.symbol, outputsize=args.limit)
+    candles = fetch_hourly_candles(args.symbol, outputsize=args.limit, require_spot=args.require_spot)
     data_source = candles.attrs.get("data_source", "unknown historical source")
     dataset = build_dataset(candles, threshold=args.threshold)
     dataset["data_source"] = data_source
