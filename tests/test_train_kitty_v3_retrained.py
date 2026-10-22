@@ -145,6 +145,30 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         self.assertEqual(signal, "NO TRADE")
         self.assertEqual(reason, "no_validated_confidence_threshold")
 
+    def test_candidate_selection_prefers_positive_net_validation_returns_after_costs(self):
+        trials = [
+            {"candidate_id": "high-f1-but-losing", "min_confidence": 0.5,
+             "trade_count": 30, "average_net_return": -0.001,
+             "compounded_net_return": -0.03, "max_drawdown": -0.05},
+            {"candidate_id": "positive-net", "min_confidence": 0.6,
+             "trade_count": 18, "average_net_return": 0.002,
+             "compounded_net_return": 0.04, "max_drawdown": -0.02},
+            {"candidate_id": "too-few-trades", "min_confidence": 0.4,
+             "trade_count": 4, "average_net_return": 0.02,
+             "compounded_net_return": 0.08, "max_drawdown": -0.01},
+        ]
+        selected = kitty.select_validation_candidate(trials)
+        self.assertEqual(selected["candidate_id"], "positive-net")
+
+    def test_candidate_selection_returns_none_when_no_validation_edge_exists(self):
+        trials = [
+            {"min_confidence": 0.5, "trade_count": 30,
+             "average_net_return": -0.001, "compounded_net_return": -0.03},
+            {"min_confidence": 0.4, "trade_count": 5,
+             "average_net_return": 0.01, "compounded_net_return": 0.04},
+        ]
+        self.assertIsNone(kitty.select_validation_candidate(trials))
+
     def test_architecture_variants_return_three_class_logits(self):
         for variant in ("baseline", "batchnorm", "leaky_relu"):
             model = kitty.KittyExperimentNet(variant=variant)
