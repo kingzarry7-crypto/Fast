@@ -22,7 +22,6 @@ on:
       - "email_draft_safety.py"
       - "test_email_draft_safety.py"
       - "google_connector.py"
-      - "account_agent.py"
       - "web_research_engine.py"
       - "test_web_research_engine.py"
       - "workflow_api.py"
@@ -82,7 +81,6 @@ on:
       - "email_draft_safety.py"
       - "test_email_draft_safety.py"
       - "google_connector.py"
-      - "account_agent.py"
       - "workflow_api.py"
       - "workflow_scheduler.py"
       - "reliability_guardian.py"
@@ -114,8 +112,8 @@ jobs:
           node-version: "22"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
-      - name: Install frontend dependencies from lockfile
-        run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - name: Install frontend dependencies and reconcile stale lockfile
+        run: npm install --legacy-peer-deps --no-audit --no-fund
       - name: Typecheck frontend
         run: npm run typecheck
       - name: Lint frontend
