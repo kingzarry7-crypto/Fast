@@ -11,6 +11,9 @@ on:
       - "train_kitty_v3_retrained.py"
       - "prepare_kitty_market_dataset.py"
       - "tests/test_prepare_kitty_market_dataset.py"
+      - "kitty_api.py"
+      - "kitty_features.py"
+      - "kitty_v3_retrained.py"
   workflow_dispatch:
     inputs:
       limit:
