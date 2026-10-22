@@ -384,6 +384,30 @@ def kitty_technical_signal(
             raise ValueError(symbol + ": at least 56 candles are required to exclude the possibly forming candle")
         closed_candles = candles[:-1]
         _validate_candles(closed_candles, timeframe, symbol)
+        if symbol == "XAU/USD" and timeframe == "1h":
+            gold_status = gold_model.status()
+            if gold_status.get("available"):
+                features = _kitty_features(closed_candles)
+                prediction = gold_model.predict_features(features)
+                return {
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "signal": prediction["signal"],
+                    "signal_type": "gold_specific_research_ml_model",
+                    "prediction_mode": "research_only_hourly_model",
+                    "prediction_available": True,
+                    "prediction": prediction,
+                    "model_status": gold_status,
+                    "completed_candle_time": _validate_candles(closed_candles, timeframe, symbol),
+                    "trading_enabled": False,
+                    "automatic_order_execution_enabled": False,
+                    "warning": "Gold ML output is research-only; the signal gate blocks BUY/SELL until a model has validated edge and explicit approval.",
+                }
+            technical = _technical_signal(closed_candles, symbol, timeframe)
+            technical["prediction_mode"] = "rule_based_technical_confluence"
+            technical["gold_ml_model_available"] = False
+            technical["gold_ml_model_note"] = gold_status.get("error", "A validated XAU/USD checkpoint is not installed.")
+            return technical
         return _technical_signal(closed_candles, symbol, timeframe)
     except Exception as exc:
         raise HTTPException(
