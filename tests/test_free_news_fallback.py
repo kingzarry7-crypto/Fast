@@ -66,6 +66,24 @@ class FreeNewsFallbackTests(unittest.TestCase):
         # Cooldown is provider-wide, not scoped to the query string.
         self.assertEqual(request.call_count, 1)
 
+    @patch("news.requests.get", side_effect=news.requests.exceptions.Timeout("simulated timeout"))
+    def test_gdelt_network_error_sets_short_cooldown_across_queries(self, request):
+        provider = news.GDELTNewsProvider()
+        self.assertEqual(provider.fetch_headlines("bitcoin", 5), [])
+        self.assertIn("gdelt", news._NEWS_PROVIDER_COOLDOWNS)
+        self.assertEqual(provider.fetch_headlines("ethereum", 5), [])
+        self.assertEqual(request.call_count, 1)
+
+    @patch("news.requests.get")
+    def test_gdelt_429_cooldown_applies_across_different_queries(self, request):
+        response = Mock()
+        response.status_code = 429
+        request.return_value = response
+        provider = news.GDELTNewsProvider()
+        self.assertEqual(provider.fetch_headlines("bitcoin", 5), [])
+        self.assertEqual(provider.fetch_headlines("ethereum", 5), [])
+        self.assertEqual(request.call_count, 1)
+
     def test_auto_news_order_starts_with_no_key_provider(self):
         with patch.object(news, "NEWS_PROVIDER", "AUTO"):
             engine = news.NewsEngineSingleton()

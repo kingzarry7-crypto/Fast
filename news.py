@@ -68,10 +68,12 @@ def _provider_cooldown_active(name: str) -> bool:
     until = _NEWS_PROVIDER_COOLDOWNS.get(name.lower())
     return bool(until and datetime.now(timezone.utc) < until)
 
-def _set_provider_cooldown(name: str, status_code: int) -> None:
+def _set_provider_cooldown(name: str, status_code: int, retry_after_seconds: Optional[int] = None) -> None:
     now = datetime.now(timezone.utc)
     name = name.lower()
-    if status_code == 429:
+    if retry_after_seconds is not None:
+        until = now + timedelta(seconds=max(1, int(retry_after_seconds)))
+    elif status_code == 429:
         if name == "currents":
             # Currents documents daily quota resets at 00:00 UTC.
             tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=5, microsecond=0)
@@ -674,6 +676,10 @@ class GDELTNewsProvider(BaseNewsProvider):
                 _clear_provider_cooldown(self.name)
             return results
         except Exception as exc:
+            # Network failures can repeat for every asset/query just like HTTP errors.
+            # Apply a short process-wide cooldown to avoid a retry storm while
+            # still recovering much faster than the one-hour HTTP 429 cooldown.
+            _set_provider_cooldown(self.name, 0, retry_after_seconds=60)
             logger.info("GDELT news unavailable: %s", type(exc).__name__)
             return []
 
