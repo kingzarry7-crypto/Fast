@@ -1,0 +1,42 @@
+# Railway runs the Python API from the repository root. The frontend is deployed
+# separately to Cloudflare and must not be copied into the backend image.
+frontend/
+
+# Git metadata and CI-only files are not needed at runtime.
+.git/
+.github/
+.gitignore
+
+# JavaScript build/dependency output.
+node_modules/
+**/node_modules/
+.next/
+.open-next/
+.turbo/
+coverage/
+
+# Python local environments and generated caches.
+.venv/
+venv/
+env/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local development artifacts and mutable runtime state should not be baked into
+# an immutable Railway image. Keep model weights and source modules included.
+*.log
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
+Thumbs.db
+
+# Temporary build/test output.
+tmp/
+temp/
