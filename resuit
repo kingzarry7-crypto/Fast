@@ -1,0 +1,5200 @@
+
+
+[1]
+0s
+```python
+%pip install -q yfinance pandas numpy scikit-learn joblib
+
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import sklearn
+
+print("Kitty retraining environment ready")
+print("scikit-learn:", sklearn.__version__)
+
+btc = yf.download(
+    "BTC-USD",
+    period="2y",
+    interval="1h",
+    auto_adjust=True,
+    progress=False
+)
+
+if btc.empty:
+    raise RuntimeError(
+        "No BTC history returned. We need another data source."
+    )
+
+if isinstance(btc.columns, pd.MultiIndex):
+    btc.columns = btc.columns.get_level_values(0)
+
+btc = btc[["Open", "High", "Low", "Close", "Volume"]].dropna()
+btc = btc[~btc.index.duplicated(keep="last")].sort_index()
+
+print("BTC candles:", len(btc))
+print("First candle:", btc.index.min())
+print("Last candle:", btc.index.max())
+print(btc.tail(3))
+```
+
+Next steps:
+
+[2]
+11s
+
+%pip install -q yfinance pandas numpy scikit-learn joblib
+
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import sklearn
+
+print("Kitty retraining environment ready")
+print("scikit-learn:", sklearn.__version__)
+
+btc = yf.download(
+    "BTC-USD",
+    period="2y",
+    interval="1h",
+    auto_adjust=True,
+    progress=False
+)
+
+if btc.empty:
+    raise RuntimeError(
+        "No BTC history returned. We need another data source."
+    )
+
+if isinstance(btc.columns, pd.MultiIndex):
+    btc.columns = btc.columns.get_level_values(0)
+
+btc = btc[["Open", "High", "Low", "Close", "Volume"]].dropna()
+btc = btc[~btc.index.duplicated(keep="last")].sort_index()
+
+print("BTC candles:", len(btc))
+print("First candle:", btc.index.min())
+print("Last candle:", btc.index.max())
+print(btc.tail(3))
+
+Kitty retraining environment ready
+scikit-learn: 1.6.1
+BTC candles: 17488
+First candle: 2024-10-13 16:00:00+00:00
+Last candle: 2026-10-13 16:00:00+00:00
+Price                              Open          High           Low  \
+Datetime                                                              
+2026-10-13 14:00:00+00:00  83149.546875  83751.929688  83107.070312   
+2026-10-13 15:00:00+00:00  83427.828125  83634.859375  83116.609375   
+2026-10-13 16:00:00+00:00  83349.062500  83485.242188  83335.429688   
+
+Price                             Close      Volume  
+Datetime                                             
+2026-10-13 14:00:00+00:00  83426.617188   248571904  
+2026-10-13 15:00:00+00:00  83337.531250  2121744384  
+2026-10-13 16:00:00+00:00  83482.843750    22587392  
+
+[3]
+0s
+
+========== KITTY BTC DATA AUDIT ==========
+Total candles: 17488
+Duplicate timestamps: 0
+Missing hourly slots in date range: 33
+Irregular time intervals: 4
+Invalid price rows: 0
+Invalid OHLC rows: 0
+Invalid volume rows: 0
+Latest candle UTC: 2026-10-13 16:00:00+00:00
+Current UTC hour: 2026-10-13 16:00:00+00:00
+Latest candle may be incomplete: True
+
+First irregular intervals:
+Datetime
+2025-01-02 15:00:00+00:00   0 days 02:00:00
+2025-10-28 14:00:00+00:00   0 days 12:00:00
+2025-11-29 19:00:00+00:00   0 days 21:00:00
+2026-05-08 03:00:00+00:00   0 days 02:00:00
+Name: Datetime, dtype: timedelta64[ns]
+
+Overall result:
+Basic checks passed. Review time gaps before training.
+
+[4]
+0s
+print("Any missing feature values:", dataset[FEATURES].isna().any().any())
+print("Any duplicate dataset timestamps:", dataset.index.has_duplicates)
+
+========== KITTY FEATURE REPORT ==========
+Candles after excluding current hour: 17487
+Usable labelled examples: 17387
+Feature count: 6
+Features: ['Close', 'SMA_20', 'RSI_14', 'BB_Upper', 'BB_Lower', 'MACD']
+
+Training examples: 12170
+Validation examples: 2608
+Test examples: 2609
+
+Training period: 2024-10-14 11:00:00+00:00 to 2026-03-09 08:00:00+00:00
+Validation period: 2026-03-09 09:00:00+00:00 to 2026-06-26 21:00:00+00:00
+Test period: 2026-06-26 22:00:00+00:00 to 2026-10-13 14:00:00+00:00
+
+Target balance (0 = next close not higher, 1 = higher):
+target
+0.0    0.494
+1.0    0.506
+Name: proportion, dtype: float64
+
+First usable examples:
+Price                             Close        SMA_20     RSI_14  \
+Datetime                                                           
+2024-10-14 11:00:00+00:00  64893.589844  63441.823047  75.012995   
+2024-10-14 12:00:00+00:00  64866.503906  63554.664258  75.907304   
+2024-10-14 13:00:00+00:00  65170.828125  63689.012891  77.292450   
+
+Price                          BB_Upper      BB_Lower        MACD  target  
+Datetime                                                                   
+2024-10-14 11:00:00+00:00  65323.959321  61559.686773  568.237675     0.0  
+2024-10-14 12:00:00+00:00  65496.403345  61612.925171  585.583079     1.0  
+2024-10-14 13:00:00+00:00  65689.724807  61688.300974  616.776047     1.0  
+
+Any missing feature values: False
+Any duplicate dataset timestamps: False
+
+[5]
+31s
+
+%pip install -q torch scikit-learn joblib
+
+import copy
+import random
+import numpy as np
+import pandas as pd
+import torch
+from torch import nn
+from torch.utils.data import DataLoader, TensorDataset
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import (
+    accuracy_score,
+    balanced_accuracy_score,
+    roc_auc_score,
+    brier_score_loss,
+    confusion_matrix
+)
+
+# Reproducibility
+SEED = 42
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Training device:", device)
+
+# Purge the final row of train and validation so next-hour labels
+# cannot cross dataset boundaries.
+train = train_df.iloc[:-1].copy()
+val = val_df.iloc[:-1].copy()
+test = test_df.copy()
+
+# Ensure all datasets contain finite numbers.
+for name, frame in [("train", train), ("validation", val), ("test", test)]:
+    assert np.isfinite(frame[FEATURES].to_numpy(dtype=np.float64)).all(), (
+        f"Non-finite features in {name}"
+    )
+    assert frame["target"].isin([0.0, 1.0]).all(), (
+        f"Invalid target in {name}"
+    )
+
+# Fit scaler ONLY on training data.
+scaler = StandardScaler()
+X_train = scaler.fit_transform(train[FEATURES]).astype(np.float32)
+X_val = scaler.transform(val[FEATURES]).astype(np.float32)
+X_test = scaler.transform(test[FEATURES]).astype(np.float32)
+
+y_train = train["target"].to_numpy(dtype=np.float32)
+y_val = val["target"].to_numpy(dtype=np.float32)
+y_test = test["target"].to_numpy(dtype=np.float32)
+
+def make_loader(X, y, batch_size=256, shuffle=False):
+    ds = TensorDataset(torch.from_numpy(X), torch.from_numpy(y))
+    return DataLoader(ds, batch_size=batch_size, shuffle=shuffle)
+
+train_loader = make_loader(X_train, y_train, shuffle=True)
+val_loader = make_loader(X_val, y_val)
+
+# Hourly checkpoint: 6 -> 32 -> 16 -> 1.
+# Output is a LOGIT; sigmoid converts it to a probability.
+class KittyHourlyBTC(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.network = nn.Sequential(
+            nn.Linear(6, 32),
+            nn.ReLU(),
+            nn.Dropout(0.10),
+            nn.Linear(32, 16),
+            nn.ReLU(),
+            nn.Dropout(0.10),
+            nn.Linear(16, 1)
+        )
+
+    def forward(self, x):
+        return self.network(x).squeeze(-1)
+
+model = KittyHourlyBTC().to(device)
+criterion = nn.BCEWithLogitsLoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+def evaluate_loss(loader):
+    model.eval()
+    losses = []
+    with torch.no_grad():
+        for xb, yb in loader:
+            xb, yb = xb.to(device), yb.to(device)
+            logits = model(xb)
+            losses.append(criterion(logits, yb).item() * len(yb))
+    return sum(losses) / len(loader.dataset)
+
+# Early stopping uses validation loss, never test performance.
+best_val_loss = float("inf")
+best_state = None
+best_epoch = 0
+patience = 12
+epochs_without_improvement = 0
+MAX_EPOCHS = 100
+
+for epoch in range(1, MAX_EPOCHS + 1):
+    model.train()
+    running_loss = 0.0
+
+    for xb, yb in train_loader:
+        xb, yb = xb.to(device), yb.to(device)
+
+        optimizer.zero_grad()
+        logits = model(xb)
+        loss = criterion(logits, yb)
+        loss.backward()
+        optimizer.step()
+
+        running_loss += loss.item() * len(yb)
+
+    train_loss = running_loss / len(train_loader.dataset)
+    val_loss = evaluate_loss(val_loader)
+
+    if val_loss < best_val_loss:
+        best_val_loss = val_loss
+        best_state = copy.deepcopy(model.state_dict())
+        best_epoch = epoch
+        epochs_without_improvement = 0
+    else:
+        epochs_without_improvement += 1
+
+    if epoch == 1 or epoch % 5 == 0:
+        print(
+            f"Epoch {epoch:03d} | "
+            f"train loss {train_loss:.5f} | "
+            f"validation loss {val_loss:.5f}"
+        )
+
+    if epochs_without_improvement >= patience:
+        print("Early stopping triggered.")
+        break
+
+model.load_state_dict(best_state)
+print("\nBest epoch:", best_epoch)
+print("Best validation loss:", round(best_val_loss, 5))
+
+# Final test evaluation — performed once after model selection.
+model.eval()
+with torch.no_grad():
+    test_logits = model(torch.from_numpy(X_test).to(device))
+    test_probs = torch.sigmoid(test_logits).cpu().numpy()
+
+test_preds = (test_probs >= 0.5).astype(int)
+majority_class = int(y_train.mean() >= 0.5)
+baseline_preds = np.full(len(y_test), majority_class)
+
+print("\n========== UNSEEN TEST RESULTS ==========")
+print("Test examples:", len(y_test))
+print("Model accuracy:", round(accuracy_score(y_test, test_preds), 4))
+print(
+    "Model balanced accuracy:",
+    round(balanced_accuracy_score(y_test, test_preds), 4)
+)
+print("Model ROC-AUC:", round(roc_auc_score(y_test, test_probs), 4))
+print("Model Brier score:", round(brier_score_loss(y_test, test_probs), 4))
+print("Confusion matrix [[TN, FP], [FN, TP]]:")
+print(confusion_matrix(y_test, test_preds))
+print(
+    "Majority-class baseline accuracy:",
+    round(accuracy_score(y_test, baseline_preds), 4)
+)
+print(
+    "Test target up rate:",
+    round(float(y_test.mean()), 4)
+)
+
+# Save as a NEW hourly checkpoint, not as a replacement for Kitty V3.
+torch.save(
+    {
+        "model_state_dict": model.state_dict(),
+        "architecture": [6, 32, 16, 1],
+        "features": FEATURES,
+        "prediction_horizon": "next_hour",
+        "output_type": "logit",
+        "seed": SEED,
+        "best_epoch": best_epoch
+    },
+    "kitty_btc_hourly.pt"
+)
+import joblib
+joblib.dump(scaler, "kitty_btc_hourly_scaler.joblib")
+
+print("\nSaved:")
+print("kitty_btc_hourly.pt")
+print("kitty_btc_hourly_scaler.joblib")
+
+Training device: cpu
+Epoch 001 | train loss 0.69418 | validation loss 0.69472
+Epoch 005 | train loss 0.69293 | validation loss 0.69386
+Epoch 010 | train loss 0.69267 | validation loss 0.69341
+Epoch 015 | train loss 0.69245 | validation loss 0.69374
+Epoch 020 | train loss 0.69228 | validation loss 0.69379
+Early stopping triggered.
+
+Best epoch: 11
+Best validation loss: 0.69322
+
+========== UNSEEN TEST RESULTS ==========
+Test examples: 2609
+Model accuracy: 0.504
+Model balanced accuracy: 0.4976
+Model ROC-AUC: 0.5171
+Model Brier score: 0.2497
+Confusion matrix [[TN, FP], [FN, TP]]:
+[[ 284  990]
+ [ 304 1031]]
+Majority-class baseline accuracy: 0.5117
+Test target up rate: 0.5117
+
+Saved:
+kitty_btc_hourly.pt
+kitty_btc_hourly_scaler.joblib
+
+[7]
+0s
+
+# KITTY TRAINING UPGRADE — STEP 1: DATA AUDIT
+# Read-only: does not change or overwrite your model.
+
+import pandas as pd
+import numpy as np
+
+if "df" not in globals():
+    print("STOP: I cannot find a DataFrame named df.")
+    print("Run the earlier market-data download cell first.")
+else:
+    print("DATASET SHAPE:", df.shape)
+    print("\nCOLUMN NAMES:")
+    print(list(df.columns))
+
+    print("\nFIRST 3 ROWS:")
+    display(df.head(3))
+
+    print("\nLAST 5 ROWS:")
+    display(df.tail(5))
+
+    print("\nDATA TYPES:")
+    print(df.dtypes)
+
+    print("\nMISSING VALUES:")
+    print(df.isna().sum())
+
+    print("\nDUPLICATE TIMESTAMPS:", df.index.duplicated().sum())
+
+    print("\nDATE RANGE:")
+    print("First:", df.index.min())
+    print("Last: ", df.index.max())
+
+    print("\nPRICE CHECK:")
+    price_cols = [
+        c for c in df.columns
+        if str(c).lower() in ["open", "high", "low", "close", "volume"]
+    ]
+    if price_cols:
+        display(df[price_cols].describe())
+    else:
+        print("Expected OHLCV columns were not found.")
+
+STOP: I cannot find a DataFrame named df.
+Run the earlier market-data download cell first.
+
+[8]
+0s
+    print("No existing pandas DataFrames found.")
+    print("We will need to download the BTC candles again.")
+
+
+
+[9]
+7s
+
+# KITTY — RECOVER BTC HOURLY DATA
+# This downloads market data only; it does not train or overwrite a model.
+
+%pip -q install yfinance
+
+import yfinance as yf
+import pandas as pd
+import numpy as np
+
+df = yf.download(
+    "BTC-USD",
+    period="2y",
+    interval="1h",
+    auto_adjust=True,
+    progress=False
+)
+
+if df.empty:
+    print("DOWNLOAD FAILED. Check your internet connection and try again.")
+else:
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+
+    df = df[~df.index.duplicated(keep="last")].sort_index()
+    df.index = pd.to_datetime(df.index, utc=True)
+    
+    print("BTC DATA RECOVERED")
+    print("Shape:", df.shape)
+    print("Columns:", list(df.columns))
+    print("First candle:", df.index.min())
+    print("Last candle:", df.index.max())
+    print("Missing values:\n", df.isna().sum())
+    display(df.tail(5))
+
+
+
+[10]
+0s
+print("Largest time gap:", time_diff.max())
+print("Continuous segments:", df_clean["segment"].nunique())
+
+print("\nLargest gaps:")
+if gap_mask.any():
+    gaps = time_diff[gap_mask].sort_values(ascending=False)
+    display(gaps.head(10).rename("Gap duration").to_frame())
+else:
+    print("No hourly gaps detected.")
+
+
+
+
+[11]
+0s
+
+print("\nSample:")
+display(kitty_data[feature_cols + ["future_return_6h", "target"]].tail())
+
+
+
+[12]
+1s
+
+
+TRAIN
+Examples: 12042
+From: 2024-10-15 17:00:00+00:00
+To:   2026-03-09 15:00:00+00:00
+Class counts:
+target
+Short       3981
+No-trade    3837
+Long        4224
+Name: count, dtype: int64
+Class proportions (%):
+target
+0    33.06
+1    31.86
+2    35.08
+Name: proportion, dtype: float64
+
+VALIDATION
+Examples: 2576
+From: 2026-03-09 22:00:00+00:00
+To:   2026-06-27 13:00:00+00:00
+Class counts:
+target
+Short       899
+No-trade    827
+Long        850
+Name: count, dtype: int64
+Class proportions (%):
+target
+0    34.9
+1    32.1
+2    33.0
+Name: proportion, dtype: float64
+
+TEST — KEEP UNTOUCHED
+Examples: 2582
+From: 2026-06-27 20:00:00+00:00
+To:   2026-10-13 09:00:00+00:00
+Class counts:
+target
+Short        731
+No-trade    1015
+Long         836
+Name: count, dtype: int64
+Class proportions (%):
+target
+0    28.31
+1    39.31
+2    32.38
+Name: proportion, dtype: float64
+
+Split checks passed: chronological order is preserved.
+The test set has not been used for training or model selection.
+
+Feature matrix shapes:
+X_train: (12042, 18)
+X_val:   (2576, 18)
+X_test:  (2582, 18)
+
+[13]
+10s
+print("\nSaved experimental files:")
+print("kitty_btc_v2_experimental.pt")
+print("kitty_btc_v2_experimental_scaler.joblib")
+print("Production model files were not changed.")
+
+Device: cpu
+Epoch 01 | train loss 1.0913 | validation loss 1.0930
+Epoch 05 | train loss 1.0724 | validation loss 1.0906
+Epoch 10 | train loss 1.0688 | validation loss 1.0904
+Epoch 15 | train loss 1.0642 | validation loss 1.0928
+Early stopping.
+
+Best epoch: 8
+Best validation log loss: 1.0896
+
+VALIDATION RESULTS
+Accuracy: 0.4002
+Balanced accuracy: 0.4015
+Log loss: 1.0896
+Confusion matrix (rows=true, columns=predicted):
+[[316 272 311]
+ [207 363 257]
+ [242 256 352]]
+              precision    recall  f1-score   support
+
+       Short       0.41      0.35      0.38       899
+    No-trade       0.41      0.44      0.42       827
+        Long       0.38      0.41      0.40       850
+
+    accuracy                           0.40      2576
+   macro avg       0.40      0.40      0.40      2576
+weighted avg       0.40      0.40      0.40      2576
+
+Majority baseline validation accuracy: 0.33
+Majority baseline balanced accuracy: 0.3333
+
+Saved experimental files:
+kitty_btc_v2_experimental.pt
+kitty_btc_v2_experimental_scaler.joblib
+Production model files were not changed.
+
+[14]
+0s
+        "liquidation, position sizing, or intrabar stop/target execution."
+    )
+
+
+Next steps:
+
+[15]
+2s
+        median_gross_return="median"
+    )
+    side.index = side.index.map({-1: "Short", 1: "Long"})
+    display(side)
+
+print(
+    "\nResearch only: this still omits actual exchange fills, variable spreads, "
+    "funding, market impact, position sizing and stop-loss execution."
+)
+
+
+Next steps:
+
+[16]
+6s
+
+# KITTY BTC V2 — VALIDATION CONFIDENCE FILTER EXPERIMENT
+# Validation only. Do NOT use X_test or y_test here.
+
+import numpy as np
+import pandas as pd
+
+assert "val_probs" in globals() and "val" in globals() and "df_clean" in globals(), (
+    "Missing validation variables. Check that the Kitty V2 training cells ran."
+)
+
+bars = df_clean.sort_index().copy()
+validation = val.sort_index().copy()
+probs = np.asarray(val_probs)
+
+assert len(probs) == len(validation), "Prediction/validation lengths do not match."
+
+validation["predicted_class"] = probs.argmax(axis=1)
+validation["confidence"] = probs.max(axis=1)
+validation["signal"] = validation["predicted_class"].map({0: -1, 1: 0, 2: 1})
+
+bar_index = bars.index
+results = []
+ROUND_TRIP_COST = 0.002  # Assumed 0.20%; test sensitivity separately
+
+for threshold in [0.34, 0.36, 0.38, 0.40, 0.42, 0.44, 0.46]:
+    trades = []
+    next_allowed_pos = -1
+    rejected_gaps = 0
+
+    for timestamp, row in validation.iterrows():
+        if row["signal"] == 0 or row["confidence"] < threshold:
+            continue
+
+        pos = bar_index.get_indexer([timestamp])[0]
+        if pos < 0 or pos < next_allowed_pos:
+            continue
+
+        entry_pos, exit_pos = pos + 1, pos + 7
+        if exit_pos >= len(bars):
+            continue
+
+        window = bars.iloc[pos:exit_pos + 1]
+        hourly = (
+            len(window) == 8
+            and (window.index.to_series().diff().dropna()
+                 == pd.Timedelta(hours=1)).all()
+            and window["segment"].nunique() == 1
+        )
+
+        if not hourly:
+            rejected_gaps += 1
+            continue
+
+        entry = float(bars.iloc[entry_pos]["Open"])
+        exit_price = float(bars.iloc[exit_pos]["Close"])
+
+        if not np.isfinite(entry) or not np.isfinite(exit_price):
+            continue
+        if entry <= 0 or exit_price <= 0:
+            continue
+
+        signal = int(row["signal"])
+        gross = signal * (exit_price / entry - 1)
+        net = gross - ROUND_TRIP_COST
+
+        trades.append({
+            "signal": signal,
+            "gross": gross,
+            "net": net,
+            "confidence": float(row["confidence"])
+        })
+        next_allowed_pos = exit_pos
+
+    if not trades:
+        results.append({
+            "confidence_threshold": threshold,
+            "trades": 0,
+            "win_rate_net": np.nan,
+            "mean_net_pct": np.nan,
+            "compounded_return_pct": np.nan,
+            "max_drawdown_pct": np.nan,
+            "long_trades": 0,
+            "short_trades": 0,
+            "rejected_gaps": rejected_gaps
+        })
+        continue
+
+    t = pd.DataFrame(trades)
+    equity = (1 + t["net"]).cumprod()
+    drawdown = equity / equity.cummax() - 1
+
+    results.append({
+        "confidence_threshold": threshold,
+        "trades": len(t),
+        "win_rate_net": (t["net"] > 0).mean() * 100,
+        "mean_net_pct": t["net"].mean() * 100,
+        "compounded_return_pct": (equity.iloc[-1] - 1) * 100,
+        "max_drawdown_pct": drawdown.min() * 100,
+        "long_trades": int((t["signal"] == 1).sum()),
+        "short_trades": int((t["signal"] == -1).sum()),
+        "rejected_gaps": rejected_gaps
+    })
+
+confidence_results = pd.DataFrame(results)
+print("VALIDATION ONLY — assumed 0.20% round-trip cost")
+display(confidence_results.round(3))
+
+
+
+[17]
+0s
+
+# Inspect current Kitty notebook variables — no training or data changes
+for name in [
+    "model", "best_model", "scaler", "best_scaler",
+    "X_test", "test_df", "test", "df_clean",
+    "val_probs", "test_probs", "feature_cols"
+]:
+    if name in globals():
+        obj = globals()[name]
+        shape = getattr(obj, "shape", None)
+        print(f"{name}: type={type(obj).__name__}, shape={shape}")
+
+model: type=KittyHourlyBTC, shape=None
+scaler: type=StandardScaler, shape=None
+X_test: type=ndarray, shape=(2582, 18)
+test_df: type=DataFrame, shape=(2582, 21)
+test: type=DataFrame, shape=(2582, 21)
+df_clean: type=DataFrame, shape=(17487, 6)
+val_probs: type=ndarray, shape=(2576, 3)
+test_probs: type=ndarray, shape=(2609,)
+feature_cols: type=list, shape=None
+
+[18]
+0s
+    display(pd.DataFrame(side_rows).round(3))
+
+
+Next steps:
+
+[19]
+0s
+
+# KITTY — identify model objects without changing or retraining anything
+import torch
+
+print("X_test shape:", getattr(X_test, "shape", None))
+print("feature count:", len(feature_cols))
+
+for name, obj in list(globals().items()):
+    try:
+        if isinstance(obj, torch.nn.Module):
+            layers = [
+                (module.in_features, module.out_features)
+                for module in obj.modules()
+                if isinstance(module, torch.nn.Linear)
+            ]
+            print(f"\nModel variable: {name}")
+            print("Class:", type(obj).__name__)
+            print("Linear layers:", layers)
+            print("Parameter device:", next(obj.parameters()).device)
+    except (StopIteration, RuntimeError):
+        pass
+
+X_test shape: (2582, 18)
+feature count: 18
+
+Model variable: model
+Class: KittyHourlyBTC
+Linear layers: [(6, 32), (32, 16), (16, 1)]
+Parameter device: cpu
+
+Model variable: criterion
+Class: CrossEntropyLoss
+Linear layers: []
+
+Model variable: model_v2
+Class: KittyBTCV2
+Linear layers: [(18, 64), (64, 32), (32, 3)]
+Parameter device: cpu
+
+[20]
+0s
+
+
+
+[21]
+0s
+
+# KITTY V3 RETRAIN — STEP 1A: DATA AUDIT
+import pandas as pd
+import numpy as np
+
+assert "df_clean" in globals(), (
+    "df_clean is missing. Tell me if you restarted your Colab runtime."
+)
+
+print("Dataset shape:", df_clean.shape)
+print("Columns:", df_clean.columns.tolist())
+print("Index type:", type(df_clean.index).__name__)
+print("First candle:", df_clean.index.min())
+print("Last candle:", df_clean.index.max())
+print("Duplicate timestamps:", int(df_clean.index.duplicated().sum()))
+
+required = ["Open", "High", "Low", "Close", "Volume"]
+missing = [c for c in required if c not in df_clean.columns]
+print("Missing required columns:", missing)
+
+if not missing:
+    prices = df_clean[required].apply(pd.to_numeric, errors="coerce")
+    print("Missing OHLCV values:", int(prices.isna().sum().sum()))
+    print("Non-positive OHLC prices:",
+          int((prices[["Open", "High", "Low", "Close"]] <= 0).sum().sum()))
+    print("Zero-volume candles:", int((prices["Volume"] == 0).sum()))
+
+    hours = df_clean.index.to_series().diff().dropna()
+    print("Intervals other than one hour:",
+          int((hours != pd.Timedelta(hours=1)).sum()))
+
+    if "segment" in df_clean.columns:
+        print("Segments:", int(df_clean["segment"].nunique()))
+
+Dataset shape: (17487, 6)
+Columns: ['Close', 'High', 'Low', 'Open', 'Volume', 'segment']
+Index type: DatetimeIndex
+First candle: 2024-10-13 16:00:00+00:00
+Last candle: 2026-10-13 15:00:00+00:00
+Duplicate timestamps: 0
+Missing required columns: []
+Missing OHLCV values: 0
+Non-positive OHLC prices: 0
+Zero-volume candles: 8803
+Intervals other than one hour: 4
+Segments: 5
+
+[22]
+0s
+
+# Verify that every example's entry/exit lies in its original segment
+assert kitty_targets["entry_time"].notna().all()
+assert kitty_targets["exit_time"].notna().all()
+assert (kitty_targets["entry_time"] > kitty_targets.index).all()
+assert (kitty_targets["exit_time"] > kitty_targets["entry_time"]).all()
+assert kitty_targets["target"].isin([0, 1, 2]).all()
+
+print("\nSTEP 1B checks passed. No model files were changed.")
+
+
+
+[23]
+0s
+print("Infinite feature values:",
+      int(np.isinf(kitty_v3_data[feature_cols_v3].to_numpy()).sum()))
+print("Target counts after feature cleanup:")
+print(kitty_v3_data["target"].value_counts().sort_index())
+print("\nFeature sample:")
+display(kitty_v3_data[feature_cols_v3].describe().round(4))
+print("\nSTEP 2 complete. No model files were changed.")
+
+
+
+[24]
+0s
+assert set(np.unique(y_train_v3)) <= {0, 1, 2}
+assert set(np.unique(y_val_v3)) <= {0, 1, 2}
+assert set(np.unique(y_test_v3)) <= {0, 1, 2}
+
+print("\nSTEP 3 PASSED: chronological splits created.")
+print("Do not inspect test performance until the model and decision rule are frozen.")
+
+
+TRAIN
+Rows: 12038
+Period: 2024-10-15 17:00:00+00:00 to 2026-03-09 14:00:00+00:00
+Feature matrix: (12038, 18)
+Labels: (12038,)
+Class proportions:
+Short       34.23
+No-trade    29.48
+Long        36.29
+Name: proportion, dtype: float64
+
+VALIDATION
+Rows: 2575
+Period: 2026-03-09 21:00:00+00:00 to 2026-06-27 12:00:00+00:00
+Feature matrix: (2575, 18)
+Labels: (2575,)
+Class proportions:
+Short       34.83
+No-trade    30.91
+Long        34.25
+Name: proportion, dtype: float64
+
+TEST
+Rows: 2582
+Period: 2026-06-27 19:00:00+00:00 to 2026-10-13 08:00:00+00:00
+Feature matrix: (2582, 18)
+Labels: (2582,)
+Class proportions:
+Short       28.81
+No-trade    37.22
+Long        33.97
+Name: proportion, dtype: float64
+
+STEP 3 PASSED: chronological splits created.
+Do not inspect test performance until the model and decision rule are frozen.
+
+[25]
+0s
+
+# KITTY RETRAIN — STEP 4: TRAIN-ONLY SCALING
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+
+assert X_train_v3.shape[1] == 18
+assert X_val_v3.shape[1] == 18
+assert X_test_v3.shape[1] == 18
+
+scaler_v3 = StandardScaler()
+
+X_train_v3_scaled = scaler_v3.fit_transform(X_train_v3).astype(np.float32)
+X_val_v3_scaled = scaler_v3.transform(X_val_v3).astype(np.float32)
+X_test_v3_scaled = scaler_v3.transform(X_test_v3).astype(np.float32)
+
+for name, array in [
+    ("train", X_train_v3_scaled),
+    ("validation", X_val_v3_scaled),
+    ("test", X_test_v3_scaled),
+]:
+    assert np.isfinite(array).all(), f"Non-finite values in {name}"
+    print(
+        f"{name}: shape={array.shape}, "
+        f"mean={array.mean():.4f}, std={array.std():.4f}"
+    )
+
+print("\nScaler fitted on training data only.")
+print("Original Kitty scaler and checkpoint remain unchanged.")
+
+train: shape=(12038, 18), mean=0.0000, std=1.0000
+validation: shape=(2575, 18), mean=-0.0400, std=0.8796
+test: shape=(2582, 18), mean=0.0044, std=0.8081
+
+Scaler fitted on training data only.
+Original Kitty scaler and checkpoint remain unchanged.
+
+[26]
+14s
+print("Validation log loss:",
+      round(log_loss(y_val_v3, final_val_probs, labels=[0, 1, 2]), 5))
+print("Class order: 0=SHORT, 1=NO TRADE, 2=LONG")
+print("Test set has NOT been used for training or model selection.")
+print("Production Kitty checkpoint and scaler remain unchanged.")
+
+Training device: cpu
+Training class counts: {0: 4121, 1: 3549, 2: 4368}
+Validation class counts: {0: 897, 1: 796, 2: 882}
+Epoch 01 | train_loss=1.0902 | val_loss=1.0932 | val_acc=0.3487 | val_bal_acc=0.3396
+Epoch 02 | train_loss=1.0805 | val_loss=1.0933 | val_acc=0.3798 | val_bal_acc=0.3806
+Epoch 03 | train_loss=1.0771 | val_loss=1.0926 | val_acc=0.3841 | val_bal_acc=0.3857
+Epoch 04 | train_loss=1.0747 | val_loss=1.0908 | val_acc=0.3849 | val_bal_acc=0.3852
+Epoch 05 | train_loss=1.0726 | val_loss=1.0931 | val_acc=0.3829 | val_bal_acc=0.3844
+Epoch 06 | train_loss=1.0721 | val_loss=1.0918 | val_acc=0.3798 | val_bal_acc=0.3770
+Epoch 07 | train_loss=1.0707 | val_loss=1.0903 | val_acc=0.3821 | val_bal_acc=0.3823
+Epoch 08 | train_loss=1.0702 | val_loss=1.0902 | val_acc=0.3880 | val_bal_acc=0.3867
+Epoch 09 | train_loss=1.0662 | val_loss=1.0916 | val_acc=0.3849 | val_bal_acc=0.3837
+Epoch 10 | train_loss=1.0674 | val_loss=1.0912 | val_acc=0.3841 | val_bal_acc=0.3843
+Epoch 11 | train_loss=1.0663 | val_loss=1.0909 | val_acc=0.3880 | val_bal_acc=0.3878
+Epoch 12 | train_loss=1.0652 | val_loss=1.0924 | val_acc=0.3833 | val_bal_acc=0.3813
+Epoch 13 | train_loss=1.0648 | val_loss=1.0940 | val_acc=0.3783 | val_bal_acc=0.3767
+Epoch 14 | train_loss=1.0636 | val_loss=1.0937 | val_acc=0.3798 | val_bal_acc=0.3777
+Epoch 15 | train_loss=1.0638 | val_loss=1.0933 | val_acc=0.3841 | val_bal_acc=0.3799
+Epoch 16 | train_loss=1.0634 | val_loss=1.0920 | val_acc=0.3934 | val_bal_acc=0.3909
+Early stopping at epoch 16.
+
+BEST VALIDATION CHECKPOINT
+Best epoch: 8
+Best validation loss: 1.09017
+Validation accuracy: 0.388
+Validation balanced accuracy: 0.3867
+Validation log loss: 1.09017
+Class order: 0=SHORT, 1=NO TRADE, 2=LONG
+Test set has NOT been used for training or model selection.
+Production Kitty checkpoint and scaler remain unchanged.
+
+[27]
+0s
+      round(float(val_correct[val_conf >= 0.40].mean()), 4)
+      if np.any(val_conf >= 0.40) else "No predictions")
+print("Number with confidence >= 0.40:",
+      int((val_conf >= 0.40).sum()))
+
+print("\nValidation only; test data remains untouched.")
+
+CLASSIFICATION REPORT
+              precision    recall  f1-score   support
+
+       SHORT     0.3856    0.3155    0.3470       897
+    NO TRADE     0.4042    0.3367    0.3674       796
+        LONG     0.3803    0.5079    0.4350       882
+
+    accuracy                         0.3880      2575
+   macro avg     0.3900    0.3867    0.3831      2575
+weighted avg     0.3895    0.3880    0.3834      2575
+
+CONFUSION MATRIX (actual rows, predicted columns)
+                 Predicted SHORT  Predicted NO TRADE  Predicted LONG
+Actual SHORT                 283                 204             410
+Actual NO TRADE              208                 268             320
+Actual LONG                  243                 191             448
+
+PREDICTION DISTRIBUTION
+SHORT: predicted=734 (28.5%), actual=897 (34.8%)
+NO TRADE: predicted=663 (25.7%), actual=796 (30.9%)
+LONG: predicted=1178 (45.7%), actual=882 (34.3%)
+
+CONFIDENCE AUDIT
+Mean maximum confidence: 0.393
+Median maximum confidence: 0.3835
+Accuracy when confidence >= 0.40: 0.4098
+Number with confidence >= 0.40: 876
+
+Validation only; test data remains untouched.
+
+[28]
+0s
+results_v3_validation = pd.DataFrame(rows)
+print("\nVALIDATION RESULTS — DIAGNOSTIC ONLY")
+display(results_v3_validation.round(3))
+
+print("\nNo held-out test data used. No live orders placed.")
+
+
+
+[29]
+0s
+print("\nNo model retraining or test-set evaluation performed.")
+
+
+
+[30]
+0s
+
+display(pd.DataFrame(conf_rows).round(4))
+print("\nValidation data only. No test-set tuning and no live orders.")
+
+
+
+[31]
+0s
+
+
+
+[32]
+0s
+        "mean_gross_pct", "mean_net_pct", "net_win_rate_pct",
+        "compounded_return_pct", "max_drawdown_pct", "profit_factor"
+    ]
+].round(4))
+
+print("\nSame non-overlapping entry schedule for all four strategies.")
+print("Validation data only; no test-set evaluation or live trading.")
+print("Compounding assumes full account exposure on each sequential trade.")
+print("Costs are illustrative, not verified broker-specific estimates.")
+
+
+
+[33]
+0s
+
+print("\nThis is a diagnostic only. No model retraining, threshold tuning,")
+print("test-set evaluation, or live trading.")
+
+
+
+[34]
+1s
+
+# KITTY V3 — STEP 13: MODEL PERFORMANCE BY VOLATILITY REGIME
+import numpy as np
+import pandas as pd
+from sklearn.metrics import accuracy_score, balanced_accuracy_score
+
+regime_eval = val_v3.sort_index().copy()
+regime_eval["prediction"] = val_pred
+regime_eval["confidence"] = val_conf
+regime_eval["actual_class"] = y_val_v3
+
+# Directional return for Kitty's active signals.
+regime_eval["directional_return"] = np.where(
+    regime_eval["prediction"] == 2,
+    regime_eval["target_return"],
+    np.where(
+        regime_eval["prediction"] == 0,
+        -regime_eval["target_return"],
+        np.nan
+    )
+)
+
+# Use the causal volatility feature and the same validation-only
+# regime boundaries from Step 12.
+volatility = regime_eval["volatility_24h"]
+regime_eval["volatility_regime"] = pd.qcut(
+    volatility.rank(method="first"),
+    q=3,
+    labels=["Low volatility", "Medium volatility", "High volatility"]
+)
+
+rows = []
+for name, group in regime_eval.groupby("volatility_regime", observed=False):
+    active = group[group["prediction"].isin([0, 2])]
+    rows.append({
+        "regime": str(name),
+        "observations": len(group),
+        "accuracy_pct": 100 * accuracy_score(
+            group["actual_class"], group["prediction"]
+        ),
+        "balanced_accuracy_pct": 100 * balanced_accuracy_score(
+            group["actual_class"], group["prediction"]
+        ),
+        "active_signals": len(active),
+        "mean_directional_return_pct": (
+            100 * active["directional_return"].mean()
+            if len(active) else np.nan
+        ),
+        "directional_win_rate_pct": (
+            100 * (active["directional_return"] > 0).mean()
+            if len(active) else np.nan
+        )
+    })
+
+display(pd.DataFrame(rows).round(4))
+
+print("\nValidation-only diagnostic.")
+print("These returns overlap in time and are before costs.")
+print("No threshold selection, test-set evaluation, or live trading.")
+
+
+
+[35]
+1s
+print("Regime labels are exploratory and not deployable thresholds.")
+print("Do not connect a live broker.")
+
+
+
+[36]
+0s
+}).rename(index={0: "SHORT", 1: "NO TRADE", 2: "LONG"}))
+
+print("\nValidation audit only. Test data remains untouched.")
+
+
+
+[37]
+0s
+
+# KITTY V3 — STEP 16: CONFIDENCE CALIBRATION AUDIT
+import numpy as np
+import pandas as pd
+
+probs = np.asarray(val_probs)
+actual = np.asarray(y_val_v3).astype(int)
+pred = np.asarray(val_pred).astype(int)
+confidence = probs.max(axis=1)
+
+audit = val_v3.sort_index().copy()
+audit["actual_class"] = actual
+audit["prediction"] = pred
+audit["confidence"] = confidence
+
+audit["directional_return"] = np.where(
+    audit["prediction"] == 2,
+    audit["target_return"],
+    np.where(
+        audit["prediction"] == 0,
+        -audit["target_return"],
+        np.nan
+    )
+)
+
+# Fixed confidence bands for diagnosis only.
+audit["confidence_band"] = pd.cut(
+    audit["confidence"],
+    bins=[0, 0.36, 0.40, 0.45, 0.50, 1.000001],
+    labels=["<=0.36", "0.36–0.40", "0.40–0.45",
+            "0.45–0.50", ">0.50"],
+    include_lowest=True
+)
+
+rows = []
+for band, group in audit.groupby("confidence_band", observed=False):
+    active = group[group["prediction"].isin([0, 2])]
+    rows.append({
+        "confidence_band": str(band),
+        "observations": len(group),
+        "classification_accuracy_pct": (
+            100 * (group["prediction"] == group["actual_class"]).mean()
+            if len(group) else np.nan
+        ),
+        "active_signals": len(active),
+        "mean_directional_return_pct": (
+            100 * active["directional_return"].mean()
+            if len(active) else np.nan
+        ),
+        "directional_win_rate_pct": (
+            100 * (active["directional_return"] > 0).mean()
+            if len(active) else np.nan
+        )
+    })
+
+display(pd.DataFrame(rows).round(4))
+
+print("Validation-only diagnostic; returns overlap and exclude costs.")
+print("Confidence bands are exploratory, not trading rules.")
+print("Do not choose a threshold from these results and then report")
+print("the same validation period as independent evidence.")
+
+
+
+[38]
+0s
+
+
+
+[39]
+0s
+
+# KITTY V3 — STEP 17A: VERIFY PROBABILITY ARRAYS
+import numpy as np
+from sklearn.metrics import log_loss
+
+p = np.asarray(val_probs, dtype=np.float64)
+y = np.asarray(y_val_v3, dtype=int)
+
+print("Probability shape:", p.shape)
+print("Label shape:", y.shape)
+print("Probability minimum:", p.min())
+print("Probability maximum:", p.max())
+print("All finite:", np.isfinite(p).all())
+print("Row-sum minimum:", p.sum(axis=1).min())
+print("Row-sum maximum:", p.sum(axis=1).max())
+print("First 5 row sums:", p.sum(axis=1)[:5])
+
+assert p.ndim == 2 and p.shape[1] == 3
+assert len(p) == len(y)
+assert np.isfinite(p).all()
+
+if (p < 0).any() or (p > 1).any():
+    print("ERROR: values are outside the probability range [0, 1].")
+elif not np.allclose(p.sum(axis=1), 1.0, atol=1e-5):
+    print("ERROR: rows do not sum to 1. Check how val_probs was created.")
+else:
+    print("Probability rows look valid.")
+    print("Verified log loss:", round(
+        log_loss(y, p, labels=[0, 1, 2]), 6
+    ))
+
+# Uniform-probability baseline for the same labels
+uniform = np.full((len(y), 3), 1 / 3, dtype=np.float64)
+print("Uniform baseline log loss:", round(
+    log_loss(y, uniform, labels=[0, 1, 2]), 6
+))
+
+Probability shape: (2575, 3)
+Label shape: (2575,)
+Probability minimum: 0.021688517183065414
+Probability maximum: 0.6338375806808472
+All finite: True
+Row-sum minimum: 0.9999998807907104
+Row-sum maximum: 1.0000001192092896
+First 5 row sums: [0.99999997 0.99999991 1.         0.99999999 0.99999991]
+Probability rows look valid.
+Verified log loss: 1.090172
+Uniform baseline log loss: 1.098612
+/usr/local/lib/python3.13/dist-packages/sklearn/metrics/_classification.py:3001: UserWarning: The y_pred values do not sum to one. Make sure to pass probabilities.
+  warnings.warn(
+
+[40]
+0s
+
+# KITTY V3 — STEP 18: FAIR PROBABILITY BASELINES
+import numpy as np
+from sklearn.metrics import log_loss, accuracy_score, balanced_accuracy_score
+
+y_train = np.asarray(y_train_v3, dtype=int)
+y_val = np.asarray(y_val_v3, dtype=int)
+p_kitty = np.asarray(val_probs, dtype=np.float64)
+
+classes = np.array([0, 1, 2])
+
+# Uniform baseline: equal probability for each class.
+p_uniform = np.full((len(y_val), 3), 1 / 3)
+
+# Prior baseline: use training class frequencies only.
+counts = np.bincount(y_train, minlength=3)
+priors = counts / counts.sum()
+p_prior = np.tile(priors, (len(y_val), 1))
+
+# Confirm all baselines are valid probabilities.
+assert np.allclose(p_kitty.sum(axis=1), 1, atol=1e-5)
+assert np.allclose(p_uniform.sum(axis=1), 1, atol=1e-10)
+assert np.allclose(p_prior.sum(axis=1), 1, atol=1e-10)
+
+rows = []
+for name, probabilities in [
+    ("Kitty V3", p_kitty),
+    ("Uniform baseline", p_uniform),
+    ("Training-prior baseline", p_prior),
+]:
+    predictions = probabilities.argmax(axis=1)
+    rows.append({
+        "model": name,
+        "log_loss": log_loss(
+            y_val, probabilities, labels=classes
+        ),
+        "accuracy_pct": 100 * accuracy_score(y_val, predictions),
+        "balanced_accuracy_pct": 100 * balanced_accuracy_score(
+            y_val, predictions
+        ),
+    })
+
+print("Training class priors [SHORT, NO TRADE, LONG]:", priors)
+display(__import__("pandas").DataFrame(rows).round(5))
+
+print("Validation-only comparison. No retraining or test-set access.")
+
+
+
+[41]
+0s
+print("SHORT: return < -0.30%")
+print("NO TRADE: -0.30% <= return <= +0.30%")
+print("LONG: return > +0.30%")
+
+print("\nTraining-only diagnostic; no model changes.")
+
+
+Next steps:
+
+[42]
+0s
+
+print("\nFirst 3 rows:")
+display(train_v3.head(3))
+
+
+
+[43]
+0s
+print("\nTraining-only diagnostic; no retraining performed.")
+
+
+
+[44]
+0s
+display(pd.DataFrame(confidence_rows).round(4))
+
+print("Validation-only diagnostic; overlapping observations.")
+print("Returns are not net of fees, slippage, or funding.")
+print("No threshold selection or live trading.")
+
+
+
+[45]
+0s
+print("Validation-only diagnostic; no retraining or trading.")
+
+
+
+[46]
+0s
+        obj = globals()[name]
+        print(f"{name} length:", len(obj))
+
+print("\nAudit complete.")
+print("No model weights or data have been modified.")
+print("This cell does not independently prove absence of leakage.")
+
+=================================================================
+KITTY V3 — PREDICTION PIPELINE AUDIT
+=================================================================
+
+model_v3:
+  Type: KittyBTCV3
+
+model:
+  Type: KittyHourlyBTC
+
+val_pred:
+  Type: ndarray
+  Shape: (2575,)
+
+val_conf:
+  Type: ndarray
+  Shape: (2575,)
+
+y_val_v3:
+  Type: ndarray
+  Shape: (2575,)
+
+val_v3:
+  Type: DataFrame
+  Shape: (2575, 30)
+  Columns: ['Close', 'High', 'Low', 'Open', 'Volume', 'segment', 'entry_open_next', 'exit_close_6h_after_entry', 'entry_time', 'exit_time', 'target_return', 'target', 'ret_1h', 'ret_3h', 'ret_6h', 'ret_12h', 'ret_24h', 'close_vs_sma6', 'close_vs_sma20', 'close_vs_sma50', 'sma6_vs_sma20', 'rsi_14', 'macd_norm', 'macd_signal_norm', 'macd_hist_norm', 'volatility_6h', 'volatility_24h', 'range_pct', 'body_pct', 'close_position']
+
+X_val_v3:
+  Type: ndarray
+  Shape: (2575, 18)
+
+X_train_v3:
+  Type: ndarray
+  Shape: (12038, 18)
+
+y_train_v3:
+  Type: ndarray
+  Shape: (12038,)
+
+scaler_v3:
+  Type: StandardScaler
+  n_features_in_: 18
+
+=================================================================
+PREDICTION SHAPES AND CLASS IDS
+=================================================================
+Predictions: (2575,)
+Actual labels: (2575,)
+Confidence: (2575,)
+Predicted class IDs: [0 1 2]
+Actual class IDs: [0 1 2]
+Prediction/label lengths match: True
+Confidence/prediction lengths match: True
+Accuracy: 0.388
+
+Confusion matrix (rows=actual, columns=predicted):
+Predicted    0    1    2
+Actual                  
+0          283  204  410
+1          208  268  320
+2          243  191  448
+
+Confidence summary:
+count    2575.00000
+mean        0.39299
+std         0.04169
+min         0.33375
+25%         0.36399
+50%         0.38353
+75%         0.41198
+max         0.63384
+dtype: float64
+Non-finite confidence values: 0
+
+=================================================================
+MODEL CLASS AND PROBABILITY SUPPORT
+=================================================================
+
+model_v3: KittyBTCV3
+  predict_proba available: False
+
+model: KittyHourlyBTC
+  predict_proba available: False
+
+=================================================================
+VALIDATION DATA AND FEATURE CHECK
+=================================================================
+Validation index type: DatetimeIndex
+Validation index sorted: True
+Duplicate validation indices: 0
+Columns: ['Close', 'High', 'Low', 'Open', 'Volume', 'segment', 'entry_open_next', 'exit_close_6h_after_entry', 'entry_time', 'exit_time', 'target_return', 'target', 'ret_1h', 'ret_3h', 'ret_6h', 'ret_12h', 'ret_24h', 'close_vs_sma6', 'close_vs_sma20', 'close_vs_sma50', 'sma6_vs_sma20', 'rsi_14', 'macd_norm', 'macd_signal_norm', 'macd_hist_norm', 'volatility_6h', 'volatility_24h', 'range_pct', 'body_pct', 'close_position']
+Target return missing: 0
+X_train_v3 length: 12038
+X_val_v3 length: 2575
+y_train_v3 length: 12038
+y_val_v3 length: 2575
+
+Audit complete.
+No model weights or data have been modified.
+This cell does not independently prove absence of leakage.
+
+[47]
+0s
+    print("First 5 recomputed classes:",
+          recomputed_probs[:5].argmax(axis=1))
+    print("First 5 actual labels:",
+          np.asarray(y_val_v3)[:5])
+
+print("\nAudit only. Model weights and test data remain unchanged.")
+
+============================================================
+1. MODEL ARCHITECTURE
+============================================================
+Model type: KittyBTCV3
+Model class source:
+Source unavailable; printing model structure instead.
+KittyBTCV3(
+  (network): Sequential(
+    (0): Linear(in_features=18, out_features=64, bias=True)
+    (1): ReLU()
+    (2): Dropout(p=0.15, inplace=False)
+    (3): Linear(in_features=64, out_features=32, bias=True)
+    (4): ReLU()
+    (5): Dropout(p=0.1, inplace=False)
+    (6): Linear(in_features=32, out_features=3, bias=True)
+  )
+)
+
+Linear layers:
+network.0 input = 18 output = 64
+network.3 input = 64 output = 32
+network.6 input = 32 output = 3
+
+============================================================
+2. RECOMPUTE VALIDATION PREDICTIONS
+============================================================
+Raw validation shape: (2575, 18)
+Scaled validation shape: (2575, 18)
+Scaler feature count: 18
+Raw model output shape: (2575, 3)
+Raw output min/max: -2.1879098415374756 1.0424838066101074
+
+============================================================
+3. COMPARE EXISTING AND RECOMPUTED RESULTS
+============================================================
+Existing probabilities shape: (2575, 3)
+Recomputed probabilities shape: (2575, 3)
+Maximum probability difference: 8.940696716308594e-08
+Existing vs recomputed predictions agree: True
+Stored predictions match existing probabilities: True
+
+============================================================
+4. CLASS ORDER AND SAMPLE OUTPUTS
+============================================================
+Expected class mapping: 0=SHORT, 1=NO TRADE, 2=LONG
+Stored prediction IDs: [0 1 2]
+First 5 recomputed probability rows:
+[[0.394  0.2548 0.3512]
+ [0.3816 0.2877 0.3307]
+ [0.3806 0.3008 0.3186]
+ [0.4226 0.2261 0.3514]
+ [0.4109 0.2489 0.3402]]
+First 5 recomputed classes: [0 0 0 0 0]
+First 5 actual labels: [2 2 2 2 2]
+
+Audit only. Model weights and test data remain unchanged.
+
+[48]
+0s
+    print("STOP: investigate target construction before further training.")
+
+print("No model weights changed.")
+print("No test-set performance inspected.")
+
+============================================================
+1. FEATURE ORDER
+============================================================
+Feature count: 18
+Validation features match val_v3: True
+
+============================================================
+2. ROW AND LABEL ALIGNMENT
+============================================================
+Validation rows: 2575
+Feature/label lengths agree: True
+Labels match validation DataFrame: True
+
+============================================================
+3. REBUILD LABELS FROM SIX-HOUR RETURNS
+============================================================
+Labels rebuilt from returns match: True
+Mismatched labels: 0
+
+============================================================
+4. SUMMARY
+============================================================
+PASS: features, rows, and return-derived labels agree.
+This does not prove there is no temporal leakage.
+No model weights changed.
+No test-set performance inspected.
+
+[49]
+6s
+    print("STOP: investigate failed checks before training.")
+else:
+    print("All checked validation examples are temporally aligned.")
+
+print("\nNo model weights changed.")
+print("No test-set metrics were calculated.")
+print("Note: this does not independently prove every feature formula is causal.")
+
+============================================================
+1. SIGNAL AND CANDLE ALIGNMENT
+============================================================
+Validation examples: 2575
+Signals found in candle history: 2575
+Signals missing from candle history: 0
+
+============================================================
+2. CHECK RESULTS
+============================================================
+Signal timestamp precedes entry: 2575/2575 passed
+Entry equals next candle open time: 2575/2575 passed
+Exit equals entry + six hours: 2575/2575 passed
+Signal-to-exit window has hourly candles: 2575/2575 passed
+Window stays within one segment: 2575/2575 passed
+Stored entry price matches candle open: 2575/2575 passed
+Stored exit price matches candle close: 2575/2575 passed
+Target return matches entry/exit prices: 2575/2575 passed
+
+Overall timing/target audit: PASS
+All checked validation examples are temporally aligned.
+
+No model weights changed.
+No test-set metrics were calculated.
+Note: this does not independently prove every feature formula is causal.
+
+[50]
+0s
+    print("=" * 72)
+    print(source[:9000])
+    if len(source) > 9000:
+        print("\n[Cell output truncated for display]")
+
+print("\nCurrent feature list:")
+print(feature_names)
+
+Matching notebook cells: 11
+
+========================================================================
+CELL: 11 | MATCHES: close_vs_sma6, macd_signal_norm, volatility_24h, close_position, future_return_6h
+========================================================================
+# KITTY — STEP 3: FEATURE ENGINEERING + COST-AWARE LABELS
+# Experimental dataset only. No training, no broker connection, no model overwrite.
+
+import numpy as np
+import pandas as pd
+
+assert "df_clean" in globals(), "Run the data-cleaning cell first."
+
+HORIZON = 6
+MOVE_THRESHOLD = 0.003  # Illustrative 0.30%; calibrate to actual trading costs later.
+
+data = df_clean.copy().sort_index()
+parts = []
+
+def make_features(g):
+    g = g.copy()
+
+    close = g["Close"].astype(float)
+    high = g["High"].astype(float)
+    low = g["Low"].astype(float)
+    open_ = g["Open"].astype(float)
+
+    # Returns and momentum
+    g["ret_1h"] = close.pct_change(1)
+    g["ret_3h"] = close.pct_change(3)
+    g["ret_6h"] = close.pct_change(6)
+    g["ret_12h"] = close.pct_change(12)
+    g["ret_24h"] = close.pct_change(24)
+
+    # Trend distances
+    sma_6 = close.rolling(6, min_periods=6).mean()
+    sma_20 = close.rolling(20, min_periods=20).mean()
+    sma_50 = close.rolling(50, min_periods=50).mean()
+
+    g["close_vs_sma6"] = close / sma_6 - 1
+    g["close_vs_sma20"] = close / sma_20 - 1
+    g["close_vs_sma50"] = close / sma_50 - 1
+    g["sma6_vs_sma20"] = sma_6 / sma_20 - 1
+
+    # RSI using rolling average gains/losses
+    delta = close.diff()
+    gain = delta.clip(lower=0).rolling(14, min_periods=14).mean()
+    loss = (-delta.clip(upper=0)).rolling(14, min_periods=14).mean()
+    rs = gain / loss.replace(0, np.nan)
+    g["rsi_14"] = (100 - 100 / (1 + rs)) / 100
+
+    # MACD, normalised by price
+    ema12 = close.ewm(span=12, adjust=False, min_periods=12).mean()
+    ema26 = close.ewm(span=26, adjust=False, min_periods=26).mean()
+    macd = ema12 - ema26
+    signal = macd.ewm(span=9, adjust=False, min_periods=9).mean()
+    g["macd_norm"] = macd / close
+    g["macd_signal_norm"] = signal / close
+    g["macd_hist_norm"] = (macd - signal) / close
+
+    # Volatility and candle shape
+    g["volatility_6h"] = g["ret_1h"].rolling(6, min_periods=6).std()
+    g["volatility_24h"] = g["ret_1h"].rolling(24, min_periods=24).std()
+    g["range_pct"] = (high - low) / close
+    g["body_pct"] = (close - open_) / open_.replace(0, np.nan)
+    g["close_position"] = (
+        (close - low) / (high - low).replace(0, np.nan)
+    )
+
+    # Future return is used ONLY to create the label, never as a feature.
+    future_close = close.shift(-HORIZON)
+    g["future_return_6h"] = future_close / close - 1
+
+    g["target"] = 1  # Default: no-trade zone
+    g.loc[g["future_return_6h"] > MOVE_THRESHOLD, "target"] = 2
+    g.loc[g["future_return_6h"] < -MOVE_THRESHOLD, "target"] = 0
+
+    return g
+
+for segment_id, group in data.groupby("segment", sort=True):
+    parts.append(make_features(group))
+
+featured = pd.concat(parts).sort_index()
+
+feature_cols = [
+    "ret_1h", "ret_3h", "ret_6h", "ret_12h", "ret_24h",
+    "close_vs_sma6", "close_vs_sma20", "close_vs_sma50",
+    "sma6_vs_sma20", "rsi_14",
+    "macd_norm", "macd_signal_norm", "macd_hist_norm",
+    "volatility_6h", "volatility_24h",
+    "range_pct", "body_pct", "close_position"
+]
+
+# Remove warm-up rows, rows with invalid features, and rows without a future label.
+kitty_data = featured[
+    feature_cols + ["target", "future_return_6h", "segment"]
+].replace([np.inf, -np.inf], np.nan).dropna().copy()
+
+kitty_data["target"] = kitty_data["target"].astype(int)
+
+print("FEATURE ENGINEERING REPORT")
+print("Usable examples:", len(kitty_data))
+print("Number of features:", len(feature_cols))
+print("Forecast horizon:", HORIZON, "hours")
+print("Illustrative move threshold:", f"{MOVE_THRESHOLD:.2%}")
+print("First example:", kitty_data.index.min())
+print("Last example:", kitty_data.index.max())
+
+print("\nTarget counts:")
+print(kitty_data["target"].value_counts().sort_index().rename(
+    index={0: "Short candidate", 1: "No-trade zone", 2: "Long candidate"}
+))
+
+print("\nTarget percentages:")
+print((100 * kitty_data["target"].value_counts(normalize=True).sort_index()).round(2))
+
+print("\nFeature columns:")
+print(feature_cols)
+
+print("\nFeature missing values:")
+print(int(kitty_data[feature_cols].isna().sum().sum()))
+
+print("\nFuture return distribution:")
+display(kitty_data["future_return_6h"].describe().to_frame())
+
+print("\nSample:")
+display(kitty_data[feature_cols + ["future_return_6h", "target"]].tail())
+
+========================================================================
+CELL: 12 | MATCHES: close_vs_sma6, macd_signal_norm, volatility_24h, close_position
+========================================================================
+# KITTY — STEP 4: CHRONOLOGICAL SPLIT
+# Keeps the latest data separate for final evaluation.
+# Does not overwrite any saved model or scaler.
+
+import numpy as np
+import pandas as pd
+
+assert "kitty_data" in globals(), "Run Step 3 first."
+
+HORIZON = 6
+data = kitty_data.sort_index().copy()
+
+# Split chronologically: earliest 70%, next 15%, latest 15%.
+n = len(data)
+train_end = int(n * 0.70)
+val_end = int(n * 0.85)
+
+# Purge six rows before each boundary to reduce overlap between
+# six-hour forward labels across adjacent datasets.
+train_df = data.iloc[:max(0, train_end - HORIZON)].copy()
+val_df = data.iloc[train_end: max(train_end, val_end - HORIZON)].copy()
+test_df = data.iloc[val_end:].copy()
+
+feature_cols = [
+    "ret_1h", "ret_3h", "ret_6h", "ret_12h", "ret_24h",
+    "close_vs_sma6", "close_vs_sma20", "close_vs_sma50",
+    "sma6_vs_sma20", "rsi_14",
+    "macd_norm", "macd_signal_norm", "macd_hist_norm",
+    "volatility_6h", "volatility_24h",
+    "range_pct", "body_pct", "close_position"
+]
+target_col = "target"
+
+for name, part in [
+    ("TRAIN", train_df),
+    ("VALIDATION", val_df),
+    ("TEST — KEEP UNTOUCHED", test_df),
+]:
+    print(f"\n{name}")
+    print("Examples:", len(part))
+    print("From:", part.index.min())
+    print("To:  ", part.index.max())
+    print("Class counts:")
+    print(part[target_col].value_counts().sort_index().rename(
+        index={0: "Short", 1: "No-trade", 2: "Long"}
+    ))
+    print("Class proportions (%):")
+    print((100 * part[target_col].value_counts(normalize=True).sort_index()).round(2))
+
+assert len(train_df) > 0 and len(val_df) > 0 and len(test_df) > 0
+assert train_df.index.max() < val_df.index.min()
+assert val_df.index.max() < test_df.index.min()
+
+print("\nSplit checks passed: chronological order is preserved.")
+print("The test set has not been used for training or model selection.")
+print("\nFeature matrix shapes:")
+print("X_train:", train_df[feature_cols].shape)
+print("X_val:  ", val_df[feature_cols].shape)
+print("X_test: ", test_df[feature_cols].shape)
+
+========================================================================
+CELL: 14 | MATCHES: future_return_6h
+========================================================================
+# KITTY V2 — STEP 6: VALIDATION SIGNAL ECONOMICS
+# Validation only. Does not inspect the reserved test set or change model files.
+
+import numpy as np
+import pandas as pd
+
+assert "val_probs" in globals(), "Run the Kitty V2 training cell first."
+assert "val" in globals(), "Validation data not found."
+assert len(val_probs) == len(val), "Prediction/data length mismatch."
+
+results = val.copy().sort_index()
+results["predicted_class"] = np.asarray(val_probs).argmax(axis=1)
+results["confidence"] = np.asarray(val_probs).max(axis=1)
+
+# Long = class 2; short = class 0; class 1 = no trade.
+results["signal"] = results["predicted_class"].map({
+    0: -1,
+    1: 0,
+    2: 1
+})
+
+# Greedy non-overlapping signals: allow at most one position per 6-hour horizon.
+# Do not use future returns to choose signals.
+selected = []
+next_allowed_time = None
+horizon = pd.Timedelta(hours=6)
+
+for timestamp, row in results.iterrows():
+    if row["signal"] == 0:
+        continue
+
+    if next_allowed_time is not None and timestamp < next_allowed_time:
+        continue
+
+    selected.append(timestamp)
+    next_allowed_time = timestamp + horizon
+
+trades = results.loc[selected].copy()
+
+if trades.empty:
+    print("No directional trades were generated.")
+else:
+    # Close-to-close forward return is a preliminary proxy, not executable fill data.
+    trades["gross_return"] = (
+        trades["signal"] * trades["future_return_6h"]
+    )
+
+    print("VALIDATION SIGNAL SUMMARY")
+    print("Available validation candles:", len(results))
+    print("Non-overlapping directional trades:", len(trades))
+    print("Signal coverage:", f"{len(trades) / len(results):.1%}")
+    print("Long trades:", int((trades["signal"] == 1).sum()))
+    print("Short trades:", int((trades["signal"] == -1).sum()))
+    print("Mean model confidence:", round(trades["confidence"].mean(), 4))
+    print("Gross win rate:", f"{(trades['gross_return'] > 0).mean():.1%}")
+    print("Mean gross return per trade:",
+          f"{trades['gross_return'].mean():.3%}")
+
+    report = []
+
+    for cost in [0.001, 0.002, 0.003]:
+        net = trades["gross_return"] - cost
+        equity = (1 + net).cumprod()
+        drawdown = equity / equity.cummax() - 1
+
+        report.append({
+            "Assumed round-trip cost": f"{cost:.2%}",
+            "Trades": len(net),
+            "Win rate after cost": f"{(net > 0).mean():.1%}",
+            "Mean net return/trade": f"{net.mean():.3%}",
+            "Compounded return": f"{(equity.iloc[-1] - 1):.2%}",
+            "Max drawdown": f"{drawdown.min():.2%}"
+        })
+
+    print("\nCOST SENSITIVITY")
+    display(pd.DataFrame(report))
+
+    print("\nLong versus short diagnostic:")
+    side_report = trades.groupby("signal")["gross_return"].agg(
+        trades="count",
+        mean_gross_return="mean",
+        median_gross_return="median"
+    )
+    side_report.index = side_report.index.map({-1: "Short", 1: "Long"})
+    display(side_report)
+
+    print(
+        "\nCaveat: overlapping positions were avoided, but this still assumes "
+        "close-based entries and does not model actual fills, funding, "
+        "liquidation, position sizing, or intrabar stop/target execution."
+    )
+
+========================================================================
+CELL: 23 | MATCHES: close_vs_sma6, macd_signal_norm, volatility_24h, close_position, kitty_v3_data, feature_cols_v3
+========================================================================
+# KITTY RETRAIN — STEP 2: CAUSAL FEATURES
+import numpy as np
+import pandas as pd
+
+assert "kitty_targets" in globals()
+assert len(kitty_targets) > 0
+
+feature_data = kitty_targets.copy()
+feature_groups = feature_data.groupby("segment", sort=False)
+
+def grouped_rolling(column, window, operation):
+    grouped = feature_data.groupby("segment", sort=False)[column]
+    rolling = grouped.rolling(window, min_periods=window)
+    result = getattr(rolling, operation)()
+    return result.reset_index(level=0, drop=True).reindex(feature_data.index)
+
+# Returns known at the signal candle's close
+for hours in [1, 3, 6, 12, 24]:
+    previous_close = feature_groups["Close"].shift(hours)
+    feature_data[f"ret_{hours}h"] = (
+        feature_data["Close"] / previous_close - 1
+    )
+
+# Relative price and moving-average structure
+for window in [6, 20, 50]:
+    sma = grouped_rolling("Close", window, "mean")
+    feature_data[f"close_vs_sma{window}"] = (
+        feature_data["Close"] / sma - 1
+    )
+
+sma6 = grouped_rolling("Close", 6, "mean")
+sma20 = grouped_rolling("Close", 20, "mean")
+feature_data["sma6_vs_sma20"] = sma6 / sma20 - 1
+
+# RSI(14), calculated independently within each segment
+delta = feature_groups["Close"].diff()
+gain = delta.clip(lower=0)
+loss = -delta.clip(upper=0)
+
+avg_gain = gain.groupby(feature_data["segment"], sort=False).transform(
+    lambda s: s.rolling(14, min_periods=14).mean()
+)
+avg_loss = loss.groupby(feature_data["segment"], sort=False).transform(
+    lambda s: s.rolling(14, min_periods=14).mean()
+)
+rs = avg_gain / avg_loss.replace(0, np.nan)
+feature_data["rsi_14"] = 100 - (100 / (1 + rs))
+feature_data.loc[(avg_loss == 0) & (avg_gain > 0), "rsi_14"] = 100
+feature_data.loc[(avg_loss == 0) & (avg_gain == 0), "rsi_14"] = 50
+
+# MACD family
+ema12 = feature_groups["Close"].transform(
+    lambda s: s.ewm(span=12, adjust=False, min_periods=12).mean()
+)
+ema26 = feature_groups["Close"].transform(
+    lambda s: s.ewm(span=26, adjust=False, min_periods=26).mean()
+)
+macd = ema12 - ema26
+macd_signal = macd.groupby(feature_data["segment"], sort=False).transform(
+    lambda s: s.ewm(span=9, adjust=False, min_periods=9).mean()
+)
+feature_data["macd_norm"] = macd / feature_data["Close"]
+feature_data["macd_signal_norm"] = macd_signal / feature_data["Close"]
+feature_data["macd_hist_norm"] = (macd - macd_signal) / feature_data["Close"]
+
+# Realized volatility of close-to-close returns
+ret1 = feature_data.groupby("segment", sort=False)["Close"].transform(
+    lambda s: s.pct_change()
+)
+feature_data["volatility_6h"] = ret1.groupby(
+    feature_data["segment"], sort=False
+).transform(lambda s: s.rolling(6, min_periods=6).std())
+feature_data["volatility_24h"] = ret1.groupby(
+    feature_data["segment"], sort=False
+).transform(lambda s: s.rolling(24, min_periods=24).std())
+
+# Current candle shape, available after its close
+feature_data["range_pct"] = (
+    feature_data["High"] - feature_data["Low"]
+) / feature_data["Close"]
+feature_data["body_pct"] = (
+    feature_data["Close"] - feature_data["Open"]
+) / feature_data["Open"]
+
+candle_range = feature_data["High"] - feature_data["Low"]
+feature_data["close_position"] = (
+    (feature_data["Close"] - feature_data["Low"])
+    / candle_range.replace(0, np.nan)
+)
+
+feature_cols_v3 = [
+    "ret_1h", "ret_3h", "ret_6h", "ret_12h", "ret_24h",
+    "close_vs_sma6", "close_vs_sma20", "close_vs_sma50",
+    "sma6_vs_sma20", "rsi_14",
+    "macd_norm", "macd_signal_norm", "macd_hist_norm",
+    "volatility_6h", "volatility_24h",
+    "range_pct", "body_pct", "close_position"
+]
+
+assert len(feature_cols_v3) == 18
+assert not any(
+    c in feature_cols_v3
+    for c in ["target", "target_return", "entry_open_next",
+              "exit_close_6h_after_entry", "entry_time", "exit_time"]
+)
+
+# Keep only rows with complete features; labels and execution data stay separate.
+feature_data[feature_cols_v3] = feature_data[feature_cols_v3].replace(
+    [np.inf, -np.inf], np.nan
+)
+kitty_v3_data = feature_data.dropna(subset=feature_cols_v3).copy()
+
+print("Rows with valid labels:", len(feature_data))
+print("Rows with all 18 features:", len(kitty_v3_data))
+print("Rows removed for feature warm-up/invalid values:",
+      len(feature_data) - len(kitty_v3_data))
+print("Feature count:", len(feature_cols_v3))
+print("Missing feature values:",
+      int(kitty_v3_data[feature_cols_v3].isna().sum().sum()))
+print("Infinite feature values:",
+      int(np.isinf(kitty_v3_data[feature_cols_v3].to_numpy()).sum()))
+print("Target counts after feature cleanup:")
+print(kitty_v3_data["target"].value_counts().sort_index())
+print("\nFeature sample:")
+display(kitty_v3_data[feature_cols_v3].describe().round(4))
+print("\nSTEP 2 complete. No model files were changed.")
+
+========================================================================
+CELL: 24 | MATCHES: kitty_v3_data, feature_cols_v3
+========================================================================
+# KITTY RETRAIN — STEP 3: CHRONOLOGICAL SPLIT
+import numpy as np
+import pandas as pd
+
+assert "kitty_v3_data" in globals()
+assert "feature_cols_v3" in globals()
+assert len(kitty_v3_data) > 1000
+
+data = kitty_v3_data.sort_index().copy()
+
+assert data.index.is_unique
+assert data.index.is_monotonic_increasing
+
+n = len(data)
+train_boundary = int(n * 0.70)
+val_boundary = int(n * 0.85)
+
+# Labels use entry at t+1 and exit at t+7.
+# Purge six rows before each subsequent split.
+PURGE = 6
+
+train_v3 = data.iloc[:train_boundary - PURGE].copy()
+val_v3 = data.iloc[train_boundary:val_boundary - PURGE].copy()
+test_v3 = data.iloc[val_boundary:].copy()
+
+feature_cols = feature_cols_v3.copy()
+
+X_train_v3 = train_v3[feature_cols].to_numpy(dtype=np.float32)
+y_train_v3 = train_v3["target"].to_numpy(dtype=np.int64)
+
+X_val_v3 = val_v3[feature_cols].to_numpy(dtype=np.float32)
+y_val_v3 = val_v3["target"].to_numpy(dtype=np.int64)
+
+X_test_v3 = test_v3[feature_cols].to_numpy(dtype=np.float32)
+y_test_v3 = test_v3["target"].to_numpy(dtype=np.int64)
+
+for name, part, X, y in [
+    ("TRAIN", train_v3, X_train_v3, y_train_v3),
+    ("VALIDATION", val_v3, X_val_v3, y_val_v3),
+    ("TEST", test_v3, X_test_v3, y_test_v3),
+]:
+    print(f"\n{name}")
+    print("Rows:", len(part))
+    print("Period:", part.index.min(), "to", part.index.max())
+    print("Feature matrix:", X.shape)
+    print("Labels:", y.shape)
+    print("Class proportions:")
+    print(
+        (pd.Series(y).value_counts(normalize=True)
+         .reindex([0, 1, 2], fill_value=0) * 100).round(2)
+        .rename(index={0: "Short", 1: "No-trade", 2: "Long"})
+    )
+
+assert X_train_v3.shape[1] == X_val_v3.shape[1] == X_test_v3.shape[1] == 18
+assert len(X_train_v3) == len(y_train_v3)
+assert len(X_val_v3) == len(y_val_v3)
+assert len(X_test_v3) == len(y_test_v3)
+assert train_v3.index.max() < val_v3.index.min()
+assert val_v3.index.max() < test_v3.index.min()
+assert set(np.unique(y_train_v3)) <= {0, 1, 2}
+assert set(np.unique(y_val_v3)) <= {0, 1, 2}
+assert set(np.unique(y_test_v3)) <= {0, 1, 2}
+
+print("\nSTEP 3 PASSED: chronological splits created.")
+print("Do not inspect test performance until the model and decision rule are frozen.")
+
+========================================================================
+CELL: 33 | MATCHES: volatility_24h
+========================================================================
+# KITTY V3 — STEP 12: VALIDATION REGIME AUDIT
+import numpy as np
+import pandas as pd
+
+regime = val_v3.sort_index().copy()
+
+# Actual returns over the defined entry-to-exit horizon.
+regime["actual_return"] = regime["target_return"]
+
+# Volatility proxy from causal features, if available.
+vol_col = "volatility_24h"
+assert vol_col in regime.columns, (
+    f"Expected {vol_col} in validation features. "
+    "Check the feature column names before continuing."
+)
+
+# Divide volatility into low, medium and high groups using
+# validation-only quantiles for diagnostic purposes.
+regime["volatility_regime"] = pd.qcut(
+    regime[vol_col].rank(method="first"),
+    q=3,
+    labels=["Low volatility", "Medium volatility", "High volatility"]
+)
+
+# Show whether the target distribution changes across periods.
+regime["month"] = regime.index.to_period("M").astype(str)
+
+print("VALIDATION TARGET RETURN BY VOLATILITY REGIME")
+display(
+    regime.groupby("volatility_regime", observed=False)
+    .agg(
+        observations=("actual_return", "size"),
+        mean_return_pct=("actual_return", lambda x: 100 * x.mean()),
+        median_return_pct=("actual_return", lambda x: 100 * x.median()),
+        positive_return_pct=("actual_return", lambda x: 100 * (x > 0).mean()),
+        return_std_pct=("actual_return", lambda x: 100 * x.std())
+    ).round(4)
+)
+
+print("\nVALIDATION TARGET RETURN BY MONTH")
+display(
+    regime.groupby("month")
+    .agg(
+        observations=("actual_return", "size"),
+        mean_return_pct=("actual_return", lambda x: 100 * x.mean()),
+        positive_return_pct=("actual_return", lambda x: 100 * (x > 0).mean()),
+        return_std_pct=("actual_return", lambda x: 100 * x.std())
+    ).round(4)
+)
+
+print("\nThis is a diagnostic only. No model retraining, threshold tuning,")
+print("test-set evaluation, or live trading.")
+
+========================================================================
+CELL: 34 | MATCHES: volatility_24h
+========================================================================
+# KITTY V3 — STEP 13: MODEL PERFORMANCE BY VOLATILITY REGIME
+import numpy as np
+import pandas as pd
+from sklearn.metrics import accuracy_score, balanced_accuracy_score
+
+regime_eval = val_v3.sort_index().copy()
+regime_eval["prediction"] = val_pred
+regime_eval["confidence"] = val_conf
+regime_eval["actual_class"] = y_val_v3
+
+# Directional return for Kitty's active signals.
+regime_eval["directional_return"] = np.where(
+    regime_eval["prediction"] == 2,
+    regime_eval["target_return"],
+    np.where(
+        regime_eval["prediction"] == 0,
+        -regime_eval["target_return"],
+        np.nan
+    )
+)
+
+# Use the causal volatility feature and the same validation-only
+# regime boundaries from Step 12.
+volatility = regime_eval["volatility_24h"]
+regime_eval["volatility_regime"] = pd.qcut(
+    volatility.rank(method="first"),
+    q=3,
+    labels=["Low volatility", "Medium volatility", "High volatility"]
+)
+
+rows = []
+for name, group in regime_eval.groupby("volatility_regime", observed=False):
+    active = group[group["prediction"].isin([0, 2])]
+    rows.append({
+        "regime": str(name),
+        "observations": len(group),
+        "accuracy_pct": 100 * accuracy_score(
+            group["actual_class"], group["prediction"]
+        ),
+        "balanced_accuracy_pct": 100 * balanced_accuracy_score(
+            group["actual_class"], group["prediction"]
+        ),
+        "active_signals": len(active),
+        "mean_directional_return_pct": (
+            100 * active["directional_return"].mean()
+            if len(active) else np.nan
+        ),
+        "directional_win_rate_pct": (
+            100 * (active["directional_return"] > 0).mean()
+            if len(active) else np.nan
+        )
+    })
+
+display(pd.DataFrame(rows).round(4))
+
+print("\nValidation-only diagnostic.")
+print("These returns overlap in time and are before costs.")
+print("No threshold selection, test-set evaluation, or live trading.")
+
+========================================================================
+CELL: 35 | MATCHES: volatility_24h
+========================================================================
+# KITTY V3 — STEP 14
+# Non-overlapping validation trades by volatility regime
+# Diagnostic only: do not use for live trading.
+
+import numpy as np
+import pandas as pd
+
+audit = val_v3.sort_index().copy()
+audit["prediction"] = np.asarray(val_pred)
+audit["confidence"] = np.asarray(val_conf)
+
+# Assign each validation observation to a volatility tercile.
+# This is exploratory; do not treat these cutoffs as deployable rules.
+audit["regime"] = pd.qcut(
+    audit["volatility_24h"].rank(method="first"),
+    q=3,
+    labels=["Low", "Medium", "High"]
+)
+
+# Directional gross return: long, short, or no trade.
+audit["gross_return"] = np.where(
+    audit["prediction"] == 2,
+    audit["target_return"],
+    np.where(
+        audit["prediction"] == 0,
+        -audit["target_return"],
+        np.nan
+    )
+)
+
+# Use the actual entry/exit times if present.
+# A new trade is allowed only after the previous trade exits.
+results = []
+
+for regime_name in ["Low", "Medium", "High"]:
+    subset = audit[
+        (audit["regime"] == regime_name)
+        & audit["prediction"].isin([0, 2])
+    ].copy()
+
+    subset = subset.sort_index()
+    selected = []
+    last_exit = None
+
+    for timestamp, row in subset.iterrows():
+        entry_time = row["entry_time"]
+        exit_time = row["exit_time"]
+
+        if last_exit is None or entry_time >= last_exit:
+            selected.append({
+                "entry_time": entry_time,
+                "exit_time": exit_time,
+                "gross_return": float(row["gross_return"])
+            })
+            last_exit = exit_time
+
+    trades = pd.DataFrame(selected)
+
+    for cost_pct in [0.10, 0.20, 0.30]:
+        if trades.empty:
+            net = pd.Series(dtype=float)
+        else:
+            net = trades["gross_return"] - cost_pct / 100
+
+        equity = (1 + net).cumprod() if len(net) else pd.Series(dtype=float)
+
+        if len(equity):
+            drawdown = equity / equity.cummax() - 1
+            compounded_pct = (equity.iloc[-1] - 1) * 100
+            max_dd_pct = drawdown.min() * 100
+            mean_net_pct = net.mean() * 100
+            win_pct = (net > 0).mean() * 100
+        else:
+            compounded_pct = max_dd_pct = mean_net_pct = win_pct = np.nan
+
+        results.append({
+            "regime": regime_name,
+            "cost_pct_per_trade": cost_pct,
+            "trades": len(trades),
+            "mean_net_return_pct": mean_net_pct,
+            "net_win_rate_pct": win_pct,
+            "compounded_return_pct": compounded_pct,
+            "max_drawdown_pct": max_dd_pct
+        })
+
+display(pd.DataFrame(results).round(4))
+
+print("Validation-only diagnostic; costs are assumed per trade.")
+print("Signals are non-overlapping within each regime, not across regimes.")
+print("Regime labels are exploratory and not deployable thresholds.")
+print("Do not connect a live broker.")
+
+========================================================================
+CELL: 42 | MATCHES: kitty_v3_data, feature_cols_v3
+========================================================================
+# KITTY V3 — STEP 19A: INSPECT ACTUAL COLUMNS
+print("train_v3 columns:")
+print(train_v3.columns.tolist())
+
+print("\ntrain_v3 shape:", train_v3.shape)
+
+print("\nTarget-related variables available:")
+for name in [
+    "y_train_v3", "y_val_v3", "train_v3",
+    "kitty_v3_data", "feature_cols_v3",
+    "X_train_v3_scaled"
+]:
+    if name in globals():
+        obj = globals()[name]
+        print(
+            name,
+            "| type:", type(obj).__name__,
+            "| shape:", getattr(obj, "shape", None)
+        )
+
+print("\nFirst 3 rows:")
+display(train_v3.head(3))
+
+========================================================================
+CELL: 48 | MATCHES: close_vs_sma6, macd_signal_norm, volatility_24h, close_position, feature_cols_v3
+========================================================================
+# KITTY V3 — STEP 27: FEATURE AND TARGET ALIGNMENT AUDIT
+import numpy as np
+import pandas as pd
+
+FEATURES_V3 = [
+    "ret_1h", "ret_3h", "ret_6h", "ret_12h", "ret_24h",
+    "close_vs_sma6", "close_vs_sma20", "close_vs_sma50",
+    "sma6_vs_sma20", "rsi_14", "macd_norm",
+    "macd_signal_norm", "macd_hist_norm",
+    "volatility_6h", "volatility_24h",
+    "range_pct", "body_pct", "close_position"
+]
+
+print("=" * 60)
+print("1. FEATURE ORDER")
+print("=" * 60)
+
+assert list(feature_cols_v3) == FEATURES_V3, (
+    "STOP: feature_cols_v3 differs from the expected feature order."
+)
+
+assert X_val_v3.shape == (len(val_v3), len(FEATURES_V3))
+assert X_train_v3.shape[1] == len(FEATURES_V3)
+assert scaler_v3.n_features_in_ == len(FEATURES_V3)
+
+expected_X = val_v3[FEATURES_V3].to_numpy(dtype=np.float64)
+actual_X = np.asarray(X_val_v3, dtype=np.float64)
+
+print("Feature count:", len(FEATURES_V3))
+print("Validation features match val_v3:",
+      np.allclose(actual_X, expected_X, rtol=1e-6, atol=1e-7))
+
+assert np.allclose(actual_X, expected_X, rtol=1e-6, atol=1e-7), (
+    "STOP: validation feature values or order do not match."
+)
+
+print("\n" + "=" * 60)
+print("2. ROW AND LABEL ALIGNMENT")
+print("=" * 60)
+
+y = np.asarray(y_val_v3, dtype=int)
+df_y = val_v3["target"].to_numpy(dtype=int)
+
+print("Validation rows:", len(val_v3))
+print("Feature/label lengths agree:",
+      len(X_val_v3) == len(y) == len(val_v3))
+print("Labels match validation DataFrame:",
+      np.array_equal(y, df_y))
+
+assert np.array_equal(y, df_y), (
+    "STOP: y_val_v3 and val_v3 target rows do not agree."
+)
+
+print("\n" + "=" * 60)
+print("3. REBUILD LABELS FROM SIX-HOUR RETURNS")
+print("=" * 60)
+
+returns = val_v3["target_return"].to_numpy(dtype=float)
+
+assert np.isfinite(returns).all(), "STOP: non-finite target returns."
+
+# Class 0: return below -0.30%
+# Class 1: return between -0.30% and +0.30%, inclusive
+# Class 2: return above +0.30%
+rebuilt_y = np.select(
+    [returns < -0.003, returns > 0.003],
+    [0, 2],
+    default=1
+).astype(int)
+
+matches = rebuilt_y == y
+
+print("Labels rebuilt from returns match:", bool(matches.all()))
+print("Mismatched labels:", int((~matches).sum()))
+
+if not matches.all():
+    print("First mismatches:")
+    display(val_v3.loc[
+        ~matches, ["target_return", "target"]
+    ].head(10))
+
+print("\n" + "=" * 60)
+print("4. SUMMARY")
+print("=" * 60)
+
+if matches.all():
+    print("PASS: features, rows, and return-derived labels agree.")
+    print("This does not prove there is no temporal leakage.")
+else:
+    print("STOP: investigate target construction before further training.")
+
+print("No model weights changed.")
+print("No test-set performance inspected.")
+
+========================================================================
+CELL: 50 | MATCHES: close_vs_sma6, macd_signal_norm, volatility_24h, close_position, future_return_6h, kitty_v3_data, feature_cols_v3
+========================================================================
+# KITTY V3 — STEP 29: FIND THE ORIGINAL FEATURE-CONSTRUCTION CODE
+# Read-only audit. Does not modify data, weights, or model files.
+
+import re
+
+feature_names = [
+    "ret_1h", "ret_3h", "ret_6h", "ret_12h", "ret_24h",
+    "close_vs_sma6", "close_vs_sma20", "close_vs_sma50",
+    "sma6_vs_sma20", "rsi_14",
+    "macd_norm", "macd_signal_norm", "macd_hist_norm",
+    "volatility_6h", "volatility_24h",
+    "range_pct", "body_pct", "close_position"
+]
+
+# Search the executed notebook history for cells that constructed
+# these features or created the Kitty V3 dataset.
+try:
+    history = list(In)
+except NameError:
+    history = []
+
+keywords = [
+    "close_vs_sma6", "macd_signal_norm", "volatility_24h",
+    "close_position", "future_return_6h", "kitty_v3_data",
+    "feature_cols_v3"
+]
+
+matches = []
+for cell_number, source in enumerate(history):
+    if not isinstance(source, str):
+        continue
+    hits = [word for word in keywords if word in source]
+    if hits:
+        matches.append((cell_number, hits, source))
+
+print("Matching notebook cells:", len(matches))
+for cell_number, hits, source in matches[-12:]:
+    print("\n" + "=" * 72)
+    print("CELL:", cell_number, "| MATCHES:", ", ".join(hits))
+    print("=" * 72)
+    print(source[:9000])
+    if len(source) > 9000:
+        print("\n[Cell output truncated for display]")
+
+print("\nCurrent feature list:")
+print(feature_names)
+
+Current feature list:
+['ret_1h', 'ret_3h', 'ret_6h', 'ret_12h', 'ret_24h', 'close_vs_sma6', 'close_vs_sma20', 'close_vs_sma50', 'sma6_vs_sma20', 'rsi_14', 'macd_norm', 'macd_signal_norm', 'macd_hist_norm', 'volatility_6h', 'volatility_24h', 'range_pct', 'body_pct', 'close_position']
+
+[51]
+0s
+print("\nAudit only. No model training or test-performance evaluation.")
+
+========================================================================
+PART A — FIND THE V3 TARGET-CONSTRUCTION CODE
+========================================================================
+Matching cells: 19
+
+------------------------------------------------------------------------
+CELL: 41 | MATCHES: target_return
+------------------------------------------------------------------------
+# KITTY V3 — STEP 19: TRAINING TARGET DIAGNOSTIC
+import numpy as np
+import pandas as pd
+
+# Use training data only; do not inspect the held-out test set.
+train_audit = train_v3.copy()
+
+print("Training rows:", len(train_audit))
+print("\nTarget class counts:")
+print(train_audit["target_class"].value_counts().sort_index())
+
+print("\nTarget class proportions:")
+print(
+    train_audit["target_class"]
+    .value_counts(normalize=True)
+    .sort_index()
+    .mul(100)
+    .round(2)
+)
+
+print("\nSix-hour target return distribution:")
+display(
+    (train_audit["target_return"] * 100)
+    .describe(percentiles=[0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99])
+    .to_frame("return_pct")
+    .round(4)
+)
+
+print("\nClass thresholds used:")
+print("SHORT: return < -0.30%")
+print("NO TRADE: -0.30% <= return <= +0.30%")
+print("LONG: return > +0.30%")
+
+print("\nTraining-only diagnostic; no model changes.")
+
+------------------------------------------------------------------------
+CELL: 43 | MATCHES: target_return
+------------------------------------------------------------------------
+# KITTY V3 — STEP 19B: TRAINING TARGET DIAGNOSTIC
+import numpy as np
+import pandas as pd
+
+train_audit = train_v3.copy()
+
+# Confirm the dataframe target and training labels are aligned.
+target = train_audit["target"].to_numpy()
+y_train = np.asarray(y_train_v3).reshape(-1)
+
+print("Training rows:", len(train_audit))
+print("Target column values:", sorted(pd.unique(target)))
+print("y_train_v3 values:", sorted(pd.unique(y_train)))
+print("Target arrays agree:", np.array_equal(target, y_train))
+
+assert len(target) == len(y_train), "Target length mismatch"
+assert np.array_equal(target, y_train), (
+    "Target labels differ; stop and inspect alignment before proceeding."
+)
+
+# Class mapping established for Kitty V3:
+# 0 = SHORT, 1 = NO TRADE, 2 = LONG
+class_names = {0: "SHORT", 1: "NO TRADE", 2: "LONG"}
+
+counts = (
+    pd.Series(y_train)
+    .value_counts()
+    .reindex([0, 1, 2], fill_value=0)
+)
+
+display(pd.DataFrame({
+    "class": [class_names[i] for i in [0, 1, 2]],
+    "count": counts.to_numpy(),
+    "percent": (counts / len(y_train) * 100).to_numpy()
+}).round(3))
+
+print("\nSix-hour target-return distribution (%):")
+display(
+    (train_audit["target_return"] * 100)
+    .describe(
+        percentiles=[
+            0.01, 0.05, 0.10, 0.25, 0.50,
+            0.75, 0.90, 0.95, 0.99
+        ]
+    )
+    .to_frame("return_pct")
+    .round(4)
+)
+
+print("\nMean target return by class (%):")
+display(
+    (train_audit.assign(
+        target_return_pct=train_audit["target_return"] * 100
+    ).groupby("target")["target_return_pct"]
+      .agg(["count", "mean", "median", "std"])
+      .rename(index=class_names)
+      .round(4))
+)
+
+print("\nTraining-only diagnostic; no retraining performed.")
+
+------------------------------------------------------------------------
+CELL: 44 | MATCHES: target_return
+------------------------------------------------------------------------
+# KITTY V3 — STEP 20: RETURN DISTRIBUTION BY PREDICTED CLASS
+import numpy as np
+import pandas as pd
+
+audit = val_v3.sort_index().copy()
+audit["prediction"] = np.asarray(val_pred)
+audit["confidence"] = np.asarray(val_conf)
+audit["actual_class"] = np.asarray(y_val_v3)
+
+class_names = {0: "SHORT", 1: "NO TRADE", 2: "LONG"}
+
+# Summarize actual returns for each predicted class.
+rows = []
+for class_id in [0, 1, 2]:
+    group = audit[audit["prediction"] == class_id]
+    r = group["target_return"] * 100
+
+    rows.append({
+        "predicted_class": class_names[class_id],
+        "observations": len(group),
+        "mean_actual_return_pct": r.mean(),
+        "median_actual_return_pct": r.median(),
+        "actual_positive_return_pct": 100 * (r > 0).mean(),
+        "actual_class_matches_prediction_pct": (
+            100 * (group["actual_class"] == class_id).mean()
+        )
+    })
+
+display(pd.DataFrame(rows).round(4))
+
+# Inspect high-confidence cases without selecting a trading threshold.
+audit["confidence_band"] = pd.cut(
+    audit["confidence"],
+    bins=[0, 0.40, 0.45, 0.50, 1.000001],
+    labels=["<=0.40", "0.40–0.45", "0.45–0.50", ">0.50"],
+    include_lowest=True
+)
+
+confidence_rows = []
+for band, group in audit.groupby("confidence_band", observed=False):
+    r = group["target_return"] * 100
+    confidence_rows.append({
+        "confidence_band": str(band),
+        "observations": len(group),
+        "mean_actual_return_pct": r.mean(),
+        "median_actual_return_pct": r.median(),
+        "actual_positive_return_pct": 100 * (r > 0).mean()
+    })
+
+display(pd.DataFrame(confidence_rows).round(4))
+
+print("Validation-only diagnostic; overlapping observations.")
+print("Returns are not net of fees, slippage, or funding.")
+print("No threshold selection or live trading.")
+
+------------------------------------------------------------------------
+CELL: 45 | MATCHES: target_return
+------------------------------------------------------------------------
+# KITTY V3 — STEP 22: CLASSIFICATION AND CONFIDENCE AUDIT
+import numpy as np
+import pandas as pd
+
+audit = val_v3.sort_index().copy()
+
+audit["actual_class"] = np.asarray(y_val_v3)
+audit["prediction"] = np.asarray(val_pred)
+audit["confidence"] = np.asarray(val_conf)
+
+class_names = {0: "SHORT", 1: "NO TRADE", 2: "LONG"}
+
+# 1. Confusion matrix: rows are actual classes,
+# columns are predicted classes.
+print("CONFUSION MATRIX")
+print(
+    pd.crosstab(
+        audit["actual_class"].map(class_names),
+        audit["prediction"].map(class_names),
+        rownames=["Actual"],
+        colnames=["Predicted"],
+        dropna=False
+    )
+)
+
+# 2. Returns grouped by the TRUE class.
+print("\nACTUAL RETURN DISTRIBUTION BY TRUE CLASS")
+audit["return_pct"] = audit["target_return"] * 100
+
+display(
+    audit.groupby("actual_class")
+    .agg(
+        observations=("return_pct", "size"),
+        mean_return_pct=("return_pct", "mean"),
+        median_return_pct=("return_pct", "median"),
+        positive_return_pct=(
+            "return_pct", lambda x: 100 * (x > 0).mean()
+        ),
+        negative_return_pct=(
+            "return_pct", lambda x: 100 * (x < 0).mean()
+        )
+    )
+    .rename(index=class_names)
+    .round(4)
+)
+
+# 3. Inspect the confidence values.
+confidence = np.asarray(val_conf).reshape(-1)
+
+print("\nCONFIDENCE AUDIT")
+print("Shape:", np.asarray(val_conf).shape)
+print("Minimum:", np.nanmin(confidence))
+print("Median:", np.nanmedian(confidence))
+print("Maximum:", np.nanmax(confidence))
+print("Non-finite values:", np.sum(~np.isfinite(confidence)))
+
+print("\nValidation observations:", len(audit))
+print("Predictions:", len(val_pred))
+print("Actual labels:", len(y_val_v3))
+print("Validation-only diagnostic; no retraining or trading.")
+
+------------------------------------------------------------------------
+CELL: 46 | MATCHES: target_return
+------------------------------------------------------------------------
+# KITTY V3 — STEP 25: PREDICTION PIPELINE AUDIT
+# Diagnostic only: no retraining, no threshold tuning, no trading.
+
+import numpy as np
+import pandas as pd
+
+print("=" * 65)
+print("KITTY V3 — PREDICTION PIPELINE AUDIT")
+print("=" * 65)
+
+# 1. Inspect model and prediction objects
+for name in [
+    "model_v3", "kitty_model_v3", "model",
+    "val_pred", "val_conf", "y_val_v3",
+    "val_v3", "X_val_v3", "X_train_v3",
+    "y_train_v3", "scaler_v3", "best_model_v3"
+]:
+    if name in globals():
+        obj = globals()[name]
+        print(f"\n{name}:")
+        print("  Type:", type(obj).__name__)
+        if isinstance(obj, (np.ndarray, pd.Series, pd.DataFrame)):
+            print("  Shape:", getattr(obj, "shape", None))
+            if isinstance(obj, pd.DataFrame):
+                print("  Columns:", list(obj.columns))
+        elif hasattr(obj, "classes_"):
+            print("  classes_:", obj.classes_)
+        elif hasattr(obj, "n_features_in_"):
+            print("  n_features_in_:", obj.n_features_in_)
+
+# 2. Verify existing predictions against labels
+pred = np.asarray(val_pred).reshape(-1)
+actual = np.asarray(y_val_v3).reshape(-1)
+conf = np.asarray(val_conf).reshape(-1)
+
+print("\n" + "=" * 65)
+print("PREDICTION SHAPES AND CLASS IDS")
+print("=" * 65)
+print("Predictions:", pred.shape)
+print("Actual labels:", actual.shape)
+print("Confidence:", conf.shape)
+print("Predicted class IDs:", np.unique(pred))
+print("Actual class IDs:", np.unique(actual))
+print("Prediction/label lengths match:", len(pred) == len(actual))
+print("Confidence/prediction lengths match:", len(conf) == len(pred))
+
+if len(pred) == len(actual) == len(conf):
+    print("Accuracy:", round(float(np.mean(pred == actual)), 4))
+
+    # Show confusion matrix with fixed class order.
+    class_order = [0, 1, 2]
+    print("\nConfusion matrix (rows=actual, columns=predicted):")
+    print(pd.crosstab(
+        pd.Categorical(actual, categories=class_order),
+        pd.Categorical(pred, categories=class_order),
+        rownames=["Actual"],
+        colnames=["Predicted"],
+        dropna=False
+    ))
+
+    print("\nConfidence summary:")
+    print(pd.Series(conf).describe().round(5))
+    print("Non-finite confidence values:", int((~np.isfinite(conf)).sum()))
+
+# 3. Inspect model class order and probability support.
+# Only examines models already present in the notebook.
+candidate_names = [
+    "model_v3", "kitty_model_v3", "model", "best_model_v3"
+]
+
+print("\n" + "=" * 65)
+print("MODEL CLASS AND PROBABILITY SUPPORT")
+print("=" * 65)
+
+for name in candidate_names:
+    if name not in globals():
+        continue
+
+    obj = globals()[name]
+    print(f"\n{name}: {type(obj).__name__}")
+
+    if hasattr(obj, "classes_"):
+        print("  classes_:", obj.classes_)
+
+    if hasattr(obj, "named_steps"):
+        print("  Pipeline steps:", list(obj.named_steps.keys()))
+        for step_name, step in obj.named_steps.items():
+            if hasattr(step, "classes_"):
+                print(f"  {step_name}.classes_:", step.classes_)
+
+    print("  predict_proba available:", hasattr(obj, "predict_proba"))
+
+# 4. Inspect data split metadata if available.
+print("\n" + "=" * 65)
+print("VALIDATION DATA AND FEATURE CHECK")
+print("=" * 65)
+
+if "val_v3" in globals():
+    df = val_v3
+    print("Validation index type:", type(df.index).__name__)
+    print("Validation index sorted:", df.index.is_monotonic_increasing)
+    print("Duplicate validation indices:", int(df.index.duplicated().sum()))
+    print("Columns:", list(df.columns))
+
+    if "target_return" in df.columns:
+        print("Target return missing:", int(df["target_return"].isna().sum()))
+
+for name in ["X_train_v3", "X_val_v3", "y_train_v3", "y_val_v3"]:
+    if name in globals():
+        obj = globals()[name]
+        print(f"{name} length:", len(obj))
+
+print("\nAudit complete.")
+print("No model weights or data have been modified.")
+print("This cell does not independently prove absence of leakage.")
+
+------------------------------------------------------------------------
+CELL: 48 | MATCHES: target_return
+------------------------------------------------------------------------
+# KITTY V3 — STEP 27: FEATURE AND TARGET ALIGNMENT AUDIT
+import numpy as np
+import pandas as pd
+
+FEATURES_V3 = [
+    "ret_1h", "ret_3h", "ret_6h", "ret_12h", "ret_24h",
+    "close_vs_sma6", "close_vs_sma20", "close_vs_sma50",
+    "sma6_vs_sma20", "rsi_14", "macd_norm",
+    "macd_signal_norm", "macd_hist_norm",
+    "volatility_6h", "volatility_24h",
+    "range_pct", "body_pct", "close_position"
+]
+
+print("=" * 60)
+print("1. FEATURE ORDER")
+print("=" * 60)
+
+assert list(feature_cols_v3) == FEATURES_V3, (
+    "STOP: feature_cols_v3 differs from the expected feature order."
+)
+
+assert X_val_v3.shape == (len(val_v3), len(FEATURES_V3))
+assert X_train_v3.shape[1] == len(FEATURES_V3)
+assert scaler_v3.n_features_in_ == len(FEATURES_V3)
+
+expected_X = val_v3[FEATURES_V3].to_numpy(dtype=np.float64)
+actual_X = np.asarray(X_val_v3, dtype=np.float64)
+
+print("Feature count:", len(FEATURES_V3))
+print("Validation features match val_v3:",
+      np.allclose(actual_X, expected_X, rtol=1e-6, atol=1e-7))
+
+assert np.allclose(actual_X, expected_X, rtol=1e-6, atol=1e-7), (
+    "STOP: validation feature values or order do not match."
+)
+
+print("\n" + "=" * 60)
+print("2. ROW AND LABEL ALIGNMENT")
+print("=" * 60)
+
+y = np.asarray(y_val_v3, dtype=int)
+df_y = val_v3["target"].to_numpy(dtype=int)
+
+print("Validation rows:", len(val_v3))
+print("Feature/label lengths agree:",
+      len(X_val_v3) == len(y) == len(val_v3))
+print("Labels match validation DataFrame:",
+      np.array_equal(y, df_y))
+
+assert np.array_equal(y, df_y), (
+    "STOP: y_val_v3 and val_v3 target rows do not agree."
+)
+
+print("\n" + "=" * 60)
+print("3. REBUILD LABELS FROM SIX-HOUR RETURNS")
+print("=" * 60)
+
+returns = val_v3["target_return"].to_numpy(dtype=float)
+
+assert np.isfinite(returns).all(), "STOP: non-finite target returns."
+
+# Class 0: return below -0.30%
+# Class 1: return between -0.30% and +0.30%, inclusive
+# Class 2: return above +0.30%
+rebuilt_y = np.select(
+    [returns < -0.003, returns > 0.003],
+    [0, 2],
+    default=1
+).astype(int)
+
+matches = rebuilt_y == y
+
+print("Labels rebuilt from returns match:", bool(matches.all()))
+print("Mismatched labels:", int((~matches).sum()))
+
+if not matches.all():
+    print("First mismatches:")
+    display(val_v3.loc[
+        ~matches, ["target_return", "target"]
+    ].head(10))
+
+print("\n" + "=" * 60)
+print("4. SUMMARY")
+print("=" * 60)
+
+if matches.all():
+    print("PASS: features, rows, and return-derived labels agree.")
+    print("This does not prove there is no temporal leakage.")
+else:
+    print("STOP: investigate target construction before further training.")
+
+print("No model weights changed.")
+print("No test-set performance inspected.")
+
+------------------------------------------------------------------------
+CELL: 49 | MATCHES: target_return, entry_open_next, exit_close_6h_after_entry, entry_time, exit_time
+------------------------------------------------------------------------
+# KITTY V3 — STEP 28: TEMPORAL AND TRADE-TARGET AUDIT
+# Read-only: does not train, modify weights, or inspect test performance.
+
+import numpy as np
+import pandas as pd
+
+assert "val_v3" in globals()
+assert "df_clean" in globals()
+
+bars = df_clean.sort_index().copy()
+v = val_v3.sort_index().copy()
+
+assert bars.index.is_unique
+assert v.index.is_unique
+
+required = [
+    "entry_time", "exit_time",
+    "entry_open_next", "exit_close_6h_after_entry",
+    "target_return", "target", "segment"
+]
+missing = [c for c in required if c not in v.columns]
+assert not missing, f"Missing required columns: {missing}"
+
+# Map each signal timestamp into the original candle history.
+positions = bars.index.get_indexer(v.index)
+
+print("=" * 60)
+print("1. SIGNAL AND CANDLE ALIGNMENT")
+print("=" * 60)
+
+print("Validation examples:", len(v))
+print("Signals found in candle history:", int((positions >= 0).sum()))
+print("Signals missing from candle history:", int((positions < 0).sum()))
+
+assert (positions >= 0).all(), (
+    "STOP: some validation timestamps are absent from df_clean."
+)
+
+signal_before_entry = []
+entry_matches_next_candle = []
+exit_matches_six_hours_later = []
+continuous_window = []
+same_segment = []
+entry_price_matches = []
+exit_price_matches = []
+return_matches = []
+
+for timestamp, row, pos in zip(v.index, v.itertuples(), positions):
+    # Expected entry is the next candle.
+    entry_pos = pos + 1
+    exit_pos = pos + 7  # entry candle + six hours
+
+    enough_bars = exit_pos < len(bars)
+
+    signal_before_entry.append(
+        pd.Timestamp(timestamp) < pd.Timestamp(row.entry_time)
+    )
+
+    if not enough_bars:
+        entry_matches_next_candle.append(False)
+        exit_matches_six_hours_later.append(False)
+        continuous_window.append(False)
+        same_segment.append(False)
+        entry_price_matches.append(False)
+        exit_price_matches.append(False)
+        return_matches.append(False)
+        continue
+
+    expected_entry_time = bars.index[entry_pos]
+    expected_exit_time = bars.index[exit_pos]
+
+    entry_matches_next_candle.append(
+        pd.Timestamp(row.entry_time) == expected_entry_time
+    )
+    exit_matches_six_hours_later.append(
+        pd.Timestamp(row.exit_time) == expected_exit_time
+    )
+
+    window = bars.iloc[pos:exit_pos + 1]
+    diffs = window.index.to_series().diff().dropna()
+
+    continuous_window.append(
+        len(window) == 8
+        and (diffs == pd.Timedelta(hours=1)).all()
+    )
+
+    same_segment.append(
+        window["segment"].nunique() == 1
+    )
+
+    actual_entry = float(bars.iloc[entry_pos]["Open"])
+    actual_exit = float(bars.iloc[exit_pos]["Close"])
+
+    entry_price_matches.append(
+        np.isclose(actual_entry, float(row.entry_open_next),
+                   rtol=1e-6, atol=1e-5)
+    )
+    exit_price_matches.append(
+        np.isclose(actual_exit, float(row.exit_close_6h_after_entry),
+                   rtol=1e-6, atol=1e-5)
+    )
+
+    calculated_return = actual_exit / actual_entry - 1.0
+    return_matches.append(
+        np.isclose(calculated_return, float(row.target_return),
+                   rtol=1e-5, atol=1e-7)
+    )
+
+checks = {
+    "Signal timestamp precedes entry": signal_before_entry,
+    "Entry equals next candle open time": entry_matches_next_candle,
+    "Exit equals entry + six hours": exit_matches_six_hours_later,
+    "Signal-to-exit window has hourly candles": continuous_window,
+    "Window stays within one segment": same_segment,
+    "Stored entry price matches candle open": entry_price_matches,
+    "Stored exit price matches candle close": exit_price_matches,
+    "Target return matches entry/exit prices": return_matches,
+}
+
+print("\n" + "=" * 60)
+print("2. CHECK RESULTS")
+print("=" * 60)
+
+for name, outcomes in checks.items():
+    passed = int(np.sum(outcomes))
+    total = len(outcomes)
+    print(f"{name}: {passed}/{total} passed")
+
+failed = {
+    name: int(np.sum(~np.asarray(outcomes, dtype=bool)))
+    for name, outcomes in checks.items()
+    if not np.all(outcomes)
+}
+
+print("\nOverall timing/target audit:",
+      "PASS" if not failed else "FAIL")
+
+if failed:
+    print("Failures:", failed)
+    print("STOP: investigate failed checks before training.")
+else:
+    print("All checked validation examples are temporally aligned.")
+
+print("\nNo model weights changed.")
+print("No test-set metrics were calculated.")
+print("Note: this does not independently prove every feature formula is causal.")
+
+------------------------------------------------------------------------
+CELL: 51 | MATCHES: kitty_targets, target_return, entry_open_next, exit_close_6h_after_entry, entry_time, exit_time
+------------------------------------------------------------------------
+# KITTY V3 — STEP 30: AUDIT TARGET CONSTRUCTION AND SPLIT BOUNDARIES
+# Read-only. Does not modify weights, data, or model files.
+
+import pandas as pd
+
+print("=" * 72)
+print("PART A — FIND THE V3 TARGET-CONSTRUCTION CODE")
+print("=" * 72)
+
+try:
+    history = list(In)
+except NameError:
+    history = []
+
+keywords = [
+    "kitty_targets", "target_return", "entry_open_next",
+    "exit_close_6h_after_entry", "entry_time", "exit_time"
+]
+
+found = []
+for cell_number, source in enumerate(history):
+    if not isinstance(source, str):
+        continue
+    hits = [word for word in keywords if word in source]
+    if hits and any(
+        word in source for word in
+        ["kitty_targets", "target_return", "entry_open_next",
+         "exit_close_6h_after_entry"]
+    ):
+        found.append((cell_number, hits, source))
+
+print("Matching cells:", len(found))
+for cell_number, hits, source in found[-8:]:
+    print("\n" + "-" * 72)
+    print("CELL:", cell_number, "| MATCHES:", ", ".join(hits))
+    print("-" * 72)
+    print(source[:7000])
+    if len(source) > 7000:
+        print("[Cell output truncated]")
+
+print("\n" + "=" * 72)
+print("PART B — CHECK ACTUAL SPLIT BOUNDARIES")
+print("=" * 72)
+
+required = ["train_v3", "val_v3", "test_v3"]
+missing = [name for name in required if name not in globals()]
+
+if missing:
+    print("Cannot check boundaries; missing:", missing)
+else:
+    splits = [
+        ("TRAIN", train_v3),
+        ("VALIDATION", val_v3),
+        ("TEST", test_v3),
+    ]
+
+    for name, frame in splits:
+        print(f"\n{name}: {len(frame)} rows")
+        print("First signal:", frame.index.min())
+        print("Last signal: ", frame.index.max())
+
+        needed = ["entry_time", "exit_time"]
+        if all(col in frame.columns for col in needed):
+            print("First entry:", frame["entry_time"].min())
+            print("Last exit: ", frame["exit_time"].max())
+        else:
+            print("Entry/exit timestamps not both present.")
+
+    if all(
+        all(col in frame.columns for col in ["entry_time", "exit_time"])
+        for _, frame in splits
+    ):
+        train_last_exit = pd.to_datetime(train_v3["exit_time"]).max()
+        val_first_signal = pd.to_datetime(val_v3.index).min()
+        val_last_exit = pd.to_datetime(val_v3["exit_time"]).max()
+        test_first_signal = pd.to_datetime(test_v3.index).min()
+
+        print("\nTRAIN → VALIDATION")
+        print("Last training exit:", train_last_exit)
+        print("First validation signal:", val_first_signal)
+        print("Training exit before validation signal:",
+              train_last_exit < val_first_signal)
+
+        print("\nVALIDATION → TEST")
+        print("Last validation exit:", val_last_exit)
+        print("First test signal:", test_first_signal)
+        print("Validation exit before test signal:",
+              val_last_exit < test_first_signal)
+
+print("\nAudit only. No model training or test-performance evaluation.")
+
+========================================================================
+PART B — CHECK ACTUAL SPLIT BOUNDARIES
+========================================================================
+
+TRAIN: 12038 rows
+First signal: 2024-10-15 17:00:00+00:00
+Last signal:  2026-03-09 14:00:00+00:00
+First entry: 2024-10-15 18:00:00+00:00
+Last exit:  2026-03-09 21:00:00+00:00
+
+VALIDATION: 2575 rows
+First signal: 2026-03-09 21:00:00+00:00
+Last signal:  2026-06-27 12:00:00+00:00
+First entry: 2026-03-09 22:00:00+00:00
+Last exit:  2026-06-27 19:00:00+00:00
+
+TEST: 2582 rows
+First signal: 2026-06-27 19:00:00+00:00
+Last signal:  2026-10-13 08:00:00+00:00
+First entry: 2026-06-27 20:00:00+00:00
+Last exit:  2026-10-13 15:00:00+00:00
+
+TRAIN → VALIDATION
+Last training exit: 2026-03-09 21:00:00+00:00
+First validation signal: 2026-03-09 21:00:00+00:00
+Training exit before validation signal: False
+
+VALIDATION → TEST
+Last validation exit: 2026-06-27 19:00:00+00:00
+First test signal: 2026-06-27 19:00:00+00:00
+Validation exit before test signal: False
+
+Audit only. No model training or test-performance evaluation.
+
+[52]
+0s
+
+# KITTY V3 — EXPORT TRAINED MODEL FOR KING ZARRY AI
+# Exports artifacts only. Does not retrain or modify the learned weights.
+
+import os
+import json
+import zipfile
+import torch
+import joblib
+from google.colab import files
+
+FEATURES_V3 = [
+    "ret_1h", "ret_3h", "ret_6h", "ret_12h", "ret_24h",
+    "close_vs_sma6", "close_vs_sma20", "close_vs_sma50",
+    "sma6_vs_sma20", "rsi_14",
+    "macd_norm", "macd_signal_norm", "macd_hist_norm",
+    "volatility_6h", "volatility_24h",
+    "range_pct", "body_pct", "close_position"
+]
+
+assert "model_v3" in globals(), "STOP: model_v3 is missing."
+assert "scaler_v3" in globals(), "STOP: scaler_v3 is missing."
+assert hasattr(scaler_v3, "transform"), "STOP: scaler_v3 is invalid."
+assert getattr(scaler_v3, "n_features_in_", None) == 18, (
+    "STOP: scaler_v3 does not report 18 fitted features."
+)
+
+state_dict = {
+    name: tensor.detach().cpu()
+    for name, tensor in model_v3.state_dict().items()
+}
+
+# Confirm the output layer has three classes.
+output_shapes = {
+    name: list(tensor.shape)
+    for name, tensor in state_dict.items()
+    if tensor.ndim == 2 and tensor.shape[0] == 3
+}
+assert output_shapes, (
+    "STOP: could not confirm a three-class output layer. "
+    "Inspect model_v3 before exporting."
+)
+
+os.makedirs("/content/kitty_v3_export", exist_ok=True)
+out = "/content/kitty_v3_export"
+
+torch.save(state_dict, f"{out}/kitty_v3_state_dict.pt")
+joblib.dump(scaler_v3, f"{out}/scaler_v3.joblib")
+
+metadata = {
+    "model_name": "Kitty V3 BTC",
+    "model_type": type(model_v3).__name__,
+    "framework": "PyTorch",
+    "architecture_expected": [18, 64, 32, 3],
+    "num_features": 18,
+    "feature_order": FEATURES_V3,
+    "class_mapping": {
+        "0": "SHORT",
+        "1": "NO_TRADE",
+        "2": "LONG"
+    },
+    "move_threshold": 0.003,
+    "forecast_horizon_hours": 6,
+    "scaler_type": type(scaler_v3).__name__,
+    "state_dict_shapes": {
+        name: list(tensor.shape)
+        for name, tensor in state_dict.items()
+    },
+    "target_execution_alignment_verified": False,
+    "split_boundary_audit_passed": False,
+    "trading_mode": "paper_only",
+    "automatic_order_execution_enabled": False
+}
+
+with open(f"{out}/metadata.json", "w") as f:
+    json.dump(metadata, f, indent=2)
+
+with zipfile.ZipFile(
+    "/content/kitty_v3_demo_package.zip", "w",
+    compression=zipfile.ZIP_DEFLATED
+) as archive:
+    for filename in [
+        "kitty_v3_state_dict.pt",
+        "scaler_v3.joblib",
+        "metadata.json"
+    ]:
+        archive.write(f"{out}/{filename}", arcname=filename)
+
+print("Export complete.")
+print("Model class:", type(model_v3).__name__)
+print("Scaler:", type(scaler_v3).__name__)
+print("Feature count:", len(FEATURES_V3))
+print("Output-layer candidates:", output_shapes)
+print("State dict keys:", list(state_dict.keys()))
+print("Metadata records unresolved validation checks.")
+print("No weights changed and no retraining performed.")
+
+files.download("/content/kitty_v3_demo_package.zip")
+
+
+
+[53]
+0s
+
+from google.colab import files
+import os
+
+# Find the files in your Colab session
+search_dirs = ["/content", "/content/drive/MyDrive"]
+
+filenames = [
+    "kitty_v3_state_dict.pt",
+    "scaler_v3.joblib",
+    "metadata.json"
+]
+
+for filename in filenames:
+    matches = []
+
+    for base_dir in search_dirs:
+        if os.path.exists(base_dir):
+            for root, dirs, files_list in os.walk(base_dir):
+                # Avoid scanning common unnecessary folders
+                dirs[:] = [
+                    d for d in dirs
+                    if d not in [".git", "node_modules", ".cache"]
+                ]
+
+                if filename in files_list:
+                    matches.append(os.path.join(root, filename))
+
+    if matches:
+        path = matches[0]
+        print(f"Downloading: {filename}")
+        files.download(path)
+    else:
+        print(f"NOT FOUND: {filename}")
+        print("Check that the model training and saving cells ran.")
+
+
+
+[54]
+0s
+
+# KITTY V3 — SPLIT BOUNDARY AUDIT EXPORT
+# Run AFTER creating your actual training, validation, and test data.
+# This cell does not train or modify the model.
+
+import pandas as pd
+import numpy as np
+from pathlib import Path
+
+# -------------------------------------------------------
+# 1. CONFIGURE THESE VARIABLES to match your notebook.
+# -------------------------------------------------------
+# Replace these example variable names with the exact
+# DataFrame variables used by your existing training code.
+#
+# Each DataFrame must contain the actual rows used for
+# that split, not a newly reconstructed dataset.
+
+SPLITS = {
+    "train": train_df,
+    "validation": val_df,
+    "test": test_df,
+}
+
+# IMPORTANT:
+# Set these to the real column names in your DataFrames.
+# Do not create fake timestamps to make the audit pass.
+SIGNAL_TIME_COL = "signal_time"
+ENTRY_TIME_COL = "entry_time"
+EXIT_TIME_COL = "exit_time"
+TARGET_COL = "target"
+
+# If the notebook uses a segment identifier, enter its
+# column name here. Otherwise leave as None.
+SEGMENT_COL = None  # Example: "segment_id"
+
+# -------------------------------------------------------
+# 2. EXPORT ACTUAL ROWS
+# -------------------------------------------------------
+exported = []
+
+for split_name, df in SPLITS.items():
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError(
+            f"{split_name} is not a pandas DataFrame. "
+            "Set SPLITS to the actual DataFrames used for training."
+        )
+
+    required = [
+        SIGNAL_TIME_COL,
+        ENTRY_TIME_COL,
+        EXIT_TIME_COL,
+        TARGET_COL,
+    ]
+    missing = [c for c in required if c not in df.columns]
+
+    if missing:
+        raise KeyError(
+            f"{split_name} is missing {missing}. "
+            f"Available columns: {list(df.columns)}"
+        )
+
+    part = pd.DataFrame({
+        "split": split_name,
+        "signal_time": df[SIGNAL_TIME_COL].values,
+        "entry_time": df[ENTRY_TIME_COL].values,
+        "exit_time": df[EXIT_TIME_COL].values,
+        "target": df[TARGET_COL].values,
+    })
+
+    if SEGMENT_COL is not None:
+        if SEGMENT_COL not in df.columns:
+            raise KeyError(
+                f"Segment column {SEGMENT_COL!r} is missing from {split_name}"
+            )
+        part["signal_segment"] = df[SEGMENT_COL].values
+
+    exported.append(part)
+
+audit_df = pd.concat(exported, ignore_index=True)
+
+# Preserve timestamps as UTC when possible.
+for col in ["signal_time", "entry_time", "exit_time"]:
+    audit_df[col] = pd.to_datetime(
+        audit_df[col], utc=True, errors="coerce"
+    )
+
+# -------------------------------------------------------
+# 3. BASIC VALIDATION
+# -------------------------------------------------------
+assert not audit_df.empty, "No rows were exported."
+
+for col in ["signal_time", "entry_time", "exit_time"]:
+    bad = audit_df[col].isna()
+    if bad.any():
+        raise ValueError(
+            f"{bad.sum()} rows have invalid {col}. "
+            "Check the source timestamp columns."
+        )
+
+assert audit_df["target"].notna().all(), "Missing target labels."
+
+bad_classes = sorted(
+    set(pd.to_numeric(audit_df["target"], errors="coerce").dropna())
+    - {0, 1, 2}
+)
+if bad_classes:
+    raise ValueError(f"Unexpected target class IDs: {bad_classes}")
+
+# -------------------------------------------------------
+# 4. CHECK LABEL TIMING
+# -------------------------------------------------------
+bad_entry = audit_df["entry_time"] <= audit_df["signal_time"]
+bad_exit = audit_df["exit_time"] <= audit_df["entry_time"]
+
+print("Rows exported:", len(audit_df))
+print("\nRows per split:")
+print(audit_df.groupby("split").size())
+
+print("\nTarget counts per split:")
+print(pd.crosstab(audit_df["split"], audit_df["target"]))
+
+print("\nTiming checks:")
+print("Entry not after signal:", int(bad_entry.sum()))
+print("Exit not after entry:", int(bad_exit.sum()))
+
+if bad_entry.any() or bad_exit.any():
+    print("\nWARNING: timing checks failed. Inspect these rows:")
+    display(
+        audit_df.loc[bad_entry | bad_exit].head(30)
+    )
+
+# -------------------------------------------------------
+# 5. CHECK SPLIT BOUNDARIES
+# A previous split's label must exit BEFORE the next
+# split begins. Equality is rejected as well.
+# -------------------------------------------------------
+split_order = ["train", "validation", "test"]
+first_times = {}
+
+for split_name in split_order:
+    part = audit_df[audit_df["split"] == split_name]
+    if not part.empty:
+        first_times[split_name] = part["signal_time"].min()
+
+print("\nSplit start timestamps (UTC):")
+for name, ts in first_times.items():
+    print(f"{name:12s}: {ts}")
+
+boundary_errors = []
+
+present = [s for s in split_order if s in first_times]
+
+for previous, following in zip(present, present[1:]):
+    boundary = first_times[following]
+    prior_rows = audit_df[audit_df["split"] == previous]
+
+    leaking = prior_rows[prior_rows["exit_time"] >= boundary]
+
+    print(
+        f"\n{previous} → {following}: "
+        f"{len(leaking)} prior labels exit at/after "
+        f"{boundary}"
+    )
+
+    if not leaking.empty:
+        boundary_errors.append((previous, following, leaking))
+
+        print("Example boundary rows:")
+        display(leaking.tail(10))
+
+# -------------------------------------------------------
+# 6. SAVE EXPORT FOR AUDIT
+# -------------------------------------------------------
+output_path = Path("/content/kitty_v3_split_audit.csv")
+audit_df.to_csv(output_path, index=False)
+
+print("\nExport saved:", output_path)
+
+if bad_entry.any() or bad_exit.any() or boundary_errors:
+    print(
+        "\nAUDIT RESULT: FAIL — do not enable predictions. "
+        "Inspect the timestamp and split-boundary issues."
+    )
+else:
+    print(
+        "\nBASIC TIMING RESULT: PASS. "
+        "This does not yet prove that targets match candle prices, "
+        "that features are leakage-free, or that the strategy is profitable."
+    )
+
+from google.colab import files
+files.download(str(output_path))
+
+
+Next steps:
+
+[55]
+0s
+        # Show only a few rows from likely source datasets
+        if any(word in name.lower() for word in [
+            "raw", "candle", "ohlc", "btc", "data", "full", "merged", "df"
+        ]):
+            display(obj.head(2))
+
+
+
+[56]
+1s
+else:
+    print(
+        "\nAUDIT RESULT: PASS for timestamp ordering, split boundaries, "
+        "and segment containment."
+    )
+    print("Review these results before changing any deployment metadata.")
+
+=== SPLIT SUMMARY ===
+
+train: 12,038 rows
+First signal: 2024-10-15 17:00:00+00:00
+Last signal:  2026-03-09 14:00:00+00:00
+Last label exit: 2026-03-09 21:00:00+00:00
+
+validation: 2,575 rows
+First signal: 2026-03-09 21:00:00+00:00
+Last signal:  2026-06-27 12:00:00+00:00
+Last label exit: 2026-06-27 19:00:00+00:00
+
+test: 2,582 rows
+First signal: 2026-06-27 19:00:00+00:00
+Last signal:  2026-10-13 08:00:00+00:00
+Last label exit: 2026-10-13 15:00:00+00:00
+
+train -> validation
+Last earlier exit: 2026-03-09 21:00:00+00:00
+First later signal: 2026-03-09 21:00:00+00:00
+Boundary PASS: False
+
+validation -> test
+Last earlier exit: 2026-06-27 19:00:00+00:00
+First later signal: 2026-06-27 19:00:00+00:00
+Boundary PASS: False
+
+=== SEGMENT CHECK ===
+Segment-crossing rows: 0
+
+Audit CSV saved to: /content/kitty_v3_split_audit.csv
+
+AUDIT RESULT: FAIL — do not enable the safety flags.
+
+[57]
+0s
+
+import pandas as pd
+
+# Keep the original splits so we can compare before and after.
+train_v3_original = train_v3.copy()
+val_v3_original = val_v3.copy()
+test_v3_original = test_v3.copy()
+
+def get_signal_times(df):
+    """Use an explicit signal-time column, or the datetime index."""
+    for col in ("signal_time", "signal_timestamp", "timestamp", "datetime"):
+        if col in df.columns:
+            return pd.to_datetime(df[col], utc=True, errors="raise")
+
+    if isinstance(df.index, pd.DatetimeIndex):
+        return pd.Series(
+            pd.to_datetime(df.index, utc=True),
+            index=df.index
+        )
+
+    raise ValueError(
+        "Cannot identify signal times. Expected a signal-time column "
+        "or a DatetimeIndex. Do not continue until this is resolved."
+    )
+
+def utc_times(series):
+    return pd.to_datetime(series, utc=True, errors="raise")
+
+# Check required columns before making any changes.
+required = {"entry_time", "exit_time", "segment", "target"}
+for name, df in [
+    ("train", train_v3_original),
+    ("validation", val_v3_original),
+    ("test", test_v3_original),
+]:
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"{name} is missing required columns: {missing}")
+
+# Work on copies and normalize timestamp handling.
+splits = {
+    "train": train_v3_original.copy(),
+    "validation": val_v3_original.copy(),
+    "test": test_v3_original.copy(),
+}
+
+for name, df in splits.items():
+    df["entry_time"] = utc_times(df["entry_time"])
+    df["exit_time"] = utc_times(df["exit_time"])
+
+# Capture signal times before filtering.
+signal_times = {
+    name: get_signal_times(df)
+    for name, df in splits.items()
+}
+
+first_val_signal = signal_times["validation"].min()
+first_test_signal = signal_times["test"].min()
+
+# Strict purge: earlier labels must finish BEFORE the next split starts.
+train_mask = splits["train"]["exit_time"] < first_val_signal
+val_mask = splits["validation"]["exit_time"] < first_test_signal
+
+train_v3 = splits["train"].loc[train_mask].copy()
+val_v3 = splits["validation"].loc[val_mask].copy()
+test_v3 = splits["test"].copy()
+
+print("=== PURGE SUMMARY ===")
+print(
+    f"Train:      {len(splits['train']):,} -> {len(train_v3):,} "
+    f"(removed {(~train_mask).sum():,})"
+)
+print(
+    f"Validation: {len(splits['validation']):,} -> {len(val_v3):,} "
+    f"(removed {(~val_mask).sum():,})"
+)
+print(f"Test:       {len(test_v3):,} (unchanged)")
+
+# Recheck split boundaries using the actual signal timestamps.
+train_last_exit = train_v3["exit_time"].max()
+val_first_signal = signal_times["validation"].loc[val_v3.index].min()
+val_last_exit = val_v3["exit_time"].max()
+test_first_signal = signal_times["test"].loc[test_v3.index].min()
+
+print("\n=== BOUNDARY RECHECK ===")
+print("Train last exit:       ", train_last_exit)
+print("Validation first signal:", val_first_signal)
+print("Train -> validation PASS:", train_last_exit < val_first_signal)
+
+print("\nValidation last exit:  ", val_last_exit)
+print("Test first signal:     ", test_first_signal)
+print("Validation -> test PASS:", val_last_exit < test_first_signal)
+
+# Basic data integrity checks.
+assert len(train_v3) > 0 and len(val_v3) > 0 and len(test_v3) > 0
+assert train_last_exit < val_first_signal
+assert val_last_exit < test_first_signal
+
+print("\nBOUNDARY CHECKS PASS.")
+print(
+    "Important: these checks alone do not prove the model is leakage-free. "
+    "Rerun the full segment, target, feature and artifact audits next."
+)
+
+=== PURGE SUMMARY ===
+Train:      12,038 -> 12,037 (removed 1)
+Validation: 2,575 -> 2,574 (removed 1)
+Test:       2,582 (unchanged)
+
+=== BOUNDARY RECHECK ===
+Train last exit:        2026-03-09 20:00:00+00:00
+Validation first signal: 2026-03-09 21:00:00+00:00
+Train -> validation PASS: True
+
+Validation last exit:   2026-06-27 18:00:00+00:00
+Test first signal:      2026-06-27 19:00:00+00:00
+Validation -> test PASS: True
+
+BOUNDARY CHECKS PASS.
+Important: these checks alone do not prove the model is leakage-free. Rerun the full segment, target, feature and artifact audits next.
+
+[58]
+1s
+print("val_v3 columns:", list(val_v3.columns))
+print("test_v3 columns:", list(test_v3.columns))
+
+if "bars" in globals():
+    print("bars shape:", bars.shape)
+    print("bars columns:", list(bars.columns))
+else:
+    print("bars DataFrame is not currently available.")
+
+=== TARGET TIMING CHECKS ===
+Rows exported: 17193
+Invalid timestamps: 0
+Entry not after signal: 0
+Exit not after entry: 0
+Duplicate signal timestamps: 0
+
+=== TARGET CLASS DISTRIBUTION ===
+target         0     1     2
+split                       
+test         744   961   877
+train       4121  3548  4368
+validation   896   796   882
+
+=== SPLIT BOUNDARY CHECKS ===
+train -> validation: first later signal=2026-03-09 21:00:00+00:00, earlier exits reaching/crossing boundary=0
+validation -> test: first later signal=2026-06-27 19:00:00+00:00, earlier exits reaching/crossing boundary=0
+
+Audit CSV saved: /content/kitty_v3_split_audit.csv
+
+=== FEATURE / SOURCE DATA AVAILABILITY ===
+train_v3 columns: ['Close', 'High', 'Low', 'Open', 'Volume', 'segment', 'entry_open_next', 'exit_close_6h_after_entry', 'entry_time', 'exit_time', 'target_return', 'target', 'ret_1h', 'ret_3h', 'ret_6h', 'ret_12h', 'ret_24h', 'close_vs_sma6', 'close_vs_sma20', 'close_vs_sma50', 'sma6_vs_sma20', 'rsi_14', 'macd_norm', 'macd_signal_norm', 'macd_hist_norm', 'volatility_6h', 'volatility_24h', 'range_pct', 'body_pct', 'close_position']
+val_v3 columns: ['Close', 'High', 'Low', 'Open', 'Volume', 'segment', 'entry_open_next', 'exit_close_6h_after_entry', 'entry_time', 'exit_time', 'target_return', 'target', 'ret_1h', 'ret_3h', 'ret_6h', 'ret_12h', 'ret_24h', 'close_vs_sma6', 'close_vs_sma20', 'close_vs_sma50', 'sma6_vs_sma20', 'rsi_14', 'macd_norm', 'macd_signal_norm', 'macd_hist_norm', 'volatility_6h', 'volatility_24h', 'range_pct', 'body_pct', 'close_position']
+test_v3 columns: ['Close', 'High', 'Low', 'Open', 'Volume', 'segment', 'entry_open_next', 'exit_close_6h_after_entry', 'entry_time', 'exit_time', 'target_return', 'target', 'ret_1h', 'ret_3h', 'ret_6h', 'ret_12h', 'ret_24h', 'close_vs_sma6', 'close_vs_sma20', 'close_vs_sma50', 'sma6_vs_sma20', 'rsi_14', 'macd_norm', 'macd_signal_norm', 'macd_hist_norm', 'volatility_6h', 'volatility_24h', 'range_pct', 'body_pct', 'close_position']
+bars shape: (17487, 6)
+bars columns: ['Close', 'High', 'Low', 'Open', 'Volume', 'segment']
+
+[59]
+1s
+}
+
+print("\n=== INTEGRITY GATE ===")
+for name, passed in checks.items():
+    print(("PASS" if passed else "FAIL") + " — " + name)
+print("\nRESULT:", "PASS" if all(checks.values()) else "FAIL — investigate mismatches")
+
+=== SOURCE DATA ===
+Duplicate source timestamps: 0
+Missing source OHLC values: 0
+
+=== CANDLE ALIGNMENT ===
+Signals absent from source candles: 0
+Entry timestamps absent from source candles: 0
+Exit timestamps absent from source candles: 0
+
+=== ENTRY / EXIT PRICE VERIFICATION ===
+Entry prices mismatching source candles: 0
+Exit prices mismatching source candles: 0
+
+=== TARGET VERIFICATION ===
+Target-return mismatches vs source prices: 0
+Target-class mismatches vs ±0.30% rule: 0
+Non-finite saved target returns: 0
+
+=== SOURCE SEGMENT VERIFICATION ===
+Rows with missing source segment: 0
+Rows crossing source segments: 0
+
+=== FEATURE MATRIX CHECK ===
+train: shape=(12037, 18), non-finite feature cells=0
+validation: shape=(2574, 18), non-finite feature cells=0
+test: shape=(2582, 18), non-finite feature cells=0
+
+=== INTEGRITY GATE ===
+PASS — source timestamps unique
+PASS — all signal/entry/exit times exist in source
+PASS — entry prices match source
+PASS — exit prices match source
+PASS — target returns match source prices
+PASS — target classes match threshold
+PASS — source segments do not cross
+
+RESULT: PASS
+
+[60]
+0s
+        print("Feature names found:", ", ".join(hits))
+        print(code[:12000])
+        found += 1
+
+if found == 0:
+    print(
+        "No matching feature-engineering code found in notebook history. "
+        "The features may have been created in a function or imported module."
+    )
+
+
+========================= NOTEBOOK CELL 11 =========================
+Feature names found: ret_1h, ret_3h, ret_6h, ret_12h, ret_24h, close_vs_sma6, close_vs_sma20, close_vs_sma50, sma6_vs_sma20, rsi_14, macd_norm, macd_signal_norm, macd_hist_norm, volatility_6h, volatility_24h, range_pct, body_pct, close_position
+# KITTY — STEP 3: FEATURE ENGINEERING + COST-AWARE LABELS
+# Experimental dataset only. No training, no broker connection, no model overwrite.
+
+import numpy as np
+import pandas as pd
+
+assert "df_clean" in globals(), "Run the data-cleaning cell first."
+
+HORIZON = 6
+MOVE_THRESHOLD = 0.003  # Illustrative 0.30%; calibrate to actual trading costs later.
+
+data = df_clean.copy().sort_index()
+parts = []
+
+def make_features(g):
+    g = g.copy()
+
+    close = g["Close"].astype(float)
+    high = g["High"].astype(float)
+    low = g["Low"].astype(float)
+    open_ = g["Open"].astype(float)
+
+    # Returns and momentum
+    g["ret_1h"] = close.pct_change(1)
+    g["ret_3h"] = close.pct_change(3)
+    g["ret_6h"] = close.pct_change(6)
+    g["ret_12h"] = close.pct_change(12)
+    g["ret_24h"] = close.pct_change(24)
+
+    # Trend distances
+    sma_6 = close.rolling(6, min_periods=6).mean()
+    sma_20 = close.rolling(20, min_periods=20).mean()
+    sma_50 = close.rolling(50, min_periods=50).mean()
+
+    g["close_vs_sma6"] = close / sma_6 - 1
+    g["close_vs_sma20"] = close / sma_20 - 1
+    g["close_vs_sma50"] = close / sma_50 - 1
+    g["sma6_vs_sma20"] = sma_6 / sma_20 - 1
+
+    # RSI using rolling average gains/losses
+    delta = close.diff()
+    gain = delta.clip(lower=0).rolling(14, min_periods=14).mean()
+    loss = (-delta.clip(upper=0)).rolling(14, min_periods=14).mean()
+    rs = gain / loss.replace(0, np.nan)
+    g["rsi_14"] = (100 - 100 / (1 + rs)) / 100
+
+    # MACD, normalised by price
+    ema12 = close.ewm(span=12, adjust=False, min_periods=12).mean()
+    ema26 = close.ewm(span=26, adjust=False, min_periods=26).mean()
+    macd = ema12 - ema26
+    signal = macd.ewm(span=9, adjust=False, min_periods=9).mean()
+    g["macd_norm"] = macd / close
+    g["macd_signal_norm"] = signal / close
+    g["macd_hist_norm"] = (macd - signal) / close
+
+    # Volatility and candle shape
+    g["volatility_6h"] = g["ret_1h"].rolling(6, min_periods=6).std()
+    g["volatility_24h"] = g["ret_1h"].rolling(24, min_periods=24).std()
+    g["range_pct"] = (high - low) / close
+    g["body_pct"] = (close - open_) / open_.replace(0, np.nan)
+    g["close_position"] = (
+        (close - low) / (high - low).replace(0, np.nan)
+    )
+
+    # Future return is used ONLY to create the label, never as a feature.
+    future_close = close.shift(-HORIZON)
+    g["future_return_6h"] = future_close / close - 1
+
+    g["target"] = 1  # Default: no-trade zone
+    g.loc[g["future_return_6h"] > MOVE_THRESHOLD, "target"] = 2
+    g.loc[g["future_return_6h"] < -MOVE_THRESHOLD, "target"] = 0
+
+    return g
+
+for segment_id, group in data.groupby("segment", sort=True):
+    parts.append(make_features(group))
+
+featured = pd.concat(parts).sort_index()
+
+feature_cols = [
+    "ret_1h", "ret_3h", "ret_6h", "ret_12h", "ret_24h",
+    "close_vs_sma6", "close_vs_sma20", "close_vs_sma50",
+    "sma6_vs_sma20", "rsi_14",
+    "macd_norm", "macd_signal_norm", "macd_hist_norm",
+    "volatility_6h", "volatility_24h",
+    "range_pct", "body_pct", "close_position"
+]
+
+# Remove warm-up rows, rows with invalid features, and rows without a future label.
+kitty_data = featured[
+    feature_cols + ["target", "future_return_6h", "segment"]
+].replace([np.inf, -np.inf], np.nan).dropna().copy()
+
+kitty_data["target"] = kitty_data["target"].astype(int)
+
+print("FEATURE ENGINEERING REPORT")
+print("Usable examples:", len(kitty_data))
+print("Number of features:", len(feature_cols))
+print("Forecast horizon:", HORIZON, "hours")
+print("Illustrative move threshold:", f"{MOVE_THRESHOLD:.2%}")
+print("First example:", kitty_data.index.min())
+print("Last example:", kitty_data.index.max())
+
+print("\nTarget counts:")
+print(kitty_data["target"].value_counts().sort_index().rename(
+    index={0: "Short candidate", 1: "No-trade zone", 2: "Long candidate"}
+))
+
+print("\nTarget percentages:")
+print((100 * kitty_data["target"].value_counts(normalize=True).sort_index()).round(2))
+
+print("\nFeature columns:")
+print(feature_cols)
+
+print("\nFeature missing values:")
+print(int(kitty_data[feature_cols].isna().sum().sum()))
+
+print("\nFuture return distribution:")
+display(kitty_data["future_return_6h"].describe().to_frame())
+
+print("\nSample:")
+display(kitty_data[feature_cols + ["future_return_6h", "target"]].tail())
+
+========================= NOTEBOOK CELL 12 =========================
+Feature names found: ret_1h, ret_3h, ret_6h, ret_12h, ret_24h, close_vs_sma6, close_vs_sma20, close_vs_sma50, sma6_vs_sma20, rsi_14, macd_norm, macd_signal_norm, macd_hist_norm, volatility_6h, volatility_24h, range_pct, body_pct, close_position
+# KITTY — STEP 4: CHRONOLOGICAL SPLIT
+# Keeps the latest data separate for final evaluation.
+# Does not overwrite any saved model or scaler.
+
+import numpy as np
+import pandas as pd
+
+assert "kitty_data" in globals(), "Run Step 3 first."
+
+HORIZON = 6
+data = kitty_data.sort_index().copy()
+
+# Split chronologically: earliest 70%, next 15%, latest 15%.
+n = len(data)
+train_end = int(n * 0.70)
+val_end = int(n * 0.85)
+
+# Purge six rows before each boundary to reduce overlap between
+# six-hour forward labels across adjacent datasets.
+train_df = data.iloc[:max(0, train_end - HORIZON)].copy()
+val_df = data.iloc[train_end: max(train_end, val_end - HORIZON)].copy()
+test_df = data.iloc[val_end:].copy()
+
+feature_cols = [
+    "ret_1h", "ret_3h", "ret_6h", "ret_12h", "ret_24h",
+    "close_vs_sma6", "close_vs_sma20", "close_vs_sma50",
+    "sma6_vs_sma20", "rsi_14",
+    "macd_norm", "macd_signal_norm", "macd_hist_norm",
+    "volatility_6h", "volatility_24h",
+    "range_pct", "body_pct", "close_position"
+]
+target_col = "target"
+
+for name, part in [
+    ("TRAIN", train_df),
+    ("VALIDATION", val_df),
+    ("TEST — KEEP UNTOUCHED", test_df),
+]:
+    print(f"\n{name}")
+    print("Examples:", len(part))
+    print("From:", part.index.min())
+    print("To:  ", part.index.max())
+    print("Class counts:")
+    print(part[target_col].value_counts().sort_index().rename(
+        index={0: "Short", 1: "No-trade", 2: "Long"}
+    ))
+    print("Class proportions (%):")
+    print((100 * part[target_col].value_counts(normalize=True).sort_index()).round(2))
+
+assert len(train_df) > 0 and len(val_df) > 0 and len(test_df) > 0
+assert train_df.index.max() < val_df.index.min()
+assert val_df.index.max() < test_df.index.min()
+
+print("\nSplit checks passed: chronological order is preserved.")
+print("The test set has not been used for training or model selection.")
+print("\nFeature matrix shapes:")
+print("X_train:", train_df[feature_cols].shape)
+print("X_val:  ", val_df[feature_cols].shape)
+print("X_test: ", test_df[feature_cols].shape)
+
+========================= NOTEBOOK CELL 23 =========================
+Feature names found: ret_1h, ret_3h, ret_6h, ret_12h, ret_24h, close_vs_sma6, close_vs_sma20, close_vs_sma50, sma6_vs_sma20, rsi_14, macd_norm, macd_signal_norm, macd_hist_norm, volatility_6h, volatility_24h, range_pct, body_pct, close_position
+# KITTY RETRAIN — STEP 2: CAUSAL FEATURES
+import numpy as np
+import pandas as pd
+
+assert "kitty_targets" in globals()
+assert len(kitty_targets) > 0
+
+feature_data = kitty_targets.copy()
+feature_groups = feature_data.groupby("segment", sort=False)
+
+def grouped_rolling(column, window, operation):
+    grouped = feature_data.groupby("segment", sort=False)[column]
+    rolling = grouped.rolling(window, min_periods=window)
+    result = getattr(rolling, operation)()
+    return result.reset_index(level=0, drop=True).reindex(feature_data.index)
+
+# Returns known at the signal candle's close
+for hours in [1, 3, 6, 12, 24]:
+    previous_close = feature_groups["Close"].shift(hours)
+    feature_data[f"ret_{hours}h"] = (
+        feature_data["Close"] / previous_close - 1
+    )
+
+# Relative price and moving-average structure
+for window in [6, 20, 50]:
+    sma = grouped_rolling("Close", window, "mean")
+    feature_data[f"close_vs_sma{window}"] = (
+        feature_data["Close"] / sma - 1
+    )
+
+sma6 = grouped_rolling("Close", 6, "mean")
+sma20 = grouped_rolling("Close", 20, "mean")
+feature_data["sma6_vs_sma20"] = sma6 / sma20 - 1
+
+# RSI(14), calculated independently within each segment
+delta = feature_groups["Close"].diff()
+gain = delta.clip(lower=0)
+loss = -delta.clip(upper=0)
+
+avg_gain = gain.groupby(feature_data["segment"], sort=False).transform(
+    lambda s: s.rolling(14, min_periods=14).mean()
+)
+avg_loss = loss.groupby(feature_data["segment"], sort=False).transform(
+    lambda s: s.rolling(14, min_periods=14).mean()
+)
+rs = avg_gain / avg_loss.replace(0, np.nan)
+feature_data["rsi_14"] = 100 - (100 / (1 + rs))
+feature_data.loc[(avg_loss == 0) & (avg_gain > 0), "rsi_14"] = 100
+feature_data.loc[(avg_loss == 0) & (avg_gain == 0), "rsi_14"] = 50
+
+# MACD family
+ema12 = feature_groups["Close"].transform(
+    lambda s: s.ewm(span=12, adjust=False, min_periods=12).mean()
+)
+ema26 = feature_groups["Close"].transform(
+    lambda s: s.ewm(span=26, adjust=False, min_periods=26).mean()
+)
+macd = ema12 - ema26
+macd_signal = macd.groupby(feature_data["segment"], sort=False).transform(
+    lambda s: s.ewm(span=9, adjust=False, min_periods=9).mean()
+)
+feature_data["macd_norm"] = macd / feature_data["Close"]
+feature_data["macd_signal_norm"] = macd_signal / feature_data["Close"]
+feature_data["macd_hist_norm"] = (macd - macd_signal) / feature_data["Close"]
+
+# Realized volatility of close-to-close returns
+ret1 = feature_data.groupby("segment", sort=False)["Close"].transform(
+    lambda s: s.pct_change()
+)
+feature_data["volatility_6h"] = ret1.groupby(
+    feature_data["segment"], sort=False
+).transform(lambda s: s.rolling(6, min_periods=6).std())
+feature_data["volatility_24h"] = ret1.groupby(
+    feature_data["segment"], sort=False
+).transform(lambda s: s.rolling(24, min_periods=24).std())
+
+# Current candle shape, available after its close
+feature_data["range_pct"] = (
+    feature_data["High"] - feature_data["Low"]
+) / feature_data["Close"]
+feature_data["body_pct"] = (
+    feature_data["Close"] - feature_data["Open"]
+) / feature_data["Open"]
+
+candle_range = feature_data["High"] - feature_data["Low"]
+feature_data["close_position"] = (
+    (feature_data["Close"] - feature_data["Low"])
+    / candle_range.replace(0, np.nan)
+)
+
+feature_cols_v3 = [
+    "ret_1h", "ret_3h", "ret_6h", "ret_12h", "ret_24h",
+    "close_vs_sma6", "close_vs_sma20", "close_vs_sma50",
+    "sma6_vs_sma20", "rsi_14",
+    "macd_norm", "macd_signal_norm", "macd_hist_norm",
+    "volatility_6h", "volatility_24h",
+    "range_pct", "body_pct", "close_position"
+]
+
+assert len(feature_cols_v3) == 18
+assert not any(
+    c in feature_cols_v3
+    for c in ["target", "target_return", "entry_open_next",
+              "exit_close_6h_after_entry", "entry_time", "exit_time"]
+)
+
+# Keep only rows with complete features; labels and execution data stay separate.
+feature_data[feature_cols_v3] = feature_data[feature_cols_v3].replace(
+    [np.inf, -np.inf], np.nan
+)
+kitty_v3_data = feature_data.dropna(subset=feature_cols_v3).copy()
+
+print("Rows with valid labels:", len(feature_data))
+print("Rows with all 18 features:", len(kitty_v3_data))
+print("Rows removed for feature warm-up/invalid values:",
+      len(feature_data) - len(kitty_v3_data))
+print("Feature count:", len(feature_cols_v3))
+print("Missing feature values:",
+      int(kitty_v3_data[feature_cols_v3].isna().sum().sum()))
+print("Infinite feature values:",
+      int(np.isinf(kitty_v3_data[feature_cols_v3].to_numpy()).sum()))
+print("Target counts after feature cleanup:")
+print(kitty_v3_data["target"].value_counts().sort_index())
+print("\nFeature sample:")
+display(kitty_v3_data[feature_cols_v3].describe().round(4))
+print("\nSTEP 2 complete. No model files were changed.")
+
+========================= NOTEBOOK CELL 33 =========================
+Feature names found: volatility_24h
+# KITTY V3 — STEP 12: VALIDATION REGIME AUDIT
+import numpy as np
+import pandas as pd
+
+regime = val_v3.sort_index().copy()
+
+# Actual returns over the defined entry-to-exit horizon.
+regime["actual_return"] = regime["target_return"]
+
+# Volatility proxy from causal features, if available.
+vol_col = "volatility_24h"
+assert vol_col in regime.columns, (
+    f"Expected {vol_col} in validation features. "
+    "Check the feature column names before continuing."
+)
+
+# Divide volatility into low, medium and high groups using
+# validation-only quantiles for diagnostic purposes.
+regime["volatility_regime"] = pd.qcut(
+    regime[vol_col].rank(method="first"),
+    q=3,
+    labels=["Low volatility", "Medium volatility", "High volatility"]
+)
+
+# Show whether the target distribution changes across periods.
+regime["month"] = regime.index.to_period("M").astype(str)
+
+print("VALIDATION TARGET RETURN BY VOLATILITY REGIME")
+display(
+    regime.groupby("volatility_regime", observed=False)
+    .agg(
+        observations=("actual_return", "size"),
+        mean_return_pct=("actual_return", lambda x: 100 * x.mean()),
+        median_return_pct=("actual_return", lambda x: 100 * x.median()),
+        positive_return_pct=("actual_return", lambda x: 100 * (x > 0).mean()),
+        return_std_pct=("actual_return", lambda x: 100 * x.std())
+    ).round(4)
+)
+
+print("\nVALIDATION TARGET RETURN BY MONTH")
+display(
+    regime.groupby("month")
+    .agg(
+        observations=("actual_return", "size"),
+        mean_return_pct=("actual_return", lambda x: 100 * x.mean()),
+        positive_return_pct=("actual_return", lambda x: 100 * (x > 0).mean()),
+        return_std_pct=("actual_return", lambda x: 100 * x.std())
+    ).round(4)
+)
+
+print("\nThis is a diagnostic only. No model retraining, threshold tuning,")
+print("test-set evaluation, or live trading.")
+
+========================= NOTEBOOK CELL 34 =========================
+Feature names found: volatility_24h
+# KITTY V3 — STEP 13: MODEL PERFORMANCE BY VOLATILITY REGIME
+import numpy as np
+import pandas as pd
+from sklearn.metrics import accuracy_score, balanced_accuracy_score
+
+regime_eval = val_v3.sort_index().copy()
+regime_eval["prediction"] = val_pred
+regime_eval["confidence"] = val_conf
+regime_eval["actual_class"] = y_val_v3
+
+# Directional return for Kitty's active signals.
+regime_eval["directional_return"] = np.where(
+    regime_eval["prediction"] == 2,
+    regime_eval["target_return"],
+    np.where(
+        regime_eval["prediction"] == 0,
+        -regime_eval["target_return"],
+        np.nan
+    )
+)
+
+# Use the causal volatility feature and the same validation-only
+# regime boundaries from Step 12.
+volatility = regime_eval["volatility_24h"]
+regime_eval["volatility_regime"] = pd.qcut(
+    volatility.rank(method="first"),
+    q=3,
+    labels=["Low volatility", "Medium volatility", "High volatility"]
+)
+
+rows = []
+for name, group in regime_eval.groupby("volatility_regime", observed=False):
+    active = group[group["prediction"].isin([0, 2])]
+    rows.append({
+        "regime": str(name),
+        "observations": len(group),
+        "accuracy_pct": 100 * accuracy_score(
+            group["actual_class"], group["prediction"]
+        ),
+        "balanced_accuracy_pct": 100 * balanced_accuracy_score(
+            group["actual_class"], group["prediction"]
+        ),
+        "active_signals": len(active),
+        "mean_directional_return_pct": (
+            100 * active["directional_return"].mean()
+            if len(active) else np.nan
+        ),
+        "directional_win_rate_pct": (
+            100 * (active["directional_return"] > 0).mean()
+            if len(active) else np.nan
+        )
+    })
+
+display(pd.DataFrame(rows).round(4))
+
+print("\nValidation-only diagnostic.")
+print("These returns overlap in time and are before costs.")
+print("No threshold selection, test-set evaluation, or live trading.")
+
+========================= NOTEBOOK CELL 35 =========================
+Feature names found: volatility_24h
+# KITTY V3 — STEP 14
+# Non-overlapping validation trades by volatility regime
+# Diagnostic only: do not use for live trading.
+
+import numpy as np
+import pandas as pd
+
+audit = val_v3.sort_index().copy()
+audit["prediction"] = np.asarray(val_pred)
+audit["confidence"] = np.asarray(val_conf)
+
+# Assign each validation observation to a volatility tercile.
+# This is exploratory; do not treat these cutoffs as deployable rules.
+audit["regime"] = pd.qcut(
+    audit["volatility_24h"].rank(method="first"),
+    q=3,
+    labels=["Low", "Medium", "High"]
+)
+
+# Directional gross return: long, short, or no trade.
+audit["gross_return"] = np.where(
+    audit["prediction"] == 2,
+    audit["target_return"],
+    np.where(
+        audit["prediction"] == 0,
+        -audit["target_return"],
+        np.nan
+    )
+)
+
+# Use the actual entry/exit times if present.
+# A new trade is allowed only after the previous trade exits.
+results = []
+
+for regime_name in ["Low", "Medium", "High"]:
+    subset = audit[
+        (audit["regime"] == regime_name)
+        & audit["prediction"].isin([0, 2])
+    ].copy()
+
+    subset = subset.sort_index()
+    selected = []
+    last_exit = None
+
+    for timestamp, row in subset.iterrows():
+        entry_time = row["entry_time"]
+        exit_time = row["exit_time"]
+
+        if last_exit is None or entry_time >= last_exit:
+            selected.append({
+                "entry_time": entry_time,
+                "exit_time": exit_time,
+                "gross_return": float(row["gross_return"])
+            })
+            last_exit = exit_time
+
+    trades = pd.DataFrame(selected)
+
+    for cost_pct in [0.10, 0.20, 0.30]:
+        if trades.empty:
+            net = pd.Series(dtype=float)
+        else:
+            net = trades["gross_return"] - cost_pct / 100
+
+        equity = (1 + net).cumprod() if len(net) else pd.Series(dtype=float)
+
+        if len(equity):
+            drawdown = equity / equity.cummax() - 1
+            compounded_pct = (equity.iloc[-1] - 1) * 100
+            max_dd_pct = drawdown.min() * 100
+            mean_net_pct = net.mean() * 100
+            win_pct = (net > 0).mean() * 100
+        else:
+            compounded_pct = max_dd_pct = mean_net_pct = win_pct = np.nan
+
+        results.append({
+            "regime": regime_name,
+            "cost_pct_per_trade": cost_pct,
+            "trades": len(trades),
+            "mean_net_return_pct": mean_net_pct,
+            "net_win_rate_pct": win_pct,
+            "compounded_return_pct": compounded_pct,
+            "max_drawdown_pct": max_dd_pct
+        })
+
+display(pd.DataFrame(results).round(4))
+
+print("Validation-only diagnostic; costs are assumed per trade.")
+print("Signals are non-overlapping within each regime, not across regimes.")
+print("Regime labels are exploratory and not deployable thresholds.")
+print("Do not connect a live broker.")
+
+========================= NOTEBOOK CELL 48 =========================
+Feature names found: ret_1h, ret_3h, ret_6h, ret_12h, ret_24h, close_vs_sma6, close_vs_sma20, close_vs_sma50, sma6_vs_sma20, rsi_14, macd_norm, macd_signal_norm, macd_hist_norm, volatility_6h, volatility_24h, range_pct, body_pct, close_position
+# KITTY V3 — STEP 27: FEATURE AND TARGET ALIGNMENT AUDIT
+import numpy as np
+import pandas as pd
+
+FEATURES_V3 = [
+    "ret_1h", "ret_3h", "ret_6h", "ret_12h", "ret_24h",
+    "close_vs_sma6", "close_vs_sma20", "close_vs_sma50",
+    "sma6_vs_sma20", "rsi_14", "macd_norm",
+    "macd_signal_norm", "macd_hist_norm",
+    "volatility_6h", "volatility_24h",
+    "range_pct", "body_pct", "close_position"
+]
+
+print("=" * 60)
+print("1. FEATURE ORDER")
+print("=" * 60)
+
+assert list(feature_cols_v3) == FEATURES_V3, (
+    "STOP: feature_cols_v3 differs from the expected feature order."
+)
+
+assert X_val_v3.shape == (len(val_v3), len(FEATURES_V3))
+assert X_train_v3.shape[1] == len(FEATURES_V3)
+assert scaler_v3.n_features_in_ == len(FEATURES_V3)
+
+expected_X = val_v3[FEATURES_V3].to_numpy(dtype=np.float64)
+actual_X = np.asarray(X_val_v3, dtype=np.float64)
+
+print("Feature count:", len(FEATURES_V3))
+print("Validation features match val_v3:",
+      np.allclose(actual_X, expected_X, rtol=1e-6, atol=1e-7))
+
+assert np.allclose(actual_X, expected_X, rtol=1e-6, atol=1e-7), (
+    "STOP: validation feature values or order do not match."
+)
+
+print("\n" + "=" * 60)
+print("2. ROW AND LABEL ALIGNMENT")
+print("=" * 60)
+
+y = np.asarray(y_val_v3, dtype=int)
+df_y = val_v3["target"].to_numpy(dtype=int)
+
+print("Validation rows:", len(val_v3))
+print("Feature/label lengths agree:",
+      len(X_val_v3) == len(y) == len(val_v3))
+print("Labels match validation DataFrame:",
+      np.array_equal(y, df_y))
+
+assert np.array_equal(y, df_y), (
+    "STOP: y_val_v3 and val_v3 target rows do not agree."
+)
+
+print("\n" + "=" * 60)
+print("3. REBUILD LABELS FROM SIX-HOUR RETURNS")
+print("=" * 60)
+
+returns = val_v3["target_return"].to_numpy(dtype=float)
+
+assert np.isfinite(returns).all(), "STOP: non-finite target returns."
+
+# Class 0: return below -0.30%
+# Class 1: return between -0.30% and +0.30%, inclusive
+# Class 2: return above +0.30%
+rebuilt_y = np.select(
+    [returns < -0.003, returns > 0.003],
+    [0, 2],
+    default=1
+).astype(int)
+
+matches = rebuilt_y == y
+
+print("Labels rebuilt from returns match:", bool(matches.all()))
+print("Mismatched labels:", int((~matches).sum()))
+
+if not matches.all():
+    print("First mismatches:")
+    display(val_v3.loc[
+        ~matches, ["target_return", "target"]
+    ].head(10))
+
+print("\n" + "=" * 60)
+print("4. SUMMARY")
+print("=" * 60)
+
+if matches.all():
+    print("PASS: features, rows, and return-derived labels agree.")
+    print("This does not prove there is no temporal leakage.")
+else:
+    print("STOP: investigate target construction before further training.")
+
+print("No model weights changed.")
+print("No test-set performance inspected.")
+
+========================= NOTEBOOK CELL 50 =========================
+Feature names found: ret_1h, ret_3h, ret_6h, ret_12h, ret_24h, close_vs_sma6, close_vs_sma20, close_vs_sma50, sma6_vs_sma20, rsi_14, macd_norm, macd_signal_norm, macd_hist_norm, volatility_6h, volatility_24h, range_pct, body_pct, close_position
+# KITTY V3 — STEP 29: FIND THE ORIGINAL FEATURE-CONSTRUCTION CODE
+# Read-only audit. Does not modify data, weights, or model files.
+
+import re
+
+feature_names = [
+    "ret_1h", "ret_3h", "ret_6h", "ret_12h", "ret_24h",
+    "close_vs_sma6", "close_vs_sma20", "close_vs_sma50",
+    "sma6_vs_sma20", "rsi_14",
+    "macd_norm", "macd_signal_norm", "macd_hist_norm",
+    "volatility_6h", "volatility_24h",
+    "range_pct", "body_pct", "close_position"
+]
+
+# Search the executed notebook history for cells that constructed
+# these features or created the Kitty V3 dataset.
+try:
+    history = list(In)
+except NameError:
+    history = []
+
+keywords = [
+    "close_vs_sma6", "macd_signal_norm", "volatility_24h",
+    "close_position", "future_return_6h", "kitty_v3_data",
+    "feature_cols_v3"
+]
+
+matches = []
+for cell_number, source in enumerate(history):
+    if not isinstance(source, str):
+        continue
+    hits = [word for word in keywords if word in source]
+    if hits:
+        matches.append((cell_number, hits, source))
+
+print("Matching notebook cells:", len(matches))
+for cell_number, hits, source in matches[-12:]:
+    print("\n" + "=" * 72)
+    print("CELL:", cell_number, "| MATCHES:", ", ".join(hits))
+    print("=" * 72)
+    print(source[:9000])
+    if len(source) > 9000:
+        print("\n[Cell output truncated for display]")
+
+print("\nCurrent feature list:")
+print(feature_names)
+
+========================= NOTEBOOK CELL 52 =========================
+Feature names found: ret_1h, ret_3h, ret_6h, ret_12h, ret_24h, close_vs_sma6, close_vs_sma20, close_vs_sma50, sma6_vs_sma20, rsi_14, macd_norm, macd_signal_norm, macd_hist_norm, volatility_6h, volatility_24h, range_pct, body_pct, close_position
+# KITTY V3 — EXPORT TRAINED MODEL FOR KING ZARRY AI
+# Exports artifacts only. Does not retrain or modify the learned weights.
+
+import os
+import json
+import zipfile
+import torch
+import joblib
+from google.colab import files
+
+FEATURES_V3 = [
+    "ret_1h", "ret_3h", "ret_6h", "ret_12h", "ret_24h",
+    "close_vs_sma6", "close_vs_sma20", "close_vs_sma50",
+    "sma6_vs_sma20", "rsi_14",
+    "macd_norm", "macd_signal_norm", "macd_hist_norm",
+    "volatility_6h", "volatility_24h",
+    "range_pct", "body_pct", "close_position"
+]
+
+assert "model_v3" in globals(), "STOP: model_v3 is missing."
+assert "scaler_v3" in globals(), "STOP: scaler_v3 is missing."
+assert hasattr(scaler_v3, "transform"), "STOP: scaler_v3 is invalid."
+assert getattr(scaler_v3, "n_features_in_", None) == 18, (
+    "STOP: scaler_v3 does not report 18 fitted features."
+)
+
+state_dict = {
+    name: tensor.detach().cpu()
+    for name, tensor in model_v3.state_dict().items()
+}
+
+# Confirm the output layer has three classes.
+output_shapes = {
+    name: list(tensor.shape)
+    for name, tensor in state_dict.items()
+    if tensor.ndim == 2 and tensor.shape[0] == 3
+}
+assert output_shapes, (
+    "STOP: could not confirm a three-class output layer. "
+    "Inspect model_v3 before exporting."
+)
+
+os.makedirs("/content/kitty_v3_export", exist_ok=True)
+out = "/content/kitty_v3_export"
+
+torch.save(state_dict, f"{out}/kitty_v3_state_dict.pt")
+joblib.dump(scaler_v3, f"{out}/scaler_v3.joblib")
+
+metadata = {
+    "model_name": "Kitty V3 BTC",
+    "model_type": type(model_v3).__name__,
+    "framework": "PyTorch",
+    "architecture_expected": [18, 64, 32, 3],
+    "num_features": 18,
+    "feature_order": FEATURES_V3,
+    "class_mapping": {
+        "0": "SHORT",
+        "1": "NO_TRADE",
+        "2": "LONG"
+    },
+    "move_threshold": 0.003,
+    "forecast_horizon_hours": 6,
+    "scaler_type": type(scaler_v3).__name__,
+    "state_dict_shapes": {
+        name: list(tensor.shape)
+        for name, tensor in state_dict.items()
+    },
+    "target_execution_alignment_verified": False,
+    "split_boundary_audit_passed": False,
+    "trading_mode": "paper_only",
+    "automatic_order_execution_enabled": False
+}
+
+with open(f"{out}/metadata.json", "w") as f:
+    json.dump(metadata, f, indent=2)
+
+with zipfile.ZipFile(
+    "/content/kitty_v3_demo_package.zip", "w",
+    compression=zipfile.ZIP_DEFLATED
+) as archive:
+    for filename in [
+        "kitty_v3_state_dict.pt",
+        "scaler_v3.joblib",
+        "metadata.json"
+    ]:
+        archive.write(f"{out}/{filename}", arcname=filename)
+
+print("Export complete.")
+print("Model class:", type(model_v3).__name__)
+print("Scaler:", type(scaler_v3).__name__)
+print("Feature count:", len(FEATURES_V3))
+print("Output-layer candidates:", output_shapes)
+print("State dict keys:", list(state_dict.keys()))
+print("Metadata records unresolved validation checks.")
+print("No weights changed and no retraining performed.")
+
+files.download("/content/kitty_v3_demo_package.zip")
+
+========================= NOTEBOOK CELL 59 =========================
+Feature names found: ret_1h, ret_3h, ret_6h, ret_12h, ret_24h, close_vs_sma6, close_vs_sma20, close_vs_sma50, sma6_vs_sma20, rsi_14, macd_norm, macd_signal_norm, macd_hist_norm, volatility_6h, volatility_24h, range_pct, body_pct, close_position
+import numpy as np
+import pandas as pd
+
+FEATURES = [
+    "ret_1h", "ret_3h", "ret_6h", "ret_12h", "ret_24h",
+    "close_vs_sma6", "close_vs_sma20", "close_vs_sma50",
+    "sma6_vs_sma20", "rsi_14", "macd_norm", "macd_signal_norm",
+    "macd_hist_norm", "volatility_6h", "volatility_24h",
+    "range_pct", "body_pct", "close_position"
+]
+THRESHOLD = 0.003
+splits = {
+    "train": train_v3,
+    "validation": val_v3,
+    "test": test_v3,
+}
+
+# Normalize the original candle index.
+source = bars.copy()
+source.index = pd.to_datetime(source.index, utc=True)
+source = source.sort_index()
+
+print("=== SOURCE DATA ===")
+print("Duplicate source timestamps:", int(source.index.duplicated().sum()))
+print("Missing source OHLC values:", int(
+    source[["Open", "High", "Low", "Close"]].isna().any(axis=1).sum()
+))
+
+if source.index.duplicated().any():
+    raise ValueError("Source candles have duplicate timestamps; resolve first.")
+
+# Exact timestamp lookup for original candles.
+source_times = set(source.index)
+all_rows = []
+for split_name, df in splits.items():
+    row = df.copy()
+    row["signal_time"] = pd.to_datetime(row.index, utc=True)
+    row["split"] = split_name
+    all_rows.append(row.reset_index(drop=True))
+data = pd.concat(all_rows, ignore_index=True)
+
+signal_exists = data["signal_time"].isin(source_times)
+entry_exists = pd.to_datetime(data["entry_time"], utc=True).isin(source_times)
+exit_exists = pd.to_datetime(data["exit_time"], utc=True).isin(source_times)
+
+print("\n=== CANDLE ALIGNMENT ===")
+print("Signals absent from source candles:", int((~signal_exists).sum()))
+print("Entry timestamps absent from source candles:", int((~entry_exists).sum()))
+print("Exit timestamps absent from source candles:", int((~exit_exists).sum()))
+
+# Compare saved prices to actual source candles.
+entry_times = pd.to_datetime(data["entry_time"], utc=True)
+exit_times = pd.to_datetime(data["exit_time"], utc=True)
+
+source_entry_open = source["Open"].reindex(pd.DatetimeIndex(entry_times)).to_numpy()
+source_exit_close = source["Close"].reindex(pd.DatetimeIndex(exit_times)).to_numpy()
+
+entry_price = pd.to_numeric(data["entry_open_next"], errors="coerce").to_numpy()
+exit_price = pd.to_numeric(data["exit_close_6h_after_entry"], errors="coerce").to_numpy()
+
+entry_mismatch = ~np.isclose(
+    entry_price, source_entry_open, rtol=1e-7, atol=1e-8, equal_nan=False
+)
+exit_mismatch = ~np.isclose(
+    exit_price, source_exit_close, rtol=1e-7, atol=1e-8, equal_nan=False
+)
+
+print("\n=== ENTRY / EXIT PRICE VERIFICATION ===")
+print("Entry prices mismatching source candles:", int(entry_mismatch.sum()))
+print("Exit prices mismatching source candles:", int(exit_mismatch.sum()))
+
+# Verify the saved target return and class mapping.
+saved_return = pd.to_numeric(data["target_return"], errors="coerce").to_numpy()
+computed_return = source_exit_close / source_entry_open - 1.0
+
+return_mismatch = ~np.isclose(
+    saved_return, computed_return, rtol=1e-5, atol=1e-7, equal_nan=False
+)
+
+expected_target = np.where(
+    computed_return < -THRESHOLD, 0,
+    np.where(computed_return > THRESHOLD, 2, 1)
+)
+actual_target = pd.to_numeric(data["target"], errors="coerce").to_numpy()
+target_mismatch = actual_target != expected_target
+
+print("\n=== TARGET VERIFICATION ===")
+print("Target-return mismatches vs source prices:", int(return_mismatch.sum()))
+print("Target-class mismatches vs ±0.30% rule:", int(target_mismatch.sum()))
+print("Non-finite saved target returns:", int((~np.isfinite(saved_return)).sum()))
+
+# Compare the signal, entry and exit candle segments.
+signal_segments = source["segment"].reindex(
+    pd.DatetimeIndex(data["signal_time"])
+).to_numpy()
+entry_segments = source["segment"].reindex(
+    pd.DatetimeIndex(entry_times)
+).to_numpy()
+exit_segments = source["segment"].reindex(
+    pd.DatetimeIndex(exit_times)
+).to_numpy()
+
+segment_missing = pd.isna(signal_segments) | pd.isna(entry_segments) | pd.isna(exit_segments)
+segment_crossing = (
+    (signal_segments != entry_segments) |
+    (signal_segments != exit_segments)
+)
+
+print("\n=== SOURCE SEGMENT VERIFICATION ===")
+print("Rows with missing source segment:", int(segment_missing.sum()))
+print("Rows crossing source segments:", int(segment_crossing.sum()))
+
+# Verify feature presence, numeric type and finite values.
+print("\n=== FEATURE MATRIX CHECK ===")
+for name, df in splits.items():
+    missing = [f for f in FEATURES if f not in df.columns]
+    if missing:
+        print(f"{name}: missing features {missing}")
+        continue
+
+    matrix = df[FEATURES].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+    print(
+        f"{name}: shape={matrix.shape}, "
+        f"non-finite feature cells={int((~np.isfinite(matrix)).sum())}"
+    )
+
+# Summary gate: this is necessary evidence, not a complete leakage proof.
+checks = {
+    "source timestamps unique": not source.index.duplicated().any(),
+    "all signal/entry/exit times exist in source": (
+        signal_exists.all() and entry_exists.all() and exit_exists.all()
+    ),
+    "entry prices match source": entry_mismatch.sum() == 0,
+    "exit prices match source": exit_mismatch.sum() == 0,
+    "target returns match source prices": return_mismatch.sum() == 0,
+    "target classes match threshold": target_mismatch.sum() == 0,
+    "source segments do not cross": (
+        segment_missing.sum() == 0 and segment_crossing.sum() == 0
+    ),
+}
+
+print("\n=== INTEGRITY GATE ===")
+for name, passed in checks.items():
+    print(("PASS" if passed else "FAIL") + " — " + name)
+print("\nRESULT:", "PASS" if all(checks.values()) else "FAIL — investigate mismatches")
+
+========================= NOTEBOOK CELL 60 =========================
+Feature names found: ret_1h, ret_3h, ret_6h, ret_12h, ret_24h, close_vs_sma6, close_vs_sma20, close_vs_sma50, sma6_vs_sma20, rsi_14, macd_norm, macd_signal_norm, macd_hist_norm, volatility_6h, volatility_24h, range_pct, body_pct, close_position
+# Find the original feature-engineering code in Colab history.
+feature_terms = [
+    "ret_1h", "ret_3h", "ret_6h", "ret_12h", "ret_24h",
+    "close_vs_sma6", "close_vs_sma20", "close_vs_sma50",
+    "sma6_vs_sma20", "rsi_14", "macd_norm",
+    "macd_signal_norm", "macd_hist_norm",
+    "volatility_6h", "volatility_24h",
+    "range_pct", "body_pct", "close_position"
+]
+
+found = 0
+
+for cell_no, code in enumerate(In):
+    if not isinstance(code, str):
+        continue
+
+    hits = [term for term in feature_terms if term in code]
+    if hits:
+        print(f"\n{'='*25} NOTEBOOK CELL {cell_no} {'='*25}")
+        print("Feature names found:", ", ".join(hits))
+        print(code[:12000])
+        found += 1
+
+if found == 0:
+    print(
+        "No matching feature-engineering code found in notebook history. "
+        "The features may have been created in a function or imported module."
+    )
+
+[61]
+0s
+
+
+Next steps:
+
+[62]
+0s
+
+=== KITTY V3 TRAINING ALIGNMENT ===
+train: 12,037 rows
+validation: 2,574 rows
+test: 2,582 rows
+
+=== FEATURE / LABEL ARRAY ALIGNMENT ===
+train: X=12,038, y=12,038, split=12,037
+  Lengths match: False
+validation: X=2,575, y=2,575, split=2,574
+  Lengths match: False
+test: X=2,582, y=2,582, split=2,582
+  Lengths match: True
+
+=== SCALER FIT CHECK ===
+Scaler type: StandardScaler
+Features fitted: 18
+Samples seen: 12038
+Expected training rows: 12037
+
+=== MODEL CHECK ===
+KittyBTCV3(
+  (network): Sequential(
+    (0): Linear(in_features=18, out_features=64, bias=True)
+    (1): ReLU()
+    (2): Dropout(p=0.15, inplace=False)
+    (3): Linear(in_features=64, out_features=32, bias=True)
+    (4): ReLU()
+    (5): Dropout(p=0.1, inplace=False)
+    (6): Linear(in_features=32, out_features=3, bias=True)
+  )
+)
+
+IMPORTANT: Matching lengths and scaler counts are useful checks, but do not by themselves prove the saved weights were trained on the corrected rows.
+
+[63]
+0s
+
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
+
+# Use the exact feature list already defined for Kitty V3.
+assert len(feature_cols_v3) == 18, (
+    f"Expected 18 features, got {len(feature_cols_v3)}"
+)
+
+for name, df in [
+    ("train", train_v3),
+    ("validation", val_v3),
+    ("test", test_v3),
+]:
+    missing = [
+        c for c in [*feature_cols_v3, "target"]
+        if c not in df.columns
+    ]
+    assert not missing, f"{name} is missing columns: {missing}"
+
+    assert df[feature_cols_v3].notna().all().all(), (
+        f"{name} contains missing feature values"
+    )
+    assert np.isfinite(
+        df[feature_cols_v3].to_numpy(dtype=np.float64)
+    ).all(), f"{name} contains non-finite feature values"
+
+    assert set(df["target"].unique()).issubset({0, 1, 2}), (
+        f"{name} has unexpected target classes"
+    )
+
+# Extract features and labels from the corrected DataFrames.
+X_train_raw_v3 = train_v3[feature_cols_v3].to_numpy(
+    dtype=np.float32
+)
+y_train_v3 = train_v3["target"].to_numpy(dtype=np.int64)
+
+X_val_raw_v3 = val_v3[feature_cols_v3].to_numpy(
+    dtype=np.float32
+)
+y_val_v3 = val_v3["target"].to_numpy(dtype=np.int64)
+
+X_test_raw_v3 = test_v3[feature_cols_v3].to_numpy(
+    dtype=np.float32
+)
+y_test_v3 = test_v3["target"].to_numpy(dtype=np.int64)
+
+# Fit ONLY on training features.
+scaler_v3 = StandardScaler()
+X_train_v3 = scaler_v3.fit_transform(
+    X_train_raw_v3
+).astype(np.float32)
+
+X_val_v3 = scaler_v3.transform(
+    X_val_raw_v3
+).astype(np.float32)
+
+X_test_v3 = scaler_v3.transform(
+    X_test_raw_v3
+).astype(np.float32)
+
+# Final alignment gate.
+assert len(X_train_v3) == len(y_train_v3) == len(train_v3)
+assert len(X_val_v3) == len(y_val_v3) == len(val_v3)
+assert len(X_test_v3) == len(y_test_v3) == len(test_v3)
+assert scaler_v3.n_features_in_ == 18
+assert scaler_v3.n_samples_seen_ == len(train_v3)
+
+print("=== CORRECTED ARRAY ALIGNMENT ===")
+print("Train:", X_train_v3.shape, y_train_v3.shape)
+print("Validation:", X_val_v3.shape, y_val_v3.shape)
+print("Test:", X_test_v3.shape, y_test_v3.shape)
+print("Scaler samples:", scaler_v3.n_samples_seen_)
+print("Training classes:", dict(zip(
+    *np.unique(y_train_v3, return_counts=True)
+)))
+print("Validation classes:", dict(zip(
+    *np.unique(y_val_v3, return_counts=True)
+)))
+print("PASS: arrays and scaler now match the corrected splits.")
+
+=== CORRECTED ARRAY ALIGNMENT ===
+Train: (12037, 18) (12037,)
+Validation: (2574, 18) (2574,)
+Test: (2582, 18) (2582,)
+Scaler samples: 12037
+Training classes: {np.int64(0): np.int64(4121), np.int64(1): np.int64(3548), np.int64(2): np.int64(4368)}
+Validation classes: {np.int64(0): np.int64(896), np.int64(1): np.int64(796), np.int64(2): np.int64(882)}
+PASS: arrays and scaler now match the corrected splits.
+
+[64]
+0s
+
+for name in sorted(globals()):
+    if any(term in name.lower() for term in (
+        "optimizer", "criterion", "loss_fn",
+        "train", "epoch", "patience", "best_model"
+    )):
+        obj = globals()[name]
+        if callable(obj):
+            print(name, "-> callable")
+        elif hasattr(obj, "param_groups"):
+            print(name, "-> optimizer:", type(obj).__name__)
+        elif hasattr(obj, "state_dict"):
+            print(name, "-> stateful object:", type(obj).__name__)
+
+criterion -> callable
+optimizer -> optimizer: AdamW
+
+[65]
+0s
+        try:
+            print(f"\n--- {name} ---")
+            print(inspect.getsource(obj)[:8000])
+        except (OSError, TypeError):
+            print(f"{name}: source not available")
+
+=== OPTIMIZER SETTINGS ===
+Type: AdamW
+Parameter groups:
+{'group': 0, 'learning_rate': 0.001, 'weight_decay': 0.0001, 'betas': (0.9, 0.999), 'eps': 1e-08}
+
+=== CRITERION ===
+Object: CrossEntropyLoss()
+Source unavailable; inspect the notebook cell that defines criterion.
+
+=== TRAINING-RELATED FUNCTIONS ===
+
+--- evaluate_loss ---
+def evaluate_loss(loader):
+    model.eval()
+    losses = []
+    with torch.no_grad():
+        for xb, yb in loader:
+            xb, yb = xb.to(device), yb.to(device)
+            logits = model(xb)
+            losses.append(criterion(logits, yb).item() * len(yb))
+    return sum(losses) / len(loader.dataset)
+
+
+--- evaluate_trades ---
+def evaluate_trades(trade_df, cost_per_trade):
+    if len(trade_df) == 0:
+        return None
+
+    net_returns = trade_df["gross_return"].to_numpy() - cost_per_trade
+    equity = np.cumprod(1.0 + net_returns)
+    peak = np.maximum.accumulate(np.concatenate(([1.0], equity)))[1:]
+    drawdown = equity / peak - 1.0
+
+    return {
+        "trades": len(net_returns),
+        "mean_gross_return_pct": 100 * trade_df["gross_return"].mean(),
+        "win_rate_pct": 100 * (trade_df["gross_return"] > 0).mean(),
+        "net_compounded_return_pct": 100 * (equity[-1] - 1.0),
+        "max_drawdown_pct": 100 * drawdown.min(),
+    }
+
+
+[66]
+0s
+    if isinstance(obj, torch.optim.Optimizer):
+        print(name, type(obj).__name__, obj.param_groups)
+
+print("\nTraining loaders:")
+for name in ("train_loader_v3", "val_loader_v3", "test_loader_v3",
+             "train_loader", "val_loader", "test_loader"):
+    if name in globals():
+        print(name, len(globals()[name].dataset))
+Model variables:
+
+model:
+KittyHourlyBTC(
+  (network): Sequential(
+    (0): Linear(in_features=6, out_features=32, bias=True)
+    (1): ReLU()
+    (2): Dropout(p=0.1, inplace=False)
+    (3): Linear(in_features=32, out_features=16, bias=True)
+    (4): ReLU()
+    (5): Dropout(p=0.1, inplace=False)
+    (6): Linear(in_features=16, out_features=1, bias=True)
+  )
+)
+
+criterion:
+CrossEntropyLoss()
+
+model_v2:
+KittyBTCV2(
+  (network): Sequential(
+    (0): Linear(in_features=18, out_features=64, bias=True)
+    (1): ReLU()
+    (2): Dropout(p=0.15, inplace=False)
+    (3): Linear(in_features=64, out_features=32, bias=True)
+    (4): ReLU()
+    (5): Dropout(p=0.1, inplace=False)
+    (6): Linear(in_features=32, out_features=3, bias=True)
+  )
+)
+
+model_v3:
+KittyBTCV3(
+  (network): Sequential(
+    (0): Linear(in_features=18, out_features=64, bias=True)
+    (1): ReLU()
+    (2): Dropout(p=0.15, inplace=False)
+    (3): Linear(in_features=64, out_features=32, bias=True)
+    (4): ReLU()
+    (5): Dropout(p=0.1, inplace=False)
+    (6): Linear(in_features=32, out_features=3, bias=True)
+  )
+)
+
+layer:
+Linear(in_features=32, out_features=3, bias=True)
+
+Optimizers:
+optimizer AdamW [{'params': [Parameter containing:
+tensor([[ 0.1772,  0.1855, -0.0753,  ..., -0.0495,  0.1691,  0.0319],
+        [-0.1396,  0.0290, -0.1791,  ...,  0.0715, -0.1065,  0.0843],
+        [ 0.0415,  0.2287,  0.0991,  ...,  0.0071, -0.1853,  0.1817],
+        ...,
+        [ 0.0882,  0.1273, -0.1935,  ...,  0.1773, -0.0723,  0.0095],
+        [-0.1083,  0.1711,  0.1423,  ...,  0.2542, -0.0670, -0.2758],
+        [ 0.2576, -0.1006,  0.0128,  ...,  0.1062, -0.1692,  0.1983]],
+       requires_grad=True), Parameter containing:
+tensor([ 0.0618,  0.0594, -0.1620,  0.0058,  0.2168,  0.1392, -0.1774,  0.2082,
+        -0.0325,  0.1067,  0.2415,  0.1626, -0.1884,  0.2506, -0.1550,  0.0121,
+        -0.1899, -0.0689,  0.0268, -0.0591, -0.0378,  0.0593,  0.2287,  0.1300,
+         0.1479,  0.0498,  0.1504, -0.0216,  0.0109,  0.0230, -0.1829, -0.2274,
+         0.1195, -0.0483,  0.0036, -0.0836,  0.0890,  0.1706,  0.0051,  0.1887,
+         0.2123, -0.1215, -0.1061, -0.1901, -0.1242, -0.0592, -0.0372, -0.0659,
+        -0.1273, -0.0694, -0.0475,  0.1838, -0.0941, -0.1138,  0.1347, -0.0648,
+         0.1788,  0.1181,  0.2234, -0.1839,  0.1882,  0.2119, -0.0274,  0.2709],
+       requires_grad=True), Parameter containing:
+tensor([[ 0.0662, -0.0019,  0.0345,  ...,  0.0507,  0.0050,  0.0304],
+        [-0.0086, -0.0093, -0.0175,  ..., -0.1202,  0.0519,  0.0299],
+        [ 0.0095, -0.0661, -0.0904,  ..., -0.0726, -0.0628, -0.0087],
+        ...,
+        [-0.0322,  0.0171, -0.0111,  ..., -0.0376, -0.0474, -0.0767],
+        [ 0.0268, -0.0717,  0.0175,  ..., -0.0949,  0.0631, -0.0293],
+        [-0.1189,  0.0392,  0.0010,  ..., -0.0374,  0.0897, -0.1144]],
+       requires_grad=True), Parameter containing:
+tensor([-0.0932, -0.0829, -0.0049,  0.0600, -0.0493,  0.1135, -0.0768,  0.0198,
+        -0.0624,  0.0492, -0.0801, -0.1094, -0.1098,  0.0314, -0.0115,  0.0636,
+        -0.0711,  0.0006, -0.0008,  0.1686,  0.0431,  0.1008,  0.0298,  0.0626,
+         0.0666,  0.0271,  0.0223, -0.0356,  0.0165,  0.0626, -0.0376,  0.0812],
+       requires_grad=True), Parameter containing:
+tensor([[-9.3770e-02,  1.0388e-01, -8.2273e-03, -1.1215e-01, -1.2170e-01,
+         -1.1021e-01,  2.3874e-02, -1.7571e-01, -6.9560e-02,  2.4714e-02,
+         -1.0229e-01,  8.5840e-03, -2.5560e-02,  8.4712e-02,  1.5721e-01,
+         -1.3120e-01,  7.9361e-02,  1.7729e-02, -2.3620e-01, -4.3802e-02,
+          8.8960e-02,  2.7839e-02, -6.2691e-02, -6.3338e-02,  5.3282e-02,
+          2.0580e-02, -1.5901e-01, -4.0721e-02, -8.4892e-02, -1.1407e-01,
+         -6.3828e-02, -1.2721e-01],
+        [ 1.5747e-01, -1.6890e-01,  1.4708e-01, -1.6663e-01,  2.2112e-02,
+         -1.1752e-01, -1.0946e-01,  1.0233e-01,  1.5094e-01, -1.5299e-01,
+         -1.0042e-01,  6.5950e-02, -3.0402e-02, -1.0625e-04,  5.0597e-02,
+         -5.1988e-02, -9.5916e-02,  1.8056e-02,  2.8291e-02, -1.4574e-01,
+         -1.1912e-01, -1.1850e-01,  2.5044e-01,  3.2036e-02,  1.4817e-01,
+          4.6683e-02, -1.9918e-01,  1.5850e-01,  2.6687e-02, -2.8631e-02,
+          1.2115e-01, -1.1423e-01],
+        [ 4.6588e-02, -1.5391e-01,  1.0839e-01,  8.3436e-02, -1.7503e-01,
+          1.2205e-01,  4.0250e-02, -7.9185e-02,  1.2337e-01,  6.4537e-02,
+          6.9750e-02, -5.0032e-02, -9.5176e-02, -8.2094e-02,  7.2051e-02,
+          5.2148e-02, -1.0128e-01,  1.7691e-01,  1.2551e-01, -8.1919e-02,
+          7.5502e-02, -4.2581e-02,  2.2783e-02,  1.3246e-01, -1.9991e-01,
+         -1.0405e-01,  4.9998e-02,  2.0208e-03, -1.7194e-01, -1.0125e-01,
+         -1.3376e-02, -1.7890e-02]], requires_grad=True), Parameter containing:
+tensor([ 0.0652, -0.0317,  0.0618], requires_grad=True)], 'lr': 0.001, 'betas': (0.9, 0.999), 'eps': 1e-08, 'weight_decay': 0.0001, 'amsgrad': False, 'maximize': False, 'foreach': None, 'capturable': False, 'differentiable': False, 'fused': None, 'decoupled_weight_decay': True}]
+
+Training loaders:
+train_loader 12038
+val_loader 2576
+
+[67]
+15s
+print(classification_report(
+    val_true_retrained,
+    val_pred_retrained,
+    labels=[0, 1, 2],
+    target_names=["SHORT", "NO TRADE", "LONG"],
+    zero_division=0,
+))
+print("Test set untouched.")
+print("Production files unchanged.")
+
+Device: cpu
+Epoch 01 | train_loss=1.08689 | val_loss=1.09431 | val_acc=0.3838 | val_bal_acc=0.3866
+Epoch 02 | train_loss=1.07614 | val_loss=1.09098 | val_acc=0.3827 | val_bal_acc=0.3874
+Epoch 03 | train_loss=1.07447 | val_loss=1.08969 | val_acc=0.3842 | val_bal_acc=0.3854
+Epoch 04 | train_loss=1.07036 | val_loss=1.09173 | val_acc=0.3877 | val_bal_acc=0.3904
+Epoch 05 | train_loss=1.07079 | val_loss=1.09062 | val_acc=0.3897 | val_bal_acc=0.3900
+Epoch 06 | train_loss=1.06872 | val_loss=1.09224 | val_acc=0.3823 | val_bal_acc=0.3801
+Epoch 07 | train_loss=1.06808 | val_loss=1.09179 | val_acc=0.3908 | val_bal_acc=0.3906
+Epoch 08 | train_loss=1.06647 | val_loss=1.09310 | val_acc=0.3788 | val_bal_acc=0.3767
+Epoch 09 | train_loss=1.06646 | val_loss=1.08992 | val_acc=0.3838 | val_bal_acc=0.3811
+Epoch 10 | train_loss=1.06537 | val_loss=1.09268 | val_acc=0.3873 | val_bal_acc=0.3890
+Epoch 11 | train_loss=1.06347 | val_loss=1.09379 | val_acc=0.3827 | val_bal_acc=0.3815
+Epoch 12 | train_loss=1.06209 | val_loss=1.09202 | val_acc=0.3784 | val_bal_acc=0.3750
+Epoch 13 | train_loss=1.06303 | val_loss=1.09449 | val_acc=0.3834 | val_bal_acc=0.3795
+Epoch 14 | train_loss=1.06023 | val_loss=1.09529 | val_acc=0.3807 | val_bal_acc=0.3782
+Epoch 15 | train_loss=1.05841 | val_loss=1.09460 | val_acc=0.3761 | val_bal_acc=0.3715
+Early stopping at epoch 15.
+
+=== BEST RETRAINED CHECKPOINT ===
+Best epoch: 3
+Best validation loss: 1.089694
+Validation accuracy: 0.3842
+Validation balanced accuracy: 0.3854
+Class order: 0=SHORT, 1=NO TRADE, 2=LONG
+
+Confusion matrix:
+[[271 225 400]
+ [189 324 283]
+ [240 248 394]]
+
+Classification report:
+              precision    recall  f1-score   support
+
+       SHORT       0.39      0.30      0.34       896
+    NO TRADE       0.41      0.41      0.41       796
+        LONG       0.37      0.45      0.40       882
+
+    accuracy                           0.38      2574
+   macro avg       0.39      0.39      0.38      2574
+weighted avg       0.39      0.38      0.38      2574
+
+Test set untouched.
+Production files unchanged.
