@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "King Zarry AI",
+  "short_name": "King Zarry AI",
+  "description": "Your AI assistant for chat, planning, and approved workflows.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#020914",
+  "theme_color": "#020914",
+  "icons": [
+    {
+      "src": "/icons/kz-ai.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
