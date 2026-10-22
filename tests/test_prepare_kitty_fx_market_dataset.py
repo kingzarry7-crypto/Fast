@@ -63,5 +63,33 @@ class KittyFxDatasetTests(unittest.TestCase):
         self.assertAlmostEqual(frame.iloc[0]["close"], 100.2)
         self.assertIn("query1.finance.yahoo.com", mock_get.call_args.args[0])
 
+    @patch("prepare_kitty_fx_market_dataset.requests.get")
+    def test_drops_the_current_incomplete_yahoo_hour(self, mock_get):
+        now_hour = pd.Timestamp.now(tz="UTC").floor("h")
+        timestamps = [int((now_hour - pd.Timedelta(hours=500 - i)).timestamp()) for i in range(501)]
+        quotes = {
+            "open": [2000.0 + i for i in range(501)],
+            "high": [2001.0 + i for i in range(501)],
+            "low": [1999.0 + i for i in range(501)],
+            "close": [2000.5 + i for i in range(501)],
+            "volume": [0 for _ in range(501)],
+        }
+        response = Mock()
+        response.json.return_value = {"chart": {"result": [{
+            "timestamp": timestamps, "indicators": {"quote": [quotes]}
+        }], "error": None}}
+        response.raise_for_status.return_value = None
+        mock_get.return_value = response
+
+        with patch.dict(os.environ, {"TWELVEDATA_API_KEY": "", "TWELVE_DATA_API_KEY": ""}):
+            frame = builder.fetch_hourly_candles("XAUUSD", outputsize=500)
+
+        self.assertEqual(len(frame), 500)
+        self.assertLess(frame["timestamp"].iloc[-1] + pd.Timedelta(hours=1), now_hour + pd.Timedelta(hours=1))
+        self.assertEqual(
+            frame.attrs.get("data_source"),
+            "Yahoo Finance GC=F gold futures proxy (not XAU/USD spot)",
+        )
+
 if __name__ == "__main__":
     unittest.main()

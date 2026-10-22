@@ -52,9 +52,15 @@ def _fetch_yahoo_hourly_candles(symbol: str, outputsize: int) -> pd.DataFrame:
     volume = quote.get("volume")
     frame["volume"] = pd.to_numeric(volume, errors="coerce") if volume is not None else 0.0
     frame = frame.dropna(subset=["timestamp", "open", "high", "low", "close"])
+    # Do not train on the still-forming hourly candle returned by Yahoo.
+    frame = frame[frame["timestamp"] + pd.Timedelta(hours=1) <= pd.Timestamp.now(tz="UTC")]
     frame = frame.sort_values("timestamp").drop_duplicates("timestamp").tail(outputsize).reset_index(drop=True)
     if len(frame) < 500:
         raise RuntimeError(f"Only {len(frame)} Yahoo Finance hourly candles returned for {symbol}; refusing to train")
+    frame.attrs["data_source"] = (
+        "Yahoo Finance GC=F gold futures proxy (not XAU/USD spot)"
+        if symbol == "XAUUSD" else f"Yahoo Finance {YAHOO_SYMBOLS[symbol]}"
+    )
     return frame[["timestamp", "open", "high", "low", "close", "volume"]]
 
 
@@ -91,6 +97,7 @@ def fetch_hourly_candles(symbol: str, api_key: str | None = None, outputsize: in
     frame = frame.sort_values("timestamp").drop_duplicates("timestamp").reset_index(drop=True)
     if len(frame) < 500:
         raise RuntimeError(f"Only {len(frame)} hourly candles returned for {symbol}; refusing to train")
+    frame.attrs["data_source"] = f"Twelve Data {SYMBOLS[symbol]}"
     return frame[["timestamp", "open", "high", "low", "close", "volume"]]
 
 
@@ -101,13 +108,13 @@ def main() -> None:
     parser.add_argument("--threshold", type=float, default=0.003)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    has_twelve_data_key = bool((os.getenv("TWELVEDATA_API_KEY", "") or os.getenv("TWELVE_DATA_API_KEY", "")).strip())
     candles = fetch_hourly_candles(args.symbol, outputsize=args.limit)
+    data_source = candles.attrs.get("data_source", "unknown historical source")
     dataset = build_dataset(candles, threshold=args.threshold)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     dataset.to_csv(args.output, index=False)
-    print({"symbol": args.symbol, "provider": "Twelve Data" if has_twelve_data_key else "Yahoo Finance",
-           "provider_symbol": SYMBOLS[args.symbol] if has_twelve_data_key else YAHOO_SYMBOLS[args.symbol],
+    print({"symbol": args.symbol, "data_source": data_source,
+           "provider_symbol": SYMBOLS[args.symbol] if data_source.startswith("Twelve Data") else YAHOO_SYMBOLS[args.symbol],
            "rows": len(dataset),
            "class_counts": dataset["target"].value_counts().sort_index().to_dict(),
            "start": str(dataset["timestamp"].iloc[0]), "end": str(dataset["timestamp"].iloc[-1]),
