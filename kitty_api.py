@@ -49,25 +49,11 @@ def _validate_candles(candles, timeframe, symbol):
     if not isinstance(candles, list) or len(candles) < 35:
         raise ValueError(symbol + ': insufficient candles')
     raw = candles[-1].get('datetime') or candles[-1].get('time') or candles[-1].get('timestamp')
-    if isinstance(raw, (int, float)):
-        stamp = datetime.fromtimestamp(raw / (1000 if raw > 10000000000 else 1), tz=timezone.utc)
-    elif isinstance(raw, str):
-        value = raw.strip()
-        # Some market providers encode Unix timestamps as strings. Parse these
-        # before ISO-8601 so gold OHLC feeds do not fail with fromisoformat().
-        try:
-            epoch = float(value)
-            if not isfinite(epoch):
-                raise ValueError("non-finite timestamp")
-            if abs(epoch) > 10000000000:
-                epoch /= 1000.0
-            stamp = datetime.fromtimestamp(epoch, tz=timezone.utc)
-        except (ValueError, OverflowError, OSError):
-            stamp = datetime.fromisoformat(value.replace('Z', '+00:00'))
-            if stamp.tzinfo is None:
-                stamp = stamp.replace(tzinfo=timezone.utc)
-    else:
-        raise ValueError(symbol + ': missing latest candle timestamp')
+    from kitty_features import normalize_candle_timestamp
+    try:
+        stamp = datetime.fromisoformat(normalize_candle_timestamp(raw))
+    except (ValueError, OverflowError, OSError) as exc:
+        raise ValueError(symbol + ': invalid or missing latest candle timestamp') from exc
     age = datetime.now(timezone.utc) - stamp.astimezone(timezone.utc)
     limit = timedelta(days=3) if timeframe == '1d' else timedelta(hours=6)
     if age < timedelta(minutes=-10) or age > limit:
@@ -329,27 +315,11 @@ def _technical_signal(candles, symbol: str, timeframe: str) -> dict:
     target1 = price + direction * 1.5 * atr if direction else None
     target2 = price + direction * 2.5 * atr if direction else None
     raw_time = candles[-1].get("datetime") or candles[-1].get("time") or candles[-1].get("timestamp")
-    if raw_time is None:
-        candle_time = None
-    else:
-        raw_text = str(raw_time).strip()
-        try:
-            # Normalize numeric strings too: some gold OHLC feeds serialize
-            # Unix seconds/milliseconds as text rather than JSON numbers.
-            epoch = float(raw_text)
-            if not isfinite(epoch):
-                raise ValueError("non-finite timestamp")
-            if abs(epoch) > 10000000000:
-                epoch /= 1000.0
-            candle_time = datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat()
-        except (ValueError, OverflowError, OSError):
-            try:
-                parsed_time = datetime.fromisoformat(raw_text.replace("Z", "+00:00"))
-                if parsed_time.tzinfo is None:
-                    parsed_time = parsed_time.replace(tzinfo=timezone.utc)
-                candle_time = parsed_time.astimezone(timezone.utc).isoformat()
-            except ValueError:
-                candle_time = raw_text
+    try:
+        from kitty_features import normalize_candle_timestamp
+        candle_time = normalize_candle_timestamp(raw_time)
+    except (ValueError, OverflowError, OSError):
+        candle_time = str(raw_time) if raw_time is not None else None
     return {
         "symbol": symbol, "timeframe": timeframe, "signal": signal,
         "signal_type": "rule_based_technical_confluence",
