@@ -1,0 +1,55 @@
+name: Kitty V3 artifact contract
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "kitty_v3_state_dict.pt"
+      - "scaler_v3.joblib"
+      - "metadata.json"
+      - "kitty_v3_multiclass.py"
+      - "scripts/audit_kitty_v3_split_boundaries.py"
+      - "tests/test_kitty_v3_multiclass.py"
+      - "tests/test_kitty_v3_split_audit.py"
+      - ".github/workflows/kitty-v3-check.yml"
+  push:
+    branches: [main, "kingzarry7-crypto-patch-1"]
+
+jobs:
+  validate-artifacts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install minimal model dependencies
+        run: python -m pip install --upgrade pip torch scikit-learn joblib pandas
+      - name: Run Kitty V3 contract and split-boundary audit tests
+        run: |
+          python -m unittest discover -s tests -p 'test_kitty_v3_multiclass.py' -v
+          python -m unittest discover -s tests -p 'test_kitty_v3_split_audit.py' -v
+      - name: Load actual weights and scaler
+        run: |
+          python - <<'PY'
+          import json
+          import torch
+          import joblib
+          from pathlib import Path
+          import kitty_v3_multiclass as kitty
+
+          metadata = json.loads(Path("metadata.json").read_text())
+          state = torch.load("kitty_v3_state_dict.pt", map_location="cpu", weights_only=True)
+          scaler = joblib.load("scaler_v3.joblib")
+          expected = metadata["state_dict_shapes"]
+          actual = {key: list(value.shape) for key, value in state.items()}
+          assert actual == expected, f"checkpoint shapes mismatch: {actual}"
+          assert getattr(scaler, "n_features_in_", None) == 18, "scaler must accept 18 features"
+          model, _, _ = kitty._load()
+          assert model.training is False, "model must be in eval mode"
+          status = kitty.status()
+          assert status["available"] is True, status
+          assert status["prediction_enabled"] is False, "audit gates must remain closed until independently verified"
+          print("Artifacts load and match metadata. Prediction remains safely blocked pending audits.")
+          PY
