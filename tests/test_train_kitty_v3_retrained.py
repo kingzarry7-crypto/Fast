@@ -7,6 +7,7 @@ import pandas as pd
 import torch
 
 import train_kitty_v3_retrained as kitty
+import kitty_v3_retrained as inference
 
 
 class KittyTrainingExperimentTests(unittest.TestCase):
@@ -120,6 +121,29 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         holdout = {"trade_count": 12, "average_net_return": 0.001, "compounded_net_return": 0.012}
         self.assertFalse(kitty.should_disable_signals(0.5, holdout))
         self.assertTrue(kitty.should_disable_signals(1.01, holdout))
+
+    def test_inference_gate_blocks_unapproved_checkpoint(self):
+        signal, reason = inference.apply_research_signal_gate(
+            "LONG", 0.9, {"production_ready": False, "recommended_min_confidence": 0.4}
+        )
+        self.assertEqual(signal, "NO TRADE")
+        self.assertEqual(reason, "checkpoint_not_approved_for_production")
+
+    def test_inference_gate_blocks_holdout_with_no_validated_edge(self):
+        checkpoint = {
+            "production_ready": True,
+            "recommended_min_confidence": 0.4,
+            "test_metrics": {"signals_disabled_for_no_validated_edge": True},
+        }
+        signal, reason = inference.apply_research_signal_gate("SHORT", 0.9, checkpoint)
+        self.assertEqual(signal, "NO TRADE")
+        self.assertEqual(reason, "holdout_validation_found_no_positive_net_edge")
+
+    def test_inference_gate_requires_validated_confidence_threshold(self):
+        checkpoint = {"production_ready": True, "recommended_min_confidence": 1.01, "test_metrics": {}}
+        signal, reason = inference.apply_research_signal_gate("LONG", 0.9, checkpoint)
+        self.assertEqual(signal, "NO TRADE")
+        self.assertEqual(reason, "no_validated_confidence_threshold")
 
     def test_architecture_variants_return_three_class_logits(self):
         for variant in ("baseline", "batchnorm", "leaky_relu"):
