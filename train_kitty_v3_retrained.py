@@ -184,6 +184,40 @@ def should_disable_signals(selected_confidence: float, holdout_metrics: dict, mi
     return not (np.isfinite(average) and np.isfinite(compounded) and average > 0 and compounded > 0)
 
 
+
+def select_validation_candidate(candidate_trials: list[dict], min_trades: int = 10) -> dict | None:
+    """Choose a model only when its validation-only net-return trial clears a minimum sample."""
+    eligible = []
+    for trial in candidate_trials:
+        try:
+            trades = int(trial.get("trade_count", 0) or 0)
+            average = float(trial.get("average_net_return"))
+            compounded = float(trial.get("compounded_net_return"))
+            threshold = float(trial.get("min_confidence", 1.01))
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if (
+            trades >= min_trades
+            and threshold <= 1.0
+            and np.isfinite(average)
+            and np.isfinite(compounded)
+            and average > 0.0
+            and compounded > 0.0
+        ):
+            eligible.append(trial)
+    if not eligible:
+        return None
+    # Prefer compounded validation return, then average return, then smaller drawdown.
+    return max(
+        eligible,
+        key=lambda trial: (
+            float(trial["compounded_net_return"]),
+            float(trial["average_net_return"]),
+            -abs(float(trial.get("max_drawdown", 0.0) or 0.0)),
+        ),
+    )
+
+
 def train_one(
     x_train: np.ndarray, y_train: np.ndarray,
     x_val: np.ndarray, y_val: np.ndarray,
@@ -363,31 +397,59 @@ def main() -> None:
     compatible_candidates = [
         item for item in candidates if item[0]["variant"] == "baseline"
     ]
-    winner, winning_model = max(
-        compatible_candidates,
-        key=lambda item: (
-            item[0]["validation"]["macro_f1"],
-            -item[0]["validation"]["log_loss"],
-        ),
-    )
-    winner["promotion_compatible_architecture"] = True
     for candidate in results:
         candidate["promotion_compatible_architecture"] = candidate["variant"] == "baseline"
-    # Tune the abstention threshold on validation only. Never tune it on the
-    # final holdout. Require a minimum trade count to avoid selecting a threshold
-    # because of one or two lucky trades.
-    threshold_trials = []
-    for confidence_threshold in (0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75):
-        trial = evaluate_paper_returns(
-            winning_model, x_val, val_returns,
-            round_trip_cost=args.round_trip_cost,
-            min_confidence=confidence_threshold,
+
+    # Select the production-compatible architecture using validation trading
+    # outcomes after assumed costs, not classification accuracy alone. The final
+    # holdout remains untouched until one candidate and threshold are selected.
+    confidence_grid = (0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75)
+    candidate_validation_trials = []
+    validation_trials_by_name = {}
+    for item, model in compatible_candidates:
+        local_trials = []
+        for confidence_threshold in confidence_grid:
+            trial = evaluate_paper_returns(
+                model, x_val, val_returns,
+                round_trip_cost=args.round_trip_cost,
+                min_confidence=confidence_threshold,
+            )
+            local_trials.append({"min_confidence": confidence_threshold, **trial})
+        confidence, selection_note = select_confidence_threshold(local_trials)
+        validation_trials_by_name[item["checkpoint"]] = local_trials
+        if confidence <= 1.0:
+            selected_trial = next(t for t in local_trials if t["min_confidence"] == confidence)
+            candidate_validation_trials.append({
+                **selected_trial,
+                "candidate": item,
+                "model": model,
+                "selection_note": selection_note,
+            })
+
+    selected_candidate_trial = select_validation_candidate(candidate_validation_trials)
+    if selected_candidate_trial is not None:
+        winner = selected_candidate_trial["candidate"]
+        winning_model = selected_candidate_trial["model"]
+        selected_confidence = float(selected_candidate_trial["min_confidence"])
+        threshold_selection_note = selected_candidate_trial["selection_note"]
+        threshold_trials = validation_trials_by_name[winner["checkpoint"]]
+        winner["selected_by"] = "validation_positive_net_return_after_costs_then_compounded_return"
+    else:
+        # No candidate demonstrated a positive validation edge with enough
+        # trades. Keep a research candidate for diagnostics but force the
+        # selected confidence to 1.01 so directional signals remain disabled.
+        winner, winning_model = max(
+            compatible_candidates,
+            key=lambda item: (
+                item[0]["validation"]["macro_f1"],
+                -item[0]["validation"]["log_loss"],
+            ),
         )
-        threshold_trials.append({
-            "min_confidence": confidence_threshold,
-            **trial,
-        })
-    selected_confidence, threshold_selection_note = select_confidence_threshold(threshold_trials)
+        threshold_trials = validation_trials_by_name[winner["checkpoint"]]
+        selected_confidence, threshold_selection_note = select_confidence_threshold(threshold_trials)
+        winner["selected_by"] = "validation_macro_f1_then_log_loss_no_positive_net_return_candidate"
+
+    winner["promotion_compatible_architecture"] = True
 
 
     test_metrics = evaluate(winning_model, x_test, y_test)
@@ -408,7 +470,7 @@ def main() -> None:
     )
     test_metrics["always_no_trade_baseline_trade_count"] = 0
     winner["test"] = test_metrics
-    winner["selected_by"] = "validation_macro_f1_then_validation_log_loss"
+    winner.setdefault("selected_by", "validation_macro_f1_then_validation_log_loss")
     winner_path = Path(winner["checkpoint"])
     winner_checkpoint = torch.load(winner_path, map_location="cpu", weights_only=False)
     winner_checkpoint["test_metrics"] = test_metrics
