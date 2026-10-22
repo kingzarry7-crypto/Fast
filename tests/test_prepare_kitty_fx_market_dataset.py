@@ -8,6 +8,11 @@ import prepare_kitty_fx_market_dataset as builder
 
 
 class KittyFxDatasetTests(unittest.TestCase):
+    def test_require_spot_rejects_gold_futures_fallback_without_api_key(self):
+        with patch.dict(os.environ, {"TWELVEDATA_API_KEY": "", "TWELVE_DATA_API_KEY": ""}):
+            with self.assertRaisesRegex(RuntimeError, "XAU/USD spot training requires"):
+                builder.fetch_hourly_candles("XAUUSD", require_spot=True)
+
     def test_falls_back_without_api_key_and_rejects_unsupported_symbol(self):
         expected = pd.DataFrame({"timestamp": [pd.Timestamp("2024-01-01", tz="UTC")]})
         with patch.dict(os.environ, {"TWELVEDATA_API_KEY": "", "TWELVE_DATA_API_KEY": ""}):
