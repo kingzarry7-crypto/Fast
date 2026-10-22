@@ -14,6 +14,33 @@ FEATURE_NAMES = (
 )
 
 
+def normalize_candle_timestamp(raw):
+    """Normalize ISO timestamps and Unix seconds/milliseconds to UTC ISO-8601."""
+    from datetime import datetime, timezone
+    import math
+
+    if raw is None:
+        raise ValueError("Candle timestamp is missing")
+    value = str(raw).strip()
+    if not value:
+        raise ValueError("Candle timestamp is empty")
+    try:
+        epoch = float(value)
+        if not math.isfinite(epoch):
+            raise ValueError("Candle timestamp must be finite")
+        if abs(epoch) > 10_000_000_000:
+            epoch /= 1000.0
+        stamp = datetime.fromtimestamp(epoch, tz=timezone.utc)
+    except (ValueError, OverflowError, OSError):
+        try:
+            stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("Candle timestamp must be ISO-8601 or Unix seconds/milliseconds") from exc
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=timezone.utc)
+    return stamp.astimezone(timezone.utc).isoformat()
+
+
 def _ema_series(values, period):
     if not values:
         return []
