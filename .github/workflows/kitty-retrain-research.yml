@@ -87,6 +87,7 @@ jobs:
           retention-days: 30
 
   retrain-gold-forex-research:
+    environment: "my screty"
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -116,7 +117,7 @@ jobs:
           TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY || secrets.TWELVE_DATA_API_KEY }}
         run: |
           if [ -z "$TWELVEDATA_API_KEY" ]; then
-            echo "::error::Gold training requires the TWELVEDATA_API_KEY or TWELVE_DATA_API_KEY GitHub Actions secret. Add it in repository Settings > Secrets and variables > Actions. A Railway variable is not shared with GitHub Actions."
+            echo "::error::Gold training requires the TWELVEDATA_API_KEY or TWELVE_DATA_API_KEY GitHub Actions environment secret. Ensure it is set in the selected environment."
             exit 1
           fi
           echo "Twelve Data credential is present; its value will not be printed."
