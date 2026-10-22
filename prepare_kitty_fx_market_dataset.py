@@ -77,7 +77,7 @@ def fetch_hourly_candles(symbol: str, api_key: str | None = None, outputsize: in
     response = requests.get(
         "https://api.twelvedata.com/time_series",
         params={"symbol": SYMBOLS[symbol], "interval": "1h", "outputsize": outputsize,
-                "apikey": key, "format": "JSON", "order": "ASC"},
+                "apikey": key, "format": "JSON", "order": "ASC", "timezone": "UTC"},
         timeout=30,
     )
     response.raise_for_status()
@@ -97,8 +97,12 @@ def fetch_hourly_candles(symbol: str, api_key: str | None = None, outputsize: in
     else:
         frame["volume"] = pd.to_numeric(frame["volume"], errors="coerce").fillna(0.0)
     frame = frame.sort_values("timestamp").drop_duplicates("timestamp").reset_index(drop=True)
+    # Ask Twelve Data for UTC explicitly and exclude the still-forming hourly bar.
+    # Without timezone=UTC, Forex defaults to Australia/Sydney and parsing those
+    # local wall-clock timestamps as UTC can create future-dated candles.
+    frame = frame[frame["timestamp"] + pd.Timedelta(hours=1) <= pd.Timestamp.now(tz="UTC")]
     if len(frame) < 500:
-        raise RuntimeError(f"Only {len(frame)} hourly candles returned for {symbol}; refusing to train")
+        raise RuntimeError(f"Only {len(frame)} completed hourly candles returned for {symbol}; refusing to train")
     frame.attrs["data_source"] = f"Twelve Data {SYMBOLS[symbol]}"
     return frame[["timestamp", "open", "high", "low", "close", "volume"]]
 
