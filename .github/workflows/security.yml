@@ -26,9 +26,9 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Use the repository-pinned npm version
         run: npm install --global npm@10.9.2
-      - name: Install frontend dependencies and reconcile stale lockfile
+      - name: Install frontend dependencies from committed lockfile
         working-directory: frontend
-        run: npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+        run: npm ci --legacy-peer-deps --ignore-scripts --no-audit --no-fund
       - name: Audit runtime frontend dependencies
         working-directory: frontend
         run: npm audit --omit=dev --audit-level=high
