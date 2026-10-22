@@ -108,6 +108,19 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         self.assertEqual(threshold, 0.5)
         self.assertIn("best_positive", reason)
 
+    def test_holdout_gate_disables_signals_when_net_returns_are_negative(self):
+        holdout = {"trade_count": 17, "average_net_return": -0.0076, "compounded_net_return": -0.1239}
+        self.assertTrue(kitty.should_disable_signals(0.5, holdout))
+
+    def test_holdout_gate_disables_signals_when_trade_sample_is_too_small(self):
+        holdout = {"trade_count": 7, "average_net_return": 0.01, "compounded_net_return": 0.05}
+        self.assertTrue(kitty.should_disable_signals(0.5, holdout))
+
+    def test_holdout_gate_allows_only_enough_positive_net_trades(self):
+        holdout = {"trade_count": 12, "average_net_return": 0.001, "compounded_net_return": 0.012}
+        self.assertFalse(kitty.should_disable_signals(0.5, holdout))
+        self.assertTrue(kitty.should_disable_signals(1.01, holdout))
+
     def test_architecture_variants_return_three_class_logits(self):
         for variant in ("baseline", "batchnorm", "leaky_relu"):
             model = kitty.KittyExperimentNet(variant=variant)

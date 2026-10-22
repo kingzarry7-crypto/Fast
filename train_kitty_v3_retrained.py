@@ -167,6 +167,23 @@ def select_confidence_threshold(threshold_trials: list[dict], min_trades: int = 
     return float(selected["min_confidence"]), "best_positive_validation_net_return_with_at_least_10_trades"
 
 
+
+def should_disable_signals(selected_confidence: float, holdout_metrics: dict, min_trades: int = 10) -> bool:
+    """Fail closed unless the untouched holdout shows enough positive net trades."""
+    if selected_confidence > 1.0:
+        return True
+    trade_count = int(holdout_metrics.get("trade_count", 0) or 0)
+    average = holdout_metrics.get("average_net_return")
+    compounded = holdout_metrics.get("compounded_net_return")
+    if trade_count < min_trades or average is None or compounded is None:
+        return True
+    try:
+        average, compounded = float(average), float(compounded)
+    except (TypeError, ValueError, OverflowError):
+        return True
+    return not (np.isfinite(average) and np.isfinite(compounded) and average > 0 and compounded > 0)
+
+
 def train_one(
     x_train: np.ndarray, y_train: np.ndarray,
     x_val: np.ndarray, y_val: np.ndarray,
@@ -383,7 +400,7 @@ def main() -> None:
     test_metrics["selected_min_confidence_from_validation"] = selected_confidence
     test_metrics["validation_threshold_trials"] = threshold_trials
     test_metrics["threshold_selection_note"] = threshold_selection_note
-    test_metrics["signals_disabled_for_no_validated_edge"] = selected_confidence > 1.0
+    test_metrics["signals_disabled_for_no_validated_edge"] = should_disable_signals(selected_confidence, paper_metrics)
     # Reference points make it harder to mistake a weak classifier for a useful
     # trading model. These are diagnostics, not competing deployable models.
     test_metrics["majority_class_baseline_accuracy"] = float(
