@@ -109,7 +109,7 @@ def status() -> dict[str, Any]:
 
 
 def apply_research_signal_gate(raw_signal: str, confidence: float, checkpoint: dict[str, Any]) -> tuple[str, str]:
-    """Only expose BUY/SELL when a checkpoint has explicit production approval and validated edge."""
+    """Fail closed unless the approved checkpoint has sufficient positive net holdout trades."""
     test_metrics = checkpoint.get("test_metrics") or {}
     try:
         minimum_confidence = float(checkpoint.get("recommended_min_confidence", 1.01))
@@ -117,12 +117,32 @@ def apply_research_signal_gate(raw_signal: str, confidence: float, checkpoint: d
         minimum_confidence = 1.01
     if checkpoint.get("production_ready") is not True:
         return "NO TRADE", "checkpoint_not_approved_for_production"
+    if not isinstance(test_metrics, dict):
+        return "NO TRADE", "holdout_validation_metrics_incomplete_or_unprofitable"
     if test_metrics.get("signals_disabled_for_no_validated_edge") is True:
         return "NO TRADE", "holdout_validation_found_no_positive_net_edge"
-    if not math.isfinite(minimum_confidence) or minimum_confidence > 1.0:
+    if not math.isfinite(minimum_confidence) or not 0.0 <= minimum_confidence <= 1.0:
         return "NO TRADE", "no_validated_confidence_threshold"
+    paper_metrics = test_metrics.get("paper_backtest_after_assumed_costs")
+    try:
+        trade_count = int(paper_metrics.get("trade_count", 0))
+        average_net = float(paper_metrics.get("average_net_return"))
+        compounded_net = float(paper_metrics.get("compounded_net_return"))
+    except (AttributeError, TypeError, ValueError, OverflowError):
+        return "NO TRADE", "holdout_validation_metrics_incomplete_or_unprofitable"
+    if (
+        test_metrics.get("signals_disabled_for_no_validated_edge") is not False
+        or trade_count < 10
+        or not math.isfinite(average_net)
+        or not math.isfinite(compounded_net)
+        or average_net <= 0.0
+        or compounded_net <= 0.0
+    ):
+        return "NO TRADE", "holdout_validation_metrics_incomplete_or_unprofitable"
     if confidence < minimum_confidence:
         return "NO TRADE", "confidence_below_validated_threshold"
+    if raw_signal not in {"LONG", "SHORT"}:
+        return "NO TRADE", "no_directional_model_signal"
     return raw_signal, "validated_checkpoint_gate_passed"
 
 
