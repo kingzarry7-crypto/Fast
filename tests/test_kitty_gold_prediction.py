@@ -27,10 +27,6 @@ class KittyGoldPredictionTests(unittest.TestCase):
             normalize_candle_timestamp("not-a-time")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class GoldModelIsolationTests(unittest.TestCase):
     def test_gold_checkpoint_requires_xauusd_symbol_and_twelve_data_spot_source(self):
         import kitty_gold_model
@@ -73,3 +69,7 @@ class GoldModelIsolationTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(ValueError, "disable automatic order execution"):
             kitty_gold_model.validate_checkpoint_metadata(invalid)
+
+
+if __name__ == "__main__":
+    unittest.main()
