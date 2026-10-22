@@ -20,7 +20,7 @@ on:
       limit:
         description: Hourly candles per market (500-15000)
         required: true
-        default: "15000"
+        default: "5000"
         type: choice
         options: ["2000", "5000", "10000", "15000"]
       threshold:
@@ -68,7 +68,7 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_kitty_paper_trader.py' -v
       - name: Build hourly dataset from public historical candles
         env:
-          LIMIT: ${{ github.event.inputs.limit || '15000' }}
+          LIMIT: ${{ github.event.inputs.limit || '5000' }}
           THRESHOLD: ${{ github.event.inputs.threshold || '0.003' }}
         run: |
           echo "MARKET_LABEL_THRESHOLD=$THRESHOLD" >> "$GITHUB_ENV"
@@ -89,6 +89,7 @@ jobs:
   retrain-gold-forex-research:
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         symbol: [XAUUSD, EURUSD, GBPUSD, USDJPY]
     runs-on: ubuntu-latest
@@ -121,7 +122,7 @@ jobs:
           echo "Twelve Data credential is present; its value will not be printed."
       - name: Build hourly dataset from Twelve Data or free Yahoo Finance fallback
         env:
-          LIMIT: ${{ github.event.inputs.limit || '15000' }}
+          LIMIT: ${{ github.event.inputs.limit || '5000' }}
         run: |
           # A 0.30% six-hour target is too large for many FX moves and creates
           # a mostly-NO-TRADE dataset. Use market-specific targets by default.
