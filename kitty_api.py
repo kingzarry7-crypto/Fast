@@ -9,6 +9,7 @@ from typing import Dict
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 import kitty_v3_retrained as kitty_model
+import kitty_gold_model as gold_model
 
 router = APIRouter(prefix="/api/kitty", tags=["Kitty V3"])
 
@@ -167,33 +168,51 @@ def kitty_predict(request: KittyPredictionRequest):
         raise HTTPException(status_code=503, detail="Kitty inference unavailable: " + type(exc).__name__)
 
 
+@router.get("/gold-status")
+def kitty_gold_status():
+    """Report whether a symbol-verified XAU/USD research checkpoint is installed."""
+    return gold_model.status()
+
+
 @router.get("/gold-features")
-def kitty_gold_features(timeframe: str = Query(default="15m", pattern="^(1m|5m|15m|30m|1h|2h|4h|1d)$")):
-    """Return real XAU/USD indicator inputs without pretending the model is gold-trained."""
+def kitty_gold_features(timeframe: str = Query(default="1h", pattern="^(1m|5m|15m|30m|1h|2h|4h|1d)$")):
+    """Return real XAU/USD indicators and use only a separately validated Gold checkpoint."""
     try:
         from market import get_candles
-        candles = get_candles("XAU/USD", timeframe=timeframe, outputsize=150)
-        latest_candle_time = _validate_candles(candles, timeframe, "XAU/USD")
-        features = _gold_features(candles)
-        latest = candles[-1]
+        candles = get_candles("XAU/USD", timeframe=timeframe, outputsize=180)
+        _validate_candles(candles, timeframe, "XAU/USD")
+        if len(candles) < 56:
+            raise ValueError("At least 56 XAU/USD candles are required to exclude the forming candle")
+        closed_candles = candles[:-1]
+        latest_candle_time = _validate_candles(closed_candles, timeframe, "XAU/USD")
+        indicators = _gold_features(closed_candles)
+        model_status = gold_model.status()
+        model_features = _kitty_features(closed_candles) if model_status.get("available") and timeframe == "1h" else None
+        prediction = gold_model.predict_features(model_features) if model_features is not None else None
+        reason = None
+        if timeframe != "1h":
+            reason = "The trained Kitty Gold model contract is hourly; other timeframes are feature-only."
+        elif not model_status.get("available"):
+            reason = model_status.get("error", "A symbol-verified Gold checkpoint is not installed.")
         return {
             "symbol": "XAU/USD",
             "timeframe": timeframe,
             "candle_count": len(candles),
             "latest_candle_time": latest_candle_time,
-            "features": {key: round(value, 8) for key, value in features.items()},
-            "prediction_available": False,
-            "reason": (
-                "Kitty V3's training metadata does not confirm XAU/USD training. "
-                "A gold-specific model/scaler validation is required before generating a gold prediction."
-            ),
+            "features": {key: round(value, 8) for key, value in indicators.items()},
+            "model_features": {key: round(value, 8) for key, value in model_features.items()} if model_features is not None else None,
+            "prediction_available": prediction is not None,
+            "prediction": prediction,
+            "model_status": model_status,
+            "reason": reason,
             "source": "market.get_candles (configured live gold providers)",
             "trading_enabled": False,
+            "automatic_order_execution_enabled": False,
         }
     except Exception as exc:
         raise HTTPException(
             status_code=503,
-            detail="Live gold feature extraction failed: " + type(exc).__name__ + ": " + str(exc)[:180],
+            detail="Live gold feature extraction/inference failed: " + type(exc).__name__ + ": " + str(exc)[:180],
         )
 
 
