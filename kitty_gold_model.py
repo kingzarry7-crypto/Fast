@@ -22,6 +22,15 @@ EXPECTED_ARCHITECTURE = [18, 64, 32, 3]
 CLASS_MAPPING = {"0": "SHORT", "1": "NO TRADE", "2": "LONG"}
 
 
+def has_validated_edge(checkpoint: dict[str, Any]) -> bool:
+    """Only allow directional research signals when holdout diagnostics explicitly pass."""
+    metrics = checkpoint.get("test_metrics")
+    return (
+        isinstance(metrics, dict)
+        and metrics.get("signals_disabled_for_no_validated_edge") is False
+    )
+
+
 def validate_checkpoint_metadata(checkpoint: dict[str, Any]) -> None:
     """Reject cross-symbol, proxy-source, and incompatible checkpoints."""
     if checkpoint.get("training_symbol") != "XAUUSD":
@@ -80,6 +89,7 @@ def status() -> dict[str, Any]:
             "training_timeframe": checkpoint.get("training_timeframe", "1h"),
             "scaler_features": int(scaler.n_features_in_),
             "test_metrics": checkpoint.get("test_metrics"),
+            "signal_edge_validated": has_validated_edge(checkpoint),
             "research_only": True,
             "production_ready": False,
             "trading_enabled": False,
@@ -117,7 +127,12 @@ def predict_features(features: dict[str, float]) -> dict[str, Any]:
     best = int(ranked[-1])
     confidence = float(probabilities[best])
     margin = confidence - float(probabilities[int(ranked[-2])])
-    signal = "NO TRADE" if best == 1 or confidence < 0.50 or margin < 0.10 else CLASS_MAPPING[str(best)]
+    edge_validated = has_validated_edge(checkpoint)
+    signal = (
+        CLASS_MAPPING[str(best)]
+        if edge_validated and best != 1 and confidence >= 0.50 and margin >= 0.10
+        else "NO TRADE"
+    )
     return {
         "model": "Kitty XAU/USD research candidate",
         "training_symbol": checkpoint["training_symbol"],
@@ -127,6 +142,8 @@ def predict_features(features: dict[str, float]) -> dict[str, Any]:
         "margin_over_second_class": round(margin, 6),
         "probabilities": {CLASS_MAPPING[str(i)]: round(float(probabilities[i]), 6) for i in range(3)},
         "best_epoch": checkpoint.get("best_epoch"),
+        "signal_edge_validated": edge_validated,
+        "signal_block_reason": None if edge_validated else "Holdout diagnostics did not explicitly validate a positive net edge; directional signals are suppressed.",
         "research_only": True,
         "production_ready": False,
         "trading_enabled": False,
