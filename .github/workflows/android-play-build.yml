@@ -1,0 +1,56 @@
+name: Android Play wrapper build
+
+on:
+  pull_request:
+    paths:
+      - "android-play/**"
+      - ".github/workflows/android-play-build.yml"
+  push:
+    branches: [main]
+    paths:
+      - "android-play/**"
+      - ".github/workflows/android-play-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android-play
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android SDK platform 36
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Build debug APK
+        run: gradle :app:assembleDebug
+
+      - name: Upload debug APK for device testing
+        uses: actions/upload-artifact@v4
+        with:
+          name: king-zarry-ai-debug-apk
+          path: android-play/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
