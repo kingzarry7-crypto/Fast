@@ -329,10 +329,27 @@ def _technical_signal(candles, symbol: str, timeframe: str) -> dict:
     target1 = price + direction * 1.5 * atr if direction else None
     target2 = price + direction * 2.5 * atr if direction else None
     raw_time = candles[-1].get("datetime") or candles[-1].get("time") or candles[-1].get("timestamp")
-    if isinstance(raw_time, (int, float)):
-        candle_time = datetime.fromtimestamp(raw_time / (1000 if raw_time > 10000000000 else 1), tz=timezone.utc).isoformat()
+    if raw_time is None:
+        candle_time = None
     else:
-        candle_time = str(raw_time)
+        raw_text = str(raw_time).strip()
+        try:
+            # Normalize numeric strings too: some gold OHLC feeds serialize
+            # Unix seconds/milliseconds as text rather than JSON numbers.
+            epoch = float(raw_text)
+            if not isfinite(epoch):
+                raise ValueError("non-finite timestamp")
+            if abs(epoch) > 10000000000:
+                epoch /= 1000.0
+            candle_time = datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat()
+        except (ValueError, OverflowError, OSError):
+            try:
+                parsed_time = datetime.fromisoformat(raw_text.replace("Z", "+00:00"))
+                if parsed_time.tzinfo is None:
+                    parsed_time = parsed_time.replace(tzinfo=timezone.utc)
+                candle_time = parsed_time.astimezone(timezone.utc).isoformat()
+            except ValueError:
+                candle_time = raw_text
     return {
         "symbol": symbol, "timeframe": timeframe, "signal": signal,
         "signal_type": "rule_based_technical_confluence",
