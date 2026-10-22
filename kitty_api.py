@@ -52,8 +52,20 @@ def _validate_candles(candles, timeframe, symbol):
     if isinstance(raw, (int, float)):
         stamp = datetime.fromtimestamp(raw / (1000 if raw > 10000000000 else 1), tz=timezone.utc)
     elif isinstance(raw, str):
-        stamp = datetime.fromisoformat(raw.replace('Z', '+00:00'))
-        if stamp.tzinfo is None: stamp = stamp.replace(tzinfo=timezone.utc)
+        value = raw.strip()
+        # Some market providers encode Unix timestamps as strings. Parse these
+        # before ISO-8601 so gold OHLC feeds do not fail with fromisoformat().
+        try:
+            epoch = float(value)
+            if not isfinite(epoch):
+                raise ValueError("non-finite timestamp")
+            if abs(epoch) > 10000000000:
+                epoch /= 1000.0
+            stamp = datetime.fromtimestamp(epoch, tz=timezone.utc)
+        except (ValueError, OverflowError, OSError):
+            stamp = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=timezone.utc)
     else:
         raise ValueError(symbol + ': missing latest candle timestamp')
     age = datetime.now(timezone.utc) - stamp.astimezone(timezone.utc)
