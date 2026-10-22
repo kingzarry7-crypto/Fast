@@ -169,6 +169,33 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         ]
         self.assertIsNone(kitty.select_validation_candidate(trials))
 
+    def test_inference_gate_rejects_approval_flag_without_positive_after_cost_metrics(self):
+        checkpoint = {
+            "production_ready": True,
+            "recommended_min_confidence": 0.4,
+            "test_metrics": {"signals_disabled_for_no_validated_edge": False},
+        }
+        signal, reason = inference.apply_research_signal_gate("LONG", 0.99, checkpoint)
+        self.assertEqual(signal, "NO TRADE")
+        self.assertEqual(reason, "holdout_validation_metrics_incomplete_or_unprofitable")
+
+    def test_inference_gate_rejects_too_few_holdout_trades(self):
+        checkpoint = {
+            "production_ready": True,
+            "recommended_min_confidence": 0.4,
+            "test_metrics": {
+                "signals_disabled_for_no_validated_edge": False,
+                "paper_backtest_after_assumed_costs": {
+                    "trade_count": 3,
+                    "average_net_return": 0.01,
+                    "compounded_net_return": 0.03,
+                },
+            },
+        }
+        signal, reason = inference.apply_research_signal_gate("LONG", 0.99, checkpoint)
+        self.assertEqual(signal, "NO TRADE")
+        self.assertEqual(reason, "holdout_validation_metrics_incomplete_or_unprofitable")
+
     def test_architecture_variants_return_three_class_logits(self):
         for variant in ("baseline", "batchnorm", "leaky_relu"):
             model = kitty.KittyExperimentNet(variant=variant)
