@@ -12,6 +12,7 @@ on:
       - "prepare_kitty_market_dataset.py"
       - "tests/test_prepare_kitty_market_dataset.py"
       - "kitty_api.py"
+      - "kitty_gold_model.py"
       - "kitty_features.py"
       - "kitty_v3_retrained.py"
   workflow_dispatch:
@@ -108,6 +109,16 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_prepare_kitty_fx_market_dataset.py' -v
       - name: Run Kitty gold/crypto timestamp regressions
         run: python -m unittest discover -s tests -p 'test_kitty_gold_prediction.py' -v
+      - name: Require Twelve Data credentials for real XAU/USD spot training
+        if: matrix.symbol == 'XAUUSD'
+        env:
+          TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY || secrets.TWELVE_DATA_API_KEY }}
+        run: |
+          if [ -z "$TWELVEDATA_API_KEY" ]; then
+            echo "::error::Gold training requires the TWELVEDATA_API_KEY or TWELVE_DATA_API_KEY GitHub Actions secret. Add it in repository Settings > Secrets and variables > Actions. A Railway variable is not shared with GitHub Actions."
+            exit 1
+          fi
+          echo "Twelve Data credential is present; its value will not be printed."
       - name: Build hourly dataset from Twelve Data or free Yahoo Finance fallback
         env:
           LIMIT: ${{ github.event.inputs.limit || '15000' }}
