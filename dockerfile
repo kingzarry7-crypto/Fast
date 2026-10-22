@@ -33,6 +33,7 @@ RUN adduser --disabled-password --gecos "" appuser
 
 COPY requirements.txt .
 RUN python -m pip install --no-cache-dir --upgrade pip && \
+    python -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu "torch==2.14.1" && \
     python -m pip install --no-cache-dir -r requirements.txt
 
 # Reuse Debian's Chromium instead of downloading a second Playwright browser.
