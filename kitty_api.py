@@ -328,11 +328,15 @@ def _technical_signal(candles, symbol: str, timeframe: str) -> dict:
         signal = "NO TRADE"
         direction = 0
         score = max(bull, bear)
+    # Technical confluence has not passed per-market out-of-sample validation
+    # after realistic costs. Preserve the raw setup for research, but fail closed:
+    # it must never be surfaced as a directional signal or used by the paper engine.
+    candidate_signal = signal
+    signal = "NO TRADE"
+    direction = 0
     price = closes[-1]
-    # ATR levels are indicative risk references, not guarantees or executable orders.
-    stop = price - direction * 1.5 * atr if direction else None
-    target1 = price + direction * 1.5 * atr if direction else None
-    target2 = price + direction * 2.5 * atr if direction else None
+    # No actionable risk levels are emitted for an unvalidated candidate.
+    stop = target1 = target2 = None
     raw_time = candles[-1].get("datetime") or candles[-1].get("time") or candles[-1].get("timestamp")
     try:
         from kitty_features import normalize_candle_timestamp
@@ -341,7 +345,10 @@ def _technical_signal(candles, symbol: str, timeframe: str) -> dict:
         candle_time = str(raw_time) if raw_time is not None else None
     return {
         "symbol": symbol, "timeframe": timeframe, "signal": signal,
-        "signal_type": "rule_based_technical_confluence",
+        "candidate_signal": candidate_signal,
+        "signal_gate_reason": "no_validated_net_edge_for_rule_based_strategy",
+        "strategy_edge_validated": False,
+        "signal_type": "rule_based_technical_confluence_research_only",
         "price": round(price, 8), "completed_candle_time": candle_time,
         "confidence_score": round(score / 5.0, 2),
         "confirmation_count": score, "confirmations_required": 4,
@@ -365,7 +372,8 @@ def _technical_signal(candles, symbol: str, timeframe: str) -> dict:
         ],
         "model_used": False,
         "research_only": True, "trading_enabled": False,
-        "warning": "This is a transparent technical-rule signal, not a trained or validated prediction. No indicator can guarantee accuracy or profit. Confirm spread, news, session, and risk before any trade.",
+        "automatic_order_execution_enabled": False,
+        "warning": "The technical setup is unvalidated and is exposed only as candidate_signal. The actionable signal is forced to NO TRADE until this strategy demonstrates positive net edge on sufficient unseen per-market data after realistic costs.",
     }
 
 
