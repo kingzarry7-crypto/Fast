@@ -218,11 +218,14 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     candles = fetch_hourly_klines(args.symbol, args.limit)
+    data_source = str(candles.attrs.get("data_source", "unknown historical source"))
     dataset = build_dataset(candles, args.threshold)
+    # Carry the actual provider through to the trainer's checkpoint/report metadata.
+    dataset["data_source"] = data_source
     args.output.parent.mkdir(parents=True, exist_ok=True)
     dataset.to_csv(args.output, index=False)
     print({
-        "symbol": args.symbol, "rows": len(dataset),
+        "symbol": args.symbol, "data_source": data_source, "rows": len(dataset),
         "class_counts": dataset["target"].value_counts().sort_index().to_dict(),
         "start": str(dataset["timestamp"].iloc[0]), "end": str(dataset["timestamp"].iloc[-1]),
         "sha256_source_rows": len(candles), "output": str(args.output),
