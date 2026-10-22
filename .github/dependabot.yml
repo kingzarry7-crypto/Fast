@@ -5,6 +5,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      nextjs-stack:
+        patterns:
+          - "next"
+          - "eslint-config-next"
 
   - package-ecosystem: pip
     directory: /
