@@ -23,11 +23,26 @@ CLASS_MAPPING = {"0": "SHORT", "1": "NO TRADE", "2": "LONG"}
 
 
 def has_validated_edge(checkpoint: dict[str, Any]) -> bool:
-    """Only allow directional research signals when holdout diagnostics explicitly pass."""
+    """Require explicit approval and sufficient positive after-cost holdout results."""
     metrics = checkpoint.get("test_metrics")
+    paper = metrics.get("paper_backtest_after_assumed_costs") if isinstance(metrics, dict) else None
+    try:
+        minimum_confidence = float(checkpoint.get("recommended_min_confidence", 1.01))
+        trade_count = int(paper.get("trade_count", 0))
+        average_net = float(paper.get("average_net_return"))
+        compounded_net = float(paper.get("compounded_net_return"))
+    except (AttributeError, TypeError, ValueError, OverflowError):
+        return False
     return (
-        isinstance(metrics, dict)
+        checkpoint.get("production_ready") is True
+        and isinstance(metrics, dict)
         and metrics.get("signals_disabled_for_no_validated_edge") is False
+        and 0.0 <= minimum_confidence <= 1.0
+        and trade_count >= 10
+        and math.isfinite(average_net)
+        and math.isfinite(compounded_net)
+        and average_net > 0.0
+        and compounded_net > 0.0
     )
 
 
@@ -128,9 +143,13 @@ def predict_features(features: dict[str, float]) -> dict[str, Any]:
     confidence = float(probabilities[best])
     margin = confidence - float(probabilities[int(ranked[-2])])
     edge_validated = has_validated_edge(checkpoint)
+    try:
+        minimum_confidence = float(checkpoint.get("recommended_min_confidence", 1.01))
+    except (TypeError, ValueError, OverflowError):
+        minimum_confidence = 1.01
     signal = (
         CLASS_MAPPING[str(best)]
-        if edge_validated and best != 1 and confidence >= 0.50 and margin >= 0.10
+        if edge_validated and best != 1 and confidence >= minimum_confidence and margin >= 0.10
         else "NO TRADE"
     )
     return {
