@@ -93,8 +93,10 @@ def status() -> dict[str, Any]:
             "training_symbol": "BTC (training dataset convention; runtime symbol metadata still needs confirmation)",
             "research_only": True,
             "prediction_enabled": True,
+            "signals_enabled": checkpoint.get("production_ready") is True and not (checkpoint.get("test_metrics") or {}).get("signals_disabled_for_no_validated_edge", False),
+            "signal_gate": "production approval and validated net edge required",
             "automatic_order_execution_enabled": False,
-            "warning": "Experimental classification only. Historical holdout metrics do not establish profitability.",
+            "warning": "Experimental classification only. BUY/SELL signals remain blocked until the checkpoint has explicit production approval and a validated positive net edge.",
         }
     except Exception as exc:
         return {
@@ -104,6 +106,24 @@ def status() -> dict[str, Any]:
             "automatic_order_execution_enabled": False,
             "error": f"{type(exc).__name__}: {exc}",
         }
+
+
+def apply_research_signal_gate(raw_signal: str, confidence: float, checkpoint: dict[str, Any]) -> tuple[str, str]:
+    """Only expose BUY/SELL when a checkpoint has explicit production approval and validated edge."""
+    test_metrics = checkpoint.get("test_metrics") or {}
+    try:
+        minimum_confidence = float(checkpoint.get("recommended_min_confidence", 1.01))
+    except (TypeError, ValueError, OverflowError):
+        minimum_confidence = 1.01
+    if checkpoint.get("production_ready") is not True:
+        return "NO TRADE", "checkpoint_not_approved_for_production"
+    if test_metrics.get("signals_disabled_for_no_validated_edge") is True:
+        return "NO TRADE", "holdout_validation_found_no_positive_net_edge"
+    if not math.isfinite(minimum_confidence) or minimum_confidence > 1.0:
+        return "NO TRADE", "no_validated_confidence_threshold"
+    if confidence < minimum_confidence:
+        return "NO TRADE", "confidence_below_validated_threshold"
+    return raw_signal, "validated_checkpoint_gate_passed"
 
 
 def predict_features(features: dict[str, float]) -> dict[str, Any]:
@@ -134,12 +154,15 @@ def predict_features(features: dict[str, float]) -> dict[str, Any]:
     margin = confidence - float(probs[int(ranked[-2])])
     # Conservative guardrails; these are operating filters, not optimized trading thresholds.
     if best == 1 or confidence < 0.50 or margin < 0.10:
-        signal = "NO TRADE"
+        raw_signal = "NO TRADE"
     else:
-        signal = CLASS_MAPPING[str(best)]
+        raw_signal = CLASS_MAPPING[str(best)]
+    signal, signal_gate = apply_research_signal_gate(raw_signal, confidence, checkpoint)
     return {
         "model": "Kitty V3 BTC retrained",
         "signal": signal,
+        "proposed_signal": raw_signal,
+        "signal_gate": signal_gate,
         "class_prediction": CLASS_MAPPING[str(best)],
         "confidence": round(confidence, 6),
         "margin_over_second_class": round(margin, 6),
