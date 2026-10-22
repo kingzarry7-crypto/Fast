@@ -2,7 +2,11 @@
 import math
 import unittest
 
+import numpy as np
+import pandas as pd
+
 from kitty_features import FEATURE_NAMES, compute_kitty_features
+from prepare_kitty_market_dataset import build_dataset
 
 
 def sample_candles(count=80, timestamps=False, interval_seconds=3600):
@@ -73,6 +77,34 @@ class KittyFeatureTests(unittest.TestCase):
         candles[40]["timestamp"] = candles[39]["timestamp"]
         with self.assertRaisesRegex(ValueError, "strictly increasing"):
             compute_kitty_features(candles)
+
+
+    def test_runtime_features_match_training_dataset_features(self):
+        rows = []
+        previous_close = 100.0
+        start = pd.Timestamp("2024-01-01", tz="UTC")
+        for i in range(700):
+            close = 100.0 * math.exp(0.004 * math.sin(i / 4.0) + 0.00002 * i)
+            opn = previous_close
+            rows.append({
+                "timestamp": start + pd.Timedelta(hours=i),
+                "open": opn,
+                "high": max(opn, close) * 1.001,
+                "low": min(opn, close) * 0.999,
+                "close": close,
+                "volume": 1.0,
+            })
+            previous_close = close
+        raw = pd.DataFrame(rows)
+        training = build_dataset(raw, threshold=0.0005)
+        self.assertEqual(set(training["target"].unique()), {0, 1, 2})
+        by_timestamp = training.set_index("timestamp")
+        for stamp in (training["timestamp"].iloc[0], training["timestamp"].iloc[len(training) // 2], training["timestamp"].iloc[-1]):
+            candle_index = int((stamp - start) / pd.Timedelta(hours=1))
+            runtime = compute_kitty_features(rows[:candle_index + 1])
+            expected = by_timestamp.loc[stamp, list(FEATURE_NAMES)].to_numpy(dtype=float)
+            actual = np.asarray([runtime[name] for name in FEATURE_NAMES], dtype=float)
+            np.testing.assert_allclose(actual, expected, rtol=1e-8, atol=1e-10)
 
 
 if __name__ == "__main__":
