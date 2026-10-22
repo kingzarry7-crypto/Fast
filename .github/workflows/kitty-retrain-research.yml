@@ -94,7 +94,7 @@ jobs:
       matrix:
         symbol: [XAUUSD, EURUSD, GBPUSD, USDJPY]
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     env:
       TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY || secrets.TWELVE_DATA_API_KEY }}
     steps:
@@ -138,6 +138,30 @@ jobs:
           REQUIRE_SPOT=""
           if [ "${{ matrix.symbol }}" = "XAUUSD" ]; then REQUIRE_SPOT="--require-spot"; fi
           python prepare_kitty_fx_market_dataset.py --symbol "${{ matrix.symbol }}" --limit "$LIMIT" --threshold "$THRESHOLD" --output "kitty-training-output/${{ matrix.symbol }}/hourly_features.csv" $REQUIRE_SPOT
+      - name: Verify Gold dataset is genuine Twelve Data XAU/USD spot
+        if: matrix.symbol == 'XAUUSD'
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          path = Path("kitty-training-output/XAUUSD/hourly_features.csv")
+          if not path.is_file():
+              raise SystemExit("Gold dataset file was not created")
+          frame = pd.read_csv(path)
+          if len(frame) < 500:
+              raise SystemExit(f"Gold dataset has only {len(frame)} rows; refusing to train")
+          if "data_source" not in frame.columns:
+              raise SystemExit("Gold dataset is missing data_source provenance")
+          sources = sorted(frame["data_source"].dropna().astype(str).unique().tolist())
+          if not sources or any(not source.startswith("Twelve Data XAU/USD") for source in sources):
+              raise SystemExit(f"Gold dataset is not verified Twelve Data XAU/USD spot data: {sources}")
+          if "timestamp" not in frame.columns or frame["timestamp"].isna().any():
+              raise SystemExit("Gold dataset has missing timestamps")
+          print({"symbol": "XAUUSD", "rows": len(frame), "sources": sources,
+                 "first_timestamp": str(frame["timestamp"].iloc[0]),
+                 "last_timestamp": str(frame["timestamp"].iloc[-1]),
+                 "research_only": True})
+          PY
       - name: Train isolated research candidate and holdout evaluation
         env:
           MARKET_SYMBOL: ${{ matrix.symbol }}
