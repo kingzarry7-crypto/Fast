@@ -57,6 +57,20 @@ class GoldModelIsolationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "training_symbol"):
             kitty_gold_model.validate_checkpoint_metadata(invalid)
 
+    def test_gold_directional_signal_requires_explicit_positive_holdout_edge(self):
+        import kitty_gold_model
+
+        self.assertFalse(kitty_gold_model.has_validated_edge({}))
+        self.assertFalse(kitty_gold_model.has_validated_edge({
+            "test_metrics": {"signals_disabled_for_no_validated_edge": True}
+        }))
+        self.assertFalse(kitty_gold_model.has_validated_edge({
+            "test_metrics": {"signals_disabled_for_no_validated_edge": None}
+        }))
+        self.assertTrue(kitty_gold_model.has_validated_edge({
+            "test_metrics": {"signals_disabled_for_no_validated_edge": False}
+        }))
+
     def test_gold_checkpoint_must_keep_orders_disabled(self):
         import kitty_gold_model
 
