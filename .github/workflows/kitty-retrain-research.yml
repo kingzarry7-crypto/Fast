@@ -122,7 +122,9 @@ jobs:
           echo "Research label threshold for ${{ matrix.symbol }}: $THRESHOLD"
           echo "MARKET_LABEL_THRESHOLD=$THRESHOLD" >> "$GITHUB_ENV"
           mkdir -p "kitty-training-output/${{ matrix.symbol }}"
-          python prepare_kitty_fx_market_dataset.py --symbol "${{ matrix.symbol }}" --limit "$LIMIT" --threshold "$THRESHOLD" --output "kitty-training-output/${{ matrix.symbol }}/hourly_features.csv"
+          REQUIRE_SPOT=""
+          if [ "${{ matrix.symbol }}" = "XAUUSD" ]; then REQUIRE_SPOT="--require-spot"; fi
+          python prepare_kitty_fx_market_dataset.py --symbol "${{ matrix.symbol }}" --limit "$LIMIT" --threshold "$THRESHOLD" --output "kitty-training-output/${{ matrix.symbol }}/hourly_features.csv" $REQUIRE_SPOT
       - name: Train isolated research candidate and holdout evaluation
         env:
           MARKET_SYMBOL: ${{ matrix.symbol }}
