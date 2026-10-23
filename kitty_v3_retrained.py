@@ -129,6 +129,7 @@ def apply_research_signal_gate(raw_signal: str, confidence: float, checkpoint: d
         average_net = float(paper_metrics.get("average_net_return"))
         compounded_net = float(paper_metrics.get("compounded_net_return"))
         max_drawdown = float(paper_metrics.get("max_drawdown"))
+        profit_factor = float(paper_metrics.get("profit_factor"))
     except (AttributeError, TypeError, ValueError, OverflowError):
         return "NO TRADE", "holdout_validation_metrics_incomplete_or_unprofitable"
     if (
@@ -140,6 +141,8 @@ def apply_research_signal_gate(raw_signal: str, confidence: float, checkpoint: d
         or average_net <= 0.0
         or compounded_net < 0.01
         or max_drawdown < -0.05
+        or not math.isfinite(profit_factor)
+        or profit_factor < 1.10
     ):
         return "NO TRADE", "holdout_validation_metrics_incomplete_or_unprofitable"
     if confidence < minimum_confidence:
