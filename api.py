@@ -35,6 +35,12 @@ from pydantic import BaseModel, EmailStr, Field
 import uvicorn
 
 try:
+    from justmarkets_mt5_bridge import router as justmarkets_mt5_bridge_router
+except Exception as _mt5_bridge_error:
+    justmarkets_mt5_bridge_router = None
+    logging.getLogger("king_zarry_api").exception("MT5 shadow bridge unavailable: %s", type(_mt5_bridge_error).__name__)
+
+try:
     from kitty_api import router as kitty_api_router
 except Exception as _kitty_api_import_error:
     kitty_api_router = None
@@ -198,6 +204,9 @@ if kitty_api_router is not None:
 
 if kitty_multi_paper_router is not None:
     app.include_router(kitty_multi_paper_router)
+
+if justmarkets_mt5_bridge_router is not None:
+    app.include_router(justmarkets_mt5_bridge_router)
 
 app.add_middleware(
     CORSMiddleware,
