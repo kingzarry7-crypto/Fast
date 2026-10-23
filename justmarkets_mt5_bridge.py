@@ -81,7 +81,7 @@ def work():
         symbols=set(json.loads(h["symbols"]))
         rows=c.execute("SELECT * FROM signals WHERE state='queued' AND direction IN ('BUY','SELL') AND expires>? ORDER BY epoch LIMIT 20",(now().isoformat(),)).fetchall()
         for r in rows:
-            if r["symbol"] in symbols:return {"work":{k:r[k] for k in ("id","symbol","direction","candle","created","expires","entry","stop","metadata")},"mode":"SHADOW_ONLY","execution_enabled":False}
+            if r["symbol"] in symbols:return {"work":{"signal_id":r["id"],"symbol":r["symbol"],"direction":r["direction"],"candle_time":r["candle"],"created_at":r["created"],"expires_at":r["expires"],"entry_reference":r["entry"],"stop_loss":r["stop"],"metadata":json.loads(r["metadata"])},"mode":"SHADOW_ONLY","execution_enabled":False}
         return {"work":None,"reason":"no_fresh_verified_signal","execution_enabled":False}
     finally:c.close()
 @router.post("/ack",dependencies=[Depends(auth)])
