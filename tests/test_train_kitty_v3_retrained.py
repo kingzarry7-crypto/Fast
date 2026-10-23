@@ -106,8 +106,8 @@ class KittyTrainingExperimentTests(unittest.TestCase):
             {"min_confidence": 0.6, "trade_count": 2, "compounded_net_return": 0.10, "average_net_return": 0.05},
         ]
         threshold, reason = kitty.select_confidence_threshold(trials)
-        self.assertEqual(threshold, 0.5)
-        self.assertIn("best_positive", reason)
+        self.assertEqual(threshold, 0.4)
+        self.assertIn("best_validation", reason)
 
     def test_holdout_gate_disables_signals_when_net_returns_are_negative(self):
         holdout = {"trade_count": 17, "average_net_return": -0.0076, "compounded_net_return": -0.1239}
