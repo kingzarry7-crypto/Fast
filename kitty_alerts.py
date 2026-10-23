@@ -132,3 +132,52 @@ def validate_mtf_watch_levels(mtf_data: dict[str, Any], signal: str) -> dict[str
     values["valid"] = True
     values["reason"] = "15M entry, stop-loss and all three targets passed direction checks"
     return values
+
+
+def normalize_kitty_mtf_signal(
+    prediction: dict[str, Any],
+    mtf_data: dict[str, Any],
+    late_entry: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Require a validated Kitty model direction plus agreeing 4H/1H/15M/5M filters."""
+    model = normalize_kitty_alert(prediction if isinstance(prediction, dict) else {})
+    if not model["actionable"]:
+        return {
+            "signal": "WAIT",
+            "reason": "Kitty model gate blocked directional output; research-only or no validated net edge",
+            "model_actionable": False,
+            "candidate_signal": model["candidate_signal"],
+            "confidence": model["confidence"],
+        }
+
+    candidate = model["signal"]
+    direction = "BUY" if candidate == "LONG" else "SELL" if candidate == "SHORT" else "WAIT"
+    if direction == "WAIT":
+        return {
+            "signal": "WAIT",
+            "reason": "Kitty model did not produce a directional class",
+            "model_actionable": False,
+            "candidate_signal": model["candidate_signal"],
+            "confidence": model["confidence"],
+        }
+
+    data = dict(mtf_data) if isinstance(mtf_data, dict) else {}
+    mtf_direction = str(data.get("mtf_signal") or "").strip().upper()
+    if mtf_direction and mtf_direction != direction:
+        return {
+            "signal": "WAIT",
+            "reason": "Kitty model direction conflicts with multi-timeframe direction",
+            "model_actionable": True,
+            "candidate_signal": candidate,
+            "confidence": model["confidence"],
+        }
+
+    data["mtf_signal"] = direction
+    mtf = normalize_mtf_watch_signal(data, late_entry)
+    return {
+        "signal": mtf["signal"],
+        "reason": mtf["reason"],
+        "model_actionable": True,
+        "candidate_signal": candidate,
+        "confidence": model["confidence"],
+    }
