@@ -96,6 +96,26 @@ class ConfiguredProviderTests(unittest.TestCase):
         )
 
 
+    def test_explicit_provider_is_not_bypassed_by_local_zarry_endpoint(self):
+        response = SimpleNamespace(choices=[
+            SimpleNamespace(message=SimpleNamespace(content="openai answer"))
+        ])
+        client = SimpleNamespace(chat=SimpleNamespace(
+            completions=SimpleNamespace(create=unittest.mock.Mock(return_value=response))
+        ))
+        with patch.dict(os.environ, {
+            "AI_PROVIDER": "OPENAI",
+            "ZARRY_API_URL": "https://example.test/generate",
+            "OPENAI_API_KEY": "test-openai-key",
+        }, clear=True), \\
+             patch("llm_client.urllib.request.urlopen") as local_post, \\
+             patch("llm_client.OpenAI", return_value=client):
+            result = ask([{"role": "user", "content": "hello"}])
+
+        self.assertEqual(result, "openai answer")
+        local_post.assert_not_called()
+        self.assertEqual(client.chat.completions.create.call_args.kwargs["model"], "gpt-5.4-nano")
+
     def test_zarry_generate_api_is_primary_for_coding_prompts(self):
         response = MagicMock()
         response.__enter__.return_value.read.return_value = json.dumps({
