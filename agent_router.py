@@ -21,7 +21,7 @@ _ASSETS = (
 _MARKET_ACTION = re.compile(
     r"\b(signal|signals|market|price|chart|analy[sz]e|analysis|setup|"
     r"trade setup|entry|support|resistance|trend|technical|mtf|timeframe|"
-    r"buy or sell|bullish|bearish|gold forecast)\b",
+    r"buy or sell|bullish|bearish|gold forecast|compare|comparison|versus|\bvs\b)\b",
     re.IGNORECASE,
 )
 # Explicit media work must never be hijacked by the market agent just because
@@ -170,11 +170,54 @@ def route_agent_request(message: str, user_id: str) -> Optional[Dict[str, Any]]:
     if not _market_requested(text):
         return None
 
-    symbol = _asset_for(text)
-    if not symbol:
-        return None
+    # Detect every explicitly mentioned asset. A comparison request must never
+    # silently become a report about only the first asset in the message.
+    asset_mentions = []
+    for pattern, asset_symbol in _ASSETS:
+        for match in re.finditer(pattern, text, re.IGNORECASE):
+            asset_mentions.append((match.start(), asset_symbol))
+    detected_assets = []
+    for _, asset_symbol in sorted(asset_mentions):
+        if asset_symbol not in detected_assets:
+            detected_assets.append(asset_symbol)
+
     timeframe_match = re.search(r"\b(5m|15m|30m|1h|4h|1d)\b", text, re.IGNORECASE)
     timeframe = timeframe_match.group(1).lower() if timeframe_match else "15m"
+
+    if len(detected_assets) > 1:
+        reports = []
+        for asset_symbol in detected_assets:
+            result = route_agent_request(
+                f"Analyze {asset_symbol} market signal on the {timeframe} timeframe",
+                user_id,
+            )
+            if result and str(result.get("reply") or "").strip():
+                reports.append(result)
+        if not reports:
+            return {
+                "status": "unavailable",
+                "reply": "I detected a multi-asset market request, but none of the asset reports could be verified. No prices or signals were invented.",
+                "provider": "market_agent",
+                "operation": "compare_markets",
+                "target": ", ".join(detected_assets),
+            }
+        status = "completed" if all(item.get("status") == "completed" for item in reports) else "partial"
+        reply = (
+            f"Multi-asset market comparison ({timeframe})\\n\\n"
+            + "\\n\\n".join(str(item["reply"]) for item in reports)
+            + "\\n\\nCompare only verified fields across reports. Missing or unavailable data must not be interpreted as a trade signal."
+        )
+        return {
+            "status": status,
+            "reply": reply,
+            "provider": "market_agent",
+            "operation": "compare_markets",
+            "target": ", ".join(detected_assets),
+        }
+
+    symbol = detected_assets[0] if detected_assets else _asset_for(text)
+    if not symbol:
+        return None
 
     try:
         from agent_core import tool_analyze_symbol, tool_news_risk, tool_learn
