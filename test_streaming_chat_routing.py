@@ -46,7 +46,7 @@ class StreamingProviderPreferenceTests(unittest.TestCase):
 
     def test_gemini_is_available_in_streaming_provider_order(self):
         with patch.dict(os.environ, {"AI_PROVIDER": "GEMINI", "ZARRY_API_URL": ""}, clear=False), \
-             patch.object(streaming_chat.ai_engine, "HF_TOKEN", ""), \\
+             patch.object(streaming_chat.ai_engine, "HF_TOKEN", ""), \
              patch.object(streaming_chat.ai_engine, "GEMINI_API_KEY", "gemini-test-key"):
             providers = [name for name, _stream in _provider_streams([])]
         self.assertEqual(providers[0], "gemini")
