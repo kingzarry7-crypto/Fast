@@ -22,4 +22,4 @@ playwright==1.49.1
 
 torch==2.14.1
 joblib==1.4.2
-scikit-learn==1.6.1
+scikit-learn==1.9.1
