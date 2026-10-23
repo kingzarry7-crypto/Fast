@@ -32,7 +32,7 @@ on:
   schedule:
     - cron: "17 2 * * 0"
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: kitty-retraining-research
@@ -77,6 +77,38 @@ jobs:
       - name: Train candidate models and evaluate one holdout
         run: |
           python train_kitty_v3_retrained.py --symbol "${{ matrix.symbol }}" --csv "kitty-training-output/${{ matrix.symbol }}/hourly_features.csv" --output-dir "kitty-training-output/${{ matrix.symbol }}/candidates" --epochs 100 --patience 10 --batch-size 128 --purge 6 --round-trip-cost 0.001 --label-threshold "$MARKET_LABEL_THRESHOLD"
+      - name: Prepare BTC research checkpoint for runtime inference
+        if: matrix.symbol == 'BTC'
+        run: |
+          python - <<'PY'
+          import json, shutil
+          from pathlib import Path
+          import torch
+          report = json.loads(Path("kitty-training-output/BTC/candidates/comparison_report.json").read_text())
+          candidate = Path(report["selection"]["candidate"])
+          if not candidate.is_file():
+              candidate = Path("kitty-training-output/BTC/candidates") / candidate.name
+          checkpoint = torch.load(candidate, map_location="cpu", weights_only=False)
+          if checkpoint.get("training_symbol") != "BTC":
+              raise SystemExit("Refusing to publish a non-BTC checkpoint")
+          if checkpoint.get("production_ready") is not False or checkpoint.get("automatic_order_execution_enabled") is not False:
+              raise SystemExit("Research checkpoint must remain unapproved with order execution disabled")
+          if not isinstance(checkpoint.get("test_metrics"), dict):
+              raise SystemExit("Checkpoint is missing untouched holdout metrics")
+          destination = Path("research-model/kitty_BTC_checkpoint.pt")
+          destination.parent.mkdir(parents=True, exist_ok=True)
+          shutil.copy2(candidate, destination)
+          print({"symbol": "BTC", "checkpoint": str(destination), "research_only": True,
+                 "signals_disabled_for_no_validated_edge": checkpoint["test_metrics"].get("signals_disabled_for_no_validated_edge")})
+          PY
+      - name: Upload BTC runtime research checkpoint
+        if: matrix.symbol == 'BTC'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kitty-BTC-checkpoint-${{ github.run_number }}
+          path: research-model/kitty_BTC_checkpoint.pt
+          if-no-files-found: error
+          retention-days: 7
       - name: Publish research artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -169,6 +201,42 @@ jobs:
           if [ "$MARKET_SYMBOL" = "XAUUSD" ]; then ROUND_TRIP_COST="0.0005"; else ROUND_TRIP_COST="0.0003"; fi
           echo "Assumed round-trip cost for $MARKET_SYMBOL: $ROUND_TRIP_COST"
           python train_kitty_v3_retrained.py --symbol "$MARKET_SYMBOL" --csv "kitty-training-output/$MARKET_SYMBOL/hourly_features.csv" --output-dir "kitty-training-output/$MARKET_SYMBOL/candidates" --epochs 100 --patience 10 --batch-size 128 --purge 6 --round-trip-cost "$ROUND_TRIP_COST" --label-threshold "$MARKET_LABEL_THRESHOLD"
+      - name: Prepare XAUUSD research checkpoint for runtime inference
+        if: matrix.symbol == 'XAUUSD'
+        run: |
+          python - <<'PY'
+          import json, shutil
+          from pathlib import Path
+          import torch
+          report = json.loads(Path("kitty-training-output/XAUUSD/candidates/comparison_report.json").read_text())
+          candidate = Path(report["selection"]["candidate"])
+          if not candidate.is_file():
+              candidate = Path("kitty-training-output/XAUUSD/candidates") / candidate.name
+          checkpoint = torch.load(candidate, map_location="cpu", weights_only=False)
+          sources = checkpoint.get("training_data_sources")
+          if checkpoint.get("training_symbol") != "XAUUSD":
+              raise SystemExit("Refusing to publish a non-XAUUSD checkpoint")
+          if not isinstance(sources, list) or not any(isinstance(s, str) and s.startswith("Twelve Data XAU/USD") for s in sources):
+              raise SystemExit(f"Refusing to publish Gold checkpoint without verified XAU/USD spot provenance: {sources}")
+          if checkpoint.get("production_ready") is not False or checkpoint.get("automatic_order_execution_enabled") is not False:
+              raise SystemExit("Gold research checkpoint must remain unapproved with order execution disabled")
+          if not isinstance(checkpoint.get("test_metrics"), dict):
+              raise SystemExit("Gold checkpoint is missing untouched holdout metrics")
+          destination = Path("research-model/kitty_XAUUSD_checkpoint.pt")
+          destination.parent.mkdir(parents=True, exist_ok=True)
+          shutil.copy2(candidate, destination)
+          print({"symbol": "XAUUSD", "checkpoint": str(destination), "sources": sources,
+                 "research_only": True,
+                 "signals_disabled_for_no_validated_edge": checkpoint["test_metrics"].get("signals_disabled_for_no_validated_edge")})
+          PY
+      - name: Upload XAUUSD runtime research checkpoint
+        if: matrix.symbol == 'XAUUSD'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kitty-XAUUSD-checkpoint-${{ github.run_number }}
+          path: research-model/kitty_XAUUSD_checkpoint.pt
+          if-no-files-found: error
+          retention-days: 7
       - name: Publish gold and forex research artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -177,3 +245,60 @@ jobs:
           path: kitty-training-output/${{ matrix.symbol }}/
           if-no-files-found: ignore
           retention-days: 30
+  publish-runtime-research-checkpoints:
+    name: Publish BTC and XAUUSD research checkpoints
+    needs: [retrain-market-research, retrain-gold-forex-research]
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Download BTC checkpoint
+        uses: actions/download-artifact@v4
+        with:
+          name: kitty-BTC-checkpoint-${{ github.run_number }}
+          path: downloaded/btc
+      - name: Download XAUUSD checkpoint
+        uses: actions/download-artifact@v4
+        with:
+          name: kitty-XAUUSD-checkpoint-${{ github.run_number }}
+          path: downloaded/xauusd
+      - name: Validate and publish research checkpoints to main
+        run: |
+          set -euo pipefail
+          test -s downloaded/btc/kitty_BTC_checkpoint.pt
+          test -s downloaded/xauusd/kitty_XAUUSD_checkpoint.pt
+          mkdir -p models
+          cp downloaded/btc/kitty_BTC_checkpoint.pt kitty_v3_retrained_checkpoint.pt
+          cp downloaded/xauusd/kitty_XAUUSD_checkpoint.pt models/kitty_XAUUSD_checkpoint.pt
+          python - <<'PY'
+          import torch
+          btc = torch.load("kitty_v3_retrained_checkpoint.pt", map_location="cpu", weights_only=False)
+          gold = torch.load("models/kitty_XAUUSD_checkpoint.pt", map_location="cpu", weights_only=False)
+          assert btc.get("training_symbol") == "BTC"
+          assert btc.get("production_ready") is False
+          assert btc.get("automatic_order_execution_enabled") is False
+          assert isinstance(btc.get("test_metrics"), dict)
+          assert gold.get("training_symbol") == "XAUUSD"
+          assert gold.get("production_ready") is False
+          assert gold.get("automatic_order_execution_enabled") is False
+          assert isinstance(gold.get("test_metrics"), dict)
+          sources = gold.get("training_data_sources")
+          assert isinstance(sources, list) and any(isinstance(s, str) and s.startswith("Twelve Data XAU/USD") for s in sources)
+          print({"BTC": "validated research checkpoint", "XAUUSD": "validated Twelve Data spot research checkpoint",
+                 "production_ready": False, "automatic_order_execution_enabled": False})
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add kitty_v3_retrained_checkpoint.pt models/kitty_XAUUSD_checkpoint.pt
+          if git diff --cached --quiet; then
+            echo "Research checkpoints unchanged; no commit needed."
+            exit 0
+          fi
+          git commit -m "chore: publish BTC and XAUUSD research checkpoints"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
