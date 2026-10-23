@@ -82,6 +82,7 @@ class GoldModelIsolationTests(unittest.TestCase):
                     "average_net_return": 0.002,
                     "compounded_net_return": 0.04,
                     "max_drawdown": -0.02,
+                    "profit_factor": 1.2,
                 },
             },
         }
