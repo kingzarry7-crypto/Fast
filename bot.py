@@ -2351,7 +2351,7 @@ KITTY_TELEGRAM_INTERVAL_SEC = max(300, env_int("KITTY_TELEGRAM_INTERVAL_SEC", 90
 
 
 async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE):
-    """Run Kitty V3 on the configured multi-asset daily watchlist and DM admins."""
+    """Send deduplicated hourly Kitty research alerts for BTC and XAU/USD to admins."""
     if not KITTY_TELEGRAM_WATCH:
         return
     if not ADMIN_IDS:
@@ -2359,70 +2359,103 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE):
         return
 
     from market import get_candles
-    from kitty_api import _kitty_features
-    import kitty_v3_retrained as kitty_model
+    from kitty_api import _kitty_features, _validate_candles
+    from kitty_alerts import normalize_kitty_alert
+    import kitty_v3_retrained as btc_model
+    import kitty_gold_model as gold_model
 
-    # Research-only hourly BTC model. Do not apply it to other assets or timeframes.
-    assets = (("BTC/USDT", "BTC/USDT"),)
+    assets = (
+        ("BTC/USDT", "BTC/USDT", "BTC"),
+        ("XAU/USD", "Gold (XAU/USD)", "XAUUSD"),
+    )
     fingerprints = context.application.bot_data.setdefault("kitty_telegram_last_fingerprints", {})
 
-    for symbol, label in assets:
+    for symbol, label, model_symbol in assets:
         try:
             candles = await asyncio.to_thread(
                 get_candles, symbol, timeframe="1h", outputsize=160
             )
             if not isinstance(candles, list) or len(candles) < 56:
-                raise ValueError(f"Need at least 56 hourly candles; received {len(candles) if isinstance(candles, list) else 'non-list data'}")
+                raise ValueError(
+                    f"Need at least 56 hourly candles; received "
+                    f"{len(candles) if isinstance(candles, list) else 'non-list data'}"
+                )
+            _validate_candles(candles, "1h", symbol)
+            closed_candles = candles[:-1]
+            candle_time = _validate_candles(closed_candles, "1h", symbol)
+            features = _kitty_features(closed_candles)
 
-            features = _kitty_features(candles[:-1])
-            prediction = await asyncio.to_thread(kitty_model.predict_features, features)
-            candle_time = str(candles[-2].get("datetime") or candles[-2].get("time") or "latest")
-            signal = str(prediction.get("signal") or "NO TRADE").upper()
-            probability = float(prediction["confidence"])
-            fingerprint = f"{symbol}|1h|{candle_time}|{signal}"
+            if model_symbol == "XAUUSD":
+                prediction = await asyncio.to_thread(gold_model.predict_features, features)
+            else:
+                prediction = await asyncio.to_thread(btc_model.predict_features, features)
+
+            safe = normalize_kitty_alert(prediction)
+            signal = safe["signal"]
+            candidate = safe["candidate_signal"]
+            probability = safe["confidence"]
+            fingerprint = f"{symbol}|1h|{candle_time}|{signal}|{candidate}"
             if fingerprints.get(symbol) == fingerprint:
-                logger.debug("Kitty watcher: no new daily candle for %s (%s)", symbol, signal)
+                logger.debug("Kitty watcher: no new hourly candle for %s", symbol)
                 continue
 
             if signal == "LONG":
-                interpretation = "UPWARD BIAS"
+                interpretation = "VALIDATED UPWARD SIGNAL"
             elif signal == "SHORT":
-                interpretation = "DOWNWARD BIAS"
+                interpretation = "VALIDATED DOWNWARD SIGNAL"
             else:
-                interpretation = "HOLD / NO CLEAR BIAS"
+                interpretation = "NO ACTIONABLE SIGNAL"
 
-            message = "\n".join([
-                "🐈 <b>KING ZARRY AI • KITTY V3 MODEL ALERT</b>",
+            lines = [
+                "🐈 <b>KING ZARRY AI • KITTY MODEL ALERT</b>",
                 "",
                 f"Asset: <b>{html.escape(label)}</b> · Timeframe: <b>1H</b>",
-                f"Kitty output: <b>{html.escape(signal)}</b> ({interpretation})",
+                f"Signal: <b>{html.escape(signal)}</b> — {interpretation}",
                 f"Top-class confidence: <b>{probability * 100.0:.2f}%</b>",
-                f"Latest candle: <code>{html.escape(candle_time)}</code>",
-                "",
-                "⚠️ <b>Experimental only:</b> Kitty is research-only; this is not a validated trading signal.",
-                "No entry, stop-loss, or take-profit is implied. No trades are placed.",
-            ])
+                f"Completed candle: <code>{html.escape(candle_time)}</code>",
+            ]
+            if candidate in ("LONG", "SHORT") and candidate != signal:
+                lines.append(
+                    f"Research candidate: <b>{html.escape(candidate)}</b> "
+                    "(not approved for trading)"
+                )
+            if safe["research_only"]:
+                lines.extend([
+                    "",
+                    "⚠️ <b>Research-only:</b> no validated production edge for this directional output.",
+                    "No entry, stop-loss, or take-profit is implied. No orders are placed.",
+                ])
+            else:
+                lines.extend(["", "No orders are placed by this alert watcher."])
+
             sent = 0
             for uid in ADMIN_IDS:
                 try:
                     await context.bot.send_message(
                         chat_id=uid,
-                        text=message,
+                        text="\n".join(lines),
                         parse_mode="HTML",
                         disable_web_page_preview=True,
                     )
                     sent += 1
                 except Exception as send_error:
-                    logger.warning("Kitty Telegram alert failed for %s / admin %s: %s", symbol, uid, send_error)
+                    logger.warning(
+                        "Kitty Telegram alert failed for %s / admin %s: %s",
+                        symbol, uid, send_error,
+                    )
             if sent:
                 fingerprints[symbol] = fingerprint
             logger.info(
-                "Kitty Telegram inference completed: symbol=%s signal=%s probability=%.6f delivered_to=%d",
-                symbol, signal, probability, sent,
+                "Kitty Telegram inference completed: symbol=%s signal=%s candidate=%s "
+                "research_only=%s delivered_to=%d",
+                symbol, signal, candidate, safe["research_only"], sent,
             )
         except Exception as exc:
-            # One unsupported market/provider failure must not block the other assets.
-            logger.warning("Kitty Telegram inference failed for %s: %s: %s", symbol, type(exc).__name__, exc)
+            # A missing Gold checkpoint/provider must not block BTC alerts, or vice versa.
+            logger.warning(
+                "Kitty Telegram inference failed for %s: %s: %s",
+                symbol, type(exc).__name__, exc,
+            )
 
 def _agent_signal_is_actionable(analysis: dict) -> bool:
     """BUY/SELL only if NOT a late entry — never push chase signals."""
