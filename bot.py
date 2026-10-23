@@ -2351,29 +2351,62 @@ KITTY_TELEGRAM_INTERVAL_SEC = max(7200, env_int("KITTY_TELEGRAM_INTERVAL_SEC", 7
 
 
 async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE):
-    """Send deduplicated multi-timeframe BUY/SELL/WAIT alerts for BTC and Gold on a 2-hour schedule."""
+    """Scan BTC and XAU/USD every two hours; Kitty model gates every multi-timeframe alert."""
     if not KITTY_TELEGRAM_WATCH:
         return
     if not ADMIN_IDS:
         logger.warning("Kitty watcher enabled but ADMIN_IDS is empty")
         return
-    from market import get_candles
-    from kitty_api import _validate_candles
-    from kitty_alerts import normalize_mtf_watch_signal, validate_mtf_watch_levels
 
-    assets = (("BTC/USDT", "BTC/USD", "Bitcoin (BTC/USD)"), ("XAU/USD", "XAU/USD", "Gold (XAU/USD)"))
+    from market import get_candles
+    from kitty_api import _validate_candles, _kitty_features
+    from kitty_alerts import normalize_kitty_mtf_signal, validate_mtf_watch_levels
+    import kitty_v3_retrained as btc_model
+    import kitty_gold_model as gold_model
+
+    assets = (
+        ("BTC/USDT", "BTC/USD", "Bitcoin (BTC/USD)", btc_model),
+        ("XAU/USD", "XAU/USD", "Gold (XAU/USD)", gold_model),
+    )
     fingerprints = context.application.bot_data.setdefault("kitty_telegram_last_fingerprints", {})
-    for feed_symbol, analysis_symbol, label in assets:
+
+    for feed_symbol, analysis_symbol, label, model_module in assets:
         try:
-            candles = await asyncio.to_thread(get_candles, feed_symbol, timeframe="15m", outputsize=120)
-            if not isinstance(candles, list) or len(candles) < 30:
-                raise ValueError(f"Need at least 30 15-minute candles; got {len(candles) if isinstance(candles, list) else 'non-list data'}")
-            _validate_candles(candles, "15m", feed_symbol)
-            candle_time = _validate_candles(candles[:-1], "15m", feed_symbol)
-            fingerprint = f"{feed_symbol}|15m|{candle_time}"
+            # The model contract is hourly. Use only completed 1H candles for inference;
+            # the 4H/1H/15M/5M checks below are confirmation filters, not model retraining timeframes.
+            candles = await asyncio.to_thread(
+                get_candles, feed_symbol, timeframe="1h", outputsize=160
+            )
+            if not isinstance(candles, list) or len(candles) < 56:
+                raise ValueError(
+                    f"Need at least 56 hourly candles; got {len(candles) if isinstance(candles, list) else 'non-list data'}"
+                )
+            _validate_candles(candles, "1h", feed_symbol)
+            closed_candles = candles[:-1]
+            candle_time = _validate_candles(closed_candles, "1h", feed_symbol)
+            fingerprint = f"{feed_symbol}|1h|{candle_time}"
             if fingerprints.get(feed_symbol) == fingerprint:
+                logger.info("Kitty two-hour watch skipped duplicate closed candle: %s %s", feed_symbol, candle_time)
                 continue
-            # Model checkpoints are hourly research models; do not misapply them to 15m candles.
+
+            model_error = None
+            try:
+                features = await asyncio.to_thread(_kitty_features, closed_candles)
+                prediction = await asyncio.to_thread(model_module.predict_features, features)
+            except Exception as exc:
+                model_error = f"{type(exc).__name__}: {str(exc)[:160]}"
+                logger.warning("Kitty model inference unavailable for %s: %s", feed_symbol, model_error)
+                prediction = {
+                    "signal": "NO TRADE",
+                    "class_prediction": "NO TRADE",
+                    "confidence": 0.0,
+                    "production_ready": False,
+                    "signal_edge_validated": False,
+                    "research_only": True,
+                }
+
+            # The legacy agent's technical MTF analysis is retained only as confirmation.
+            # It cannot originate a BUY/SELL unless Kitty's own model is approved and actionable.
             mtf = await asyncio.to_thread(analyze_multi_timeframe, analysis_symbol)
             try:
                 news = await asyncio.to_thread(news_engine.get_news_for_asset, analysis_symbol)
@@ -2381,42 +2414,60 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE):
                 logger.warning("Kitty watch news unavailable for %s: %s", analysis_symbol, exc)
                 news = {"risk": "UNKNOWN", "events": [], "headlines": []}
             mtf = await asyncio.to_thread(ai_confirm_signal_mtf, mtf, news)
-            late = await asyncio.to_thread(detect_late_entry_status, mtf.get("15m", {}), mtf.get("5m", {}), mtf.get("1h", {}))
-            safe = normalize_mtf_watch_signal(mtf, late)
+            late = await asyncio.to_thread(
+                detect_late_entry_status, mtf.get("15m", {}), mtf.get("5m", {}), mtf.get("1h", {})
+            )
+            safe = normalize_kitty_mtf_signal(prediction, mtf, late)
+            if model_error:
+                safe = {
+                    **safe,
+                    "signal": "WAIT",
+                    "reason": "Kitty model inference unavailable: " + model_error,
+                }
+
             levels = validate_mtf_watch_levels(mtf, safe["signal"])
             if safe["signal"] in {"BUY", "SELL"} and not levels["valid"]:
-                safe = {"signal": "WAIT", "reason": "Risk levels rejected: " + levels["reason"]}
+                safe = {**safe, "signal": "WAIT", "reason": "Risk levels rejected: " + levels["reason"]}
+
             tf4, tf1, tf15, tf5 = (mtf.get(k, {}) for k in ("4h", "1h", "15m", "5m"))
+            candidate = str(safe.get("candidate_signal") or prediction.get("class_prediction") or "NO TRADE")
+            confidence = float(safe.get("confidence", 0.0) or 0.0)
             lines = [
-                "🐈 <b>KING ZARRY AI • KITTY MULTI-CANDLE WATCH</b>", "",
+                "🐈 <b>KING ZARRY AI • KITTY MODEL ALERT</b>", "",
                 f"Asset: <b>{html.escape(label)}</b>",
                 f"Decision: <b>{html.escape(safe['signal'])}</b>",
-                "Execution timeframe: <b>15M</b> · Confirmation: 4H / 1H / 15M / 5M",
-                f"Last completed 15M candle: <code>{html.escape(candle_time)}</code>", "",
+                f"Kitty model candidate: <b>{html.escape(candidate)}</b> · Confidence: <b>{confidence * 100:.2f}%</b>",
+                "Scan: <b>every 2 hours</b> · Confirmation: 4H / 1H / 15M / 5M",
+                f"Last completed 1H candle: <code>{html.escape(candle_time)}</code>", "",
                 f"4H: {html.escape(str(tf4.get('trend', 'UNKNOWN')))} · 1H: {html.escape(str(tf1.get('trend', 'UNKNOWN')))} · "
                 f"15M: {html.escape(str(tf15.get('trend', 'UNKNOWN')))} · 5M: {html.escape(str(tf5.get('trend', 'UNKNOWN')))}",
-                f"Filter: {html.escape(safe['reason'])}", "",
+                f"Decision reason: {html.escape(str(safe['reason']))}", "",
                 *(
                     [
                         f"Entry zone: <code>{levels['entry_low']:.2f} – {levels['entry_high']:.2f}</code>",
                         f"Stop-loss: <code>{levels['stop_loss']:.2f}</code>",
                         f"TP1: <code>{levels['tp1']:.2f}</code> · TP2: <code>{levels['tp2']:.2f}</code> · TP3: <code>{levels['tp3']:.2f}</code>",
-                        f"Risk/reward to TP1: <b>1:{levels['risk_reward_tp1']:.2f}</b>",
-                        "",
+                        f"Risk/reward to TP1: <b>1:{levels['risk_reward_tp1']:.2f}</b>", "",
                     ] if safe["signal"] in {"BUY", "SELL"} and levels["valid"] else []
                 ),
-                "Alert only; no order is placed. BUY/SELL is not a profit guarantee. Conflicting, late, or incomplete risk setups become WAIT.",
+                "Alert only; no order is placed. Research-only models, conflicting timeframes, stale data, or invalid risk levels must remain WAIT.",
             ]
             sent = 0
             for uid in ADMIN_IDS:
                 try:
-                    await context.bot.send_message(chat_id=uid, text="\n".join(lines), parse_mode="HTML", disable_web_page_preview=True)
+                    await context.bot.send_message(
+                        chat_id=uid, text="\\n".join(lines), parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
                     sent += 1
                 except Exception as exc:
                     logger.warning("Kitty alert failed for %s / admin %s: %s", feed_symbol, uid, exc)
             if sent:
                 fingerprints[feed_symbol] = fingerprint
-            logger.info("Kitty 2-hour multi-candle watch: symbol=%s signal=%s candle=%s delivered_to=%d", feed_symbol, safe["signal"], candle_time, sent)
+            logger.info(
+                "Kitty two-hour model-gated watch: symbol=%s signal=%s candidate=%s candle=%s delivered_to=%d",
+                feed_symbol, safe["signal"], candidate, candle_time, sent,
+            )
         except Exception as exc:
             logger.warning("Kitty watch failed for %s: %s: %s", feed_symbol, type(exc).__name__, exc)
 
@@ -4747,10 +4798,12 @@ def main():
                 name="king-zarry-provider-registry-watch",
             )
             if AGENT_SIGNAL_WATCH:
-                application.job_queue.run_repeating(
-                    agent_signal_watch_job,
-                    interval=AGENT_SIGNAL_INTERVAL_SEC,
-                    first=30,
+                # The legacy agent signal dropper is intentionally not scheduled.
+                # Kitty is the sole automated signal source for BTC and XAU/USD;
+                # other agent analysis remains available on demand.
+                logger.warning(
+                    "AGENT_SIGNAL_WATCH is deprecated and was not scheduled; "
+                    "use the Kitty model-gated two-hour watcher instead."
                 )
             # Daily morning brief: one fresh scan, then DM active Telegram VIP users.
             # Defaults to 08:00 Africa/Lagos. Disable with AGENT_MORNING_BRIEF=false.
