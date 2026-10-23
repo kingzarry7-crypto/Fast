@@ -47,23 +47,39 @@ def _ema(values, period):
 
 def _validate_candles(candles, timeframe, symbol):
     from datetime import datetime, timezone, timedelta
+    from kitty_features import normalize_candle_timestamp
+
     if not isinstance(candles, list) or len(candles) < 35:
         raise ValueError(symbol + ': insufficient candles')
-    raw = candles[-1].get('datetime') or candles[-1].get('time') or candles[-1].get('timestamp')
-    from kitty_features import normalize_candle_timestamp
+
+    def _candle_time(candle):
+        raw = candle.get("datetime") or candle.get("time") or candle.get("timestamp")
+        try:
+            return datetime.fromisoformat(normalize_candle_timestamp(raw)).astimezone(timezone.utc)
+        except (ValueError, OverflowError, OSError, TypeError) as exc:
+            raise ValueError(symbol + ': invalid or missing candle timestamp') from exc
+
+    # Some upstream feeds return newest-first. Normalize chronology before we
+    # exclude the forming candle or compute any rolling features.
     try:
-        stamp = datetime.fromisoformat(normalize_candle_timestamp(raw))
-    except (ValueError, OverflowError, OSError) as exc:
-        raise ValueError(symbol + ': invalid or missing latest candle timestamp') from exc
-    age = datetime.now(timezone.utc) - stamp.astimezone(timezone.utc)
+        candles.sort(key=_candle_time)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(symbol + ': candle timestamps could not be ordered') from exc
+
+    stamp = _candle_time(candles[-1])
+    age = datetime.now(timezone.utc) - stamp
     limit = timedelta(days=3) if timeframe == '1d' else timedelta(hours=6)
     if age < timedelta(minutes=-10) or age > limit:
-        raise ValueError(symbol + ': stale or future candle timestamp')
+        raise ValueError(
+            f"{symbol}: stale or future candle timestamp {stamp.isoformat()} "
+            f"(age_seconds={int(age.total_seconds())}, timeframe={timeframe})"
+        )
     for candle in candles[-35:]:
         for key in ('open', 'high', 'low', 'close'):
             value = float(candle[key])
-            if not isfinite(value) or value <= 0: raise ValueError(symbol + ': invalid candle price')
-    return stamp.astimezone(timezone.utc).isoformat()
+            if not isfinite(value) or value <= 0:
+                raise ValueError(symbol + ': invalid candle price')
+    return stamp.isoformat()
 
 def _gold_features(candles):
     closes = [float(c["close"]) for c in candles]
