@@ -208,6 +208,7 @@ def select_validation_candidate(candidate_trials: list[dict], min_trades: int = 
             average = float(trial.get("average_net_return"))
             compounded = float(trial.get("compounded_net_return"))
             threshold = float(trial.get("min_confidence", 1.01))
+            drawdown = float(trial.get("max_drawdown"))
         except (TypeError, ValueError, OverflowError):
             continue
         if (
@@ -215,10 +216,10 @@ def select_validation_candidate(candidate_trials: list[dict], min_trades: int = 
             and threshold <= 1.0
             and np.isfinite(average)
             and np.isfinite(compounded)
+            and np.isfinite(drawdown)
             and average > 0.0
             and compounded >= 0.01
-            and np.isfinite(float(trial.get("max_drawdown")))
-            and float(trial.get("max_drawdown")) >= -0.05
+            and drawdown >= -0.05
         ):
             eligible.append(trial)
     if not eligible:
