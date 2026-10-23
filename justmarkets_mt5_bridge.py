@@ -12,7 +12,11 @@ def dt(v):
     if x.tzinfo is None: raise ValueError("timezone required")
     return x.astimezone(timezone.utc)
 def db():
-    p = os.getenv("JUSTMARKETS_MT5_BRIDGE_DB_PATH") or str(Path(os.getenv("DATA_DIR","/tmp"))/"mt5-shadow.sqlite3")
+    p = (os.getenv("JUSTMARKETS_MT5_BRIDGE_DB_PATH") or "").strip()
+    data_dir = (os.getenv("DATA_DIR") or "").strip()
+    if not p and not data_dir:
+        raise HTTPException(503, "MT5 bridge disabled: configure persistent database storage")
+    if not p: p = str(Path(data_dir)/"mt5-shadow.sqlite3")
     Path(p).parent.mkdir(parents=True,exist_ok=True)
     c=sqlite3.connect(p,timeout=15); c.row_factory=sqlite3.Row
     c.executescript("CREATE TABLE IF NOT EXISTS heartbeat(id INTEGER PRIMARY KEY, at TEXT, connected INTEGER, verified INTEGER, symbols TEXT); CREATE TABLE IF NOT EXISTS signals(id TEXT PRIMARY KEY,symbol TEXT,direction TEXT,candle TEXT,created TEXT,expires TEXT,entry REAL,stop REAL,metadata TEXT,state TEXT,epoch REAL); CREATE TABLE IF NOT EXISTS acks(id TEXT,status TEXT,code TEXT,reason TEXT,at TEXT,UNIQUE(id,status,code));")
