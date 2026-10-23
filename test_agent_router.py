@@ -64,6 +64,28 @@ class AgentRouterTests(unittest.TestCase):
         self.assertIn("4312.5", result["reply"])
         self.assertIn("No trade was placed", result["reply"])
 
+    def test_multi_asset_comparison_analyzes_each_requested_asset(self):
+        def analyze(symbol, timeframe):
+            return {
+                "symbol": symbol, "timeframe": timeframe, "price": 100 if symbol == "BTC/USD" else 200,
+                "signal": "WAIT", "trend": "mixed", "confidence": 50, "data_ok": True,
+                "entry": None, "stop_loss": None, "tp1": None, "tp2": None, "tp3": None,
+                "reasons": ["mixed timeframes"],
+            }
+
+        with patch("agent_core.tool_analyze_symbol", side_effect=analyze) as analyze_mock, \\
+             patch("agent_core.tool_news_risk", return_value={"level": "LOW"}), \\
+             patch("agent_core.tool_learn", return_value="learning-id"), \\
+             patch("market.get_candles", return_value=[]):
+            result = agent_router.route_agent_request("Compare BTC and gold signals on 1h", "u1")
+
+        self.assertEqual(result["operation"], "compare_markets")
+        self.assertIn("BTC/USD", result["reply"])
+        self.assertIn("XAU/USD", result["reply"])
+        symbols = [call.args[0] for call in analyze_mock.call_args_list]
+        self.assertIn("BTC/USD", symbols)
+        self.assertIn("XAU/USD", symbols)
+
     def test_market_data_failure_is_reported_without_fabrication(self):
         with patch("agent_core.tool_analyze_symbol", return_value={
             "symbol": "BTC/USD", "signal": "WAIT", "data_ok": False, "error": "provider timeout"
