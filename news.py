@@ -468,9 +468,24 @@ def get_forexfactory_events() -> List[Dict[str, Any]]:
             try:
                 if not isinstance(item, dict):
                     continue
-                if item.get("currency") not in ["USD", "EUR", "GBP", "JPY", "XAU"]:
+                # ForexFactory's public JSON uses "country" for the currency
+                # code (e.g. "USD") and often omits a separate "currency" key.
+                # Prefer an explicit currency when present, otherwise use that
+                # documented field; checking only item["currency"] made the
+                # no-key fallback silently return an empty calendar.
+                currency = str(item.get("currency") or item.get("country") or "").strip().upper()
+                if currency not in ["USD", "EUR", "GBP", "JPY", "XAU"]:
                     continue
-                ev = {"title": item.get("title"), "country": item.get("country") or item.get("currency"), "currency": item.get("currency"), "date": item.get("date"), "impact": item.get("impact"), "forecast": item.get("forecast") if item.get("forecast") is not None else None, "previous": item.get("previous") if item.get("previous") is not None else None, "actual": item.get("actual") if item.get("actual") is not None else None}
+                ev = {
+                    "title": item.get("title"),
+                    "country": item.get("country") or currency,
+                    "currency": currency,
+                    "date": item.get("date"),
+                    "impact": item.get("impact"),
+                    "forecast": item.get("forecast") if item.get("forecast") is not None else None,
+                    "previous": item.get("previous") if item.get("previous") is not None else None,
+                    "actual": item.get("actual") if item.get("actual") is not None else None,
+                }
                 events.append(normalize_event(ev, "FOREXFACTORY"))
                 if len(events) >= 30:
                     break
