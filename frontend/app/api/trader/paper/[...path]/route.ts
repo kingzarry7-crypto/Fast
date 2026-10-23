@@ -14,7 +14,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     process.env.BACKEND_URL ||
     process.env.NEXT_PUBLIC_API_BASE_URL ||
     "https://fast-production-0eba.up.railway.app"
-  ).trim().replace(/\\/+$/, "");
+  ).trim().replace(/\/+$/, "");
   const url = new URL("/multi-paper/" + path[0], upstream);
   request.nextUrl.searchParams.forEach((value, key) => url.searchParams.append(key, value));
   try {
