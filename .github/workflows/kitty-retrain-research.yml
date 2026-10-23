@@ -31,6 +31,7 @@ on:
         options: ["0.002", "0.003", "0.004", "0.005"]
   schedule:
     - cron: "17 2 * * 0"
+# Publish only validated research checkpoints; never enable production signals or automatic orders.
 permissions:
   contents: write
 
