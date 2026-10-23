@@ -10,6 +10,7 @@ from typing import Any
 
 
 DIRECTIONAL = {"LONG", "SHORT"}
+MIN_RISK_REWARD_TP1 = 1.2
 
 
 def normalize_kitty_alert(prediction: dict[str, Any]) -> dict[str, Any]:
@@ -71,8 +72,6 @@ def normalize_mtf_watch_signal(mtf_data: dict[str, Any], late_entry: dict[str, A
         return {"signal": "WAIT", "reason": "Late-entry safety score is not finite"}
     if status in {"LATE", "EXTENDED / AVOID", "RISKY"} or late_score >= 45 or action in {"WAIT FOR PULLBACK", "WAIT FOR RETEST", "WAIT"}:
         return {"signal": "WAIT", "reason": "Late-entry / extension filter blocked setup"}
-    # Fail closed: every required timeframe must explicitly agree. Missing or
-    # neutral candle directions are not confirmation and therefore become WAIT.
     required = {
         "4h": str(tf4.get("signal") or "").strip().upper(),
         "1h": str(tf1.get("signal") or "").strip().upper(),
@@ -89,7 +88,7 @@ def normalize_mtf_watch_signal(mtf_data: dict[str, Any], late_entry: dict[str, A
 
 
 def validate_mtf_watch_levels(mtf_data: dict[str, Any], signal: str) -> dict[str, Any]:
-    """Require complete, directionally valid 15M entry/SL/TP levels for BUY/SELL alerts."""
+    """Require complete, directionally valid 15M levels and at least 1.2R to TP1."""
     direction = str(signal or "WAIT").strip().upper()
     if direction not in {"BUY", "SELL"}:
         return {"valid": False, "reason": "No directional setup", "signal": "WAIT"}
@@ -127,10 +126,16 @@ def validate_mtf_watch_levels(mtf_data: dict[str, Any], signal: str) -> dict[str
     reward = abs(values["tp1"] - entry)
     if risk <= 0 or reward <= 0:
         return {"valid": False, "signal": "WAIT", "reason": "Invalid risk/reward levels"}
-    values["risk_reward_tp1"] = reward / risk
+    risk_reward = reward / risk
+    if not math.isfinite(risk_reward) or risk_reward < MIN_RISK_REWARD_TP1:
+        return {
+            "valid": False, "signal": "WAIT",
+            "reason": f"TP1 reward-to-risk {risk_reward:.2f}R is below the {MIN_RISK_REWARD_TP1:.1f}R minimum",
+        }
+    values["risk_reward_tp1"] = risk_reward
     values["signal"] = direction
     values["valid"] = True
-    values["reason"] = "15M entry, stop-loss and all three targets passed direction checks"
+    values["reason"] = f"15M levels passed direction checks and TP1 meets the {MIN_RISK_REWARD_TP1:.1f}R minimum"
     return values
 
 
@@ -149,7 +154,6 @@ def normalize_kitty_mtf_signal(
             "candidate_signal": model["candidate_signal"],
             "confidence": model["confidence"],
         }
-
     candidate = model["signal"]
     direction = "BUY" if candidate == "LONG" else "SELL" if candidate == "SHORT" else "WAIT"
     if direction == "WAIT":
@@ -160,7 +164,6 @@ def normalize_kitty_mtf_signal(
             "candidate_signal": model["candidate_signal"],
             "confidence": model["confidence"],
         }
-
     data = dict(mtf_data) if isinstance(mtf_data, dict) else {}
     mtf_direction = str(data.get("mtf_signal") or "").strip().upper()
     if mtf_direction and mtf_direction != direction:
@@ -171,7 +174,6 @@ def normalize_kitty_mtf_signal(
             "candidate_signal": candidate,
             "confidence": model["confidence"],
         }
-
     data["mtf_signal"] = direction
     mtf = normalize_mtf_watch_signal(data, late_entry)
     return {
