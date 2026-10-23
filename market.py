@@ -906,9 +906,10 @@ def _eulerpool_gold_get_price() -> float:
     last-resort spot/reference-price fallback and is never converted into
     synthetic candles for Kitty's hourly model.
     """
-    api_key = _clean_env_str(os.getenv("EULERPOOL_API_KEY"))
+    # Accept the documented provider name and the legacy short alias used in Railway.
+    api_key = _clean_env_str(os.getenv("EULERPOOL_API_KEY") or os.getenv("EULER_API_KEY"))
     if not api_key:
-        raise RuntimeError("EULERPOOL_API_KEY is not configured")
+        raise RuntimeError("EULERPOOL_API_KEY (or EULER_API_KEY) is not configured")
     response = requests.get(
         "https://api.eulerpool.com/api/1/commodity/prices/GOLD",
         params={"days": 30},
