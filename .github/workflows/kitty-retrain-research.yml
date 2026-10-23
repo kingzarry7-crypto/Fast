@@ -104,7 +104,7 @@ jobs:
           PY
       - name: Upload BTC runtime research checkpoint
         if: matrix.symbol == 'BTC'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kitty-BTC-checkpoint-${{ github.run_number }}
           path: research-model/kitty_BTC_checkpoint.pt
@@ -112,7 +112,7 @@ jobs:
           retention-days: 7
       - name: Publish research artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kitty-${{ matrix.symbol }}-retraining-${{ github.run_number }}
           path: kitty-training-output/
@@ -232,7 +232,7 @@ jobs:
           PY
       - name: Upload XAUUSD runtime research checkpoint
         if: matrix.symbol == 'XAUUSD'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kitty-XAUUSD-checkpoint-${{ github.run_number }}
           path: research-model/kitty_XAUUSD_checkpoint.pt
@@ -240,7 +240,7 @@ jobs:
           retention-days: 7
       - name: Publish gold and forex research artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kitty-${{ matrix.symbol }}-retraining-${{ github.run_number }}
           path: kitty-training-output/${{ matrix.symbol }}/
