@@ -2456,7 +2456,7 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE):
             for uid in ADMIN_IDS:
                 try:
                     await context.bot.send_message(
-                        chat_id=uid, text="\\n".join(lines), parse_mode="HTML",
+                        chat_id=uid, text="\n".join(lines), parse_mode="HTML",
                         disable_web_page_preview=True,
                     )
                     sent += 1
