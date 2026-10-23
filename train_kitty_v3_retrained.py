@@ -203,6 +203,7 @@ def should_disable_signals(selected_confidence: float, holdout_metrics: dict, mi
         and np.isfinite(average) and average > 0.0
         and np.isfinite(compounded) and compounded >= 0.01
         and np.isfinite(drawdown) and drawdown >= -0.05
+        and np.isfinite(profit_factor) and profit_factor >= 1.10
     )
 
 
