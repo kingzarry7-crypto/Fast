@@ -101,8 +101,8 @@ class KittyTrainingExperimentTests(unittest.TestCase):
 
     def test_confidence_selection_uses_profitable_validation_threshold_with_enough_trades(self):
         trials = [
-            {"min_confidence": 0.4, "trade_count": 30, "compounded_net_return": 0.02, "average_net_return": 0.001},
-            {"min_confidence": 0.5, "trade_count": 20, "compounded_net_return": 0.04, "average_net_return": 0.002},
+            {"min_confidence": 0.4, "trade_count": 30, "compounded_net_return": 0.02, "average_net_return": 0.001, "max_drawdown": -0.03},
+            {"min_confidence": 0.5, "trade_count": 20, "compounded_net_return": 0.04, "average_net_return": 0.002, "max_drawdown": -0.01},
             {"min_confidence": 0.6, "trade_count": 2, "compounded_net_return": 0.10, "average_net_return": 0.05},
         ]
         threshold, reason = kitty.select_confidence_threshold(trials)
@@ -118,7 +118,7 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         self.assertTrue(kitty.should_disable_signals(0.5, holdout))
 
     def test_holdout_gate_allows_only_enough_positive_net_trades(self):
-        holdout = {"trade_count": 12, "average_net_return": 0.001, "compounded_net_return": 0.012}
+        holdout = {"trade_count": 35, "average_net_return": 0.001, "compounded_net_return": 0.02, "max_drawdown": -0.03}
         self.assertFalse(kitty.should_disable_signals(0.5, holdout))
         self.assertTrue(kitty.should_disable_signals(1.01, holdout))
 
@@ -151,7 +151,7 @@ class KittyTrainingExperimentTests(unittest.TestCase):
              "trade_count": 30, "average_net_return": -0.001,
              "compounded_net_return": -0.03, "max_drawdown": -0.05},
             {"candidate_id": "positive-net", "min_confidence": 0.6,
-             "trade_count": 18, "average_net_return": 0.002,
+             "trade_count": 35, "average_net_return": 0.002,
              "compounded_net_return": 0.04, "max_drawdown": -0.02},
             {"candidate_id": "too-few-trades", "min_confidence": 0.4,
              "trade_count": 4, "average_net_return": 0.02,
@@ -186,9 +186,10 @@ class KittyTrainingExperimentTests(unittest.TestCase):
             "test_metrics": {
                 "signals_disabled_for_no_validated_edge": False,
                 "paper_backtest_after_assumed_costs": {
-                    "trade_count": 3,
+                    "trade_count": 35,
                     "average_net_return": 0.01,
                     "compounded_net_return": 0.03,
+                    "max_drawdown": -0.07,
                 },
             },
         }
