@@ -282,6 +282,32 @@ def run_cycle(symbol: str | None = None) -> dict[str, Any]:
             price = float(signal["price"])
             if not math.isfinite(price) or price <= 0:
                 raise ValueError("Invalid market price")
+            # Publish only the actual gated signal (never candidate_signal) to the
+            # separate shadow bridge. The current safety gate forces NO TRADE.
+            broker_symbol = {"BTC/USD": "BTC", "BTC/USDT": "BTC", "XAU/USD": "XAUUSD"}.get(market_symbol)
+            if broker_symbol:
+                try:
+                    from justmarkets_mt5_bridge import publish_shadow_signal
+                    from datetime import timedelta
+                    published_at = datetime.now(timezone.utc)
+                    bridge_result = publish_shadow_signal({
+                        "signal_id": market_symbol + ":" + cfg["timeframe"] + ":" + str(candle_time),
+                        "symbol": broker_symbol,
+                        "direction": "NO_TRADE" if str(signal.get("signal", "")).upper().replace(" ", "_") in {"NO_TRADE", "NO_TRADE"} else str(signal.get("signal", "")).upper(),
+                        "candle_time": candle_time,
+                        "created_at": published_at.isoformat(),
+                        "expires_at": (published_at + timedelta(hours=2)).isoformat(),
+                        "entry_reference": price,
+                        "stop_loss": (signal.get("risk_levels") or {}).get("stop_reference"),
+                        "metadata": {"timeframe": cfg["timeframe"], "source_symbol": market_symbol,
+                                     "signal_type": signal.get("signal_type"), "strategy_edge_validated": False},
+                    })
+                    logger.info("MT5 shadow signal publication status=%s reason=%s",
+                                "published" if bridge_result.get("published") else "rejected",
+                                bridge_result.get("reason", bridge_result.get("state", "unknown")))
+                except Exception as bridge_exc:
+                    # The optional bridge must never break the isolated paper ledger.
+                    logger.warning("MT5 shadow publication unavailable: %s", type(bridge_exc).__name__)
         except Exception as exc:
             logger.warning("Kitty multi-market paper skipped %s: %s", market_symbol, type(exc).__name__)
             results.append({"symbol": market_symbol, "status": "unavailable", "error": type(exc).__name__ + ": " + str(exc)[:160]})
@@ -436,7 +462,7 @@ def current_signals(
 
 
 def _worker_loop() -> None:
-    interval = max(60, min(int(os.getenv("KITTY_MULTI_PAPER_POLL_SECONDS", "900")), 3600))
+    interval = max(60, min(int(os.getenv("KITTY_MULTI_PAPER_POLL_SECONDS", "7200")), 7200))
     while not _stop.is_set():
         try:
             run_cycle()
