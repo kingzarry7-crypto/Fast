@@ -80,7 +80,7 @@ class MarketEmptyFallbackTests(unittest.TestCase):
             patch.object(market, "binance_pair", return_value=None),
             patch.object(market, "_twelve_get_candles", return_value=[]),
         ):
-            with self.assertRaisesRegex(RuntimeError, "No candle provider returned data"):
+            with self.assertRaisesRegex(RuntimeError, "No fresh candle provider returned data"):
                 market.get_candles("UNKNOWN/USD", "1h", 100)
 
 
