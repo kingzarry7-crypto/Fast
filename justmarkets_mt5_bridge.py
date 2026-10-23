@@ -43,7 +43,7 @@ def heartbeat(p:dict):
     for s in p.get("symbols",[]):
         if not isinstance(s,dict) or s.get("name") not in SYMBOLS: continue
         try:
-            if float(s["volume_min"])>0 and float(s["volume_min"])<=float(s["volume_max"]) and float(s["volume_step"])>0 and float(s["tick_size"])>0: symbols[s["name"]]=s
+            if int(s["trade_mode"])>0 and float(s["volume_min"])>0 and float(s["volume_min"])<=float(s["volume_max"]) and float(s["volume_step"])>0 and float(s["tick_size"])>0: symbols[s["name"]]=s
         except (KeyError,TypeError,ValueError): pass
     if not ok: symbols={}
     c=db()
