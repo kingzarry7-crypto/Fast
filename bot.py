@@ -2326,7 +2326,13 @@ async def cancelnotify_command(update, context):
 # Keep the old Railway flag readable only to warn about stale configuration.
 LEGACY_AGENT_SIGNAL_WATCH_REQUESTED = clean_env_str(os.getenv("AGENT_SIGNAL_WATCH", "false")).lower() in ("1", "true", "yes", "on")
 
- KITTY_TELEGRAM_WATCH:
+KITTY_TELEGRAM_WATCH = clean_env_str(os.getenv("KITTY_TELEGRAM_WATCH", "true")).lower() in ("1", "true", "yes", "on")
+KITTY_TELEGRAM_INTERVAL_SEC = max(7200, env_int("KITTY_TELEGRAM_INTERVAL_SEC", 7200))  # Never scan more often than every 2 hours
+
+
+async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE, force: bool = False):
+    """Scan BTC and XAU/USD every two hours; Kitty model gates every multi-timeframe alert."""
+    if not KITTY_TELEGRAM_WATCH:
         return
     if not ADMIN_IDS:
         logger.warning("Kitty watcher enabled but ADMIN_IDS is empty")
@@ -2359,7 +2365,7 @@ LEGACY_AGENT_SIGNAL_WATCH_REQUESTED = clean_env_str(os.getenv("AGENT_SIGNAL_WATC
             closed_candles = candles[:-1]
             candle_time = _validate_candles(closed_candles, "1h", feed_symbol)
             fingerprint = f"{feed_symbol}|1h|{candle_time}"
-            if fingerprints.get(feed_symbol) == fingerprint:
+            if not force and fingerprints.get(feed_symbol) == fingerprint:
                 logger.info("Kitty two-hour watch skipped duplicate closed candle: %s %s", feed_symbol, candle_time)
                 continue
 
@@ -2521,77 +2527,21 @@ async def intelligence_command(update, context):
 
 
 async def agentscan_command(update, context):
-    """Admin-only: force one agent market scan and reply with results."""
+    """Admin-only manual Kitty scan; never use the legacy agent as a signal source."""
     user = update.effective_user
     if not user or user.id not in ADMIN_IDS:
         await update.message.reply_text("Admin only.")
         return
-    await update.message.reply_text("🤖 Agent scanning BTC/ETH/SOL/XAU…")
+    await update.message.reply_text("🐈 Running Kitty's model-gated BTC + Gold scan...")
     try:
-        from agent_core import tool_analyze_symbol
-    except Exception as e:
-        await update.message.reply_text(f"agent_core error: {type(e).__name__}")
-        return
-
-    lines = ["🤖 <b>AGENT SCAN RESULT</b>", ""]
-    actionable = []
-    for symbol in AGENT_WATCH_SYMBOLS:
-        try:
-            analysis = await asyncio.to_thread(tool_analyze_symbol, symbol, "15m")
-        except Exception as e:
-            lines.append(f"• {html.escape(symbol)}: ERROR {html.escape(type(e).__name__)}")
-            continue
-        sig = str(analysis.get("signal") or "WAIT").upper()
-        price = analysis.get("price")
-        late = _agent_signal_is_late(analysis)
-        eq = analysis.get("entry_quality") or "—"
-        conf = analysis.get("confidence")
-        err = analysis.get("error") or analysis.get("reason") or ""
-        tag = ""
-        if late and sig in ("BUY", "SELL"):
-            tag = " — <b>LATE (not sent)</b>"
-        elif sig in ("BUY", "SELL") and _agent_signal_is_actionable(analysis):
-            tag = " — <b>WOULD PUSH</b>"
-            actionable.append(analysis)
-        lines.append(
-            f"• <b>{html.escape(symbol)}</b>: {html.escape(sig)}"
-            + (f" @ {html.escape(str(price))}" if price is not None else "")
-            + f" | q={html.escape(str(eq))} conf={html.escape(str(conf))}"
-            + tag
+        await kitty_telegram_signal_job(context, force=True)
+        await update.message.reply_text(
+            "Kitty scan completed. BUY/SELL is allowed only when the trained model has validated edge "
+            "and 4H/1H/15M/5M confirmation passes. Otherwise Kitty reports WAIT. No order was placed."
         )
-        if err and sig == "WAIT":
-            lines.append(f"  <i>{html.escape(str(err)[:120])}</i>")
-
-    lines.append("")
-    lines.append(f"Actionable now: <b>{len(actionable)}</b>")
-    if not actionable:
-        lines.append("No Telegram push — market is WAIT or late.")
-    else:
-        lines.append("Pushing LIVE SIGNAL to admin…")
-    await update.message.reply_text("\n".join(lines), parse_mode="HTML", disable_web_page_preview=True)
-
-    if actionable:
-        # Reuse same format as watch job
-        msg = ["🤖 <b>KING ZARRY AGENT — LIVE SIGNAL</b>", "", "Manual /agentscan:", ""]
-        for a in actionable:
-            msg.append(
-                f"• <b>{html.escape(str(a.get('symbol')))}</b> — "
-                f"<b>{html.escape(str(a.get('signal') or '').upper())}</b>\n"
-                f"  Price: {html.escape(str(a.get('price') or '—'))} | "
-                f"Entry: {html.escape(str(a.get('entry') or '—'))}\n"
-                f"  SL: {html.escape(str(a.get('stop_loss') or '—'))} | "
-                f"TP1: {html.escape(str(a.get('tp1') or '—'))}"
-            )
-        msg.append("")
-        msg.append("<i>Not financial advice. Trading involves risk.</i>")
-        text = "\n".join(msg)
-        for uid in ADMIN_IDS:
-            try:
-                await context.bot.send_message(
-                    chat_id=uid, text=text, parse_mode="HTML", disable_web_page_preview=True
-                )
-            except Exception as e:
-                logger.warning("agentscan send failed %s: %s", uid, e)
+    except Exception as exc:
+        logger.exception("Manual Kitty scan failed")
+        await update.message.reply_text(f"Kitty scan failed safely: {type(exc).__name__}")
 
 
 _provider_watch_signature = None
