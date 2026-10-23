@@ -5,6 +5,7 @@ show a candidate class, but never an actionable LONG/SHORT signal.
 """
 from __future__ import annotations
 
+import math
 from typing import Any
 
 
@@ -17,27 +18,32 @@ def normalize_kitty_alert(prediction: dict[str, Any]) -> dict[str, Any]:
     candidate = str(
         prediction.get("class_prediction")
         or prediction.get("candidate_signal")
+        or prediction.get("proposed_signal")
         or raw_signal
     ).strip().upper()
     approved = (
-        prediction.get("production_ready") is True
-        and prediction.get("signal_edge_validated") is True
+        (prediction.get("production_ready") is True and prediction.get("signal_edge_validated") is True)
+        or prediction.get("signal_gate") == "validated_checkpoint_gate_passed"
     )
-    signal = raw_signal if raw_signal in DIRECTIONAL and approved else "NO TRADE"
+    try:
+        confidence = float(prediction.get("confidence"))
+    except (TypeError, ValueError, OverflowError):
+        confidence = float("nan")
+    confidence_valid = math.isfinite(confidence) and 0.0 <= confidence <= 1.0
+    if not confidence_valid:
+        confidence = 0.0
     if candidate not in DIRECTIONAL | {"NO TRADE"}:
         candidate = "NO TRADE"
-    confidence = prediction.get("confidence")
-    try:
-        confidence = float(confidence)
-    except (TypeError, ValueError, OverflowError):
-        confidence = 0.0
-    if not 0.0 <= confidence <= 1.0:
-        confidence = 0.0
+    signal = (
+        raw_signal
+        if raw_signal in DIRECTIONAL and approved and confidence_valid
+        else "NO TRADE"
+    )
     return {
         "signal": signal,
         "candidate_signal": candidate,
         "confidence": confidence,
         "production_ready": approved,
         "research_only": not approved,
-        "actionable": signal in DIRECTIONAL and approved,
+        "actionable": signal in DIRECTIONAL and approved and confidence_valid,
     }
