@@ -36,7 +36,8 @@ class KittyAlertNormalizationTests(unittest.TestCase):
             "signal_edge_validated": True,
         })
         self.assertEqual(result["confidence"], 0.0)
-        self.assertEqual(result["signal"], "LONG")
+        self.assertEqual(result["signal"], "NO TRADE")
+        self.assertFalse(result["actionable"])
 
 
 if __name__ == "__main__":
