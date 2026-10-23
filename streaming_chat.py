@@ -245,14 +245,14 @@ def _provider_streams(messages: list):
     if preferred == "hf":
         preferred = "huggingface"
 
-    default_order = ["zarry", "huggingface", "cloudflare", "openai", "groq", "openrouter", "chutes"]
+    default_order = ["zarry", "huggingface", "cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"]
     if not os.getenv("ZARRY_API_URL", "").strip():
         default_order = default_order[1:]
     if not ai_engine.HF_TOKEN:
         default_order = [p for p in default_order if p != "huggingface"]
 
-    # Match ai_engine's AUTO ordering: Zarry, then HF when configured, then
-    # Cloudflare, OpenAI, Groq, OpenRouter, and Chutes.
+    # Match ai_engine's AUTO ordering and include Gemini when configured.
+    # Provider-specific adapters are yielded only when their credentials exist.
     order = default_order
     if preferred not in {"", "auto"} and preferred in default_order:
         order = [preferred] + [p for p in default_order if p != preferred]
@@ -304,6 +304,13 @@ def _provider_streams(messages: list):
                 url=_CHUTES_URL,
                 key=_CHUTES_KEY,
                 model=_CHUTES_MODEL,
+                messages=messages,
+            )
+        elif provider == "gemini" and ai_engine.GEMINI_API_KEY:
+            yield provider, _stream_openai_compatible(
+                url="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+                key=ai_engine.GEMINI_API_KEY,
+                model=ai_engine.GEMINI_MODEL,
                 messages=messages,
             )
 
