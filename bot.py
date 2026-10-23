@@ -2347,7 +2347,7 @@ except Exception:
 # is not confirmed, so Telegram messages must never present its output as a
 # validated trade setup or invent entry/SL/TP levels.
 KITTY_TELEGRAM_WATCH = clean_env_str(os.getenv("KITTY_TELEGRAM_WATCH", "true")).lower() in ("1", "true", "yes", "on")
-KITTY_TELEGRAM_INTERVAL_SEC = 7200  # Check BTC and Gold every 2 hours to conserve market/news API calls
+KITTY_TELEGRAM_INTERVAL_SEC = max(7200, env_int("KITTY_TELEGRAM_INTERVAL_SEC", 7200))  # Never scan more often than every 2 hours
 
 
 async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE):
