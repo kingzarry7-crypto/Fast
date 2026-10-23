@@ -203,9 +203,9 @@ def route_agent_request(message: str, user_id: str) -> Optional[Dict[str, Any]]:
             }
         status = "completed" if all(item.get("status") == "completed" for item in reports) else "partial"
         reply = (
-            f"Multi-asset market comparison ({timeframe})\\n\\n"
-            + "\\n\\n".join(str(item["reply"]) for item in reports)
-            + "\\n\\nCompare only verified fields across reports. Missing or unavailable data must not be interpreted as a trade signal."
+            f"Multi-asset market comparison ({timeframe})\n\n"
+            + "\n\n".join(str(item["reply"]) for item in reports)
+            + "\n\nCompare only verified fields across reports. Missing or unavailable data must not be interpreted as a trade signal."
         )
         return {
             "status": status,
