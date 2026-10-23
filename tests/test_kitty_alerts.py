@@ -141,5 +141,55 @@ class KittyAlertNormalizationTests(unittest.TestCase):
         self.assertEqual(wrong["signal"], "WAIT")
 
 
+    def test_research_only_kitty_model_forces_wait_even_when_mtf_agrees(self):
+        from kitty_alerts import normalize_kitty_mtf_signal
+        prediction = {
+            "signal": "NO TRADE", "class_prediction": "LONG", "confidence": 0.82,
+            "production_ready": False, "signal_edge_validated": False, "research_only": True,
+        }
+        mtf = {
+            "mtf_signal": "BUY", "4h": {"signal": "BUY"}, "1h": {"signal": "BUY"},
+            "15m": {"signal": "BUY"}, "5m": {"signal": "BUY"},
+        }
+        result = normalize_kitty_mtf_signal(
+            prediction, mtf, {"action": "EARLY - GOOD ENTRY WINDOW", "status": "EARLY", "score": 0}
+        )
+        self.assertEqual(result["signal"], "WAIT")
+        self.assertFalse(result["model_actionable"])
+        self.assertIn("Kitty model gate", result["reason"])
+
+    def test_approved_kitty_model_and_all_matching_timeframes_can_signal_buy(self):
+        from kitty_alerts import normalize_kitty_mtf_signal
+        prediction = {
+            "signal": "LONG", "class_prediction": "LONG", "confidence": 0.82,
+            "production_ready": True, "signal_edge_validated": True,
+        }
+        mtf = {
+            "mtf_signal": "BUY", "4h": {"signal": "BUY"}, "1h": {"signal": "BUY"},
+            "15m": {"signal": "BUY"}, "5m": {"signal": "BUY"},
+        }
+        result = normalize_kitty_mtf_signal(
+            prediction, mtf, {"action": "EARLY - GOOD ENTRY WINDOW", "status": "EARLY", "score": 0}
+        )
+        self.assertEqual(result["signal"], "BUY")
+        self.assertTrue(result["model_actionable"])
+
+    def test_model_direction_conflict_forces_wait(self):
+        from kitty_alerts import normalize_kitty_mtf_signal
+        prediction = {
+            "signal": "SHORT", "class_prediction": "SHORT", "confidence": 0.82,
+            "production_ready": True, "signal_edge_validated": True,
+        }
+        mtf = {
+            "mtf_signal": "BUY", "4h": {"signal": "BUY"}, "1h": {"signal": "BUY"},
+            "15m": {"signal": "BUY"}, "5m": {"signal": "BUY"},
+        }
+        result = normalize_kitty_mtf_signal(
+            prediction, mtf, {"action": "EARLY - GOOD ENTRY WINDOW", "status": "EARLY", "score": 0}
+        )
+        self.assertEqual(result["signal"], "WAIT")
+        self.assertIn("model direction conflicts", result["reason"])
+
+
 if __name__ == "__main__":
     unittest.main()
