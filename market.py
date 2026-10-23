@@ -899,6 +899,41 @@ _GOLD_CACHE_TTL_SECONDS = max(5, int(os.getenv("GOLD_CACHE_TTL_SECONDS", "20") o
 def _is_gold_symbol(symbol: str) -> bool:
     return _normalize_symbol_key(symbol) in {"XAU/USD", "XAUUSD", "XAU", "GOLD"}
 
+def _eulerpool_gold_get_price() -> float:
+    """Return the latest daily Gold reference price from Eulerpool.
+
+    Eulerpool's commodity history is daily, not hourly OHLC. This is only a
+    last-resort spot/reference-price fallback and is never converted into
+    synthetic candles for Kitty's hourly model.
+    """
+    api_key = _clean_env_str(os.getenv("EULERPOOL_API_KEY"))
+    if not api_key:
+        raise RuntimeError("EULERPOOL_API_KEY is not configured")
+    response = requests.get(
+        "https://api.eulerpool.com/api/1/commodity/prices/GOLD",
+        params={"days": 30},
+        headers={"Accept": "application/json", "Authorization": f"Bearer {api_key}"},
+        timeout=10,
+    )
+    if response.status_code != 200:
+        raise RuntimeError(f"Eulerpool Gold reference request failed with HTTP {response.status_code}")
+    payload = response.json()
+    if not isinstance(payload, list):
+        raise RuntimeError("Eulerpool Gold reference response is not a list")
+    valid = []
+    for row in payload:
+        if not isinstance(row, dict):
+            continue
+        price = safe_float(row.get("price"))
+        stamp = row.get("date") or row.get("timestamp")
+        if price is not None and price > 0 and stamp is not None:
+            valid.append((str(stamp), price))
+    if not valid:
+        raise RuntimeError("Eulerpool Gold reference response contains no valid prices")
+    valid.sort(key=lambda item: item[0])
+    return valid[-1][1]
+
+
 def _gold_free_get_price(symbol: str) -> float:
     key = "XAU/USD"
     now = time.time()
@@ -933,6 +968,14 @@ def _gold_free_get_price(symbol: str) -> float:
             return _twelve_get_price(symbol)
         except Exception as exc:
             errors.append(f"twelve:{type(exc).__name__}")
+    if _clean_env_str(os.getenv("EULERPOOL_API_KEY")):
+        try:
+            price = _eulerpool_gold_get_price()
+            _GOLD_PRICE_CACHE[key] = (price, now, "eulerpool_daily_reference")
+            logger.info("Gold price fallback succeeded via Eulerpool daily reference data")
+            return price
+        except Exception as exc:
+            errors.append(f"eulerpool:{type(exc).__name__}")
     if cached:
         logger.warning("Gold providers unavailable; using cached real price")
         return cached[0]
