@@ -4,6 +4,32 @@ from kitty_alerts import normalize_kitty_alert
 
 
 class KittyAlertNormalizationTests(unittest.TestCase):
+    def test_mtf_watch_returns_buy_when_timeframes_confirm(self):
+        from kitty_alerts import normalize_mtf_watch_signal
+        result = normalize_mtf_watch_signal({
+            "mtf_signal": "BUY", "4h": {"signal": "BUY"}, "1h": {"signal": "BUY"},
+            "15m": {"signal": "BUY"}, "5m": {"signal": "BUY"},
+        }, {"action": "EARLY - GOOD ENTRY WINDOW", "status": "EARLY", "score": 0})
+        self.assertEqual(result["signal"], "BUY")
+
+    def test_mtf_watch_returns_wait_when_higher_timeframe_conflicts(self):
+        from kitty_alerts import normalize_mtf_watch_signal
+        result = normalize_mtf_watch_signal({
+            "mtf_signal": "BUY", "4h": {"signal": "SELL"}, "1h": {"signal": "BUY"},
+            "15m": {"signal": "BUY"}, "5m": {"signal": "BUY"},
+        }, {"action": "EARLY - GOOD ENTRY WINDOW", "status": "EARLY", "score": 0})
+        self.assertEqual(result["signal"], "WAIT")
+        self.assertIn("conflict", result["reason"])
+
+    def test_mtf_watch_returns_wait_when_late_or_safety_check_missing(self):
+        from kitty_alerts import normalize_mtf_watch_signal
+        mtf = {"mtf_signal": "SELL", "4h": {"signal": "SELL"}, "1h": {"signal": "SELL"},
+               "15m": {"signal": "SELL"}, "5m": {"signal": "SELL"}}
+        late = normalize_mtf_watch_signal(mtf, {"action": "WAIT FOR RETEST", "status": "LATE", "score": 45})
+        missing = normalize_mtf_watch_signal(mtf, None)
+        self.assertEqual(late["signal"], "WAIT")
+        self.assertEqual(missing["signal"], "WAIT")
+
     def test_research_gold_candidate_is_not_promoted_to_actionable_signal(self):
         result = normalize_kitty_alert({
             "signal": "NO TRADE",
