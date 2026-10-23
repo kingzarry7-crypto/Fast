@@ -60,6 +60,7 @@ def publish_shadow_signal(s:dict):
         if symbol not in SYMBOLS:return {"published":False,"reason":"unsupported_symbol"}
         if direction not in {"BUY","SELL","NO_TRADE"}:return {"published":False,"reason":"invalid_direction"}
         if dt(expires)<=now() or dt(expires)<=dt(created):return {"published":False,"reason":"expired_signal"}
+        if dt(candle)>dt(created) or dt(created)>(now()+__import__("datetime").timedelta(minutes=2)):return {"published":False,"reason":"invalid_signal_timestamps"}
         entry,stop=s.get("entry_reference"),s.get("stop_loss")
         if direction in {"BUY","SELL"} and (stop is None or float(stop)<=0):return {"published":False,"reason":"invalid_stop_loss"}
         if entry is not None and float(entry)<=0:return {"published":False,"reason":"invalid_entry"}
