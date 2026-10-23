@@ -462,7 +462,7 @@ def current_signals(
 
 
 def _worker_loop() -> None:
-    interval = max(60, min(int(os.getenv("KITTY_MULTI_PAPER_POLL_SECONDS", "7200")), 7200))
+    interval = 7200  # Fixed two-hour cadence requested; avoids frequent provider/API polling.
     while not _stop.is_set():
         try:
             run_cycle()
