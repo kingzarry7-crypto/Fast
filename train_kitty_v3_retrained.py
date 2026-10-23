@@ -146,47 +146,61 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
     }
 
 
-def select_confidence_threshold(threshold_trials: list[dict], min_trades: int = 10) -> tuple[float, str]:
-    """Select only a validation threshold with positive net returns and enough trades."""
-    eligible = [
-        trial for trial in threshold_trials
-        if trial["trade_count"] >= min_trades
-        and trial["compounded_net_return"] > 0.0
-        and trial["average_net_return"] is not None
-        and trial["average_net_return"] > 0.0
-    ]
+def select_confidence_threshold(threshold_trials: list[dict], min_trades: int = 30) -> tuple[float, str]:
+    """Select only a validation threshold with meaningful net returns, sample size, and bounded drawdown."""
+    eligible = []
+    for trial in threshold_trials:
+        try:
+            trades = int(trial.get("trade_count", 0) or 0)
+            compounded = float(trial.get("compounded_net_return"))
+            average = float(trial.get("average_net_return"))
+            drawdown = float(trial.get("max_drawdown"))
+            threshold = float(trial.get("min_confidence", 1.01))
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if (
+            trades >= min_trades and threshold <= 1.0
+            and np.isfinite(compounded) and compounded >= 0.01
+            and np.isfinite(average) and average > 0.0
+            and np.isfinite(drawdown) and drawdown >= -0.05
+        ):
+            eligible.append(trial)
     if not eligible:
-        return 1.01, "signals_disabled_no_validation_threshold_with_positive_net_return_and_at_least_10_trades"
+        return 1.01, "signals_disabled_no_validation_threshold_meets_30_trades_1pct_net_return_and_5pct_drawdown"
     selected = max(
         eligible,
         key=lambda trial: (
-            trial["compounded_net_return"],
-            trial["average_net_return"] if trial["average_net_return"] is not None else -1e9,
+            float(trial["compounded_net_return"]),
+            float(trial["average_net_return"]),
+            -abs(float(trial["max_drawdown"])),
         ),
     )
-    return float(selected["min_confidence"]), "best_positive_validation_net_return_with_at_least_10_trades"
+    return float(selected["min_confidence"]), "best_validation_net_return_with_30_trades_1pct_net_return_and_5pct_drawdown"
 
 
 
-def should_disable_signals(selected_confidence: float, holdout_metrics: dict, min_trades: int = 10) -> bool:
-    """Fail closed unless the untouched holdout shows enough positive net trades."""
-    if selected_confidence > 1.0:
-        return True
-    trade_count = int(holdout_metrics.get("trade_count", 0) or 0)
-    average = holdout_metrics.get("average_net_return")
-    compounded = holdout_metrics.get("compounded_net_return")
-    if trade_count < min_trades or average is None or compounded is None:
+def should_disable_signals(selected_confidence: float, holdout_metrics: dict, min_trades: int = 30) -> bool:
+    """Fail closed unless untouched holdout has 30+ trades, >=1% net return, and <=5% drawdown."""
+    if not np.isfinite(selected_confidence) or selected_confidence > 1.0:
         return True
     try:
-        average, compounded = float(average), float(compounded)
+        trade_count = int(holdout_metrics.get("trade_count", 0) or 0)
+        average = float(holdout_metrics.get("average_net_return"))
+        compounded = float(holdout_metrics.get("compounded_net_return"))
+        drawdown = float(holdout_metrics.get("max_drawdown"))
     except (TypeError, ValueError, OverflowError):
         return True
-    return not (np.isfinite(average) and np.isfinite(compounded) and average > 0 and compounded > 0)
+    return not (
+        trade_count >= min_trades
+        and np.isfinite(average) and average > 0.0
+        and np.isfinite(compounded) and compounded >= 0.01
+        and np.isfinite(drawdown) and drawdown >= -0.05
+    )
 
 
 
-def select_validation_candidate(candidate_trials: list[dict], min_trades: int = 10) -> dict | None:
-    """Choose a model only when its validation-only net-return trial clears a minimum sample."""
+def select_validation_candidate(candidate_trials: list[dict], min_trades: int = 30) -> dict | None:
+    """Choose only validation trials with >=30 trades, >=1% compounded net return, and <=5% drawdown."""
     eligible = []
     for trial in candidate_trials:
         try:
@@ -202,7 +216,9 @@ def select_validation_candidate(candidate_trials: list[dict], min_trades: int = 
             and np.isfinite(average)
             and np.isfinite(compounded)
             and average > 0.0
-            and compounded > 0.0
+            and compounded >= 0.01
+            and np.isfinite(float(trial.get("max_drawdown")))
+            and float(trial.get("max_drawdown")) >= -0.05
         ):
             eligible.append(trial)
     if not eligible:
