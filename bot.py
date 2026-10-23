@@ -2359,7 +2359,7 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE):
         return
     from market import get_candles
     from kitty_api import _validate_candles
-    from kitty_alerts import normalize_mtf_watch_signal
+    from kitty_alerts import normalize_mtf_watch_signal, validate_mtf_watch_levels
 
     assets = (("BTC/USDT", "BTC/USD", "Bitcoin (BTC/USD)"), ("XAU/USD", "XAU/USD", "Gold (XAU/USD)"))
     fingerprints = context.application.bot_data.setdefault("kitty_telegram_last_fingerprints", {})
@@ -2383,6 +2383,9 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE):
             mtf = await asyncio.to_thread(ai_confirm_signal_mtf, mtf, news)
             late = await asyncio.to_thread(detect_late_entry_status, mtf.get("15m", {}), mtf.get("5m", {}), mtf.get("1h", {}))
             safe = normalize_mtf_watch_signal(mtf, late)
+            levels = validate_mtf_watch_levels(mtf, safe["signal"])
+            if safe["signal"] in {"BUY", "SELL"} and not levels["valid"]:
+                safe = {"signal": "WAIT", "reason": "Risk levels rejected: " + levels["reason"]}
             tf4, tf1, tf15, tf5 = (mtf.get(k, {}) for k in ("4h", "1h", "15m", "5m"))
             lines = [
                 "🐈 <b>KING ZARRY AI • KITTY MULTI-CANDLE WATCH</b>", "",
@@ -2393,7 +2396,16 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE):
                 f"4H: {html.escape(str(tf4.get('trend', 'UNKNOWN')))} · 1H: {html.escape(str(tf1.get('trend', 'UNKNOWN')))} · "
                 f"15M: {html.escape(str(tf15.get('trend', 'UNKNOWN')))} · 5M: {html.escape(str(tf5.get('trend', 'UNKNOWN')))}",
                 f"Filter: {html.escape(safe['reason'])}", "",
-                "Alert only; no order is placed. BUY/SELL is not a profit guarantee. Conflicting or late setups become WAIT.",
+                *(
+                    [
+                        f"Entry zone: <code>{levels['entry_low']:.2f} – {levels['entry_high']:.2f}</code>",
+                        f"Stop-loss: <code>{levels['stop_loss']:.2f}</code>",
+                        f"TP1: <code>{levels['tp1']:.2f}</code> · TP2: <code>{levels['tp2']:.2f}</code> · TP3: <code>{levels['tp3']:.2f}</code>",
+                        f"Risk/reward to TP1: <b>1:{levels['risk_reward_tp1']:.2f}</b>",
+                        "",
+                    ] if safe["signal"] in {"BUY", "SELL"} and levels["valid"] else []
+                ),
+                "Alert only; no order is placed. BUY/SELL is not a profit guarantee. Conflicting, late, or incomplete risk setups become WAIT.",
             ]
             sent = 0
             for uid in ADMIN_IDS:
