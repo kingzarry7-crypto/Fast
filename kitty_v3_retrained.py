@@ -128,15 +128,18 @@ def apply_research_signal_gate(raw_signal: str, confidence: float, checkpoint: d
         trade_count = int(paper_metrics.get("trade_count", 0))
         average_net = float(paper_metrics.get("average_net_return"))
         compounded_net = float(paper_metrics.get("compounded_net_return"))
+        max_drawdown = float(paper_metrics.get("max_drawdown"))
     except (AttributeError, TypeError, ValueError, OverflowError):
         return "NO TRADE", "holdout_validation_metrics_incomplete_or_unprofitable"
     if (
         test_metrics.get("signals_disabled_for_no_validated_edge") is not False
-        or trade_count < 10
+        or trade_count < 30
         or not math.isfinite(average_net)
         or not math.isfinite(compounded_net)
+        or not math.isfinite(max_drawdown)
         or average_net <= 0.0
-        or compounded_net <= 0.0
+        or compounded_net < 0.01
+        or max_drawdown < -0.05
     ):
         return "NO TRADE", "holdout_validation_metrics_incomplete_or_unprofitable"
     if confidence < minimum_confidence:
