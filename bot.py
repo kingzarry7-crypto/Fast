@@ -2347,15 +2347,15 @@ except Exception:
 # is not confirmed, so Telegram messages must never present its output as a
 # validated trade setup or invent entry/SL/TP levels.
 KITTY_TELEGRAM_WATCH = clean_env_str(os.getenv("KITTY_TELEGRAM_WATCH", "true")).lower() in ("1", "true", "yes", "on")
-KITTY_TELEGRAM_INTERVAL_SEC = max(900, env_int("KITTY_TELEGRAM_INTERVAL_SEC", 900))
+KITTY_TELEGRAM_INTERVAL_SEC = 7200  # Check BTC and Gold every 2 hours to conserve market/news API calls
 
 
 async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE):
-    """Send deduplicated 15-minute multi-timeframe BUY/SELL/WAIT alerts for BTC and Gold."""
+    """Send deduplicated multi-timeframe BUY/SELL/WAIT alerts for BTC and Gold on a 2-hour schedule."""
     if not KITTY_TELEGRAM_WATCH:
         return
     if not ADMIN_IDS:
-        logger.warning("Kitty 15m watcher enabled but ADMIN_IDS is empty")
+        logger.warning("Kitty watcher enabled but ADMIN_IDS is empty")
         return
     from market import get_candles
     from kitty_api import _validate_candles
@@ -2378,7 +2378,7 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE):
             try:
                 news = await asyncio.to_thread(news_engine.get_news_for_asset, analysis_symbol)
             except Exception as exc:
-                logger.warning("Kitty 15m news unavailable for %s: %s", analysis_symbol, exc)
+                logger.warning("Kitty watch news unavailable for %s: %s", analysis_symbol, exc)
                 news = {"risk": "UNKNOWN", "events": [], "headlines": []}
             mtf = await asyncio.to_thread(ai_confirm_signal_mtf, mtf, news)
             late = await asyncio.to_thread(detect_late_entry_status, mtf.get("15m", {}), mtf.get("5m", {}), mtf.get("1h", {}))
@@ -2401,12 +2401,12 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE):
                     await context.bot.send_message(chat_id=uid, text="\n".join(lines), parse_mode="HTML", disable_web_page_preview=True)
                     sent += 1
                 except Exception as exc:
-                    logger.warning("Kitty 15m alert failed for %s / admin %s: %s", feed_symbol, uid, exc)
+                    logger.warning("Kitty alert failed for %s / admin %s: %s", feed_symbol, uid, exc)
             if sent:
                 fingerprints[feed_symbol] = fingerprint
-            logger.info("Kitty 15m multi-candle watch: symbol=%s signal=%s candle=%s delivered_to=%d", feed_symbol, safe["signal"], candle_time, sent)
+            logger.info("Kitty 2-hour multi-candle watch: symbol=%s signal=%s candle=%s delivered_to=%d", feed_symbol, safe["signal"], candle_time, sent)
         except Exception as exc:
-            logger.warning("Kitty 15m watch failed for %s: %s: %s", feed_symbol, type(exc).__name__, exc)
+            logger.warning("Kitty watch failed for %s: %s: %s", feed_symbol, type(exc).__name__, exc)
 
 def _agent_signal_is_actionable(analysis: dict) -> bool:
     """BUY/SELL only if NOT a late entry — never push chase signals."""
