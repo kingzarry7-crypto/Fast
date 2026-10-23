@@ -1,9 +1,10 @@
 """Regression tests for the live-candle Kitty V3 feature contract."""
 import math
 import unittest
+from datetime import datetime, timedelta, timezone
 
 import kitty_v3_retrained as model
-from kitty_api import _kitty_features
+from kitty_api import _kitty_features, _validate_candles
 
 
 class KittyCandleFeatureContractTests(unittest.TestCase):
@@ -31,6 +32,27 @@ class KittyCandleFeatureContractTests(unittest.TestCase):
         ]
         with self.assertRaisesRegex(ValueError, "At least 55 candles"):
             _kitty_features(candles)
+
+
+    def test_reversed_provider_candles_are_sorted_before_freshness_validation(self):
+        newest = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        candles = []
+        for index in range(60):
+            stamp = newest - timedelta(hours=index)
+            close = 60000.0 + index
+            candles.append({
+                "datetime": stamp.isoformat(),
+                "open": close - 1,
+                "high": close + 2,
+                "low": close - 2,
+                "close": close,
+                "volume": 100,
+            })
+        # Providers may return newest-first; the contract must normalize to oldest-first.
+        latest = _validate_candles(candles, "1h", "BTC/USDT")
+        self.assertEqual(candles[0]["datetime"], (newest - timedelta(hours=59)).isoformat())
+        self.assertEqual(candles[-1]["datetime"], newest.isoformat())
+        self.assertEqual(latest, newest.isoformat())
 
 
 if __name__ == "__main__":
