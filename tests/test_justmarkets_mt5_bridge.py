@@ -45,7 +45,7 @@ class BridgeSafetyTests(unittest.TestCase):
         self.signal()
         self.assertIsNone(self.client.get("/justmarkets-mt5/work",headers=self.headers).json()["work"])
         self.heartbeat()
-        self.assertEqual(self.client.get("/justmarkets-mt5/work",headers=self.headers).json()["work"]["id"],"signal-1")
+        self.assertEqual(self.client.get("/justmarkets-mt5/work",headers=self.headers).json()["work"]["signal_id"],"signal-1")
     def test_unknown_ack_rejected_and_status_never_enables_execution(self):
         self.assertEqual(self.client.post("/justmarkets-mt5/ack",headers=self.headers,json={"signal_id":"unknown","status":"shadow_evaluated","code":"OK"}).status_code,404)
         self.assertFalse(self.client.get("/justmarkets-mt5/status",headers=self.headers).json()["execution_enabled"])
