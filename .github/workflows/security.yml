@@ -32,7 +32,7 @@ jobs:
       - name: Audit runtime frontend dependencies
         working-directory: frontend
         run: npm audit --omit=dev --audit-level=high
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Audit Python dependencies
