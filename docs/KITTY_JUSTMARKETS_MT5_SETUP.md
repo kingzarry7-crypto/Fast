@@ -31,7 +31,7 @@ All endpoints require `Authorization: Bearer <JUSTMARKETS_MT5_BRIDGE_TOKEN>`.
 The heartbeat is considered fresh for five minutes. The EA sends it every timer cycle. Work is only returned when the account/server allowlist has passed, the heartbeat is fresh, and the signal symbol is present in verified metadata. `NO_TRADE` is informational only. Expired signals are not returned.
 
 ## Important current limitation
-Kitty's existing paper simulator uses its own market-data provider and paper ledger. The MT5 bridge does not fetch candles from the broker and does not submit orders. A signal is not automatically published just because the EA is running; the next integration step must connect only completed-candle signals and must reject signals without valid stop-loss/freshness metadata. Do not infer profitability from a successful heartbeat.
+Kitty's existing paper simulator uses its own market-data provider and paper ledger. The MT5 bridge does not fetch candles from the broker and does not submit orders. Kitty's existing completed-candle cycle now publishes only the actual gated output for the explicitly mapped source symbols BTC/USD → BTC and XAU/USD → XAUUSD. The current strategy safety gate forces the actionable output to NO TRADE, and the bridge records that as informational only; candidate BUY/SELL setups are never promoted. No directional work should be expected unless Kitty's signal gate is separately revalidated. Do not infer profitability from a successful heartbeat.
 
 ## Manual acceptance checklist
 - [ ] MetaEditor compiles the EA with zero errors.
