@@ -1,6 +1,6 @@
 """Regression coverage for Alpaca's historical crypto-bars query window."""
 import unittest
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import market
@@ -37,7 +37,7 @@ class AlpacaBarsWindowTests(unittest.TestCase):
 
 
     def test_known_empty_alpaca_assets_skip_to_fallback(self):
-        candles = [{"datetime": "2026-10-16T00:00:00Z", "open": "1", "high": "1", "low": "1", "close": "1", "volume": "1"}] * 15
+        candles = [{"datetime": datetime.now(timezone.utc).isoformat(), "open": "1", "high": "1", "low": "1", "close": "1", "volume": "1"}] * 15
         for symbol, pair in (("BNB/USD", "BNBUSDT"), ("ATOM/USD", "ATOMUSDT"), ("NEAR/USD", "NEARUSDT"), ("APT/USD", "APTUSDT")):
             with self.subTest(symbol=symbol):
                 with (
