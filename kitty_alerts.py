@@ -47,3 +47,31 @@ def normalize_kitty_alert(prediction: dict[str, Any]) -> dict[str, Any]:
         "research_only": not approved,
         "actionable": signal in DIRECTIONAL and approved and confidence_valid,
     }
+
+
+def normalize_mtf_watch_signal(mtf_data: dict[str, Any], late_entry: dict[str, Any] | None) -> dict[str, str]:
+    """Return BUY/SELL only when multi-timeframe checks agree; otherwise WAIT."""
+    data = mtf_data if isinstance(mtf_data, dict) else {}
+    tf15 = data.get("15m") if isinstance(data.get("15m"), dict) else {}
+    tf5 = data.get("5m") if isinstance(data.get("5m"), dict) else {}
+    tf1 = data.get("1h") if isinstance(data.get("1h"), dict) else {}
+    tf4 = data.get("4h") if isinstance(data.get("4h"), dict) else {}
+    signal = str(data.get("mtf_signal") or tf15.get("signal") or "WAIT").strip().upper()
+    if signal not in {"BUY", "SELL"}:
+        return {"signal": "WAIT", "reason": "No confirmed multi-timeframe direction"}
+    if not isinstance(late_entry, dict):
+        return {"signal": "WAIT", "reason": "Late-entry safety check unavailable"}
+    status = str(late_entry.get("status") or "").upper()
+    action = str(late_entry.get("action") or "").upper()
+    try:
+        late_score = float(late_entry.get("score", 0) or 0)
+    except (TypeError, ValueError):
+        late_score = 100.0
+    if status in {"LATE", "EXTENDED / AVOID", "RISKY"} or late_score >= 45 or action in {"WAIT FOR PULLBACK", "WAIT FOR RETEST", "WAIT"}:
+        return {"signal": "WAIT", "reason": "Late-entry / extension filter blocked setup"}
+    opposing = "SELL" if signal == "BUY" else "BUY"
+    if opposing in {str(tf4.get("signal") or "").upper(), str(tf1.get("signal") or "").upper()}:
+        return {"signal": "WAIT", "reason": "Higher-timeframe candles conflict with 15m setup"}
+    if str(tf5.get("signal") or "").upper() not in {signal, "WAIT", ""}:
+        return {"signal": "WAIT", "reason": "5m timing candle conflicts with setup"}
+    return {"signal": signal, "reason": "Multi-timeframe confirmation passed"}
