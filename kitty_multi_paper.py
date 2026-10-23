@@ -284,7 +284,7 @@ def run_cycle(symbol: str | None = None) -> dict[str, Any]:
                 raise ValueError("Invalid market price")
             # Publish only the actual gated signal (never candidate_signal) to the
             # separate shadow bridge. The current safety gate forces NO TRADE.
-            broker_symbol = {"BTC/USD": "BTC", "BTC/USDT": "BTC", "XAU/USD": "XAUUSD"}.get(market_symbol)
+            broker_symbol = {"BTC/USD": "BTC", "XAU/USD": "XAUUSD"}.get(market_symbol)
             if broker_symbol:
                 try:
                     from justmarkets_mt5_bridge import publish_shadow_signal
