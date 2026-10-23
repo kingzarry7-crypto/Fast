@@ -122,6 +122,14 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         self.assertFalse(kitty.should_disable_signals(0.5, holdout))
         self.assertTrue(kitty.should_disable_signals(1.01, holdout))
 
+    def test_holdout_gate_disables_signals_when_profit_factor_is_below_minimum(self):
+        holdout = {"trade_count": 35, "average_net_return": 0.001, "compounded_net_return": 0.02, "max_drawdown": -0.03, "profit_factor": 1.05}
+        self.assertTrue(kitty.should_disable_signals(0.5, holdout))
+
+    def test_holdout_gate_disables_signals_when_profit_factor_is_missing(self):
+        holdout = {"trade_count": 35, "average_net_return": 0.001, "compounded_net_return": 0.02, "max_drawdown": -0.03}
+        self.assertTrue(kitty.should_disable_signals(0.5, holdout))
+
     def test_inference_gate_blocks_unapproved_checkpoint(self):
         signal, reason = inference.apply_research_signal_gate(
             "LONG", 0.9, {"production_ready": False, "recommended_min_confidence": 0.4}
