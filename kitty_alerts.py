@@ -86,3 +86,49 @@ def normalize_mtf_watch_signal(mtf_data: dict[str, Any], late_entry: dict[str, A
     if missing:
         return {"signal": "WAIT", "reason": "No confirmation from: " + ", ".join(missing)}
     return {"signal": signal, "reason": "4H, 1H, 15M and 5M candles agree; late-entry filter passed"}
+
+
+def validate_mtf_watch_levels(mtf_data: dict[str, Any], signal: str) -> dict[str, Any]:
+    """Require complete, directionally valid 15M entry/SL/TP levels for BUY/SELL alerts."""
+    direction = str(signal or "WAIT").strip().upper()
+    if direction not in {"BUY", "SELL"}:
+        return {"valid": False, "reason": "No directional setup", "signal": "WAIT"}
+    data = mtf_data if isinstance(mtf_data, dict) else {}
+    tf15 = data.get("15m") if isinstance(data.get("15m"), dict) else {}
+    aliases = {
+        "entry_low": ("entry_zone_low", "entry_low"),
+        "entry_high": ("entry_zone_high", "entry_high"),
+        "stop_loss": ("stop_loss", "sl"),
+        "tp1": ("tp1", "take_profit_1"),
+        "tp2": ("tp2", "take_profit_2"),
+        "tp3": ("tp3", "take_profit_3"),
+        "price": ("price", "close"),
+    }
+    values: dict[str, float] = {}
+    for target, keys in aliases.items():
+        raw = next((tf15.get(key) for key in keys if tf15.get(key) is not None), None)
+        try:
+            number = float(raw)
+        except (TypeError, ValueError, OverflowError):
+            return {"valid": False, "signal": "WAIT", "reason": f"Missing or invalid {target.replace('_', ' ')}"}
+        if not math.isfinite(number) or number <= 0:
+            return {"valid": False, "signal": "WAIT", "reason": f"Missing or invalid {target.replace('_', ' ')}"}
+        values[target] = number
+    if values["entry_low"] > values["entry_high"]:
+        return {"valid": False, "signal": "WAIT", "reason": "Entry zone is inverted"}
+    if direction == "BUY":
+        ordered = values["stop_loss"] < values["entry_low"] <= values["entry_high"] < values["tp1"] <= values["tp2"] <= values["tp3"]
+    else:
+        ordered = values["stop_loss"] > values["entry_high"] >= values["entry_low"] > values["tp1"] >= values["tp2"] >= values["tp3"]
+    if not ordered:
+        return {"valid": False, "signal": "WAIT", "reason": "SL/TP levels do not match the signal direction"}
+    entry = (values["entry_low"] + values["entry_high"]) / 2.0
+    risk = abs(entry - values["stop_loss"])
+    reward = abs(values["tp1"] - entry)
+    if risk <= 0 or reward <= 0:
+        return {"valid": False, "signal": "WAIT", "reason": "Invalid risk/reward levels"}
+    values["risk_reward_tp1"] = reward / risk
+    values["signal"] = direction
+    values["valid"] = True
+    values["reason"] = "15M entry, stop-loss and all three targets passed direction checks"
+    return values
