@@ -15,13 +15,13 @@ class BridgeSafetyTests(unittest.TestCase):
         app=FastAPI(); app.include_router(bridge.router); self.client=TestClient(app)
         self.headers={"Authorization":"Bearer "+"z"*40}
     def heartbeat(self,**changes):
-        p={"terminal_connected":True,"trade_mode":"DEMO","server":"ExactDemoServer","account_id":"demo-123","symbols":[{"name":"BTC","volume_min":0.01,"volume_max":5,"volume_step":0.01,"tick_size":0.01},{"name":"XAUUSD","volume_min":0.01,"volume_max":5,"volume_step":0.01,"tick_size":0.01},{"name":"BTCUSD","volume_min":0.01,"volume_max":5,"volume_step":0.01,"tick_size":0.01}]}
+        p={"terminal_connected":True,"trade_mode":"DEMO","server":"ExactDemoServer","account_id":"demo-123","symbols":[{"name":"BTC","trade_mode":4,"volume_min":0.01,"volume_max":5,"volume_step":0.01,"tick_size":0.01},{"name":"XAUUSD","trade_mode":4,"volume_min":0.01,"volume_max":5,"volume_step":0.01,"tick_size":0.01},{"name":"BTCUSD","trade_mode":4,"volume_min":0.01,"volume_max":5,"volume_step":0.01,"tick_size":0.01}]}
         p.update(changes); return self.client.post("/justmarkets-mt5/heartbeat",json=p,headers=self.headers)
     def signal(self,**changes):
         p={"signal_id":"signal-1","symbol":"BTC","direction":"BUY","candle_time":ts(-7200),"created_at":ts(-10),"expires_at":ts(1800),"entry_reference":60000,"stop_loss":59000}
         p.update(changes); return bridge.publish_shadow_signal(p)
     def test_token_required_and_missing_secret_disables(self):
-        self.assertEqual(self.client.get("/justmarkets-mt5/status").status_code,503)
+        self.assertEqual(self.client.get("/justmarkets-mt5/status").status_code,401)
         with patch.dict(os.environ,{"JUSTMARKETS_MT5_BRIDGE_TOKEN":""}): self.assertEqual(self.client.get("/justmarkets-mt5/status",headers=self.headers).status_code,503)
         self.assertEqual(self.client.get("/justmarkets-mt5/status",headers={"Authorization":"Bearer bad"}).status_code,401)
     def test_demo_server_and_account_must_match(self):
