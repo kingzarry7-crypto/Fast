@@ -8,7 +8,7 @@ Set these backend environment variables as Railway secrets/configuration:
 - `JUSTMARKETS_MT5_BRIDGE_TOKEN`: random secret at least 32 characters. Use a dedicated value, not a broker password or other API key.
 - `JUSTMARKETS_MT5_EXPECTED_SERVER`: exact server string copied from MT5 account details.
 - `JUSTMARKETS_MT5_ALLOWED_ACCOUNTS`: comma-separated approved demo login IDs only.
-- Optional `JUSTMARKETS_MT5_BRIDGE_DB_PATH` or `DATA_DIR`: persistent writable storage path for the SQLite ledger. Without persistent storage, records may be lost on redeploy/restart.
+- `JUSTMARKETS_MT5_BRIDGE_DB_PATH` or `DATA_DIR`: **required** persistent writable storage path for the SQLite ledger. The bridge returns HTTP 503 if neither is configured, rather than silently writing to ephemeral storage.
 
 Do not commit secrets to GitHub. If the bridge token is missing, all operational endpoints fail closed. Railway must deploy the branch/commit containing the bridge before the endpoints exist.
 
