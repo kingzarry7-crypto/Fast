@@ -78,14 +78,18 @@ class GoldModelIsolationTests(unittest.TestCase):
             "test_metrics": {
                 "signals_disabled_for_no_validated_edge": False,
                 "paper_backtest_after_assumed_costs": {
-                    "trade_count": 20,
-                    "average_net_return": 0.001,
-                    "compounded_net_return": 0.02,
+                    "trade_count": 35,
+                    "average_net_return": 0.002,
+                    "compounded_net_return": 0.04,
+                    "max_drawdown": -0.02,
                 },
             },
         }
         self.assertTrue(kitty_gold_model.has_validated_edge(approved))
         approved["test_metrics"]["paper_backtest_after_assumed_costs"]["trade_count"] = 3
+        self.assertFalse(kitty_gold_model.has_validated_edge(approved))
+        approved["test_metrics"]["paper_backtest_after_assumed_costs"]["trade_count"] = 35
+        approved["test_metrics"]["paper_backtest_after_assumed_costs"]["max_drawdown"] = -0.061
         self.assertFalse(kitty_gold_model.has_validated_edge(approved))
 
     def test_gold_checkpoint_must_keep_orders_disabled(self):
