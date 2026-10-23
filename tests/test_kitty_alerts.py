@@ -95,7 +95,7 @@ class KittyAlertNormalizationTests(unittest.TestCase):
         from kitty_alerts import validate_mtf_watch_levels
         result = validate_mtf_watch_levels({"15m": {
             "price": 100, "entry_zone_low": 99, "entry_zone_high": 100,
-            "stop_loss": 102, "tp1": 98, "tp2": 97, "tp3": 96}}, "SELL")
+            "stop_loss": 102, "tp1": 96, "tp2": 95, "tp3": 94}}, "SELL")
         self.assertTrue(result["valid"])
         self.assertEqual(result["signal"], "SELL")
 
