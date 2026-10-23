@@ -248,7 +248,7 @@ jobs:
   publish-runtime-research-checkpoints:
     name: Publish BTC and XAUUSD research checkpoints
     needs: [retrain-market-research, retrain-gold-forex-research]
-    if: ${{ success() }}
+    if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main
@@ -265,11 +265,13 @@ jobs:
         run: python -m pip install --upgrade pip torch
       - name: Download BTC checkpoint
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: kitty-BTC-checkpoint-${{ github.run_number }}
           path: downloaded/btc
       - name: Download XAUUSD checkpoint
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: kitty-XAUUSD-checkpoint-${{ github.run_number }}
           path: downloaded/xauusd
