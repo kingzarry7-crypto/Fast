@@ -59,6 +59,20 @@ class KittyAlertNormalizationTests(unittest.TestCase):
         self.assertEqual(late["signal"], "WAIT")
         self.assertEqual(missing["signal"], "WAIT")
 
+    def test_mtf_watch_fails_closed_on_non_finite_late_entry_score(self):
+        from kitty_alerts import normalize_mtf_watch_signal
+        mtf = {
+            "mtf_signal": "BUY", "4h": {"signal": "BUY"}, "1h": {"signal": "BUY"},
+            "15m": {"signal": "BUY"}, "5m": {"signal": "BUY"},
+        }
+        for score in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(score=score):
+                result = normalize_mtf_watch_signal(
+                    mtf, {"action": "EARLY - GOOD ENTRY WINDOW", "status": "EARLY", "score": score}
+                )
+                self.assertEqual(result["signal"], "WAIT")
+                self.assertIn("not finite", result["reason"])
+
     def test_research_gold_candidate_is_not_promoted_to_actionable_signal(self):
         result = normalize_kitty_alert({
             "signal": "NO TRADE",
