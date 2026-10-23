@@ -65,8 +65,10 @@ def normalize_mtf_watch_signal(mtf_data: dict[str, Any], late_entry: dict[str, A
     action = str(late_entry.get("action") or "").upper()
     try:
         late_score = float(late_entry.get("score", 0) or 0)
-    except (TypeError, ValueError):
-        late_score = 100.0
+    except (TypeError, ValueError, OverflowError):
+        return {"signal": "WAIT", "reason": "Late-entry safety score is invalid"}
+    if not math.isfinite(late_score):
+        return {"signal": "WAIT", "reason": "Late-entry safety score is not finite"}
     if status in {"LATE", "EXTENDED / AVOID", "RISKY"} or late_score >= 45 or action in {"WAIT FOR PULLBACK", "WAIT FOR RETEST", "WAIT"}:
         return {"signal": "WAIT", "reason": "Late-entry / extension filter blocked setup"}
     # Fail closed: every required timeframe must explicitly agree. Missing or
