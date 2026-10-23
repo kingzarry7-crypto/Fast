@@ -210,8 +210,20 @@ while true; do
   fi
 
   if [ -n "${BOT_PID:-}" ] && ! kill -0 "${BOT_PID}" 2>/dev/null; then
-    echo "⚠️ Telegram bot process died. Restarting..."
-    start_telegram
+    BOT_EXIT=0
+    if wait "${BOT_PID}"; then
+      BOT_EXIT=0
+    else
+      BOT_EXIT=$?
+    fi
+    if [ "${BOT_EXIT}" -eq 2 ]; then
+      echo "🛑 Telegram bot stopped after a polling conflict (exit 2). Not restarting to avoid a getUpdates conflict loop."
+      echo "➡️ Resolve the duplicate TELEGRAM_BOT_TOKEN poller, then redeploy/restart this service."
+      BOT_PID=""
+    else
+      echo "⚠️ Telegram bot process died (exit ${BOT_EXIT}). Restarting..."
+      start_telegram
+    fi
   fi
 
   if [ -n "${DISCORD_PID:-}" ] && ! kill -0 "${DISCORD_PID}" 2>/dev/null; then
