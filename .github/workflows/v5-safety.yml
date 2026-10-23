@@ -65,6 +65,7 @@ jobs:
       - name: Test free news and empty market-data fallbacks
         run: |
           python -m unittest discover -s tests -p "test_free_news_fallback.py" -v
+          python -m unittest test_forexfactory_calendar_parser -v
           python -m unittest discover -s tests -p "test_market_empty_fallback.py" -v
       - name: Test Eulerpool Gold reference-price fallback
         run: python -m unittest discover -s tests -p "test_market_eulerpool.py" -v
