@@ -151,6 +151,16 @@ wait_for_api
 # ------------------------------------------------------------------
 start_telegram() {
   if [ -f "bot.py" ]; then
+    # Railway can briefly overlap old/new containers during a rollout. Delay
+    # Telegram getUpdates polling until the previous deployment has stopped.
+    local poll_start_delay="${TELEGRAM_POLL_START_DELAY_SEC:-45}"
+    if ! [[ "${poll_start_delay}" =~ ^[0-9]+$ ]] || [ "${poll_start_delay}" -gt 120 ]; then
+      poll_start_delay=45
+    fi
+    if [ "${poll_start_delay}" -gt 0 ]; then
+      echo "⏳ Waiting ${poll_start_delay}s before Telegram polling to avoid deployment overlap..."
+      sleep "${poll_start_delay}"
+    fi
     echo "🤖 Starting Telegram bot (bot.py)..."
     python bot.py &
     BOT_PID=$!
