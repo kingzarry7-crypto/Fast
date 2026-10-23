@@ -107,8 +107,8 @@ class ConfiguredProviderTests(unittest.TestCase):
             "AI_PROVIDER": "OPENAI",
             "ZARRY_API_URL": "https://example.test/generate",
             "OPENAI_API_KEY": "test-openai-key",
-        }, clear=True), \\
-             patch("llm_client.urllib.request.urlopen") as local_post, \\
+        }, clear=True), \
+             patch("llm_client.urllib.request.urlopen") as local_post, \
              patch("llm_client.OpenAI", return_value=client):
             result = ask([{"role": "user", "content": "hello"}])
 
