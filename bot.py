@@ -2341,6 +2341,7 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE, force: b
     from market import get_candles
     from kitty_api import _validate_candles, _kitty_features
     from kitty_alerts import normalize_kitty_mtf_signal, validate_mtf_watch_levels
+    from kitty_watch_state import all_recipients_delivered, ensure_delivery_table, is_delivered, mark_delivered
     import kitty_v3_retrained as btc_model
     import kitty_gold_model as gold_model
 
@@ -2348,8 +2349,6 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE, force: b
         ("BTC/USDT", "BTC/USD", "Bitcoin (BTC/USD)", btc_model),
         ("XAU/USD", "XAU/USD", "Gold (XAU/USD)", gold_model),
     )
-    fingerprints = context.application.bot_data.setdefault("kitty_telegram_last_fingerprints", {})
-
     for feed_symbol, analysis_symbol, label, model_module in assets:
         try:
             # The model contract is hourly. Use only completed 1H candles for inference;
@@ -2364,10 +2363,22 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE, force: b
             _validate_candles(candles, "1h", feed_symbol)
             closed_candles = candles[:-1]
             candle_time = _validate_candles(closed_candles, "1h", feed_symbol)
-            fingerprint = f"{feed_symbol}|1h|{candle_time}"
-            if not force and fingerprints.get(feed_symbol) == fingerprint:
-                logger.info("Kitty two-hour watch skipped duplicate closed candle: %s %s", feed_symbol, candle_time)
-                continue
+            # Persist deduplication in the shared bot database so restarts do not
+            # resend the same candle. If a recipient failed previously, retry only
+            # that recipient and avoid repeating successful deliveries.
+            delivery_conn = db_connect()
+            try:
+                ensure_delivery_table(delivery_conn)
+                if not force and all_recipients_delivered(
+                    delivery_conn, feed_symbol, candle_time, [str(uid) for uid in ADMIN_IDS]
+                ):
+                    logger.info(
+                        "Kitty two-hour watch skipped already-delivered candle: %s %s",
+                        feed_symbol, candle_time,
+                    )
+                    continue
+            finally:
+                delivery_conn.close()
 
             model_error = None
             try:
@@ -2433,17 +2444,23 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE, force: b
                 "Alert only; no order is placed. Research-only models, conflicting timeframes, stale data, or invalid risk levels must remain WAIT.",
             ]
             sent = 0
-            for uid in ADMIN_IDS:
-                try:
-                    await context.bot.send_message(
-                        chat_id=uid, text="\n".join(lines), parse_mode="HTML",
-                        disable_web_page_preview=True,
-                    )
-                    sent += 1
-                except Exception as exc:
-                    logger.warning("Kitty alert failed for %s / admin %s: %s", feed_symbol, uid, exc)
-            if sent:
-                fingerprints[feed_symbol] = fingerprint
+            delivery_conn = db_connect()
+            try:
+                ensure_delivery_table(delivery_conn)
+                for uid in ADMIN_IDS:
+                    if not force and is_delivered(delivery_conn, feed_symbol, candle_time, str(uid)):
+                        continue
+                    try:
+                        await context.bot.send_message(
+                            chat_id=uid, text="\\n".join(lines), parse_mode="HTML",
+                            disable_web_page_preview=True,
+                        )
+                        mark_delivered(delivery_conn, feed_symbol, candle_time, str(uid))
+                        sent += 1
+                    except Exception as exc:
+                        logger.warning("Kitty alert failed for %s / admin %s: %s", feed_symbol, uid, exc)
+            finally:
+                delivery_conn.close()
             logger.info(
                 "Kitty two-hour model-gated watch: symbol=%s signal=%s candidate=%s candle=%s delivered_to=%d",
                 feed_symbol, safe["signal"], candidate, candle_time, sent,
