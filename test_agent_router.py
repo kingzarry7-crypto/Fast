@@ -73,9 +73,9 @@ class AgentRouterTests(unittest.TestCase):
                 "reasons": ["mixed timeframes"],
             }
 
-        with patch("agent_core.tool_analyze_symbol", side_effect=analyze) as analyze_mock, \\
-             patch("agent_core.tool_news_risk", return_value={"level": "LOW"}), \\
-             patch("agent_core.tool_learn", return_value="learning-id"), \\
+        with patch("agent_core.tool_analyze_symbol", side_effect=analyze) as analyze_mock, \
+             patch("agent_core.tool_news_risk", return_value={"level": "LOW"}), \
+             patch("agent_core.tool_learn", return_value="learning-id"), \
              patch("market.get_candles", return_value=[]):
             result = agent_router.route_agent_request("Compare BTC and gold signals on 1h", "u1")
 
