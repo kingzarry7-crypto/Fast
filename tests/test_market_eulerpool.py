@@ -26,6 +26,17 @@ class EulerpoolGoldReferenceTests(unittest.TestCase):
         self.assertEqual(kwargs["headers"]["Authorization"], "Bearer test-key")
         self.assertEqual(kwargs["params"], {"days": 30})
 
+    @patch.dict(os.environ, {"EULER_API_KEY": "legacy-test-key"}, clear=True)
+    @patch("market.requests.get")
+    def test_accepts_legacy_euler_api_key_alias(self, get):
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = [{"symbol": "GOLD", "date": "2026-10-22", "price": 4022.75}]
+        get.return_value = response
+
+        self.assertEqual(market._eulerpool_gold_get_price(), 4022.75)
+        self.assertEqual(get.call_args.kwargs["headers"]["Authorization"], "Bearer legacy-test-key")
+
     @patch.dict(os.environ, {}, clear=True)
     def test_missing_key_fails_closed(self):
         with self.assertRaisesRegex(RuntimeError, "EULERPOOL_API_KEY"):
