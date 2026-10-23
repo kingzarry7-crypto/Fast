@@ -2909,6 +2909,63 @@ async def tts_command(update, context):
         logger.error(f"TTS Error: {error}")
         await update.message.reply_text("❌ TTS Error: Unable to generate voice note.",disable_web_page_preview=True)
 
+async def _apply_kitty_model_gate(mtf_data: dict, symbol: str):
+    """Gate on-demand BTC/Gold MTF output through the matching Kitty checkpoint."""
+    normalized = re.sub(r"[^A-Z]", "", str(symbol or "").upper())
+    if normalized in {"BTCUSD", "BTCUSDT"}:
+        feed_symbol = "BTC/USDT"
+        model_module_name = "btc"
+    elif normalized in {"XAUUSD", "GOLD"}:
+        feed_symbol = "XAU/USD"
+        model_module_name = "gold"
+    else:
+        return mtf_data, None
+
+    from market import get_candles
+    from kitty_api import _validate_candles, _kitty_features
+    from kitty_alerts import normalize_kitty_mtf_signal, validate_mtf_watch_levels
+    import kitty_v3_retrained as btc_model
+    import kitty_gold_model as gold_model
+
+    model_module = btc_model if model_module_name == "btc" else gold_model
+    candle_time = "unknown"
+    try:
+        candles = await asyncio.to_thread(get_candles, feed_symbol, timeframe="1h", outputsize=160)
+        if not isinstance(candles, list) or len(candles) < 56:
+            raise ValueError("at least 56 hourly candles are required")
+        _validate_candles(candles, "1h", feed_symbol)
+        closed_candles = candles[:-1]
+        candle_time = _validate_candles(closed_candles, "1h", feed_symbol)
+        features = await asyncio.to_thread(_kitty_features, closed_candles)
+        prediction = await asyncio.to_thread(model_module.predict_features, features)
+        late = await asyncio.to_thread(
+            detect_late_entry_status,
+            mtf_data.get("15m", {}), mtf_data.get("5m", {}), mtf_data.get("1h", {}),
+        )
+        safe = normalize_kitty_mtf_signal(prediction, mtf_data, late)
+        levels = validate_mtf_watch_levels(mtf_data, safe["signal"])
+        if safe["signal"] in {"BUY", "SELL"} and not levels["valid"]:
+            safe = {**safe, "signal": "WAIT", "reason": "Risk levels rejected: " + levels["reason"]}
+        candidate = str(safe.get("candidate_signal") or prediction.get("class_prediction") or "NO TRADE")
+        confidence = float(safe.get("confidence", 0.0) or 0.0)
+    except Exception as exc:
+        safe = {"signal": "WAIT", "reason": f"Kitty inference unavailable: {type(exc).__name__}"}
+        candidate = "NO TRADE"
+        confidence = 0.0
+
+    mtf_data["mtf_signal"] = safe["signal"]
+    mtf_data["kitty_gate_reason"] = safe["reason"]
+    mtf_data["kitty_candidate_signal"] = candidate
+    mtf_data["kitty_confidence"] = confidence
+    mtf_data["kitty_candle_time"] = candle_time
+    return mtf_data, (
+        f"🐈 <b>KITTY MODEL GATE:</b> {html.escape(safe['signal'])}\n"
+        f"Model candidate: {html.escape(candidate)} · Confidence: {confidence * 100:.2f}%\n"
+        f"Closed 1H candle: <code>{html.escape(candle_time)}</code>\n"
+        f"Reason: {html.escape(str(safe['reason']))}"
+    )
+
+
 async def quick_symbol_command(symbol, update, context):
     if not await require_subscription(update):
         return
@@ -2937,11 +2994,15 @@ async def quick_symbol_command(symbol, update, context):
             news_data = {"risk": "UNKNOWN", "events": [], "headlines": []}
 
         mtf_data = await asyncio.to_thread(ai_confirm_signal_mtf, mtf_data, news_data)
+        mtf_data, kitty_gate_message = await _apply_kitty_model_gate(mtf_data, symbol)
         try:
             memory_instance.save_trading_preferences(str(update.effective_user.id), preferred_assets=symbol)
         except:
             pass
-        await send_long_message(update.message, format_signal_mtf(mtf_data, news_data), is_raw_html=True)
+        signal_message = format_signal_mtf(mtf_data, news_data)
+        if kitty_gate_message:
+            signal_message += "\n\n" + kitty_gate_message
+        await send_long_message(update.message, signal_message, is_raw_html=True)
         try:
             chart=await asyncio.to_thread(build_signal_chart, mtf_data)
             caption = build_signal_chart_caption(mtf_data, symbol, news_data)
@@ -2984,7 +3045,11 @@ async def signal_command(update, context):
         mtf_data = await asyncio.to_thread(analyze_multi_timeframe, symbol)
         news_data = await asyncio.to_thread(news_engine.get_news_for_asset, symbol)
         mtf_data = await asyncio.to_thread(ai_confirm_signal_mtf, mtf_data, news_data)
-        await send_long_message(update.message, format_signal_mtf(mtf_data, news_data), is_raw_html=True)
+        mtf_data, kitty_gate_message = await _apply_kitty_model_gate(mtf_data, symbol)
+        signal_message = format_signal_mtf(mtf_data, news_data)
+        if kitty_gate_message:
+            signal_message += "\n\n" + kitty_gate_message
+        await send_long_message(update.message, signal_message, is_raw_html=True)
         try:
             chart=await asyncio.to_thread(build_signal_chart, mtf_data)
             caption = build_signal_chart_caption(mtf_data, symbol)
