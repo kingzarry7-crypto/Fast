@@ -3081,6 +3081,18 @@ async def plan_command(update, context):
         mtf_data = await asyncio.to_thread(analyze_multi_timeframe, symbol)
         news_data = await asyncio.to_thread(news_engine.get_news_for_asset, symbol)
         mtf_data = await asyncio.to_thread(ai_confirm_signal_mtf, mtf_data, news_data)
+        mtf_data, kitty_gate_message = await _apply_kitty_model_gate(mtf_data, symbol)
+        if kitty_gate_message and mtf_data.get("mtf_signal") == "WAIT":
+            await send_long_message(
+                update.message,
+                format_signal_mtf(mtf_data, news_data) + "\n\n" + kitty_gate_message,
+                is_raw_html=True,
+            )
+            try:
+                await status.delete()
+            except Exception:
+                pass
+            return
         tf_15m = mtf_data["15m"]
         tf_4h = mtf_data["4h"]
         tf_1h = mtf_data["1h"]
