@@ -125,17 +125,22 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
         next_entry_index = index + 6
     if not trades:
         return {
-            "trade_count": 0, "win_rate": None, "average_net_return": None,
+            "trade_count": 0, "win_rate": None, "average_net_return": None, "profit_factor": None,
             "compounded_net_return": 0.0, "max_drawdown": 0.0,
             "skipped_overlapping_signals": skipped_overlapping_signals,
             "round_trip_cost_assumption": round_trip_cost,
             "minimum_class_confidence": min_confidence,
         }
-    equity = np.cumprod(1.0 + np.asarray(trades, dtype=np.float64))
+    net = np.asarray(trades, dtype=np.float64)
+    equity = np.cumprod(1.0 + net)
     peaks = np.maximum.accumulate(np.concatenate(([1.0], equity)))[1:]
     drawdowns = equity / peaks - 1.0
+    gross_profit = float(net[net > 0].sum())
+    gross_loss = float(-net[net < 0].sum())
+    profit_factor = gross_profit / gross_loss if gross_loss > 0 else (999.0 if gross_profit > 0 else 0.0)
     return {
         "trade_count": len(trades),
+        "profit_factor": float(profit_factor),
         "skipped_overlapping_signals": skipped_overlapping_signals,
         "win_rate": float(np.mean(np.asarray(trades) > 0)),
         "average_net_return": float(np.mean(trades)),
@@ -155,6 +160,7 @@ def select_confidence_threshold(threshold_trials: list[dict], min_trades: int = 
             compounded = float(trial.get("compounded_net_return"))
             average = float(trial.get("average_net_return"))
             drawdown = float(trial.get("max_drawdown"))
+            profit_factor = float(trial.get("profit_factor"))
             threshold = float(trial.get("min_confidence", 1.01))
         except (TypeError, ValueError, OverflowError):
             continue
@@ -163,6 +169,7 @@ def select_confidence_threshold(threshold_trials: list[dict], min_trades: int = 
             and np.isfinite(compounded) and compounded >= 0.01
             and np.isfinite(average) and average > 0.0
             and np.isfinite(drawdown) and drawdown >= -0.05
+            and np.isfinite(profit_factor) and profit_factor >= 1.10
         ):
             eligible.append(trial)
     if not eligible:
@@ -188,6 +195,7 @@ def should_disable_signals(selected_confidence: float, holdout_metrics: dict, mi
         average = float(holdout_metrics.get("average_net_return"))
         compounded = float(holdout_metrics.get("compounded_net_return"))
         drawdown = float(holdout_metrics.get("max_drawdown"))
+        profit_factor = float(holdout_metrics.get("profit_factor"))
     except (TypeError, ValueError, OverflowError):
         return True
     return not (
@@ -209,6 +217,7 @@ def select_validation_candidate(candidate_trials: list[dict], min_trades: int = 
             compounded = float(trial.get("compounded_net_return"))
             threshold = float(trial.get("min_confidence", 1.01))
             drawdown = float(trial.get("max_drawdown"))
+            profit_factor = float(trial.get("profit_factor"))
         except (TypeError, ValueError, OverflowError):
             continue
         if (
@@ -220,6 +229,7 @@ def select_validation_candidate(candidate_trials: list[dict], min_trades: int = 
             and average > 0.0
             and compounded >= 0.01
             and drawdown >= -0.05
+            and profit_factor >= 1.10
         ):
             eligible.append(trial)
     if not eligible:
