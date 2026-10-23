@@ -17,6 +17,7 @@ const baseNavItems = [
   { label: "Admin", href: "/admin", icon: "◆" },
   { label: "Markets", href: "/markets", icon: "◆" },
   { label: "Signals", href: "/signals", icon: "◆" },
+  { label: "Trader", href: "/trader", icon: "◆" },
   { label: "News", href: "/news", icon: "◆" },
   { label: "Alerts", href: "/alerts", icon: "◆" },
   { label: "History", href: "/history", icon: "◆" },
