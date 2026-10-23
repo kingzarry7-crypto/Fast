@@ -31,6 +31,7 @@ def has_validated_edge(checkpoint: dict[str, Any]) -> bool:
         trade_count = int(paper.get("trade_count", 0))
         average_net = float(paper.get("average_net_return"))
         compounded_net = float(paper.get("compounded_net_return"))
+        max_drawdown = float(paper.get("max_drawdown"))
     except (AttributeError, TypeError, ValueError, OverflowError):
         return False
     return (
@@ -38,11 +39,13 @@ def has_validated_edge(checkpoint: dict[str, Any]) -> bool:
         and isinstance(metrics, dict)
         and metrics.get("signals_disabled_for_no_validated_edge") is False
         and 0.0 <= minimum_confidence <= 1.0
-        and trade_count >= 10
+        and trade_count >= 30
         and math.isfinite(average_net)
         and math.isfinite(compounded_net)
+        and math.isfinite(max_drawdown)
         and average_net > 0.0
-        and compounded_net > 0.0
+        and compounded_net >= 0.01
+        and max_drawdown >= -0.05
     )
 
 
