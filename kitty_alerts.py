@@ -69,9 +69,18 @@ def normalize_mtf_watch_signal(mtf_data: dict[str, Any], late_entry: dict[str, A
         late_score = 100.0
     if status in {"LATE", "EXTENDED / AVOID", "RISKY"} or late_score >= 45 or action in {"WAIT FOR PULLBACK", "WAIT FOR RETEST", "WAIT"}:
         return {"signal": "WAIT", "reason": "Late-entry / extension filter blocked setup"}
+    # Fail closed: every required timeframe must explicitly agree. Missing or
+    # neutral candle directions are not confirmation and therefore become WAIT.
+    required = {
+        "4h": str(tf4.get("signal") or "").strip().upper(),
+        "1h": str(tf1.get("signal") or "").strip().upper(),
+        "15m": str(tf15.get("signal") or "").strip().upper(),
+        "5m": str(tf5.get("signal") or "").strip().upper(),
+    }
     opposing = "SELL" if signal == "BUY" else "BUY"
-    if opposing in {str(tf4.get("signal") or "").upper(), str(tf1.get("signal") or "").upper()}:
-        return {"signal": "WAIT", "reason": "Higher-timeframe candles conflict with 15m setup"}
-    if str(tf5.get("signal") or "").upper() not in {signal, "WAIT", ""}:
-        return {"signal": "WAIT", "reason": "5m timing candle conflicts with setup"}
-    return {"signal": signal, "reason": "Multi-timeframe confirmation passed"}
+    if any(value == opposing for value in required.values()):
+        return {"signal": "WAIT", "reason": "Timeframes conflict; all candles must agree"}
+    missing = [timeframe for timeframe, value in required.items() if value != signal]
+    if missing:
+        return {"signal": "WAIT", "reason": "No confirmation from: " + ", ".join(missing)}
+    return {"signal": signal, "reason": "4H, 1H, 15M and 5M candles agree; late-entry filter passed"}
