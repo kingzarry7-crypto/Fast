@@ -32,7 +32,7 @@ def status():
     c=db()
     try:
         h=c.execute("SELECT * FROM heartbeat WHERE id=1").fetchone()
-        return {"mode":"SHADOW_ONLY","heartbeat_received":bool(h),"demo_verified":bool(h and h["verified"]),"verified_symbols":sorted(json.loads(h["symbols"])) if h else [],"execution_enabled":False}
+        return {"mode":"SHADOW_ONLY","heartbeat_received":bool(h),"last_heartbeat_at":h["at"] if h else None,"terminal_connected":bool(h and h["connected"]),"demo_verified":bool(h and h["verified"]),"verified_symbols":sorted(json.loads(h["symbols"])) if h else [],"execution_enabled":False}
     finally:c.close()
 @router.post("/heartbeat",dependencies=[Depends(auth)])
 def heartbeat(p:dict):
