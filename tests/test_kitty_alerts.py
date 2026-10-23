@@ -109,5 +109,37 @@ class KittyAlertNormalizationTests(unittest.TestCase):
         self.assertFalse(result["actionable"])
 
 
+    def test_mtf_watch_levels_accept_valid_buy_levels(self):
+        from kitty_alerts import validate_mtf_watch_levels
+        result = validate_mtf_watch_levels({"15m": {
+            "price": 100, "entry_zone_low": 99, "entry_zone_high": 100,
+            "stop_loss": 98, "tp1": 102, "tp2": 103, "tp3": 104,
+        }}, "BUY")
+        self.assertTrue(result["valid"])
+        self.assertEqual(result["signal"], "BUY")
+        self.assertGreater(result["risk_reward_tp1"], 0)
+
+    def test_mtf_watch_levels_accept_valid_sell_levels(self):
+        from kitty_alerts import validate_mtf_watch_levels
+        result = validate_mtf_watch_levels({"15m": {
+            "price": 100, "entry_zone_low": 99, "entry_zone_high": 100,
+            "stop_loss": 102, "tp1": 98, "tp2": 97, "tp3": 96,
+        }}, "SELL")
+        self.assertTrue(result["valid"])
+        self.assertEqual(result["signal"], "SELL")
+
+    def test_mtf_watch_levels_fail_closed_if_missing_or_wrong_direction(self):
+        from kitty_alerts import validate_mtf_watch_levels
+        missing = validate_mtf_watch_levels({"15m": {"price": 100}}, "BUY")
+        wrong = validate_mtf_watch_levels({"15m": {
+            "price": 100, "entry_zone_low": 99, "entry_zone_high": 100,
+            "stop_loss": 101, "tp1": 102, "tp2": 103, "tp3": 104,
+        }}, "BUY")
+        self.assertFalse(missing["valid"])
+        self.assertEqual(missing["signal"], "WAIT")
+        self.assertFalse(wrong["valid"])
+        self.assertEqual(wrong["signal"], "WAIT")
+
+
 if __name__ == "__main__":
     unittest.main()
