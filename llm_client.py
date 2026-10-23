@@ -175,7 +175,11 @@ def ask(messages: list[dict[str, Any]], max_tokens: int = 500):
     """Try providers in order; recover once from an unsupported HF model."""
     errors = []
     timeout = float(os.getenv("AI_PROVIDER_TIMEOUT", "12") or 12)
-    if os.getenv("ZARRY_API_URL", "").strip():
+    requested_provider = os.getenv("AI_PROVIDER", "AUTO").strip().upper()
+    # A configured local Zarry endpoint is an automatic-mode fallback/primary,
+    # but it must not override an explicit provider choice such as OPENAI.
+    should_try_zarry = requested_provider in {"", "AUTO", "AUTOMATIC", "ZARRY", "LOCAL_ZARRY"}
+    if should_try_zarry and os.getenv("ZARRY_API_URL", "").strip():
         try:
             answer = _zarry_completion(messages, max_tokens, timeout)
             if answer:
