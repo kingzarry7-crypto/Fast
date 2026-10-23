@@ -44,7 +44,7 @@ void SendHeartbeat(){
  bool identity=IdentityOK();
  string syms="";
  if(identity){ string a=SymbolObject(BrokerSymbolBTC); string b=SymbolObject(BrokerSymbolGold); if(a!="")syms=a; if(b!=""){if(syms!="")syms+=",";syms+=b;} }
- string body="{\"terminal_connected\":"+string(TerminalInfoInteger(TERMINAL_CONNECTED)?"true":"false")+",\"trade_mode\":\""+string(IsDemo()?"DEMO":"OTHER")+"\",\"server\":\""+JsonEscape(AccountInfoString(ACCOUNT_SERVER))+"\",\"account_id\":\""+IntegerToString((int)AccountInfoInteger(ACCOUNT_LOGIN))+"\",\"symbols\":["+syms+"]}";
+ string body="{\"terminal_connected\":"+string(TerminalInfoInteger(TERMINAL_CONNECTED)?"true":"false")+",\"trade_mode\":\""+string(IsDemo()?"DEMO":"OTHER")+"\",\"server\":\""+JsonEscape(AccountInfoString(ACCOUNT_SERVER))+"\",\"account_id\":\""+IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN))+"\",\"symbols\":["+syms+"]}";
  string response;
  if(Request("POST","/justmarkets-mt5/heartbeat",body,response)){ g_verified=identity && StringFind(response,"\"demo_verified\":true")>=0; }
  else g_verified=false;
