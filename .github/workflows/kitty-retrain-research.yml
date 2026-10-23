@@ -256,6 +256,13 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+      - name: Set up Python for checkpoint validation
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install checkpoint validation dependency
+        run: python -m pip install --upgrade pip torch
       - name: Download BTC checkpoint
         uses: actions/download-artifact@v4
         with:
