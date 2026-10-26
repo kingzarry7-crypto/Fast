@@ -199,8 +199,10 @@ jobs:
         env:
           MARKET_SYMBOL: ${{ matrix.symbol }}
         run: |
+          # All-in research assumptions include spread, commissions/fees and slippage.
+          # These are not a substitute for measuring the current JustMarkets bid/ask spread.
           if [ "$MARKET_SYMBOL" = "XAUUSD" ]; then ROUND_TRIP_COST="0.0005"; else ROUND_TRIP_COST="0.0003"; fi
-          echo "Assumed round-trip cost for $MARKET_SYMBOL: $ROUND_TRIP_COST"
+          echo "Assumed all-in round-trip spread+fees+slippage for $MARKET_SYMBOL: $ROUND_TRIP_COST (not broker-quote verified)"
           python train_kitty_v3_retrained.py --symbol "$MARKET_SYMBOL" --csv "kitty-training-output/$MARKET_SYMBOL/hourly_features.csv" --output-dir "kitty-training-output/$MARKET_SYMBOL/candidates" --epochs 100 --patience 10 --batch-size 128 --purge 6 --round-trip-cost "$ROUND_TRIP_COST" --label-threshold "$MARKET_LABEL_THRESHOLD"
       - name: Prepare XAUUSD research checkpoint for runtime inference
         if: matrix.symbol == 'XAUUSD'
