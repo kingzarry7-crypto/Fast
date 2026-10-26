@@ -257,6 +257,35 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         self.assertEqual(signal, "NO TRADE")
         self.assertEqual(reason, "holdout_validation_metrics_incomplete_or_unprofitable")
 
+    def test_cost_aware_edge_proxy_blocks_directional_confidence_that_does_not_clear_costs(self):
+        class WeakDirectionalModel(torch.nn.Module):
+            def forward(self, x):
+                # LONG is the top class, but the LONG-vs-SHORT probability gap
+                # is too small to clear 1.25x assumed costs at a 0.30% label move.
+                return torch.log(torch.tensor([0.06, 0.40, 0.54], dtype=torch.float32)).repeat(len(x), 1)
+
+        result = kitty.evaluate_paper_returns(
+            WeakDirectionalModel(), np.zeros((8, 18), dtype=np.float32),
+            np.full(8, 0.01, dtype=np.float64), round_trip_cost=0.001,
+            min_confidence=0.50, label_threshold=0.003,
+        )
+        self.assertEqual(result["trade_count"], 0)
+        self.assertEqual(result["label_threshold_for_edge_proxy"], 0.003)
+        self.assertEqual(result["minimum_edge_cost_multiple"], 1.25)
+
+    def test_cost_aware_edge_proxy_allows_strong_directional_gap_after_costs(self):
+        class StrongDirectionalModel(torch.nn.Module):
+            def forward(self, x):
+                return torch.log(torch.tensor([0.01, 0.04, 0.95], dtype=torch.float32)).repeat(len(x), 1)
+
+        result = kitty.evaluate_paper_returns(
+            StrongDirectionalModel(), np.zeros((8, 18), dtype=np.float32),
+            np.full(8, 0.01, dtype=np.float64), round_trip_cost=0.001,
+            min_confidence=0.50, label_threshold=0.003,
+        )
+        self.assertEqual(result["trade_count"], 1)
+        self.assertGreater(result["average_net_return"], 0.0)
+
     def test_architecture_variants_return_three_class_logits(self):
         for variant in ("baseline", "batchnorm", "leaky_relu"):
             model = kitty.KittyExperimentNet(variant=variant)
