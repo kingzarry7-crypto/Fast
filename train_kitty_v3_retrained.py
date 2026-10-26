@@ -96,27 +96,38 @@ def split_chronologically(x: np.ndarray, y: np.ndarray, purge: int = 0):
 
 
 def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.ndarray,
-                            round_trip_cost: float = 0.001, min_confidence: float = 0.50) -> dict:
-    """One-pass holdout simulation with fixed costs; no position overlap or leverage."""
+                            round_trip_cost: float = 0.001, min_confidence: float = 0.50,
+                            min_margin: float = 0.10) -> dict:
+    """One-pass holdout simulation matching inference confidence/margin filters."""
     if len(x) != len(forward_returns):
         raise ValueError("Test features and forward returns must have equal lengths")
     if not 0 <= round_trip_cost < 0.05:
         raise ValueError("round_trip_cost must be between 0 and 5%")
+    if not 0.50 <= min_confidence <= 1.0:
+        raise ValueError("min_confidence must be between 0.50 and 1.0 to match inference")
+    if not 0.0 <= min_margin <= 1.0:
+        raise ValueError("min_margin must be between 0 and 1")
     model.eval()
     with torch.inference_mode():
         probs = torch.softmax(model(torch.from_numpy(x)), dim=1).cpu().numpy()
     trades = []
     next_entry_index = 0
     skipped_overlapping_signals = 0
+    skipped_low_margin_signals = 0
     for index, (probabilities, raw_return) in enumerate(zip(probs, forward_returns)):
         if index < next_entry_index:
             skipped_overlapping_signals += 1
             continue
         if not np.isfinite(raw_return):
             continue
-        side_class = int(np.argmax(probabilities))
+        ranked = np.argsort(probabilities)
+        side_class = int(ranked[-1])
         confidence = float(probabilities[side_class])
+        margin = confidence - float(probabilities[int(ranked[-2])])
         if side_class == 1 or confidence < min_confidence:
+            continue
+        if margin < min_margin:
+            skipped_low_margin_signals += 1
             continue
         gross = -float(raw_return) if side_class == 0 else float(raw_return)
         trades.append(gross - round_trip_cost)
@@ -129,8 +140,10 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
             "trade_count": 0, "win_rate": None, "average_net_return": None, "profit_factor": None,
             "compounded_net_return": 0.0, "max_drawdown": 0.0,
             "skipped_overlapping_signals": skipped_overlapping_signals,
+            "skipped_low_margin_signals": skipped_low_margin_signals,
             "round_trip_cost_assumption": round_trip_cost,
             "minimum_class_confidence": min_confidence,
+            "minimum_probability_margin": min_margin,
         }
     net = np.asarray(trades, dtype=np.float64)
     equity = np.cumprod(1.0 + net)
@@ -143,6 +156,8 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
         "trade_count": len(trades),
         "profit_factor": float(profit_factor),
         "skipped_overlapping_signals": skipped_overlapping_signals,
+        "skipped_low_margin_signals": skipped_low_margin_signals,
+        "minimum_probability_margin": min_margin,
         "win_rate": float(np.mean(np.asarray(trades) > 0)),
         "average_net_return": float(np.mean(trades)),
         "compounded_net_return": float(equity[-1] - 1.0),
@@ -432,7 +447,9 @@ def main() -> None:
     # Select the production-compatible architecture using validation trading
     # outcomes after assumed costs, not classification accuracy alone. The final
     # holdout remains untouched until one candidate and threshold are selected.
-    confidence_grid = (0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75)
+    # Runtime inference never emits a directional candidate below 0.50 confidence.
+    # Keep threshold search on the same operating envelope to avoid backtest/live drift.
+    confidence_grid = (0.50, 0.55, 0.60, 0.65, 0.70, 0.75)
     candidate_validation_trials = []
     validation_trials_by_name = {}
     for item, model in compatible_candidates:
