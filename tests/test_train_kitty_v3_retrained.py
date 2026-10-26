@@ -65,14 +65,18 @@ class KittyTrainingExperimentTests(unittest.TestCase):
                 logits = torch.tensor([0.01, 0.01, 0.99], dtype=torch.float32)
                 return logits.repeat(len(x), 1)
 
+        forward_returns = np.full(12, 0.01, dtype=np.float64)
+        forward_returns[6] = 0.015  # Must be skipped: prior trade exits at t+7.
+        forward_returns[7] = 0.02   # First eligible next signal.
         result = kitty.evaluate_paper_returns(
             AlwaysLong(), np.zeros((12, 18), dtype=np.float32),
-            np.full(12, 0.01, dtype=np.float64), round_trip_cost=0.001,
+            forward_returns, round_trip_cost=0.001,
         )
         # Signals at indices 0 and 7 are eligible; indices 1..6 overlap
         # the first trade's next-open entry through its t+7 exit candle.
         self.assertEqual(result["trade_count"], 2)
         self.assertEqual(result["skipped_overlapping_signals"], 10)
+        self.assertAlmostEqual(result["average_net_return"], 0.014)
 
     def test_training_tracks_learning_rate_for_scheduler(self):
         rng = np.random.default_rng(7)
