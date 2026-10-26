@@ -134,6 +134,27 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         holdout = {"trade_count": 35, "average_net_return": 0.001, "compounded_net_return": 0.02, "max_drawdown": -0.03}
         self.assertTrue(kitty.should_disable_signals(0.5, holdout))
 
+    def test_inference_gate_blocks_missing_or_unverified_broker_spread(self):
+        checkpoint = {
+            "production_ready": True,
+            "broker_spread_verified": False,
+            "recommended_min_confidence": 0.4,
+            "test_metrics": {
+                "signals_disabled_for_no_validated_edge": False,
+                "paper_backtest_after_assumed_costs": {
+                    "trade_count": 35, "average_net_return": 0.01,
+                    "compounded_net_return": 0.03, "max_drawdown": -0.02,
+                    "profit_factor": 1.2,
+                },
+            },
+        }
+        signal, reason = inference.apply_research_signal_gate("LONG", 0.99, checkpoint)
+        self.assertEqual(signal, "NO TRADE")
+        self.assertEqual(reason, "broker_spread_not_verified")
+        checkpoint["broker_spread_verified"] = True
+        signal, _ = inference.apply_research_signal_gate("LONG", 0.99, checkpoint)
+        self.assertEqual(signal, "LONG")
+
     def test_inference_gate_blocks_unapproved_checkpoint(self):
         signal, reason = inference.apply_research_signal_gate(
             "LONG", 0.9, {"production_ready": False, "recommended_min_confidence": 0.4}
