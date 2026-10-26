@@ -129,6 +129,8 @@ def apply_research_signal_gate(raw_signal: str, confidence: float, checkpoint: d
         minimum_confidence = 1.01
     if checkpoint.get("production_ready") is not True:
         return "NO TRADE", "checkpoint_not_approved_for_production"
+    if checkpoint.get("broker_spread_verified") is not True:
+        return "NO TRADE", "broker_spread_not_verified"
     if not isinstance(test_metrics, dict):
         return "NO TRADE", "holdout_validation_metrics_incomplete_or_unprofitable"
     if test_metrics.get("signals_disabled_for_no_validated_edge") is True:
