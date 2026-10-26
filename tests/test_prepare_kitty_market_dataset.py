@@ -61,6 +61,31 @@ class KittyMarketDatasetTests(unittest.TestCase):
         affected = pd.date_range("2024-01-25 17:00:00+00:00", periods=7, freq="h")
         self.assertTrue(set(affected).isdisjoint(set(dataset["timestamp"])))
 
+    def test_features_do_not_span_missing_hourly_candles(self):
+        rng = np.random.default_rng(2028)
+        count = 1200
+        returns = rng.normal(0.00005, 0.004, count)
+        closes = 60_000 * np.cumprod(1 + returns)
+        opens = np.concatenate(([closes[0] * (1 - returns[0]),], closes[:-1]))
+        frame = pd.DataFrame({
+            "timestamp": pd.date_range("2024-01-01", periods=count, freq="h", tz="UTC"),
+            "open": opens,
+            "high": np.maximum(opens, closes) * 1.001,
+            "low": np.minimum(opens, closes) * 0.999,
+            "close": closes,
+            "volume": np.ones(count),
+        }).drop(index=600).reset_index(drop=True)
+
+        dataset = builder.build_dataset(frame)
+        # Candle 600 is 2024-01-26 00:00 UTC. Since the next available candle
+        # is 01:00, the 50-candle feature window is not contiguous until
+        # 2024-01-28 02:00 UTC (49 full hourly intervals after the gap).
+        contaminated_window = pd.date_range(
+            "2024-01-26 01:00:00+00:00",
+            "2024-01-28 01:00:00+00:00",
+            freq="h",
+        )
+        self.assertTrue(set(contaminated_window).isdisjoint(set(dataset["timestamp"])))
 
     @unittest.mock.patch("prepare_kitty_market_dataset.fetch_yahoo_hourly")
     @unittest.mock.patch("prepare_kitty_market_dataset.requests.Session.get", side_effect=requests.HTTPError("451 blocked"))
