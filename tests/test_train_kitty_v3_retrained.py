@@ -165,6 +165,7 @@ class KittyTrainingExperimentTests(unittest.TestCase):
     def test_inference_gate_blocks_holdout_with_no_validated_edge(self):
         checkpoint = {
             "production_ready": True,
+            "broker_spread_verified": True,
             "recommended_min_confidence": 0.4,
             "test_metrics": {"signals_disabled_for_no_validated_edge": True},
         }
@@ -173,7 +174,8 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         self.assertEqual(reason, "holdout_validation_found_no_positive_net_edge")
 
     def test_inference_gate_requires_validated_confidence_threshold(self):
-        checkpoint = {"production_ready": True, "recommended_min_confidence": 1.01, "test_metrics": {}}
+        checkpoint = {"production_ready": True,
+            "broker_spread_verified": True, "recommended_min_confidence": 1.01, "test_metrics": {}}
         signal, reason = inference.apply_research_signal_gate("LONG", 0.9, checkpoint)
         self.assertEqual(signal, "NO TRADE")
         self.assertEqual(reason, "no_validated_confidence_threshold")
@@ -205,6 +207,7 @@ class KittyTrainingExperimentTests(unittest.TestCase):
     def test_inference_gate_rejects_approval_flag_without_positive_after_cost_metrics(self):
         checkpoint = {
             "production_ready": True,
+            "broker_spread_verified": True,
             "recommended_min_confidence": 0.4,
             "test_metrics": {"signals_disabled_for_no_validated_edge": False},
         }
@@ -215,6 +218,7 @@ class KittyTrainingExperimentTests(unittest.TestCase):
     def test_inference_gate_rejects_too_few_holdout_trades(self):
         checkpoint = {
             "production_ready": True,
+            "broker_spread_verified": True,
             "recommended_min_confidence": 0.4,
             "test_metrics": {
                 "signals_disabled_for_no_validated_edge": False,
