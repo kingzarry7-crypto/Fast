@@ -164,10 +164,17 @@ def kitty_status():
     if not result.get("available"):
         raise HTTPException(status_code=503, detail=result)
     result["legacy_six_feature_model_retired"] = True
-    result["gold_prediction_ready"] = False
+    gold_status = gold_model.status()
+    result["gold_model_available"] = gold_status.get("available") is True
+    result["gold_prediction_ready"] = (
+        gold_status.get("available") is True
+        and gold_status.get("signal_edge_validated") is True
+    )
+    result["gold_model_status"] = gold_status
     result["gold_prediction_note"] = (
-        "The packaged model metadata does not identify gold-specific training data. "
-        "Use /gold-features for real XAU/USD features; do not treat this model as a gold signal until validated."
+        "Gold checkpoint is installed but has not passed the after-cost edge gate."
+        if gold_status.get("available") and not gold_status.get("signal_edge_validated")
+        else gold_status.get("error", "A verified XAU/USD spot checkpoint with validated net edge is required.")
     )
     return result
 
@@ -260,16 +267,17 @@ def kitty_market_predict(
             "latest_candle_time": latest_candle_time,
             "prediction_available": True,
             "prediction_mode": "research_only_hourly_model",
-            "training_symbol_confirmed": False,
-            "training_timeframe": "1h",
+            "training_symbol_confirmed": prediction.get("training_symbol_confirmed") is True,
+            "training_symbol": prediction.get("training_symbol"),
+            "training_data_sources": prediction.get("training_data_sources", []),
+            "training_timeframe": prediction.get("training_timeframe", "1h"),
             "timeframe_validated": False,
             "features": {key: round(value, 8) for key, value in features.items()},
             "prediction": prediction,
             "warning": (
-                "Kitty V3 produced an inference from live hourly BTC candles, but its "
-                "training metadata does not identify the training symbol. Treat this "
-                "as an experimental model test, not a validated trading signal. "
-                "No trades are placed."
+                "Kitty V3 produced an inference from completed hourly BTC candles. "
+                "Checkpoint identity is reported explicitly; this remains research-only, "
+                "not a validated trading signal. No trades are placed."
             ),
             "trading_enabled": False,
             "source": "market.get_candles (configured live crypto providers)",
