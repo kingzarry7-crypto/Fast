@@ -18,7 +18,7 @@ type SignalRow = {
   status?: string;
   timeframe?: string;
   completed_candle_time?: string;
-  signal?: { signal?: string; price?: number; reasons?: string[]; signal_type?: string };
+  signal?: { signal?: string; candidate_signal?: string; signal_gate_reason?: string; strategy_edge_validated?: boolean; price?: number; reasons?: string[]; signal_type?: string };
   signal_type?: string;
   model_validated_for_market?: boolean;
   error?: string;
@@ -48,6 +48,13 @@ function signalLabel(row?: SignalRow) {
   if (!Number.isFinite(stamp) || Date.now() - stamp > 3 * 60 * 60 * 1000 || stamp > Date.now() + 5 * 60 * 1000) return "WAIT / NO TRADE";
   const value = String(row.signal?.signal || "").toUpperCase().replaceAll("_", " ");
   return ["BUY", "SELL", "NO TRADE"].includes(value) ? value : "WAIT / NO TRADE";
+}
+function candidateLabel(row?: SignalRow) {
+  if (!row || row.status !== "available" || !row.completed_candle_time) return "UNAVAILABLE";
+  const stamp = Date.parse(row.completed_candle_time);
+  if (!Number.isFinite(stamp) || Date.now() - stamp > 3 * 60 * 60 * 1000 || stamp > Date.now() + 5 * 60 * 1000) return "STALE";
+  const value = String(row.signal?.candidate_signal || "NO SETUP").toUpperCase().replaceAll("_", " ");
+  return ["BUY", "SELL", "NO TRADE"].includes(value) ? value : "NO SETUP";
 }
 function signalClass(value: string) {
   if (value === "BUY") return "border-emerald-400/30 bg-emerald-400/10 text-emerald-200";
@@ -162,14 +169,19 @@ export default function TraderPage() {
             <div className="grid gap-4 md:grid-cols-2">
               {markets.map((symbol) => {
                 const row = signals.find((item) => item.symbol === symbol);
-                const label = signalLabel(row);
+                const label = signalLabel(row);\n                const candidate = candidateLabel(row);
                 return <article key={symbol} className={panel() + " p-5"}>
                   <div className="flex items-start justify-between gap-3"><div><p className="text-xs tracking-widest text-slate-400">MARKET</p><h3 className="mt-1 text-2xl font-semibold">{symbol}</h3></div><span className={"rounded-lg border px-3 py-1.5 text-xs font-semibold " + signalClass(label)}>{label}</span></div>
                   <div className="mt-5 grid grid-cols-2 gap-3">
                     <div className="rounded-xl bg-black/20 p-3"><p className="text-[10px] tracking-widest text-slate-500">REFERENCE PRICE</p><p className="mt-2 text-lg">{typeof row?.signal?.price === "number" ? row.signal.price.toLocaleString(undefined, { maximumFractionDigits: 5 }) : "—"}</p></div>
                     <div className="rounded-xl bg-black/20 p-3"><p className="text-[10px] tracking-widest text-slate-500">COMPLETED CANDLE</p><p className="mt-2 text-xs text-slate-200">{row?.completed_candle_time ? new Date(row.completed_candle_time).toLocaleString() : "No fresh data"}</p></div>
                   </div>
-                  <p className="mt-4 text-xs leading-relaxed text-slate-400">{row?.status === "available" ? "Experimental rule-based technical signal. It is not a validated profitability claim." : "Signal unavailable or stale. Defaulting to WAIT / NO TRADE."}</p>
+                  <div className="mt-4 rounded-xl border border-cyan-300/10 bg-cyan-300/[0.04] p-3">
+                    <p className="text-[10px] tracking-widest text-cyan-200/70">RESEARCH SETUP · NOT AN APPROVED TRADE</p>
+                    <p className="mt-2 text-sm font-semibold text-slate-100">{candidate}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-400">{row?.signal?.strategy_edge_validated === true ? "This strategy has passed its recorded validation gate." : row?.signal?.signal_gate_reason || "Candidate setups are informational only; the actionable signal remains gated."}</p>
+                  </div>
+                  <p className="mt-3 text-xs leading-relaxed text-slate-400">{row?.status === "available" ? "Technical confluence is experimental and does not establish profitability. The actionable signal remains WAIT / NO TRADE unless separately validated." : "Signal unavailable or stale. Defaulting to WAIT / NO TRADE."}</p>
                 </article>;
               })}
             </div>
