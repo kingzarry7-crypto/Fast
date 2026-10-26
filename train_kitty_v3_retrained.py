@@ -101,7 +101,8 @@ def split_chronologically(x: np.ndarray, y: np.ndarray, purge: int = 0):
 
 def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.ndarray,
                             round_trip_cost: float = 0.001, min_confidence: float = 0.50,
-                            min_margin: float = 0.10) -> dict:
+                            min_margin: float = 0.10, label_threshold: float | None = None,
+                            min_edge_cost_multiple: float = 1.25) -> dict:
     """One-pass holdout simulation matching inference confidence/margin filters."""
     if len(x) != len(forward_returns):
         raise ValueError("Test features and forward returns must have equal lengths")
@@ -111,6 +112,10 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
         raise ValueError("min_confidence must be between 0.50 and 1.01; 1.01 is the fail-closed no-signal sentinel")
     if not 0.0 <= min_margin <= 1.0:
         raise ValueError("min_margin must be between 0 and 1")
+    if label_threshold is not None and (not np.isfinite(label_threshold) or label_threshold <= 0):
+        raise ValueError("label_threshold must be a positive finite return fraction")
+    if not np.isfinite(min_edge_cost_multiple) or min_edge_cost_multiple < 1.0:
+        raise ValueError("min_edge_cost_multiple must be finite and at least 1.0")
     model.eval()
     with torch.inference_mode():
         probs = torch.softmax(model(torch.from_numpy(x)), dim=1).cpu().numpy()
@@ -133,6 +138,16 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
         if margin < min_margin:
             skipped_low_margin_signals += 1
             continue
+        # Confidence is not an estimate of profit. Require the directional
+        # probability gap, scaled by the dataset's move threshold, to clear
+        # the assumed all-in cost by a predeclared safety multiple.
+        # This is a conservative edge proxy, not a calibrated return forecast.
+        if label_threshold is not None:
+            directional_gap = abs(float(probabilities[2]) - float(probabilities[0]))
+            directional_edge_proxy = directional_gap * label_threshold
+            if directional_edge_proxy < round_trip_cost * min_edge_cost_multiple:
+                skipped_low_margin_signals += 1
+                continue
         gross = -float(raw_return) if side_class == 0 else float(raw_return)
         trades.append(gross - round_trip_cost)
         # A signal after candle t closes enters at t+1 open and exits at t+7 close.
@@ -148,6 +163,8 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
             "round_trip_cost_assumption": round_trip_cost,
             "minimum_class_confidence": min_confidence,
             "minimum_probability_margin": min_margin,
+            "label_threshold_for_edge_proxy": label_threshold,
+            "minimum_edge_cost_multiple": min_edge_cost_multiple,
         }
     net = np.asarray(trades, dtype=np.float64)
     equity = np.cumprod(1.0 + net)
@@ -168,6 +185,8 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
         "max_drawdown": float(np.min(drawdowns)),
         "round_trip_cost_assumption": round_trip_cost,
         "minimum_class_confidence": min_confidence,
+        "label_threshold_for_edge_proxy": label_threshold,
+        "minimum_edge_cost_multiple": min_edge_cost_multiple,
     }
 
 
@@ -473,6 +492,7 @@ def main() -> None:
                 model, x_val, val_returns,
                 round_trip_cost=args.round_trip_cost,
                 min_confidence=confidence_threshold,
+                label_threshold=args.label_threshold,
             )
             local_trials.append({"min_confidence": confidence_threshold, **trial})
         confidence, selection_note = select_confidence_threshold(local_trials)
@@ -517,6 +537,7 @@ def main() -> None:
         winning_model, x_test, test_returns,
         round_trip_cost=args.round_trip_cost,
         min_confidence=selected_confidence,
+        label_threshold=args.label_threshold,
     )
     test_metrics["paper_backtest_after_assumed_costs"] = paper_metrics
     test_metrics["selected_min_confidence_from_validation"] = selected_confidence
