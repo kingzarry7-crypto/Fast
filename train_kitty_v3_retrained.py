@@ -31,6 +31,10 @@ FEATURES = [
 ]
 LABELS = {"SHORT": 0, "NO TRADE": 1, "LONG": 2}
 ARCHITECTURE = [18, 64, 32, 3]
+LABEL_HORIZON_HOURS = 6
+# Entry is at t+1 open and exit at t+7 close, so labels can touch the next
+# partition unless we leave a seven-row gap at each split boundary.
+MIN_LABEL_PURGE_ROWS = LABEL_HORIZON_HOURS + 1
 
 
 class KittyExperimentNet(nn.Module):
@@ -355,12 +359,14 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
-    parser.add_argument("--purge", type=int, default=6, help="Rows purged at split boundaries to prevent overlapping six-hour labels")
+    parser.add_argument("--purge", type=int, default=MIN_LABEL_PURGE_ROWS, help="Rows purged at split boundaries; must cover next-open entry plus the six-hour exit horizon (minimum 7)")
     parser.add_argument("--round-trip-cost", type=float, default=0.001, help="Assumed all-in round-trip spread + commissions/fees + slippage per trade; default 0.10%. This is a conservative assumption, not a broker-quote measurement.")
     parser.add_argument("--label-threshold", type=float, default=None, help="Forward-return class threshold used by the dataset builder")
     args = parser.parse_args()
     if args.epochs < 1 or args.patience < 1 or args.batch_size < 2:
         parser.error("epochs/patience must be positive and batch-size must be at least 2")
+    if args.purge < MIN_LABEL_PURGE_ROWS:
+        parser.error(f"--purge must be at least {MIN_LABEL_PURGE_ROWS}; labels enter at t+1 open and exit at t+7 close")
     x, y, dataset_sha256 = load_dataset(args.csv)
     (x_train, y_train), (x_val, y_val), (x_test, y_test) = split_chronologically(x, y, purge=args.purge)
     source_frame = pd.read_csv(args.csv)
