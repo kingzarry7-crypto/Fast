@@ -198,9 +198,19 @@ def build_dataset(frame: pd.DataFrame, threshold: float = 0.003, horizon: int = 
         & ((exit_time - timestamps) == pd.Timedelta(hours=horizon + 1))
     )
     dataset["valid_label_window"] = valid_label_window
-    # Remove warm-up rows, non-finite rows, and labels spanning data gaps.
+    # Row-based rolling features (e.g. SMA50) are only meaningful as hourly
+    # features when the preceding 50 candles are contiguous. FX sessions and
+    # provider outages can leave gaps; do not let a 50-row window silently
+    # span more than 50 elapsed hours.
+    hourly_interval = timestamps.diff().eq(pd.Timedelta(hours=1))
+    valid_feature_window = hourly_interval.rolling(49, min_periods=49).sum().eq(49)
+    dataset["valid_feature_window"] = valid_feature_window
+    # Remove warm-up rows, non-finite rows, features spanning data gaps, and
+    # labels spanning gaps. The feature and label windows are independent.
     dataset = dataset.replace([np.inf, -np.inf], np.nan).dropna(subset=FEATURES + ["forward_return_6h"])
-    dataset = dataset[dataset["valid_label_window"]].drop(columns=["valid_label_window"])
+    dataset = dataset[dataset["valid_label_window"] & dataset["valid_feature_window"]].drop(
+        columns=["valid_label_window", "valid_feature_window"]
+    )
     dataset["target"] = dataset["target"].astype(int)
     dataset = dataset[dataset["timestamp"] < frame["timestamp"].iloc[-(horizon + 1)]].reset_index(drop=True)
     if set(dataset["target"].unique()) != {0, 1, 2}:
