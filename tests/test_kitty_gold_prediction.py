@@ -97,6 +97,7 @@ class GoldModelIsolationTests(unittest.TestCase):
         }))
         approved = {
             "production_ready": True,
+            "broker_spread_verified": True,
             "recommended_min_confidence": 0.55,
             "test_metrics": {
                 "signals_disabled_for_no_validated_edge": False,
@@ -110,6 +111,9 @@ class GoldModelIsolationTests(unittest.TestCase):
             },
         }
         self.assertTrue(kitty_gold_model.has_validated_edge(approved))
+        approved["broker_spread_verified"] = False
+        self.assertFalse(kitty_gold_model.has_validated_edge(approved))
+        approved["broker_spread_verified"] = True
         approved["test_metrics"]["paper_backtest_after_assumed_costs"]["trade_count"] = 3
         self.assertFalse(kitty_gold_model.has_validated_edge(approved))
         approved["test_metrics"]["paper_backtest_after_assumed_costs"]["trade_count"] = 35
