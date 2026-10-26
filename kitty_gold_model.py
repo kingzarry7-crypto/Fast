@@ -36,7 +36,8 @@ def has_validated_edge(checkpoint: dict[str, Any]) -> bool:
     except (AttributeError, TypeError, ValueError, OverflowError):
         return False
     return (
-        checkpoint.get("production_ready") is True
+        checkpoint.get("broker_spread_verified") is True
+        and checkpoint.get("production_ready") is True
         and isinstance(metrics, dict)
         and metrics.get("signals_disabled_for_no_validated_edge") is False
         and 0.0 <= minimum_confidence <= 1.0
