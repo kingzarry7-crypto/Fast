@@ -69,7 +69,7 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_kitty_paper_trader.py' -v
       - name: Build hourly dataset from public historical candles
         env:
-          LIMIT: ${{ github.event.inputs.limit || '5000' }}
+          LIMIT: ${{ github.event.inputs.limit || '15000' }}
           THRESHOLD: ${{ github.event.inputs.threshold || '0.003' }}
         run: |
           echo "MARKET_LABEL_THRESHOLD=$THRESHOLD" >> "$GITHUB_ENV"
