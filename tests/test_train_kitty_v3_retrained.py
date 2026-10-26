@@ -40,9 +40,9 @@ class KittyTrainingExperimentTests(unittest.TestCase):
     def test_chronological_split_purges_overlapping_forward_labels(self):
         x = np.arange(300 * 18, dtype=np.float32).reshape(300, 18)
         y = np.arange(300, dtype=np.int64) % 3
-        train, validation, test = kitty.split_chronologically(x, y, purge=6)
-        self.assertEqual(len(train[0]), 204)
-        self.assertEqual(len(validation[0]), 39)
+        train, validation, test = kitty.split_chronologically(x, y, purge=7)
+        self.assertEqual(len(train[0]), 203)
+        self.assertEqual(len(validation[0]), 38)
         self.assertEqual(len(test[0]), 45)
         self.assertLess(train[0][-1, 0], validation[0][0, 0])
         self.assertLess(validation[0][-1, 0], test[0][0, 0])
