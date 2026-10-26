@@ -1,6 +1,5 @@
 """Regression tests for gold/crypto candle timestamps used by Kitty signals."""
 import unittest
-from unittest.mock import patch
 from datetime import datetime, timezone
 
 from kitty_features import normalize_candle_timestamp
