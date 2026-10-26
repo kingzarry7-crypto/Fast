@@ -279,8 +279,8 @@ class KittyTrainingExperimentTests(unittest.TestCase):
                 return torch.log(torch.tensor([0.01, 0.04, 0.95], dtype=torch.float32)).repeat(len(x), 1)
 
         result = kitty.evaluate_paper_returns(
-            StrongDirectionalModel(), np.zeros((8, 18), dtype=np.float32),
-            np.full(8, 0.01, dtype=np.float64), round_trip_cost=0.001,
+            StrongDirectionalModel(), np.zeros((7, 18), dtype=np.float32),
+            np.full(7, 0.01, dtype=np.float64), round_trip_cost=0.001,
             min_confidence=0.50, label_threshold=0.003,
         )
         self.assertEqual(result["trade_count"], 1)
