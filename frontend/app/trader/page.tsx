@@ -169,7 +169,8 @@ export default function TraderPage() {
             <div className="grid gap-4 md:grid-cols-2">
               {markets.map((symbol) => {
                 const row = signals.find((item) => item.symbol === symbol);
-                const label = signalLabel(row);\n                const candidate = candidateLabel(row);
+                const label = signalLabel(row);
+                const candidate = candidateLabel(row);
                 return <article key={symbol} className={panel() + " p-5"}>
                   <div className="flex items-start justify-between gap-3"><div><p className="text-xs tracking-widest text-slate-400">MARKET</p><h3 className="mt-1 text-2xl font-semibold">{symbol}</h3></div><span className={"rounded-lg border px-3 py-1.5 text-xs font-semibold " + signalClass(label)}>{label}</span></div>
                   <div className="mt-5 grid grid-cols-2 gap-3">
