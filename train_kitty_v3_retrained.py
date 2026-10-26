@@ -103,8 +103,8 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
         raise ValueError("Test features and forward returns must have equal lengths")
     if not 0 <= round_trip_cost < 0.05:
         raise ValueError("round_trip_cost must be between 0 and 5%")
-    if not 0.50 <= min_confidence <= 1.0:
-        raise ValueError("min_confidence must be between 0.50 and 1.0 to match inference")
+    if not 0.50 <= min_confidence <= 1.01:
+        raise ValueError("min_confidence must be between 0.50 and 1.01; 1.01 is the fail-closed no-signal sentinel")
     if not 0.0 <= min_margin <= 1.0:
         raise ValueError("min_margin must be between 0 and 1")
     model.eval()
