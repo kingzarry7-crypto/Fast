@@ -27,6 +27,29 @@ class KittyGoldPredictionTests(unittest.TestCase):
             normalize_candle_timestamp("not-a-time")
 
 
+class BtcModelIdentityTests(unittest.TestCase):
+    def test_btc_checkpoint_requires_explicit_btc_hourly_identity(self):
+        import kitty_v3_retrained as model
+
+        valid = {
+            "training_symbol": "BTC",
+            "training_timeframe": "1h",
+            "automatic_order_execution_enabled": False,
+        }
+        model.validate_checkpoint_metadata(valid)
+
+        invalid_checkpoints = [
+            {"training_timeframe": "1h", "automatic_order_execution_enabled": False},
+            {"training_symbol": "ETH", "training_timeframe": "1h", "automatic_order_execution_enabled": False},
+            {"training_symbol": "BTC", "training_timeframe": "15m", "automatic_order_execution_enabled": False},
+            {"training_symbol": "BTC", "training_timeframe": "1h", "automatic_order_execution_enabled": True},
+        ]
+        for invalid in invalid_checkpoints:
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    model.validate_checkpoint_metadata(invalid)
+
+
 class GoldModelIsolationTests(unittest.TestCase):
     def test_gold_checkpoint_requires_xauusd_symbol_and_twelve_data_spot_source(self):
         import kitty_gold_model
@@ -74,6 +97,7 @@ class GoldModelIsolationTests(unittest.TestCase):
         }))
         approved = {
             "production_ready": True,
+            "broker_spread_verified": True,
             "recommended_min_confidence": 0.55,
             "test_metrics": {
                 "signals_disabled_for_no_validated_edge": False,
@@ -87,6 +111,9 @@ class GoldModelIsolationTests(unittest.TestCase):
             },
         }
         self.assertTrue(kitty_gold_model.has_validated_edge(approved))
+        approved["broker_spread_verified"] = False
+        self.assertFalse(kitty_gold_model.has_validated_edge(approved))
+        approved["broker_spread_verified"] = True
         approved["test_metrics"]["paper_backtest_after_assumed_costs"]["trade_count"] = 3
         self.assertFalse(kitty_gold_model.has_validated_edge(approved))
         approved["test_metrics"]["paper_backtest_after_assumed_costs"]["trade_count"] = 35

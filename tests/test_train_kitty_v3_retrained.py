@@ -40,12 +40,35 @@ class KittyTrainingExperimentTests(unittest.TestCase):
     def test_chronological_split_purges_overlapping_forward_labels(self):
         x = np.arange(300 * 18, dtype=np.float32).reshape(300, 18)
         y = np.arange(300, dtype=np.int64) % 3
-        train, validation, test = kitty.split_chronologically(x, y, purge=6)
-        self.assertEqual(len(train[0]), 204)
-        self.assertEqual(len(validation[0]), 39)
+        train, validation, test = kitty.split_chronologically(x, y, purge=7)
+        self.assertEqual(len(train[0]), 203)
+        self.assertEqual(len(validation[0]), 38)
         self.assertEqual(len(test[0]), 45)
         self.assertLess(train[0][-1, 0], validation[0][0, 0])
         self.assertLess(validation[0][-1, 0], test[0][0, 0])
+
+    def test_paper_backtest_rejects_ambiguous_directional_probabilities(self):
+        class AmbiguousModel(torch.nn.Module):
+            def forward(self, x):
+                # Directional class probability is 0.55, but the runner-up is
+                # 0.46. Inference rejects this because the margin is below 0.10.
+                probs = torch.tensor([0.55, 0.46, 0.01], dtype=torch.float32)
+                return torch.log(probs).repeat(len(x), 1)
+
+        result = kitty.evaluate_paper_returns(
+            AmbiguousModel(), np.zeros((8, 18), dtype=np.float32),
+            np.full(8, 0.02, dtype=np.float64), round_trip_cost=0.001,
+            min_confidence=0.50,
+        )
+        self.assertEqual(result["trade_count"], 0)
+        self.assertTrue(result["compounded_net_return"] == 0.0)
+        # 1.01 is the trainer's sentinel for "no validated threshold".
+        disabled = kitty.evaluate_paper_returns(
+            AmbiguousModel(), np.zeros((8, 18), dtype=np.float32),
+            np.full(8, 0.02, dtype=np.float64), round_trip_cost=0.001,
+            min_confidence=1.01,
+        )
+        self.assertEqual(disabled["trade_count"], 0)
 
     def test_paper_return_evaluation_subtracts_costs_and_skips_no_trade(self):
         class FixedModel(torch.nn.Module):
@@ -134,6 +157,27 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         holdout = {"trade_count": 35, "average_net_return": 0.001, "compounded_net_return": 0.02, "max_drawdown": -0.03}
         self.assertTrue(kitty.should_disable_signals(0.5, holdout))
 
+    def test_inference_gate_blocks_missing_or_unverified_broker_spread(self):
+        checkpoint = {
+            "production_ready": True,
+            "broker_spread_verified": False,
+            "recommended_min_confidence": 0.4,
+            "test_metrics": {
+                "signals_disabled_for_no_validated_edge": False,
+                "paper_backtest_after_assumed_costs": {
+                    "trade_count": 35, "average_net_return": 0.01,
+                    "compounded_net_return": 0.03, "max_drawdown": -0.02,
+                    "profit_factor": 1.2,
+                },
+            },
+        }
+        signal, reason = inference.apply_research_signal_gate("LONG", 0.99, checkpoint)
+        self.assertEqual(signal, "NO TRADE")
+        self.assertEqual(reason, "broker_spread_not_verified")
+        checkpoint["broker_spread_verified"] = True
+        signal, _ = inference.apply_research_signal_gate("LONG", 0.99, checkpoint)
+        self.assertEqual(signal, "LONG")
+
     def test_inference_gate_blocks_unapproved_checkpoint(self):
         signal, reason = inference.apply_research_signal_gate(
             "LONG", 0.9, {"production_ready": False, "recommended_min_confidence": 0.4}
@@ -144,6 +188,7 @@ class KittyTrainingExperimentTests(unittest.TestCase):
     def test_inference_gate_blocks_holdout_with_no_validated_edge(self):
         checkpoint = {
             "production_ready": True,
+            "broker_spread_verified": True,
             "recommended_min_confidence": 0.4,
             "test_metrics": {"signals_disabled_for_no_validated_edge": True},
         }
@@ -152,7 +197,8 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         self.assertEqual(reason, "holdout_validation_found_no_positive_net_edge")
 
     def test_inference_gate_requires_validated_confidence_threshold(self):
-        checkpoint = {"production_ready": True, "recommended_min_confidence": 1.01, "test_metrics": {}}
+        checkpoint = {"production_ready": True,
+            "broker_spread_verified": True, "recommended_min_confidence": 1.01, "test_metrics": {}}
         signal, reason = inference.apply_research_signal_gate("LONG", 0.9, checkpoint)
         self.assertEqual(signal, "NO TRADE")
         self.assertEqual(reason, "no_validated_confidence_threshold")
@@ -184,6 +230,7 @@ class KittyTrainingExperimentTests(unittest.TestCase):
     def test_inference_gate_rejects_approval_flag_without_positive_after_cost_metrics(self):
         checkpoint = {
             "production_ready": True,
+            "broker_spread_verified": True,
             "recommended_min_confidence": 0.4,
             "test_metrics": {"signals_disabled_for_no_validated_edge": False},
         }
@@ -194,6 +241,7 @@ class KittyTrainingExperimentTests(unittest.TestCase):
     def test_inference_gate_rejects_too_few_holdout_trades(self):
         checkpoint = {
             "production_ready": True,
+            "broker_spread_verified": True,
             "recommended_min_confidence": 0.4,
             "test_metrics": {
                 "signals_disabled_for_no_validated_edge": False,

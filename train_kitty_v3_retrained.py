@@ -31,6 +31,10 @@ FEATURES = [
 ]
 LABELS = {"SHORT": 0, "NO TRADE": 1, "LONG": 2}
 ARCHITECTURE = [18, 64, 32, 3]
+LABEL_HORIZON_HOURS = 6
+# Entry is at t+1 open and exit at t+7 close, so labels can touch the next
+# partition unless we leave a seven-row gap at each split boundary.
+MIN_LABEL_PURGE_ROWS = LABEL_HORIZON_HOURS + 1
 
 
 class KittyExperimentNet(nn.Module):
@@ -96,27 +100,38 @@ def split_chronologically(x: np.ndarray, y: np.ndarray, purge: int = 0):
 
 
 def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.ndarray,
-                            round_trip_cost: float = 0.001, min_confidence: float = 0.50) -> dict:
-    """One-pass holdout simulation with fixed costs; no position overlap or leverage."""
+                            round_trip_cost: float = 0.001, min_confidence: float = 0.50,
+                            min_margin: float = 0.10) -> dict:
+    """One-pass holdout simulation matching inference confidence/margin filters."""
     if len(x) != len(forward_returns):
         raise ValueError("Test features and forward returns must have equal lengths")
     if not 0 <= round_trip_cost < 0.05:
         raise ValueError("round_trip_cost must be between 0 and 5%")
+    if not 0.50 <= min_confidence <= 1.01:
+        raise ValueError("min_confidence must be between 0.50 and 1.01; 1.01 is the fail-closed no-signal sentinel")
+    if not 0.0 <= min_margin <= 1.0:
+        raise ValueError("min_margin must be between 0 and 1")
     model.eval()
     with torch.inference_mode():
         probs = torch.softmax(model(torch.from_numpy(x)), dim=1).cpu().numpy()
     trades = []
     next_entry_index = 0
     skipped_overlapping_signals = 0
+    skipped_low_margin_signals = 0
     for index, (probabilities, raw_return) in enumerate(zip(probs, forward_returns)):
         if index < next_entry_index:
             skipped_overlapping_signals += 1
             continue
         if not np.isfinite(raw_return):
             continue
-        side_class = int(np.argmax(probabilities))
+        ranked = np.argsort(probabilities)
+        side_class = int(ranked[-1])
         confidence = float(probabilities[side_class])
+        margin = confidence - float(probabilities[int(ranked[-2])])
         if side_class == 1 or confidence < min_confidence:
+            continue
+        if margin < min_margin:
+            skipped_low_margin_signals += 1
             continue
         gross = -float(raw_return) if side_class == 0 else float(raw_return)
         trades.append(gross - round_trip_cost)
@@ -129,8 +144,10 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
             "trade_count": 0, "win_rate": None, "average_net_return": None, "profit_factor": None,
             "compounded_net_return": 0.0, "max_drawdown": 0.0,
             "skipped_overlapping_signals": skipped_overlapping_signals,
+            "skipped_low_margin_signals": skipped_low_margin_signals,
             "round_trip_cost_assumption": round_trip_cost,
             "minimum_class_confidence": min_confidence,
+            "minimum_probability_margin": min_margin,
         }
     net = np.asarray(trades, dtype=np.float64)
     equity = np.cumprod(1.0 + net)
@@ -143,6 +160,8 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
         "trade_count": len(trades),
         "profit_factor": float(profit_factor),
         "skipped_overlapping_signals": skipped_overlapping_signals,
+        "skipped_low_margin_signals": skipped_low_margin_signals,
+        "minimum_probability_margin": min_margin,
         "win_rate": float(np.mean(np.asarray(trades) > 0)),
         "average_net_return": float(np.mean(trades)),
         "compounded_net_return": float(equity[-1] - 1.0),
@@ -340,12 +359,14 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
-    parser.add_argument("--purge", type=int, default=6, help="Rows purged at split boundaries to prevent overlapping six-hour labels")
-    parser.add_argument("--round-trip-cost", type=float, default=0.001, help="Assumed fees plus slippage per completed trade, default 0.10%")
+    parser.add_argument("--purge", type=int, default=MIN_LABEL_PURGE_ROWS, help="Rows purged at split boundaries; must cover next-open entry plus the six-hour exit horizon (minimum 7)")
+    parser.add_argument("--round-trip-cost", type=float, default=0.001, help="Assumed all-in round-trip spread + commissions/fees + slippage per trade; default 0.10%. This is a conservative assumption, not a broker-quote measurement.")
     parser.add_argument("--label-threshold", type=float, default=None, help="Forward-return class threshold used by the dataset builder")
     args = parser.parse_args()
     if args.epochs < 1 or args.patience < 1 or args.batch_size < 2:
         parser.error("epochs/patience must be positive and batch-size must be at least 2")
+    if args.purge < MIN_LABEL_PURGE_ROWS:
+        parser.error(f"--purge must be at least {MIN_LABEL_PURGE_ROWS}; labels enter at t+1 open and exit at t+7 close")
     x, y, dataset_sha256 = load_dataset(args.csv)
     (x_train, y_train), (x_val, y_val), (x_test, y_test) = split_chronologically(x, y, purge=args.purge)
     source_frame = pd.read_csv(args.csv)
@@ -432,7 +453,9 @@ def main() -> None:
     # Select the production-compatible architecture using validation trading
     # outcomes after assumed costs, not classification accuracy alone. The final
     # holdout remains untouched until one candidate and threshold are selected.
-    confidence_grid = (0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75)
+    # Runtime inference never emits a directional candidate below 0.50 confidence.
+    # Keep threshold search on the same operating envelope to avoid backtest/live drift.
+    confidence_grid = (0.50, 0.55, 0.60, 0.65, 0.70, 0.75)
     candidate_validation_trials = []
     validation_trials_by_name = {}
     for item, model in compatible_candidates:
@@ -521,6 +544,12 @@ def main() -> None:
         "feature_order": FEATURES,
         "chronological_split": {"train": len(y_train), "validation": len(y_val), "test": len(y_test), "purged_rows_per_boundary": args.purge},
         "selection": {"candidate": winner["checkpoint"], "rule": winner["selected_by"], "holdout_test_evaluations": 1, "production_architecture_compatible": True},
+        "cost_model": {
+            "round_trip_cost_assumption": args.round_trip_cost,
+            "cost_components": ["spread", "commissions_and_fees", "slippage"],
+            "cost_basis": "assumed all-in deduction; not measured live bid/ask or broker-specific fills",
+            "broker_spread_verified": False,
+        },
         "validation_threshold_selection": {
             "chosen_min_confidence": selected_confidence,
             "rule": threshold_selection_note,

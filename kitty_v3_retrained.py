@@ -40,7 +40,16 @@ class KittyV3RetrainedNet(nn.Module):
         return self.net(x)
 
 
-@lru_cache(maxsize=1)
+def validate_checkpoint_metadata(checkpoint: dict[str, Any]) -> None:
+    """Reject checkpoints whose training symbol cannot be proven to be BTC."""
+    if checkpoint.get("training_symbol") != "BTC":
+        raise ValueError("BTC inference requires checkpoint metadata training_symbol='BTC'")
+    if checkpoint.get("training_timeframe", "1h") != "1h":
+        raise ValueError("BTC inference requires a checkpoint trained on 1h candles")
+    if checkpoint.get("automatic_order_execution_enabled") is not False:
+        raise ValueError("BTC research checkpoint must explicitly disable automatic order execution")
+
+
 def _load() -> tuple[KittyV3RetrainedNet, Any, dict[str, Any]]:
     if not CHECKPOINT_PATH.is_file():
         raise FileNotFoundError(f"Missing checkpoint: {CHECKPOINT_PATH.name}")
@@ -48,6 +57,7 @@ def _load() -> tuple[KittyV3RetrainedNet, Any, dict[str, Any]]:
     checkpoint = torch.load(CHECKPOINT_PATH, map_location="cpu", weights_only=False)
     if not isinstance(checkpoint, dict):
         raise ValueError("Checkpoint must be a dictionary bundle")
+    validate_checkpoint_metadata(checkpoint)
     if checkpoint.get("features") != EXPECTED_FEATURES:
         raise ValueError("Checkpoint feature order does not match the 18-feature contract")
     if checkpoint.get("architecture") != [18, 64, 32, 3]:
@@ -89,8 +99,10 @@ def status() -> dict[str, Any]:
             "validation_accuracy": checkpoint.get("validation_accuracy"),
             "validation_metrics": checkpoint.get("validation_metrics"),
             "test_metrics": checkpoint.get("test_metrics"),
-            "training_timeframe": "1h",
-            "training_symbol": "BTC (training dataset convention; runtime symbol metadata still needs confirmation)",
+            "training_timeframe": checkpoint.get("training_timeframe", "1h"),
+            "training_symbol": checkpoint.get("training_symbol"),
+            "training_symbol_confirmed": checkpoint.get("training_symbol") == "BTC",
+            "training_data_sources": checkpoint.get("training_data_sources", []),
             "research_only": True,
             "prediction_enabled": True,
             "signals_enabled": checkpoint.get("production_ready") is True and not (checkpoint.get("test_metrics") or {}).get("signals_disabled_for_no_validated_edge", False),
@@ -117,6 +129,8 @@ def apply_research_signal_gate(raw_signal: str, confidence: float, checkpoint: d
         minimum_confidence = 1.01
     if checkpoint.get("production_ready") is not True:
         return "NO TRADE", "checkpoint_not_approved_for_production"
+    if checkpoint.get("broker_spread_verified") is not True:
+        return "NO TRADE", "broker_spread_not_verified"
     if not isinstance(test_metrics, dict):
         return "NO TRADE", "holdout_validation_metrics_incomplete_or_unprofitable"
     if test_metrics.get("signals_disabled_for_no_validated_edge") is True:
@@ -196,7 +210,10 @@ def predict_features(features: dict[str, float]) -> dict[str, Any]:
         "features": {name: float(features[name]) for name in EXPECTED_FEATURES},
         "best_epoch": checkpoint.get("best_epoch"),
         "research_only": True,
-        "training_timeframe": "1h",
+        "training_timeframe": checkpoint.get("training_timeframe", "1h"),
+        "training_symbol": checkpoint.get("training_symbol"),
+        "training_symbol_confirmed": checkpoint.get("training_symbol") == "BTC",
+        "training_data_sources": checkpoint.get("training_data_sources", []),
         "trading_enabled": False,
         "warning": "Research signal only. Multi-timeframe and non-hourly predictions are unvalidated; no orders are placed.",
     }
