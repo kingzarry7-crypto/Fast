@@ -40,7 +40,6 @@ class KittyV3RetrainedNet(nn.Module):
         return self.net(x)
 
 
-@lru_cache(maxsize=1)
 def validate_checkpoint_metadata(checkpoint: dict[str, Any]) -> None:
     """Reject checkpoints whose training symbol cannot be proven to be BTC."""
     if checkpoint.get("training_symbol") != "BTC":
