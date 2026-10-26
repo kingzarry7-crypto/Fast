@@ -267,7 +267,7 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         result = kitty.evaluate_paper_returns(
             WeakDirectionalModel(), np.zeros((8, 18), dtype=np.float32),
             np.full(8, 0.01, dtype=np.float64), round_trip_cost=0.001,
-            min_confidence=0.50, label_threshold=0.003,
+            min_confidence=0.50, min_margin=0.0, label_threshold=0.003,
         )
         self.assertEqual(result["trade_count"], 0)
         self.assertEqual(result["label_threshold_for_edge_proxy"], 0.003)
