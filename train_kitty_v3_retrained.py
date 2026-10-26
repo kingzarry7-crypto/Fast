@@ -120,9 +120,10 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
             continue
         gross = -float(raw_return) if side_class == 0 else float(raw_return)
         trades.append(gross - round_trip_cost)
-        # A signal at candle t enters at t+1 open and exits at t+6 close.
-        # Do not allow another signal until the previous six-hour trade has exited.
-        next_entry_index = index + 6
+        # A signal after candle t closes enters at t+1 open and exits at t+7 close.
+        # The exit candle is part of the holding window, so the next eligible
+        # signal is t+7; t+6 would overlap the prior trade's exit candle.
+        next_entry_index = index + 7
     if not trades:
         return {
             "trade_count": 0, "win_rate": None, "average_net_return": None, "profit_factor": None,
