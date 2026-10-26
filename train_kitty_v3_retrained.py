@@ -341,7 +341,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--purge", type=int, default=6, help="Rows purged at split boundaries to prevent overlapping six-hour labels")
-    parser.add_argument("--round-trip-cost", type=float, default=0.001, help="Assumed fees plus slippage per completed trade, default 0.10%")
+    parser.add_argument("--round-trip-cost", type=float, default=0.001, help="Assumed all-in round-trip spread + commissions/fees + slippage per trade; default 0.10%. This is a conservative assumption, not a broker-quote measurement.")
     parser.add_argument("--label-threshold", type=float, default=None, help="Forward-return class threshold used by the dataset builder")
     args = parser.parse_args()
     if args.epochs < 1 or args.patience < 1 or args.batch_size < 2:
@@ -521,6 +521,12 @@ def main() -> None:
         "feature_order": FEATURES,
         "chronological_split": {"train": len(y_train), "validation": len(y_val), "test": len(y_test), "purged_rows_per_boundary": args.purge},
         "selection": {"candidate": winner["checkpoint"], "rule": winner["selected_by"], "holdout_test_evaluations": 1, "production_architecture_compatible": True},
+        "cost_model": {
+            "round_trip_cost_assumption": args.round_trip_cost,
+            "cost_components": ["spread", "commissions_and_fees", "slippage"],
+            "cost_basis": "assumed all-in deduction; not measured live bid/ask or broker-specific fills",
+            "broker_spread_verified": False,
+        },
         "validation_threshold_selection": {
             "chosen_min_confidence": selected_confidence,
             "rule": threshold_selection_note,
