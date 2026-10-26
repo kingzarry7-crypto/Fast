@@ -47,6 +47,22 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         self.assertLess(train[0][-1, 0], validation[0][0, 0])
         self.assertLess(validation[0][-1, 0], test[0][0, 0])
 
+    def test_paper_backtest_rejects_ambiguous_directional_probabilities(self):
+        class AmbiguousModel(torch.nn.Module):
+            def forward(self, x):
+                # Directional class probability is 0.55, but the runner-up is
+                # 0.46. Inference rejects this because the margin is below 0.10.
+                probs = torch.tensor([0.55, 0.46, 0.01], dtype=torch.float32)
+                return torch.log(probs).repeat(len(x), 1)
+
+        result = kitty.evaluate_paper_returns(
+            AmbiguousModel(), np.zeros((8, 18), dtype=np.float32),
+            np.full(8, 0.02, dtype=np.float64), round_trip_cost=0.001,
+            min_confidence=0.50,
+        )
+        self.assertEqual(result["trade_count"], 0)
+        self.assertTrue(result["compounded_net_return"] == 0.0)
+
     def test_paper_return_evaluation_subtracts_costs_and_skips_no_trade(self):
         class FixedModel(torch.nn.Module):
             def forward(self, x):
