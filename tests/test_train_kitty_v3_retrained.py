@@ -62,6 +62,13 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         )
         self.assertEqual(result["trade_count"], 0)
         self.assertTrue(result["compounded_net_return"] == 0.0)
+        # 1.01 is the trainer's sentinel for "no validated threshold".
+        disabled = kitty.evaluate_paper_returns(
+            AmbiguousModel(), np.zeros((8, 18), dtype=np.float32),
+            np.full(8, 0.02, dtype=np.float64), round_trip_cost=0.001,
+            min_confidence=1.01,
+        )
+        self.assertEqual(disabled["trade_count"], 0)
 
     def test_paper_return_evaluation_subtracts_costs_and_skips_no_trade(self):
         class FixedModel(torch.nn.Module):
