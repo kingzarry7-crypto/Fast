@@ -395,49 +395,57 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     results = []
     candidates = []
-    for variant in ("baseline", "batchnorm", "leaky_relu"):
-        for optimizer_name in ("adamw", "adam"):
-            model, training = train_one(
-                x_train, y_train, x_val, y_val, variant, optimizer_name,
-                args.seed, args.epochs, args.patience, args.batch_size, args.weight_decay,
-            )
-            val_metrics = evaluate(model, x_val, y_val)
-            run_name = f"{variant}_{optimizer_name}"
-            checkpoint_path = args.output_dir / f"{run_name}_candidate.pt"
-            # Do not inspect the holdout test set for every candidate: that would
-            # turn it into another tuning set. Candidate selection uses validation only.
-            torch.save({
-                "model_state_dict": model.state_dict(),
-                "scaler": scaler,
-                "features": FEATURES,
-                "architecture": ARCHITECTURE,
-                "model_variant": variant,
-                "optimizer": optimizer_name,
-                "seed": args.seed,
-                "training_symbol": args.symbol,
-                "training_data_sources": data_sources,
-                "training_timeframe": "1h",
-                "label_horizon_hours": 6,
-                "label_threshold": args.label_threshold if args.label_threshold is not None else "dataset-defined",
-                "best_epoch": training["best_epoch"],
-                "best_validation_loss": training["best_validation_loss"],
-                "validation_metrics": val_metrics,
-                "dataset_sha256": dataset_sha256,
-                "split_sizes": {"train": len(y_train), "validation": len(y_val), "test": len(y_test)},
-                "research_only": True,
-                "production_ready": False,
-                "automatic_order_execution_enabled": False,
-            }, checkpoint_path)
-            candidate = {
-                "variant": variant, "optimizer": optimizer_name,
-                "best_epoch": training["best_epoch"],
-                "best_validation_loss": training["best_validation_loss"],
-                "validation": val_metrics,
-                "checkpoint": str(checkpoint_path),
-            }
-            results.append(candidate)
-            candidates.append((candidate, model))
-            print(json.dumps({"run": run_name, "validation": val_metrics, "checkpoint": str(checkpoint_path)}))
+    # Run a small, predeclared seed sweep for the inference-compatible baseline.
+    # This reduces dependence on one lucky/unlucky random initialization. All
+    # seed candidates are selected on validation only; the holdout remains untouched.
+    training_runs = [
+        (variant, optimizer_name, run_seed)
+        for variant in ("baseline", "batchnorm", "leaky_relu")
+        for optimizer_name in ("adamw", "adam")
+        for run_seed in ((args.seed, args.seed + 17, args.seed + 37) if variant == "baseline" else (args.seed,))
+    ]
+    for variant, optimizer_name, run_seed in training_runs:
+        model, training = train_one(
+            x_train, y_train, x_val, y_val, variant, optimizer_name,
+            run_seed, args.epochs, args.patience, args.batch_size, args.weight_decay,
+        )
+        val_metrics = evaluate(model, x_val, y_val)
+        run_name = f"{variant}_{optimizer_name}_seed{run_seed}"
+        checkpoint_path = args.output_dir / f"{run_name}_candidate.pt"
+        # Do not inspect the holdout test set for every candidate: that would
+        # turn it into another tuning set. Candidate selection uses validation only.
+        torch.save({
+            "model_state_dict": model.state_dict(),
+            "scaler": scaler,
+            "features": FEATURES,
+            "architecture": ARCHITECTURE,
+            "model_variant": variant,
+            "optimizer": optimizer_name,
+            "seed": run_seed,
+            "training_symbol": args.symbol,
+            "training_data_sources": data_sources,
+            "training_timeframe": "1h",
+            "label_horizon_hours": 6,
+            "label_threshold": args.label_threshold if args.label_threshold is not None else "dataset-defined",
+            "best_epoch": training["best_epoch"],
+            "best_validation_loss": training["best_validation_loss"],
+            "validation_metrics": val_metrics,
+            "dataset_sha256": dataset_sha256,
+            "split_sizes": {"train": len(y_train), "validation": len(y_val), "test": len(y_test)},
+            "research_only": True,
+            "production_ready": False,
+            "automatic_order_execution_enabled": False,
+        }, checkpoint_path)
+        candidate = {
+            "variant": variant, "optimizer": optimizer_name, "seed": run_seed,
+            "best_epoch": training["best_epoch"],
+            "best_validation_loss": training["best_validation_loss"],
+            "validation": val_metrics,
+            "checkpoint": str(checkpoint_path),
+        }
+        results.append(candidate)
+        candidates.append((candidate, model))
+        print(json.dumps({"run": run_name, "validation": val_metrics, "checkpoint": str(checkpoint_path)}))
 
     # Predeclare selection using validation macro-F1, then validation log loss.
     # The holdout test partition is evaluated exactly once, after selection.
