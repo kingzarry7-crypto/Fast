@@ -262,7 +262,7 @@ class KittyTrainingExperimentTests(unittest.TestCase):
             def forward(self, x):
                 # LONG is the top class, but the LONG-vs-SHORT probability gap
                 # is too small to clear 1.25x assumed costs at a 0.30% label move.
-                return torch.log(torch.tensor([0.06, 0.40, 0.54], dtype=torch.float32)).repeat(len(x), 1)
+                return torch.log(torch.tensor([0.30, 0.19, 0.51], dtype=torch.float32)).repeat(len(x), 1)
 
         result = kitty.evaluate_paper_returns(
             WeakDirectionalModel(), np.zeros((8, 18), dtype=np.float32),
