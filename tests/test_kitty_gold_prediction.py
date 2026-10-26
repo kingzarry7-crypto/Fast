@@ -1,5 +1,6 @@
 """Regression tests for gold/crypto candle timestamps used by Kitty signals."""
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timezone
 
 from kitty_features import normalize_candle_timestamp
@@ -25,6 +26,29 @@ class KittyGoldPredictionTests(unittest.TestCase):
     def test_invalid_timestamp_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "ISO-8601 or Unix"):
             normalize_candle_timestamp("not-a-time")
+
+
+class BtcModelIdentityTests(unittest.TestCase):
+    def test_btc_checkpoint_requires_explicit_btc_hourly_identity(self):
+        import kitty_v3_retrained as model
+
+        valid = {
+            "training_symbol": "BTC",
+            "training_timeframe": "1h",
+            "automatic_order_execution_enabled": False,
+        }
+        model.validate_checkpoint_metadata(valid)
+
+        invalid_checkpoints = [
+            {"training_timeframe": "1h", "automatic_order_execution_enabled": False},
+            {"training_symbol": "ETH", "training_timeframe": "1h", "automatic_order_execution_enabled": False},
+            {"training_symbol": "BTC", "training_timeframe": "15m", "automatic_order_execution_enabled": False},
+            {"training_symbol": "BTC", "training_timeframe": "1h", "automatic_order_execution_enabled": True},
+        ]
+        for invalid in invalid_checkpoints:
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    model.validate_checkpoint_metadata(invalid)
 
 
 class GoldModelIsolationTests(unittest.TestCase):
