@@ -63,6 +63,9 @@ def compute_kitty_features(candles):
     arrays = closes + opens + highs + lows
     if not all(math.isfinite(v) and v > 0 for v in arrays):
         raise ValueError("Candles contain invalid OHLC prices")
+    for index, (opn, high, low, close) in enumerate(zip(opens, highs, lows, closes)):
+        if high < max(opn, close) or low > min(opn, close) or high < low:
+            raise ValueError(f"Candles contain invalid OHLC candle range at index {index}")
     def ret(period):
         return closes[-1] / closes[-1-period] - 1.0
     def sma(period, end=None):
