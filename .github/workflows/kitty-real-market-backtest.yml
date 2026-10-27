@@ -9,6 +9,12 @@ on:
       - "run_kitty_realistic_backtest.py"
       - "kitty_realistic_backtest.py"
       - ".github/workflows/kitty-real-market-backtest.yml"
+  pull_request:
+    paths:
+      - "fetch_kitty_5m_market_data.py"
+      - "run_kitty_realistic_backtest.py"
+      - "kitty_realistic_backtest.py"
+      - ".github/workflows/kitty-real-market-backtest.yml"
   workflow_dispatch:
     inputs:
       limit:
