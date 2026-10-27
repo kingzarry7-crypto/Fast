@@ -69,6 +69,10 @@ def fetch_yahoo_hourly(symbol: str, limit: int = 5000) -> pd.DataFrame:
     frame = frame.sort_values("timestamp").drop_duplicates("timestamp").tail(limit).reset_index(drop=True)
     if len(frame) < 500:
         raise RuntimeError(f"Only {len(frame)} completed hourly candles returned for {yahoo_symbol}")
+    latest_completed_at = frame["timestamp"].iloc[-1] + pd.Timedelta(hours=1)
+    age = pd.Timestamp.now(tz="UTC") - latest_completed_at
+    if age > pd.Timedelta(hours=3) or age < pd.Timedelta(minutes=-10):
+        raise RuntimeError(f"stale hourly market data for {yahoo_symbol}: latest completed candle age is {age}")
     frame.attrs["data_source"] = "Yahoo Finance fallback"
     return frame[["timestamp", "open", "high", "low", "close", "volume"]]
 
@@ -125,6 +129,12 @@ def fetch_hourly_klines(symbol: str, limit: int = 5000) -> pd.DataFrame:
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
     frame = frame[frame["close_time"].astype("int64") < now_ms].copy()
     frame = frame.sort_values("timestamp").drop_duplicates("timestamp").reset_index(drop=True)
+    if frame.empty:
+        raise RuntimeError(f"No completed hourly candles returned for {symbol}")
+    latest_completed_at = frame["timestamp"].iloc[-1] + pd.Timedelta(hours=1)
+    age = pd.Timestamp.now(tz="UTC") - latest_completed_at
+    if age > pd.Timedelta(hours=3) or age < pd.Timedelta(minutes=-10):
+        raise RuntimeError(f"stale hourly market data for {symbol}: latest completed candle age is {age}")
     frame.attrs["data_source"] = "Binance public klines"
     return frame
 
