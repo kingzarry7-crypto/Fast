@@ -18,11 +18,11 @@ on:
   workflow_dispatch:
     inputs:
       limit:
-        description: Number of recent 5-minute candles per market (1500-5000)
+        description: Number of recent 5-minute candles per market (1500-15000)
         required: true
-        default: "5000"
+        default: "15000"
         type: choice
-        options: ["1500", "3000", "5000"]
+        options: ["5000", "10000", "15000"]
 
 permissions:
   contents: read
@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      CANDLE_LIMIT: ${{ github.event.inputs.limit || '5000' }}
+      CANDLE_LIMIT: ${{ github.event.inputs.limit || '15000' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
