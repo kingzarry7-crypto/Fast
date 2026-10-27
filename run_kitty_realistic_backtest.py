@@ -141,6 +141,49 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
                     and item["profit_factor"] >= 1.0
                     for item in fold_results
                 )
+                # Stress-test the same candidate on validation data with 1.5x
+                # spread and slippage. This is a robustness check, not a claim
+                # that these assumptions equal the broker's actual costs.
+                stress_config = BacktestConfig(
+                    stop_pct=stop_pct,
+                    target_pct=target_pct,
+                    max_hold_bars=max_hold_bars,
+                    spread_bps_per_side=cost_bps_per_side * 1.5,
+                    commission_bps_per_side=0.0,
+                    slippage_bps_per_side=3.0,
+                )
+                stress_validation = backtest_ohlc(
+                    validation, strategy_signal.reindex(validation.index), stress_config
+                )
+                stress_fold_results = []
+                for fold_number in range(3):
+                    fold_start = len(validation) * fold_number // 3
+                    fold_end = len(validation) * (fold_number + 1) // 3
+                    fold = validation.iloc[fold_start:fold_end]
+                    fold_result = backtest_ohlc(
+                        fold, strategy_signal.reindex(fold.index), stress_config
+                    )
+                    stress_fold_results.append({
+                        "trade_count": fold_result["trade_count"],
+                        "compounded_net_return": fold_result["compounded_net_return"],
+                        "profit_factor": fold_result["profit_factor"],
+                        "max_drawdown": fold_result["max_drawdown"],
+                    })
+                positive_stress_folds = sum(
+                    item["trade_count"] >= 8
+                    and item["compounded_net_return"] > 0
+                    and item["profit_factor"] is not None
+                    and item["profit_factor"] >= 1.0
+                    for item in stress_fold_results
+                )
+                stress_eligible = (
+                    stress_validation["trade_count"] >= 20
+                    and stress_validation["compounded_net_return"] > 0
+                    and stress_validation["profit_factor"] is not None
+                    and stress_validation["profit_factor"] >= 1.10
+                    and stress_validation["max_drawdown"] >= -0.05
+                    and positive_stress_folds >= 2
+                )
                 eligible = (
                     validation_result["trade_count"] >= 20
                     and validation_result["compounded_net_return"] > 0
@@ -148,6 +191,7 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
                     and validation_result["profit_factor"] >= 1.10
                     and validation_result["max_drawdown"] >= -0.05
                     and positive_folds >= 2
+                    and stress_eligible
                 )
                 candidates.append({
                     "strategy": strategy,
@@ -157,6 +201,10 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
                     "validation": validation_result,
                     "positive_validation_folds": positive_folds,
                     "fold_results": fold_results,
+                    "stress_validation": stress_validation,
+                    "stress_fold_results": stress_fold_results,
+                    "positive_stress_validation_folds": positive_stress_folds,
+                    "stress_eligible": stress_eligible,
                     "eligible": eligible,
                 })
     eligible_candidates = [item for item in candidates if item["eligible"]]
@@ -202,6 +250,15 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
         "strategies_evaluated": ["mtf_cross", "mtf_trend", "mtf_momentum"],
         "direction_modes_evaluated": ["both", "long_only", "short_only"],
         "eligible_candidates": len(eligible_candidates),
+        "cost_stress_test": {
+            "enabled": True,
+            "spread_multiplier": 1.5,
+            "slippage_bps_per_side": 3.0,
+            "minimum_stress_validation_trades": 20,
+            "minimum_stress_validation_profit_factor": 1.10,
+            "minimum_positive_stress_folds": 2,
+            "stress_gate_required_for_selection": True,
+        },
         "minimum_validation_trades": 20,
         "validation_folds": 3,
         "minimum_trades_per_validation_fold": 8,
