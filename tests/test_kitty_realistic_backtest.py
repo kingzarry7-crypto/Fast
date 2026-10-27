@@ -141,8 +141,10 @@ class KittyRealisticBacktestTests(unittest.TestCase):
         self.assertFalse(report["automatic_order_execution_enabled"])
         self.assertFalse(report["candidate_selection"]["selected"])
         self.assertEqual(report["candidate_selection"]["reason"], "no_validation_candidate_passed_edge_gate")
-        self.assertEqual(report["candidate_selection"]["candidates_evaluated"], 81)
+        self.assertEqual(report["candidate_selection"]["candidates_evaluated"], 243)
         self.assertEqual(report["candidate_selection"]["strategies_evaluated"], ["mtf_cross", "mtf_trend", "mtf_momentum"])
+        self.assertEqual(report["candidate_selection"]["direction_modes_evaluated"], ["both", "long_only", "short_only"])
+        self.assertFalse(report["holdout_edge_gate_passed"])
         self.assertTrue(report["candidate_selection"]["parameter_tuning_on_holdout"] is False)
         self.assertEqual(report["result"]["trade_count"], 0)
 
