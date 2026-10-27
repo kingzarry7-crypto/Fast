@@ -359,6 +359,8 @@ class KittyTrainingExperimentTests(unittest.TestCase):
             test_ranges.append((fold["test_start_index"], fold["test_end_index"]))
             self.assertIn("model_after_costs", fold)
             self.assertIn("momentum_baseline_after_costs", fold)
+            self.assertIn("trend_confirmation_baseline_after_costs", fold)
+        self.assertIn("trend_confirmation_profitable_fold_count", report)
         self.assertEqual(test_ranges[0][1], test_ranges[1][0])
         self.assertEqual(test_ranges[1][1], test_ranges[2][0])
 
