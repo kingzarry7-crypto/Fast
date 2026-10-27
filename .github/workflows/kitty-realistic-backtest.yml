@@ -5,13 +5,13 @@ on:
     paths:
       - "kitty_realistic_backtest.py"
       - "run_kitty_realistic_backtest.py"
-      - "run_kitty_realistic_backtest.py"
       - "tests/test_kitty_realistic_backtest.py"
       - ".github/workflows/kitty-realistic-backtest.yml"
   push:
     branches: [main]
     paths:
       - "kitty_realistic_backtest.py"
+      - "run_kitty_realistic_backtest.py"
       - "tests/test_kitty_realistic_backtest.py"
       - ".github/workflows/kitty-realistic-backtest.yml"
 
