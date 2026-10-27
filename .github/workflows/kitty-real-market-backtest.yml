@@ -1,21 +1,8 @@
 name: Kitty real-market 5m holdout backtest
 # Research pipeline: 15k candles by default; manual runs may override the sample size.
 
+# API-consuming market-data fetches are manual only to protect Twelve Data quota.
 on:
-  push:
-    branches:
-      - kitty/realistic-mtf-backtest-20261027
-    paths:
-      - "fetch_kitty_5m_market_data.py"
-      - "run_kitty_realistic_backtest.py"
-      - "kitty_realistic_backtest.py"
-      - ".github/workflows/kitty-real-market-backtest.yml"
-  pull_request:
-    paths:
-      - "fetch_kitty_5m_market_data.py"
-      - "run_kitty_realistic_backtest.py"
-      - "kitty_realistic_backtest.py"
-      - ".github/workflows/kitty-real-market-backtest.yml"
   workflow_dispatch:
     inputs:
       limit:
