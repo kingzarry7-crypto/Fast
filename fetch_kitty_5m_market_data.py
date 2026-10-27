@@ -14,40 +14,36 @@ from pathlib import Path
 import pandas as pd
 import requests
 
-BINANCE_URL = "https://api.binance.com/api/v3/klines"
+COINBASE_URL = "https://api.exchange.coinbase.com/products/BTC-USD/candles"
 TWELVEDATA_URL = "https://api.twelvedata.com/time_series"
 
 
 def fetch_btc(output: Path, limit: int = 5000) -> pd.DataFrame:
+    """Fetch BTC/USD spot candles from Coinbase Exchange (Binance may geo-block CI)."""
+    end = pd.Timestamp.now(tz="UTC").floor("5min")
+    start = end - pd.Timedelta(minutes=5 * limit)
+    cursor = start
     rows = []
-    end_ms = int(pd.Timestamp.now(tz="UTC").timestamp() * 1000)
-    start_ms = end_ms - limit * 5 * 60 * 1000
-    cursor = start_ms
-    while len(rows) < limit:
-        count = min(1000, limit - len(rows))
-        response = requests.get(BINANCE_URL, params={
-            "symbol": "BTCUSDT", "interval": "5m", "limit": count,
-            "startTime": cursor, "endTime": end_ms,
-        }, timeout=30)
+    window = 300 * 5 * 60  # Coinbase caps a candle response at 300 rows.
+    while cursor < end:
+        chunk_end = min(cursor + pd.Timedelta(seconds=window), end)
+        response = requests.get(COINBASE_URL, params={
+            "granularity": 300,
+            "start": cursor.isoformat().replace("+00:00", "Z"),
+            "end": chunk_end.isoformat().replace("+00:00", "Z"),
+        }, headers={"User-Agent": "KittyResearchBacktest/1.0"}, timeout=30)
         response.raise_for_status()
         batch = response.json()
         if not isinstance(batch, list):
-            raise RuntimeError(f"Unexpected Binance response: {batch}")
-        if not batch:
-            break
+            raise RuntimeError("Unexpected Coinbase candle response")
         rows.extend(batch)
-        cursor = int(batch[-1][0]) + 5 * 60 * 1000
-        if len(batch) < count:
-            break
-        time.sleep(0.15)
+        cursor = chunk_end
+        time.sleep(0.12)
     if not rows:
-        raise RuntimeError("Binance returned no BTCUSDT candles")
-    frame = pd.DataFrame(rows, columns=[
-        "open_time", "open", "high", "low", "close", "volume", "close_time",
-        "quote_volume", "trades", "taker_buy_base", "taker_buy_quote", "ignore",
-    ])
-    frame["timestamp"] = pd.to_datetime(frame["open_time"], unit="ms", utc=True) + pd.Timedelta(minutes=5)
-    frame = frame[["timestamp", "open", "high", "low", "close"]].tail(limit)
+        raise RuntimeError("Coinbase returned no BTC-USD candles")
+    frame = pd.DataFrame(rows, columns=["open_time", "low", "high", "open", "close", "volume"])
+    frame["timestamp"] = pd.to_datetime(frame["open_time"], unit="s", utc=True) + pd.Timedelta(minutes=5)
+    frame = frame[["timestamp", "open", "high", "low", "close"]].drop_duplicates("timestamp").sort_values("timestamp").tail(limit)
     _write(frame, output)
     return frame
 
