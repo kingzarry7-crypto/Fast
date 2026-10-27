@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "kitty_realistic_backtest.py"
+      - "run_kitty_realistic_backtest.py"
+      - "run_kitty_realistic_backtest.py"
       - "tests/test_kitty_realistic_backtest.py"
       - ".github/workflows/kitty-realistic-backtest.yml"
   push:
