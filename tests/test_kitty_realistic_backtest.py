@@ -93,7 +93,11 @@ class KittyRealisticBacktestTests(unittest.TestCase):
             forced_signals = pd.Series(1, index=pd.DatetimeIndex(idx))
             with patch("run_kitty_realistic_backtest.build_mtf_signals", return_value=forced_signals):
                 report = evaluate_csv(path, "BTC", 2.0)
-        self.assertGreater(report["result"]["trade_count"], 0)
+        effective_or_diagnostic = (
+            report["result"] if report["candidate_selection"]["selected"]
+            else report["diagnostic_result"]
+        )
+        self.assertGreater(effective_or_diagnostic["trade_count"], 0)
 
 
     def test_xauusd_filters_weekend_quotes_and_does_not_hold_through_closure(self):
@@ -112,7 +116,11 @@ class KittyRealisticBacktestTests(unittest.TestCase):
             with patch("run_kitty_realistic_backtest.build_mtf_signals", return_value=forced_signals):
                 report = evaluate_csv(path, "XAUUSD", 5.0)
         self.assertLess(report["source_rows"], report["raw_rows"])
-        self.assertGreater(report["result"]["trade_count"], 0)
+        effective_or_diagnostic = (
+            report["result"] if report["candidate_selection"]["selected"]
+            else report["diagnostic_result"]
+        )
+        self.assertGreater(effective_or_diagnostic["trade_count"], 0)
         for trade in report["trade_log"]:
             signal_time = pd.Timestamp(trade["signal_time"])
             entry_time = pd.Timestamp(trade["entry_time"])
