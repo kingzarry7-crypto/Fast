@@ -95,6 +95,32 @@ class KittyRealisticBacktestTests(unittest.TestCase):
                 report = evaluate_csv(path, "BTC", 2.0)
         self.assertGreater(report["result"]["trade_count"], 0)
 
+
+    def test_xauusd_filters_weekend_quotes_and_does_not_hold_through_closure(self):
+        idx = pd.date_range("2026-10-19", periods=2400, freq="5min", tz="UTC")
+        close = np.full(len(idx), 4100.0)
+        frame = pd.DataFrame({
+            "timestamp": idx, "open": close, "high": close + .05,
+            "low": close - .05, "close": close,
+        })
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "gold.csv"
+            frame.to_csv(path, index=False)
+            forced_signals = pd.Series(1, index=idx)
+            with patch("run_kitty_realistic_backtest.build_mtf_signals", return_value=forced_signals):
+                report = evaluate_csv(path, "XAUUSD", 5.0)
+        self.assertLess(report["source_rows"], report["raw_rows"])
+        self.assertGreater(report["result"]["trade_count"], 0)
+        for trade in report["trade_log"]:
+            signal_time = pd.Timestamp(trade["signal_time"])
+            entry_time = pd.Timestamp(trade["entry_time"])
+            exit_time = pd.Timestamp(trade["exit_time"])
+            self.assertLess(signal_time.dayofweek, 5)
+            self.assertEqual(entry_time - signal_time, pd.Timedelta(minutes=5))
+            self.assertLessEqual(exit_time - entry_time, pd.Timedelta(hours=2))
+
     def test_mtf_signals_are_valid_and_warmup_is_no_trade(self):
         idx = pd.date_range("2025-01-01", periods=1200, freq="5min", tz="UTC")
         close = 100 + np.arange(len(idx)) * 0.01 + np.sin(np.arange(len(idx)) / 8) * 0.1
