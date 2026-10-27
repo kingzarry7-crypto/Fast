@@ -64,11 +64,16 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
         else ([0.002, 0.003, 0.004], [0.004, 0.006, 0.008], [12, 24, 36])
     )
     candidates = []
-    strategy_signals = {
+    base_strategy_signals = {
         strategy: build_mtf_signals(frame, strategy=strategy)
         for strategy in ("mtf_cross", "mtf_trend", "mtf_momentum")
     }
-    for strategy, strategy_signal in strategy_signals.items():
+    strategy_signals = {}
+    for strategy, base_signal in base_strategy_signals.items():
+        strategy_signals[(strategy, "both")] = base_signal
+        strategy_signals[(strategy, "long_only")] = base_signal.clip(lower=0)
+        strategy_signals[(strategy, "short_only")] = base_signal.clip(upper=0)
+    for (strategy, direction_mode), strategy_signal in strategy_signals.items():
       for stop_pct in stop_grid:
         for target_pct in target_grid:
             for max_hold_bars in hold_grid:
@@ -83,8 +88,8 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
                 validation_result = backtest_ohlc(
                     validation, strategy_signal.reindex(validation.index), candidate_config
                 )
-                # Edge gate is deliberately conservative; no candidate is
-                # selected merely because it is the least bad one.
+                # Require a meaningful trade sample and positive after-cost edge;
+                # the final holdout is never used to select a strategy.
                 eligible = (
                     validation_result["trade_count"] >= 20
                     and validation_result["compounded_net_return"] > 0
@@ -94,6 +99,7 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
                 )
                 candidates.append({
                     "strategy": strategy,
+                    "direction_mode": direction_mode,
                     "signals": strategy_signal,
                     "config": candidate_config,
                     "validation": validation_result,
@@ -115,7 +121,8 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
     )
     chosen_config = selected["config"] if selected else diagnostic_config
     chosen_strategy = selected["strategy"] if selected else "mtf_cross"
-    chosen_signals = selected["signals"] if selected else strategy_signals["mtf_cross"]
+    chosen_direction_mode = selected["direction_mode"] if selected else "both"
+    chosen_signals = selected["signals"] if selected else strategy_signals[("mtf_cross", "both")]
     validation_full = backtest_ohlc(
         validation, chosen_signals.reindex(validation.index), chosen_config
     )
@@ -125,6 +132,7 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
         "reason": "validation_edge_gate_passed" if selected else "no_validation_candidate_passed_edge_gate",
         "candidates_evaluated": len(candidates),
         "strategies_evaluated": ["mtf_cross", "mtf_trend", "mtf_momentum"],
+        "direction_modes_evaluated": ["both", "long_only", "short_only"],
         "eligible_candidates": len(eligible_candidates),
         "minimum_validation_trades": 20,
         "minimum_validation_profit_factor": 1.10,
@@ -133,6 +141,7 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
         "parameter_tuning_on_holdout": False,
         "selected_config": ({
             "strategy": chosen_strategy,
+            "direction_mode": chosen_direction_mode,
             "stop_pct": chosen_config.stop_pct,
             "target_pct": chosen_config.target_pct,
             "max_hold_bars": chosen_config.max_hold_bars,
@@ -163,6 +172,14 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
         "result": {key: value for key, value in result.items() if key != "trades"},
         "trade_log": result["trades"],
         "research_only": True,
+        "holdout_edge_gate_passed": bool(
+            selected is not None
+            and result["trade_count"] >= 20
+            and result["compounded_net_return"] > 0
+            and result["profit_factor"] is not None
+            and result["profit_factor"] >= 1.10
+            and result["max_drawdown"] >= -0.05
+        ),
         "production_ready": False,
         "automatic_order_execution_enabled": False,
     }
