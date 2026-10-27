@@ -54,7 +54,7 @@ class KittyRealisticBacktestTests(unittest.TestCase):
         self.assertIsNone(no_trade["profit_factor"])
 
     def test_csv_runner_uses_chronological_holdout_and_keeps_orders_disabled(self):
-        idx = pd.date_range("2026-01-01", periods=1200, freq="5min", tz="UTC")
+        idx = pd.date_range("2026-01-01", periods=1600, freq="5min", tz="UTC")
         close = 100 + np.arange(len(idx)) * 0.005 + np.sin(np.arange(len(idx)) / 8) * 0.1
         frame = pd.DataFrame({
             "timestamp": idx,
@@ -69,7 +69,7 @@ class KittyRealisticBacktestTests(unittest.TestCase):
             path = Path(tmp) / "btc.csv"
             frame.to_csv(path, index=False)
             report = evaluate_csv(path, "BTC", 2.0)
-        self.assertEqual(report["holdout_rows"], 240)
+        self.assertEqual(report["holdout_rows"], 320)
         self.assertFalse(report["parameter_tuning_on_holdout"])
         self.assertFalse(report["production_ready"])
         self.assertFalse(report["automatic_order_execution_enabled"])
