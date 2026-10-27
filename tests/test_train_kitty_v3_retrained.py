@@ -154,6 +154,20 @@ class KittyTrainingExperimentTests(unittest.TestCase):
             "average_net_return": 0.0005, "compounded_net_return": 0.01}}
         self.assertFalse(kitty.walk_forward_gate_passes({"folds": [underperforming] * 3}))
 
+    def test_walk_forward_gate_fails_closed_when_baselines_are_missing_or_under_sampled(self):
+        model = {"trade_count": 20, "average_net_return": 0.002,
+            "compounded_net_return": 0.04, "max_drawdown": -0.03, "profit_factor": 1.2}
+        missing_baseline = {"model_after_costs": model}
+        undersampled_baseline = {
+            "model_after_costs": model,
+            "momentum_baseline_after_costs": {
+                "trade_count": 3, "average_net_return": -0.001,
+                "compounded_net_return": -0.01,
+            },
+        }
+        self.assertFalse(kitty.walk_forward_gate_passes({"folds": [missing_baseline] * 3}))
+        self.assertFalse(kitty.walk_forward_gate_passes({"folds": [undersampled_baseline] * 3}))
+
     def test_holdout_gate_also_requires_walk_forward_robustness_when_provided(self):
         holdout = {"trade_count": 35, "average_net_return": 0.002,
             "compounded_net_return": 0.05, "max_drawdown": -0.03, "profit_factor": 1.2}

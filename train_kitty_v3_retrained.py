@@ -547,10 +547,14 @@ def walk_forward_gate_passes(walk_forward_metrics: dict, min_profitable_folds: i
                 continue
             if count >= 10 and np.isfinite(base_avg) and np.isfinite(base_compounded):
                 baselines.append((base_avg, base_compounded))
-        if baselines:
-            best_avg, best_compounded = max(baselines, key=lambda pair: (pair[1], pair[0]))
-            if average <= best_avg or compounded <= best_compounded:
-                continue
+        # A model fold cannot pass without a sufficiently sampled baseline.
+        # Otherwise missing baseline data silently turns the comparison into
+        # a no-op, contradicting the fail-closed promotion contract.
+        if not baselines:
+            continue
+        best_avg, best_compounded = max(baselines, key=lambda pair: (pair[1], pair[0]))
+        if average <= best_avg or compounded <= best_compounded:
+            continue
         passing += 1
     return passing >= min_profitable_folds
 
