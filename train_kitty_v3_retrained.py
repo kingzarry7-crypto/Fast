@@ -194,6 +194,168 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
     }
 
 
+
+def evaluate_directional_rule(
+    momentum_returns: np.ndarray,
+    forward_returns: np.ndarray,
+    threshold: float,
+    round_trip_cost: float,
+) -> dict:
+    """Evaluate a simple six-hour momentum rule with the same costs and holding window."""
+    momentum_returns = np.asarray(momentum_returns, dtype=np.float64)
+    forward_returns = np.asarray(forward_returns, dtype=np.float64)
+    if momentum_returns.ndim != 1 or forward_returns.ndim != 1 or len(momentum_returns) != len(forward_returns):
+        raise ValueError("Momentum features and forward returns must be equal-length one-dimensional arrays")
+    if not np.isfinite(momentum_returns).all() or not np.isfinite(forward_returns).all():
+        raise ValueError("Momentum features and forward returns must be finite")
+    if not np.isfinite(threshold) or threshold <= 0:
+        raise ValueError("momentum threshold must be a positive finite return fraction")
+    if not np.isfinite(round_trip_cost) or not 0 <= round_trip_cost < 0.05:
+        raise ValueError("round_trip_cost must be between 0 and 5%")
+
+    trades = []
+    next_entry_index = 0
+    skipped_overlapping_signals = 0
+    for index, (momentum, raw_return) in enumerate(zip(momentum_returns, forward_returns)):
+        if index < next_entry_index:
+            skipped_overlapping_signals += 1
+            continue
+        if abs(float(momentum)) < threshold:
+            continue
+        side = 1.0 if momentum > 0 else -1.0
+        trades.append(side * float(raw_return) - round_trip_cost)
+        next_entry_index = index + LABEL_HORIZON_HOURS + 1
+
+    if not trades:
+        return {
+            "trade_count": 0, "win_rate": None, "average_net_return": None,
+            "profit_factor": None, "compounded_net_return": 0.0, "max_drawdown": 0.0,
+            "skipped_overlapping_signals": skipped_overlapping_signals,
+            "round_trip_cost_assumption": round_trip_cost,
+            "momentum_threshold": threshold,
+        }
+    net = np.asarray(trades, dtype=np.float64)
+    equity = np.cumprod(1.0 + net)
+    peaks = np.maximum.accumulate(np.concatenate(([1.0], equity)))[1:]
+    drawdowns = equity / peaks - 1.0
+    gross_profit = float(net[net > 0].sum())
+    gross_loss = float(-net[net < 0].sum())
+    profit_factor = gross_profit / gross_loss if gross_loss > 0 else (999.0 if gross_profit > 0 else 0.0)
+    return {
+        "trade_count": len(trades),
+        "win_rate": float(np.mean(net > 0)),
+        "average_net_return": float(np.mean(net)),
+        "profit_factor": float(profit_factor),
+        "compounded_net_return": float(equity[-1] - 1.0),
+        "max_drawdown": float(np.min(drawdowns)),
+        "skipped_overlapping_signals": skipped_overlapping_signals,
+        "round_trip_cost_assumption": round_trip_cost,
+        "momentum_threshold": threshold,
+    }
+
+
+def evaluate_walk_forward(
+    x: np.ndarray,
+    y: np.ndarray,
+    forward_returns: np.ndarray,
+    round_trip_cost: float,
+    label_threshold: float,
+    folds: int = 3,
+    epochs: int = 30,
+    patience: int = 5,
+    batch_size: int = 128,
+    weight_decay: float = 1e-4,
+    seed: int = 42,
+    purge: int = MIN_LABEL_PURGE_ROWS,
+) -> dict:
+    """Retrain across expanding chronological folds; choose each threshold on its validation window only."""
+    x = np.asarray(x, dtype=np.float32)
+    y = np.asarray(y, dtype=np.int64)
+    forward_returns = np.asarray(forward_returns, dtype=np.float64)
+    if x.ndim != 2 or x.shape[1] != len(FEATURES) or len(x) != len(y) or len(y) != len(forward_returns):
+        raise ValueError("Walk-forward features, labels, and returns have incompatible shapes")
+    if not np.isfinite(x).all() or not np.isfinite(forward_returns).all():
+        raise ValueError("Walk-forward inputs must contain only finite values")
+    if folds < 1 or folds > 3:
+        raise ValueError("folds must be between 1 and 3 to preserve the final untouched holdout")
+    if purge < MIN_LABEL_PURGE_ROWS:
+        raise ValueError(f"purge must be at least {MIN_LABEL_PURGE_ROWS}")
+    if label_threshold <= 0 or not np.isfinite(label_threshold):
+        raise ValueError("label_threshold must be a positive finite return fraction")
+
+    fold_reports = []
+    confidence_grid = (0.50, 0.55, 0.60, 0.65, 0.70, 0.75)
+    momentum_index = FEATURES.index("ret_6h")
+    for fold_index in range(folds):
+        train_end = int(len(x) * (0.40 + 0.10 * fold_index))
+        validation_end = int(len(x) * (0.55 + 0.10 * fold_index))
+        test_end = int(len(x) * (0.65 + 0.10 * fold_index))
+        train_stop = train_end - purge
+        validation_stop = validation_end - purge
+        if min(train_stop, validation_stop - train_end, test_end - validation_end) < 2:
+            raise ValueError("Not enough rows for the requested purged walk-forward windows")
+
+        x_train_raw, y_train = x[:train_stop], y[:train_stop]
+        x_val_raw, y_val = x[train_end:validation_stop], y[train_end:validation_stop]
+        x_test_raw = x[validation_end:test_end]
+        val_returns = forward_returns[train_end:validation_stop]
+        test_returns = forward_returns[validation_end:test_end]
+        scaler = StandardScaler()
+        x_train = scaler.fit_transform(x_train_raw).astype(np.float32)
+        x_val = scaler.transform(x_val_raw).astype(np.float32)
+        x_test = scaler.transform(x_test_raw).astype(np.float32)
+        model, training = train_one(
+            x_train, y_train, x_val, y_val,
+            variant="baseline", optimizer_name="adamw", seed=seed + fold_index,
+            epochs=epochs, patience=patience, batch_size=batch_size, weight_decay=weight_decay,
+        )
+        validation_trials = []
+        for confidence in confidence_grid:
+            trial = evaluate_paper_returns(
+                model, x_val, val_returns, round_trip_cost=round_trip_cost,
+                min_confidence=confidence, label_threshold=label_threshold,
+            )
+            validation_trials.append({"min_confidence": confidence, **trial})
+        selected_confidence, selection_note = select_confidence_threshold(validation_trials)
+        model_metrics = evaluate_paper_returns(
+            model, x_test, test_returns, round_trip_cost=round_trip_cost,
+            min_confidence=selected_confidence, label_threshold=label_threshold,
+        )
+        momentum_metrics = evaluate_directional_rule(
+            x_test_raw[:, momentum_index], test_returns,
+            threshold=label_threshold, round_trip_cost=round_trip_cost,
+        )
+        fold_reports.append({
+            "fold": fold_index + 1,
+            "train_end_index": train_stop,
+            "validation_start_index": train_end,
+            "validation_end_index": validation_stop,
+            "test_start_index": validation_end,
+            "test_end_index": test_end,
+            "best_epoch": training["best_epoch"],
+            "selected_min_confidence_from_validation": selected_confidence,
+            "threshold_selection_note": selection_note,
+            "model_after_costs": model_metrics,
+            "momentum_baseline_after_costs": momentum_metrics,
+        })
+    return {
+        "purpose": "expanding-window robustness diagnostic; each fold threshold is selected on its own prior validation window; final candidate selection is unchanged and final holdout remains untouched",
+        "fold_count": len(fold_reports),
+        "model_profitable_fold_count": sum(
+            1 for fold in fold_reports
+            if (fold["model_after_costs"].get("average_net_return") or 0.0) > 0.0
+            and fold["model_after_costs"].get("trade_count", 0) > 0
+        ),
+        "momentum_baseline_profitable_fold_count": sum(
+            1 for fold in fold_reports
+            if (fold["momentum_baseline_after_costs"].get("average_net_return") or 0.0) > 0.0
+            and fold["momentum_baseline_after_costs"].get("trade_count", 0) > 0
+        ),
+        "folds": fold_reports,
+    }
+
+
+
 def evaluate_cost_sensitivity(
     model: nn.Module, x: np.ndarray, forward_returns: np.ndarray,
     round_trip_cost: float, min_confidence: float,
@@ -557,6 +719,18 @@ def main() -> None:
     winner["promotion_compatible_architecture"] = True
 
 
+    walk_forward_metrics = evaluate_walk_forward(
+        x, y, forward_returns,
+        round_trip_cost=args.round_trip_cost,
+        label_threshold=args.label_threshold if args.label_threshold is not None else 0.003,
+        folds=3,
+        epochs=min(args.epochs, 30),
+        patience=min(args.patience, 5),
+        batch_size=args.batch_size,
+        weight_decay=args.weight_decay,
+        seed=args.seed,
+        purge=args.purge,
+    )
     test_metrics = evaluate(winning_model, x_test, y_test)
     paper_metrics = evaluate_paper_returns(
         winning_model, x_test, test_returns,
@@ -620,7 +794,8 @@ def main() -> None:
             "majority_class_test_accuracy": test_metrics["majority_class_baseline_accuracy"],
             "always_no_trade_trade_count": 0,
         },
-        "note": "Candidate architecture is selected using validation classification metrics; the abstention threshold is tuned using validation-only net paper returns and a minimum trade count, then evaluated once on the untouched holdout. Targets enter at the next hourly open and exit at the close six hours after entry; the return simulation subtracts assumed costs and skips overlapping trades. This is still a preliminary single-holdout diagnostic, not a walk-forward or executable portfolio backtest. Inspect several chronological test windows, realistic spreads/fills/funding, calibration, and drawdown before production use.",
+        "walk_forward_diagnostics": walk_forward_metrics,
+        "note": "Candidate architecture is selected using validation classification metrics; the abstention threshold is tuned using validation-only net paper returns and a minimum trade count, then evaluated once on the untouched final holdout. Three expanding-window walk-forward folds retrain a baseline model, select each fold threshold using only that fold's prior validation window, and compare after-cost results with a predeclared six-hour momentum rule. Walk-forward results are diagnostics, not used to tune the final candidate. Targets enter at the next hourly open and exit at the close six hours after entry; the return simulation subtracts assumed costs and skips overlapping trades. Costs are assumptions, not measured broker fills; no result is production approval.",
         "results": results,
     }
     report_path = args.output_dir / "comparison_report.json"

@@ -328,5 +328,40 @@ class KittyTrainingExperimentTests(unittest.TestCase):
             self.assertEqual(tuple(output.shape), (4, 3))
 
 
+    def test_directional_momentum_baseline_deducts_costs_and_skips_overlapping_trades(self):
+        momentum = np.full(15, 0.004, dtype=np.float64)
+        forward_returns = np.full(15, 0.01, dtype=np.float64)
+        result = kitty.evaluate_directional_rule(
+            momentum, forward_returns, threshold=0.003, round_trip_cost=0.001,
+        )
+        self.assertEqual(result["trade_count"], 3)
+        self.assertAlmostEqual(result["average_net_return"], 0.009, places=12)
+        self.assertAlmostEqual(result["compounded_net_return"], (1.009 ** 3) - 1.0, places=12)
+        self.assertEqual(result["skipped_overlapping_signals"], 12)
+
+    def test_walk_forward_diagnostics_use_sequential_train_validation_test_windows(self):
+        rng = np.random.default_rng(881)
+        count = 1000
+        x = rng.normal(size=(count, 18)).astype(np.float32)
+        y = np.tile(np.array([0, 1, 2], dtype=np.int64), count // 3 + 1)[:count]
+        returns = rng.normal(0.0002, 0.004, count).astype(np.float64)
+        report = kitty.evaluate_walk_forward(
+            x, y, returns, round_trip_cost=0.001, label_threshold=0.003,
+            folds=3, epochs=1, patience=1, batch_size=64, weight_decay=1e-4,
+            seed=881, purge=7,
+        )
+        self.assertEqual(len(report["folds"]), 3)
+        test_ranges = []
+        for fold in report["folds"]:
+            self.assertLess(fold["train_end_index"], fold["validation_start_index"])
+            self.assertLess(fold["validation_end_index"], fold["test_start_index"])
+            self.assertLess(fold["test_start_index"], fold["test_end_index"])
+            test_ranges.append((fold["test_start_index"], fold["test_end_index"]))
+            self.assertIn("model_after_costs", fold)
+            self.assertIn("momentum_baseline_after_costs", fold)
+        self.assertEqual(test_ranges[0][1], test_ranges[1][0])
+        self.assertEqual(test_ranges[1][1], test_ranges[2][0])
+
+
 if __name__ == "__main__":
     unittest.main()

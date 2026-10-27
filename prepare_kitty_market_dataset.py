@@ -69,6 +69,10 @@ def fetch_yahoo_hourly(symbol: str, limit: int = 5000) -> pd.DataFrame:
     frame = frame.sort_values("timestamp").drop_duplicates("timestamp").tail(limit).reset_index(drop=True)
     if len(frame) < 500:
         raise RuntimeError(f"Only {len(frame)} completed hourly candles returned for {yahoo_symbol}")
+    latest_completed_at = frame["timestamp"].iloc[-1] + pd.Timedelta(hours=1)
+    age = pd.Timestamp.now(tz="UTC") - latest_completed_at
+    if age > pd.Timedelta(hours=3) or age < pd.Timedelta(minutes=-10):
+        raise RuntimeError(f"stale hourly market data for {yahoo_symbol}: latest completed candle age is {age}")
     frame.attrs["data_source"] = "Yahoo Finance fallback"
     return frame[["timestamp", "open", "high", "low", "close", "volume"]]
 
@@ -125,6 +129,12 @@ def fetch_hourly_klines(symbol: str, limit: int = 5000) -> pd.DataFrame:
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
     frame = frame[frame["close_time"].astype("int64") < now_ms].copy()
     frame = frame.sort_values("timestamp").drop_duplicates("timestamp").reset_index(drop=True)
+    if frame.empty:
+        raise RuntimeError(f"No completed hourly candles returned for {symbol}")
+    latest_completed_at = frame["timestamp"].iloc[-1] + pd.Timedelta(hours=1)
+    age = pd.Timestamp.now(tz="UTC") - latest_completed_at
+    if age > pd.Timedelta(hours=3) or age < pd.Timedelta(minutes=-10):
+        raise RuntimeError(f"stale hourly market data for {symbol}: latest completed candle age is {age}")
     frame.attrs["data_source"] = "Binance public klines"
     return frame
 
@@ -133,15 +143,35 @@ def build_dataset(frame: pd.DataFrame, threshold: float = 0.003, horizon: int = 
         raise ValueError("threshold must be between 0.05% and 2%")
     if horizon != 6:
         raise ValueError("The current Kitty target contract is a six-hour forward return")
-    frame = frame.sort_values("timestamp").reset_index(drop=True).copy()
+    required_columns = {"timestamp", "open", "high", "low", "close"}
+    missing_columns = sorted(required_columns.difference(frame.columns))
+    if missing_columns:
+        raise ValueError("Candle data is missing required columns: " + ", ".join(missing_columns))
+    frame = frame.copy()
+    timestamps = pd.to_datetime(frame["timestamp"], errors="coerce", utc=True)
+    if timestamps.isna().any():
+        raise ValueError("Candle timestamps must be valid UTC-normalizable datetimes")
+    if timestamps.duplicated().any():
+        raise ValueError("duplicate candle timestamps are not allowed in a training dataset")
+    frame["timestamp"] = timestamps
+    frame = frame.sort_values("timestamp", kind="stable").reset_index(drop=True)
+    ohlc_columns = ["open", "high", "low", "close"]
+    for column in ohlc_columns:
+        frame[column] = pd.to_numeric(frame[column], errors="coerce")
+    ohlc = frame[ohlc_columns].to_numpy(dtype=np.float64)
+    if len(frame) < 500 or not np.isfinite(ohlc).all() or (ohlc <= 0).any():
+        raise ValueError("OHLC prices must be finite and positive, and at least 500 rows are required")
     close = frame["close"].astype(float)
     opn = frame["open"].astype(float)
     high = frame["high"].astype(float)
     low = frame["low"].astype(float)
-    if len(frame) < 500 or not np.isfinite(frame[["open", "high", "low", "close"]].to_numpy()).all():
-        raise ValueError("At least 500 rows of finite OHLC data are required")
-    if (frame[["open", "high", "low", "close"]] <= 0).any().any():
-        raise ValueError("OHLC prices must be positive")
+    invalid_ohlc = (
+        (high < np.maximum(opn, close))
+        | (low > np.minimum(opn, close))
+        | (high < low)
+    )
+    if invalid_ohlc.any():
+        raise ValueError("OHLC candle invariants failed: high must cover open/close and low must cover open/close")
 
     changes = close.pct_change()
     ema12 = close.ewm(span=12, adjust=False).mean()

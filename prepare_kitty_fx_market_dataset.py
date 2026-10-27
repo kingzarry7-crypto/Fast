@@ -57,6 +57,10 @@ def _fetch_yahoo_hourly_candles(symbol: str, outputsize: int) -> pd.DataFrame:
     frame = frame.sort_values("timestamp").drop_duplicates("timestamp").tail(outputsize).reset_index(drop=True)
     if len(frame) < 500:
         raise RuntimeError(f"Only {len(frame)} Yahoo Finance hourly candles returned for {symbol}; refusing to train")
+    latest_completed_at = frame["timestamp"].iloc[-1] + pd.Timedelta(hours=1)
+    age = pd.Timestamp.now(tz="UTC") - latest_completed_at
+    if age > pd.Timedelta(hours=72) or age < pd.Timedelta(minutes=-10):
+        raise RuntimeError(f"stale hourly market data for {symbol}: latest completed candle age is {age}")
     frame.attrs["data_source"] = (
         "Yahoo Finance GC=F gold futures proxy (not XAU/USD spot)"
         if symbol == "XAUUSD" else f"Yahoo Finance {YAHOO_SYMBOLS[symbol]}"
@@ -103,6 +107,11 @@ def fetch_hourly_candles(symbol: str, api_key: str | None = None, outputsize: in
     frame = frame[frame["timestamp"] + pd.Timedelta(hours=1) <= pd.Timestamp.now(tz="UTC")]
     if len(frame) < 500:
         raise RuntimeError(f"Only {len(frame)} completed hourly candles returned for {symbol}; refusing to train")
+    latest_completed_at = frame["timestamp"].iloc[-1] + pd.Timedelta(hours=1)
+    age = pd.Timestamp.now(tz="UTC") - latest_completed_at
+    # A 72-hour ceiling accommodates normal weekend closures while rejecting stale feeds.
+    if age > pd.Timedelta(hours=72) or age < pd.Timedelta(minutes=-10):
+        raise RuntimeError(f"stale hourly market data for {symbol}: latest completed candle age is {age}")
     frame.attrs["data_source"] = f"Twelve Data {SYMBOLS[symbol]}"
     return frame[["timestamp", "open", "high", "low", "close", "volume"]]
 

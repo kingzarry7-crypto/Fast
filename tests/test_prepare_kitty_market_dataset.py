@@ -91,7 +91,7 @@ class KittyMarketDatasetTests(unittest.TestCase):
     @unittest.mock.patch("prepare_kitty_market_dataset.requests.Session.get", side_effect=requests.HTTPError("451 blocked"))
     def test_binance_http_451_uses_public_fallback(self, mock_get, mock_fallback):
         fallback = pd.DataFrame({
-            "timestamp": pd.date_range("2025-01-01", periods=500, freq="h", tz="UTC"),
+            "timestamp": pd.date_range(pd.Timestamp.now(tz="UTC").floor("h") - pd.Timedelta(hours=500), periods=500, freq="h", tz="UTC"),
             "open": np.ones(500), "high": np.ones(500) * 1.01,
             "low": np.ones(500) * 0.99, "close": np.ones(500),
             "volume": np.ones(500),
@@ -112,6 +112,74 @@ class KittyMarketDatasetTests(unittest.TestCase):
         })
         with self.assertRaises(ValueError):
             builder.build_dataset(short)
+
+
+    def _valid_ohlc_frame(self, count=600):
+        rng = np.random.default_rng(901)
+        returns = rng.normal(0.0001, 0.002, count)
+        closes = 60000 * np.cumprod(1 + returns)
+        opens = np.concatenate(([closes[0] * (1 - returns[0]),], closes[:-1]))
+        return pd.DataFrame({
+            "timestamp": pd.date_range("2025-01-01", periods=count, freq="h", tz="UTC"),
+            "open": opens,
+            "high": np.maximum(opens, closes) * 1.001,
+            "low": np.minimum(opens, closes) * 0.999,
+            "close": closes,
+            "volume": np.ones(count),
+        })
+
+    def test_rejects_duplicate_candle_timestamps_instead_of_silently_training(self):
+        frame = self._valid_ohlc_frame()
+        frame.loc[301, "timestamp"] = frame.loc[300, "timestamp"]
+        with self.assertRaisesRegex(ValueError, "duplicate candle timestamps"):
+            builder.build_dataset(frame)
+
+    def test_rejects_ohlc_candles_where_high_does_not_cover_open_and_close(self):
+        frame = self._valid_ohlc_frame()
+        frame.loc[300, "high"] = min(frame.loc[300, "open"], frame.loc[300, "close"]) * 0.99
+        with self.assertRaisesRegex(ValueError, "OHLC candle invariants"):
+            builder.build_dataset(frame)
+
+    def test_rejects_ohlc_candles_with_nonpositive_or_nonfinite_prices(self):
+        frame = self._valid_ohlc_frame()
+        frame.loc[300, "low"] = 0.0
+        with self.assertRaisesRegex(ValueError, "OHLC prices must be finite and positive"):
+            builder.build_dataset(frame)
+
+
+    def test_dataset_features_match_runtime_feature_transform(self):
+        from kitty_features import compute_kitty_features
+
+        frame = self._valid_ohlc_frame()
+        dataset = builder.build_dataset(frame, threshold=0.001)
+        candle_index = 300
+        timestamp = frame.loc[candle_index, "timestamp"]
+        dataset_row = dataset.loc[dataset["timestamp"] == timestamp].iloc[0]
+        runtime_features = compute_kitty_features(
+            frame.iloc[:candle_index + 1][["open", "high", "low", "close"]].to_dict("records")
+        )
+        for feature in builder.FEATURES:
+            self.assertAlmostEqual(
+                float(dataset_row[feature]), float(runtime_features[feature]),
+                delta=1e-8, msg=f"training/runtime feature mismatch: {feature}",
+            )
+
+    @unittest.mock.patch("prepare_kitty_market_dataset.requests.get")
+    def test_yahoo_hourly_rejects_stale_market_data(self, mock_get):
+        timestamps = [int(pd.Timestamp("2025-01-01", tz="UTC").timestamp()) + i * 3600 for i in range(600)]
+        quotes = {
+            "open": [100.0] * 600, "high": [101.0] * 600,
+            "low": [99.0] * 600, "close": [100.0] * 600,
+            "volume": [1.0] * 600,
+        }
+        response = unittest.mock.Mock()
+        response.json.return_value = {"chart": {"result": [{
+            "timestamp": timestamps, "indicators": {"quote": [quotes]}
+        }], "error": None}}
+        response.raise_for_status.return_value = None
+        mock_get.return_value = response
+        with self.assertRaisesRegex(RuntimeError, "stale hourly market data"):
+            builder.fetch_yahoo_hourly("BTC", limit=500)
 
 
 if __name__ == "__main__":
