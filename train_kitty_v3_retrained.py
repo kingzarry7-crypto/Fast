@@ -795,7 +795,7 @@ def main() -> None:
             "always_no_trade_trade_count": 0,
         },
         "walk_forward_diagnostics": walk_forward_metrics,
-        "note": "Candidate architecture is selected using validation classification metrics; the abstention threshold is tuned using validation-only net paper returns and a minimum trade count, then evaluated once on the untouched holdout. Targets enter at the next hourly open and exit at the close six hours after entry; the return simulation subtracts assumed costs and skips overlapping trades. This is still a preliminary single-holdout diagnostic, not a walk-forward or executable portfolio backtest. Inspect several chronological test windows, realistic spreads/fills/funding, calibration, and drawdown before production use.",
+        "note": "Candidate architecture is selected using validation classification metrics; the abstention threshold is tuned using validation-only net paper returns and a minimum trade count, then evaluated once on the untouched final holdout. Three expanding-window walk-forward folds retrain a baseline model, select each fold threshold using only that fold's prior validation window, and compare after-cost results with a predeclared six-hour momentum rule. Walk-forward results are diagnostics, not used to tune the final candidate. Targets enter at the next hourly open and exit at the close six hours after entry; the return simulation subtracts assumed costs and skips overlapping trades. Costs are assumptions, not measured broker fills; no result is production approval.",
         "results": results,
     }
     report_path = args.output_dir / "comparison_report.json"
