@@ -166,7 +166,7 @@ class KittyTrainingExperimentTests(unittest.TestCase):
             },
         }
         self.assertFalse(kitty.walk_forward_gate_passes({"folds": [missing_baseline] * 3}))
-        self.assertFalse(kitty.walk_forward_gate_passes({"folds": [undersampled_baseline] * 3})))
+        self.assertFalse(kitty.walk_forward_gate_passes({"folds": [undersampled_baseline] * 3}))
 
     def test_holdout_gate_also_requires_walk_forward_robustness_when_provided(self):
         holdout = {"trade_count": 35, "average_net_return": 0.002,
