@@ -31,6 +31,36 @@ def _filter_market_session(frame: pd.DataFrame, symbol: str) -> pd.DataFrame:
     return frame.loc[valid].copy()
 
 
+def _candidate_stability_key(candidate: dict) -> tuple[float, float, float, float]:
+    """Rank eligible candidates by validation-fold robustness, not peak return.
+
+    All inputs are validation-only. The worst fold is prioritized first, then
+    the median fold, profit factor, and aggregate validation return as tie-breaks.
+    """
+    fold_returns = [
+        float(item["compounded_net_return"])
+        for item in candidate["fold_results"]
+    ]
+    worst_fold = min(fold_returns, default=float("-inf"))
+    ordered = sorted(fold_returns)
+    if not ordered:
+        median_fold = float("-inf")
+    elif len(ordered) % 2:
+        median_fold = ordered[len(ordered) // 2]
+    else:
+        middle = len(ordered) // 2
+        median_fold = (ordered[middle - 1] + ordered[middle]) / 2
+    profit_factor = candidate["validation"].get("profit_factor")
+    if profit_factor is None:
+        profit_factor = 0.0
+    return (
+        worst_fold,
+        median_fold,
+        float(profit_factor),
+        float(candidate["validation"]["compounded_net_return"]),
+    )
+
+
 def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dict:
     frame = pd.read_csv(path)
     required = {"timestamp", "open", "high", "low", "close"}
@@ -130,9 +160,11 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
                     "eligible": eligible,
                 })
     eligible_candidates = [item for item in candidates if item["eligible"]]
+    # Choose the most stable eligible candidate, not the one with the
+    # highest aggregate validation return (which can reward one lucky fold).
     selected = max(
         eligible_candidates,
-        key=lambda item: item["validation"]["compounded_net_return"],
+        key=_candidate_stability_key,
         default=None,
     )
     diagnostic_config = BacktestConfig(
