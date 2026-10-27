@@ -268,6 +268,7 @@ class KittyTrainingExperimentTests(unittest.TestCase):
             WeakDirectionalModel(), np.zeros((8, 18), dtype=np.float32),
             np.full(8, 0.01, dtype=np.float64), round_trip_cost=0.001,
             min_confidence=0.50, min_margin=0.0, label_threshold=0.003,
+            use_edge_proxy=True,
         )
         self.assertEqual(result["trade_count"], 0)
         self.assertEqual(result["label_threshold_for_edge_proxy"], 0.003)
@@ -304,6 +305,19 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         self.assertGreater(base, stressed)
         self.assertEqual(scenarios["1x_assumed_cost"]["trade_count"], 1)
         self.assertEqual(scenarios["2x_assumed_cost"]["trade_count"], 1)
+
+    def test_uncalibrated_probability_gap_does_not_suppress_direct_net_return_validation(self):
+        class WeakGapButProfitableFixture(torch.nn.Module):
+            def forward(self, x):
+                return torch.log(torch.tensor([0.30, 0.19, 0.51], dtype=torch.float32)).repeat(len(x), 1)
+
+        result = kitty.evaluate_paper_returns(
+            WeakGapButProfitableFixture(), np.zeros((7, 18), dtype=np.float32),
+            np.full(7, 0.01, dtype=np.float64), round_trip_cost=0.001,
+            min_confidence=0.50, min_margin=0.10, label_threshold=0.003,
+        )
+        self.assertEqual(result["trade_count"], 1)
+        self.assertGreater(result["average_net_return"], 0.0)
 
     def test_architecture_variants_return_three_class_logits(self):
         for variant in ("baseline", "batchnorm", "leaky_relu"):
