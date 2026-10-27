@@ -150,7 +150,7 @@ def build_dataset(frame: pd.DataFrame, threshold: float = 0.003, horizon: int = 
         frame[column] = pd.to_numeric(frame[column], errors="coerce")
     ohlc = frame[ohlc_columns].to_numpy(dtype=np.float64)
     if len(frame) < 500 or not np.isfinite(ohlc).all() or (ohlc <= 0).any():
-        raise ValueError("At least 500 rows of OHLC data with finite positive prices are required")
+        raise ValueError("OHLC prices must be finite and positive, and at least 500 rows are required")
     close = frame["close"].astype(float)
     opn = frame["open"].astype(float)
     high = frame["high"].astype(float)
@@ -161,7 +161,7 @@ def build_dataset(frame: pd.DataFrame, threshold: float = 0.003, horizon: int = 
         | (high < low)
     )
     if invalid_ohlc.any():
-        raise ValueError("OHLC candle invariants failed: high must cover open/close and low must cover open/close");
+        raise ValueError("OHLC candle invariants failed: high must cover open/close and low must cover open/close")
 
     changes = close.pct_change()
     ema12 = close.ewm(span=12, adjust=False).mean()
