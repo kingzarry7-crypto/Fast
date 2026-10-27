@@ -52,19 +52,33 @@ def fetch_xauusd(output: Path, limit: int = 5000) -> pd.DataFrame:
     key = os.getenv("TWELVEDATA_API_KEY") or os.getenv("TWELVE_DATA_API_KEY")
     if not key:
         raise RuntimeError("Missing TWELVEDATA_API_KEY/TWELVE_DATA_API_KEY; refusing a non-spot gold fallback")
-    response = requests.get(TWELVEDATA_URL, params={
-        "symbol": "XAU/USD", "interval": "5min", "outputsize": min(limit, 5000),
-        "order": "ASC", "timezone": "UTC", "apikey": key,
-    }, timeout=60)
-    response.raise_for_status()
-    payload = response.json()
-    if payload.get("status") == "error" or "values" not in payload:
-        # Do not print the request URL, which contains the credential.
-        raise RuntimeError(f"Twelve Data XAU/USD request failed: {payload.get('message', 'unexpected response')}")
-    values = payload["values"]
-    frame = pd.DataFrame(values)
+    end = pd.Timestamp.now(tz="UTC").floor("5min")
+    start = end - pd.Timedelta(minutes=5 * limit)
+    cursor = start
+    chunks = []
+    # Time-series endpoint caps each response at 5,000 observations.
+    chunk_span = pd.Timedelta(minutes=5 * 4999)
+    while cursor < end:
+        chunk_end = min(cursor + chunk_span, end)
+        response = requests.get(TWELVEDATA_URL, params={
+            "symbol": "XAU/USD", "interval": "5min", "outputsize": 5000,
+            "start_date": cursor.strftime("%Y-%m-%d %H:%M:%S"),
+            "end_date": chunk_end.strftime("%Y-%m-%d %H:%M:%S"),
+            "order": "ASC", "timezone": "UTC", "apikey": key,
+        }, timeout=60)
+        response.raise_for_status()
+        payload = response.json()
+        if payload.get("status") == "error" or "values" not in payload:
+            # Do not print the request URL, which contains the credential.
+            raise RuntimeError(f"Twelve Data XAU/USD request failed: {payload.get('message', 'unexpected response')}")
+        chunks.append(pd.DataFrame(payload["values"]))
+        cursor = chunk_end + pd.Timedelta(minutes=5)
+        time.sleep(0.2)
+    if not chunks:
+        raise RuntimeError("Twelve Data returned no XAU/USD spot candles")
+    frame = pd.concat(chunks, ignore_index=True)
     frame["timestamp"] = pd.to_datetime(frame["datetime"], utc=True) + pd.Timedelta(minutes=5)
-    frame = frame[["timestamp", "open", "high", "low", "close"]].sort_values("timestamp").tail(limit)
+    frame = frame[["timestamp", "open", "high", "low", "close"]].drop_duplicates("timestamp").sort_values("timestamp").tail(limit)
     _write(frame, output)
     return frame
 
@@ -85,8 +99,8 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--limit", type=int, default=5000)
     args = parser.parse_args()
-    if not 1500 <= args.limit <= 5000:
-        raise SystemExit("--limit must be between 1500 and 5000 to respect the Twelve Data endpoint limit")
+    if not 1500 <= args.limit <= 15000:
+        raise SystemExit("--limit must be between 1500 and 15000")
     frame = fetch_btc(args.output, args.limit) if args.symbol == "BTC" else fetch_xauusd(args.output, args.limit)
     # Only non-secret provenance and timestamps are emitted.
     print({
