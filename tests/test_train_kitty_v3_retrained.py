@@ -136,6 +136,36 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         self.assertEqual(threshold, 0.4)
         self.assertIn("best_validation", reason)
 
+    def test_walk_forward_gate_fails_closed_on_inconsistent_or_underperforming_folds(self):
+        fold = {
+            "model_after_costs": {"trade_count": 20, "average_net_return": 0.002,
+                "compounded_net_return": 0.04, "max_drawdown": -0.03, "profit_factor": 1.2},
+            "momentum_baseline_after_costs": {"trade_count": 20, "average_net_return": 0.001,
+                "compounded_net_return": 0.02},
+            "trend_confirmation_baseline_after_costs": {"trade_count": 20, "average_net_return": 0.0005,
+                "compounded_net_return": 0.01},
+        }
+        robust = {"folds": [fold, fold, fold]}
+        self.assertTrue(kitty.walk_forward_gate_passes(robust))
+        weak_fold = {**fold, "model_after_costs": {**fold["model_after_costs"],
+            "average_net_return": -0.001, "compounded_net_return": -0.02}}
+        self.assertFalse(kitty.walk_forward_gate_passes({"folds": [fold, weak_fold, weak_fold]}))
+        underperforming = {**fold, "model_after_costs": {**fold["model_after_costs"],
+            "average_net_return": 0.0005, "compounded_net_return": 0.01}}
+        self.assertFalse(kitty.walk_forward_gate_passes({"folds": [underperforming] * 3}))
+
+    def test_holdout_gate_also_requires_walk_forward_robustness_when_provided(self):
+        holdout = {"trade_count": 35, "average_net_return": 0.002,
+            "compounded_net_return": 0.05, "max_drawdown": -0.03, "profit_factor": 1.2}
+        fold = {
+            "model_after_costs": {"trade_count": 20, "average_net_return": -0.001,
+                "compounded_net_return": -0.02, "max_drawdown": -0.03, "profit_factor": 0.8},
+            "momentum_baseline_after_costs": {"trade_count": 20, "average_net_return": 0.001,
+                "compounded_net_return": 0.02},
+        }
+        self.assertTrue(kitty.should_disable_signals(0.5, holdout,
+            walk_forward_metrics={"folds": [fold, fold, fold]}))
+
     def test_holdout_gate_disables_signals_when_net_returns_are_negative(self):
         holdout = {"trade_count": 17, "average_net_return": -0.0076, "compounded_net_return": -0.1239}
         self.assertTrue(kitty.should_disable_signals(0.5, holdout))

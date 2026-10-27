@@ -498,13 +498,74 @@ def select_confidence_threshold(threshold_trials: list[dict], min_trades: int = 
 
 
 
+
+
+def walk_forward_gate_passes(walk_forward_metrics: dict, min_profitable_folds: int = 2) -> bool:
+    """Require repeatable after-cost performance across chronological folds.
+
+    A single positive holdout is not enough: at least two folds must be
+    profitable and beat the best sufficiently sampled rule baseline on both
+    average and compounded net return. This is a fail-closed research gate.
+    """
+    if not isinstance(walk_forward_metrics, dict):
+        return False
+    folds = walk_forward_metrics.get("folds")
+    if not isinstance(folds, list) or len(folds) < 3 or min_profitable_folds < 1:
+        return False
+    passing = 0
+    for fold in folds:
+        if not isinstance(fold, dict):
+            continue
+        model = fold.get("model_after_costs")
+        if not isinstance(model, dict):
+            continue
+        try:
+            trades = int(model.get("trade_count", 0) or 0)
+            average = float(model.get("average_net_return"))
+            compounded = float(model.get("compounded_net_return"))
+            drawdown = float(model.get("max_drawdown"))
+            profit_factor = float(model.get("profit_factor"))
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if not (
+            trades >= 10 and np.isfinite(average) and average > 0
+            and np.isfinite(compounded) and compounded > 0
+            and np.isfinite(drawdown) and drawdown >= -0.10
+            and np.isfinite(profit_factor) and profit_factor >= 1.05
+        ):
+            continue
+        baselines = []
+        for key in ("momentum_baseline_after_costs", "trend_confirmation_baseline_after_costs"):
+            baseline = fold.get(key)
+            if not isinstance(baseline, dict):
+                continue
+            try:
+                count = int(baseline.get("trade_count", 0) or 0)
+                base_avg = float(baseline.get("average_net_return"))
+                base_compounded = float(baseline.get("compounded_net_return"))
+            except (TypeError, ValueError, OverflowError):
+                continue
+            if count >= 10 and np.isfinite(base_avg) and np.isfinite(base_compounded):
+                baselines.append((base_avg, base_compounded))
+        if baselines:
+            best_avg, best_compounded = max(baselines, key=lambda pair: (pair[1], pair[0]))
+            if average <= best_avg or compounded <= best_compounded:
+                continue
+        passing += 1
+    return passing >= min_profitable_folds
+
+
+
 def should_disable_signals(
     selected_confidence: float,
     holdout_metrics: dict,
     min_trades: int = 30,
     baseline_metrics: dict | None = None,
+    walk_forward_metrics: dict | None = None,
 ) -> bool:
-    """Fail closed unless holdout is profitable and beats any sufficiently sampled rule baseline."""
+    """Fail closed unless holdout and chronological walk-forward evidence are robust."""
+    if walk_forward_metrics is not None and not walk_forward_gate_passes(walk_forward_metrics):
+        return True
     if not np.isfinite(selected_confidence) or selected_confidence > 1.0:
         return True
     try:
@@ -884,6 +945,7 @@ def main() -> None:
     test_metrics["threshold_selection_note"] = threshold_selection_note
     test_metrics["signals_disabled_for_no_validated_edge"] = should_disable_signals(
         selected_confidence, paper_metrics, baseline_metrics=baseline_comparison,
+        walk_forward_metrics=walk_forward_metrics,
     )
     # Reference points make it harder to mistake a weak classifier for a useful
     # trading model. These are diagnostics, not competing deployable models.
