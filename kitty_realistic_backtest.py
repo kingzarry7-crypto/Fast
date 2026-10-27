@@ -171,13 +171,15 @@ def _completed_timeframe(frame: pd.DataFrame, rule: str, fast: int, slow: int, p
     return bars[[f"{prefix}_direction"]].dropna()
 
 
-def build_mtf_signals(candles_5m: pd.DataFrame) -> pd.Series:
+def build_mtf_signals(candles_5m: pd.DataFrame, strategy: str = "mtf_cross") -> pd.Series:
     """Conservative 4H trend + 1H direction + 15M setup + 5M timing signals.
 
     Index timestamps represent candle close times. Higher-timeframe states are
     backward-asof joined only after those candles have closed. Signal at close
     executes no earlier than the next 5-minute candle open in backtest_ohlc.
     """
+    if strategy not in {"mtf_cross", "mtf_trend", "mtf_momentum"}:
+        raise ValueError("strategy must be mtf_cross, mtf_trend, or mtf_momentum")
     frame = _validate_candles(candles_5m)
     base = frame[["open", "high", "low", "close"]].copy()
     contexts = [
@@ -197,14 +199,35 @@ def build_mtf_signals(candles_5m: pd.DataFrame) -> pd.Series:
     rsi_delta = close.diff()
     gain = rsi_delta.clip(lower=0).ewm(alpha=1 / 14, adjust=False, min_periods=14).mean()
     loss = (-rsi_delta.clip(upper=0)).ewm(alpha=1 / 14, adjust=False, min_periods=14).mean()
-    rsi = 100 - 100 / (1 + gain / loss.replace(0, np.nan))
-    long_ok = (
+    relative_strength = gain / loss.replace(0, np.nan)
+    rsi = 100 - 100 / (1 + relative_strength)
+    rsi = rsi.mask((loss == 0) & (gain > 0), 100.0).mask((loss == 0) & (gain == 0), 50.0)
+    context_long = (
         (joined["h4_direction"] > 0) & (joined["h1_direction"] > 0)
-        & (joined["m15_direction"] > 0) & timing_long & rsi.between(45, 70)
+        & (joined["m15_direction"] > 0)
     )
-    short_ok = (
+    context_short = (
         (joined["h4_direction"] < 0) & (joined["h1_direction"] < 0)
-        & (joined["m15_direction"] < 0) & timing_short & rsi.between(30, 55)
+        & (joined["m15_direction"] < 0)
     )
+    if strategy == "mtf_cross":
+        timing_long = timing_long & rsi.between(45, 70)
+        timing_short = timing_short & rsi.between(30, 55)
+    elif strategy == "mtf_trend":
+        ema21 = close.ewm(span=21, adjust=False, min_periods=21).mean()
+        timing_long = (ema5 > ema21) & (close > ema5) & rsi.between(45, 70)
+        timing_short = (ema5 < ema21) & (close < ema5) & rsi.between(30, 55)
+        # Enter only on the first bar of a new aligned state; avoid repeatedly
+        # signaling while the same trend condition stays true.
+        timing_long &= ~timing_long.shift(1, fill_value=False)
+        timing_short &= ~timing_short.shift(1, fill_value=False)
+    else:
+        momentum = close.pct_change(12)
+        timing_long = (momentum > 0.001) & rsi.between(50, 70)
+        timing_short = (momentum < -0.001) & rsi.between(30, 50)
+        timing_long &= ~timing_long.shift(1, fill_value=False)
+        timing_short &= ~timing_short.shift(1, fill_value=False)
+    long_ok = context_long & timing_long
+    short_ok = context_short & timing_short
     result = pd.Series(np.select([long_ok, short_ok], [1, -1], default=0), index=frame.index, name="signal")
     return result.astype(int)
