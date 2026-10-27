@@ -23,16 +23,26 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
         raise ValueError(f"{symbol}: CSV missing required columns: {sorted(missing)}")
     frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True, errors="raise")
     frame = frame.sort_values("timestamp").drop_duplicates("timestamp").set_index("timestamp")
-    if len(frame) < 1200:
+    if len(frame) < 1500:
         raise ValueError(f"{symbol}: need at least 1200 5-minute candles for timeframe warm-up and evaluation; got {len(frame)}")
     # Keep only contiguous five-minute candles so indicators cannot bridge data outages.
     gaps = frame.index.to_series().diff().dropna()
-    if not gaps.eq(pd.Timedelta(minutes=5)).all():
-        raise ValueError(f"{symbol}: candle timestamps must be contiguous 5-minute intervals")
+    if (gaps <= pd.Timedelta(0)).any():
+        raise ValueError(f"{symbol}: candle timestamps must be strictly increasing")
+    # Gaps are permitted for exchange closures, but suppress signals for 26
+    # completed 4H bars after each gap so the slow trend EMA is not trusted on
+    # a discontinuous history. This is intentionally conservative.
     split = int(len(frame) * 0.8)
     # Generate indicators over prior history for realistic warm-up, but evaluate
     # only signals observed in the final holdout. Entries still occur next open.
     signals = build_mtf_signals(frame)
+    gap_rows = frame.index.to_series().diff().gt(pd.Timedelta(minutes=5))
+    if gap_rows.any():
+        gap_positions = [i for i, value in enumerate(gap_rows.to_numpy()) if value]
+        signal_values = signals.to_numpy(copy=True)
+        for gap_i in gap_positions:
+            signal_values[gap_i:min(len(signal_values), gap_i + 26 * 48)] = 0
+        signals = pd.Series(signal_values, index=frame.index, name="signal")
     holdout = frame.iloc[split:].copy()
     holdout_signals = signals.reindex(holdout.index).copy()
     if len(holdout_signals):
