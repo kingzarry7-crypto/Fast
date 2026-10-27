@@ -141,6 +141,8 @@ class KittyRealisticBacktestTests(unittest.TestCase):
         self.assertFalse(report["automatic_order_execution_enabled"])
         self.assertFalse(report["candidate_selection"]["selected"])
         self.assertEqual(report["candidate_selection"]["reason"], "no_validation_candidate_passed_edge_gate")
+        self.assertEqual(report["candidate_selection"]["candidates_evaluated"], 81)
+        self.assertEqual(report["candidate_selection"]["strategies_evaluated"], ["mtf_cross", "mtf_trend", "mtf_momentum"])
         self.assertTrue(report["candidate_selection"]["parameter_tuning_on_holdout"] is False)
         self.assertEqual(report["result"]["trade_count"], 0)
 
@@ -152,6 +154,10 @@ class KittyRealisticBacktestTests(unittest.TestCase):
         self.assertEqual(len(signals), len(frame))
         self.assertTrue(signals.isin([-1, 0, 1]).all())
         self.assertTrue((signals.iloc[:500] == 0).all())
+        for strategy in ("mtf_cross", "mtf_trend", "mtf_momentum"):
+            candidate = build_mtf_signals(frame, strategy=strategy)
+            self.assertEqual(len(candidate), len(frame))
+            self.assertTrue(candidate.isin([-1, 0, 1]).all())
 
 
 if __name__ == "__main__":
