@@ -72,6 +72,24 @@ class KittyCandleFeatureContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid OHLC bounds"):
             _validate_candles(candles, "1h", "BTC/USDT")
 
+    def test_runtime_candle_validator_rejects_duplicate_timestamps(self):
+        newest = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        candles = []
+        for index in range(60):
+            stamp = newest - timedelta(hours=59 - index)
+            close = 60000.0 + index * 2
+            candles.append({
+                "datetime": stamp.isoformat(),
+                "open": close - 1,
+                "high": close + 2,
+                "low": close - 2,
+                "close": close,
+                "volume": 100,
+            })
+        candles[30]["datetime"] = candles[29]["datetime"]
+        with self.assertRaisesRegex(ValueError, "duplicate candle timestamps"):
+            _validate_candles(candles, "1h", "BTC/USDT")
+
 
 if __name__ == "__main__":
     unittest.main()
