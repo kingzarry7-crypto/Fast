@@ -30,12 +30,13 @@ class KittyRealisticBacktestTests(unittest.TestCase):
     def test_gap_through_stop_fills_at_worse_open(self):
         frame = self.candles([
             (100, 101, 99, 100),
-            (90, 92, 88, 91),
-            (91, 92, 90, 91),
+            (100, 101, 99, 100),  # entry at 100; stop is 95
+            (90, 92, 88, 91),  # gap through stop fills at open 90
         ])
         result = backtest_ohlc(frame, pd.Series([1, 0, 0], index=frame.index),
             BacktestConfig(stop_pct=0.05, target_pct=0.10, max_hold_bars=2,
                            spread_bps_per_side=0, commission_bps_per_side=0, slippage_bps_per_side=0))
+        self.assertEqual(result["trades"][0]["entry_price"], 100)
         self.assertEqual(result["trades"][0]["exit_price"], 90)
         self.assertEqual(result["trades"][0]["exit_reason"], "stop")
 
