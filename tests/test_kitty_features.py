@@ -50,6 +50,12 @@ class KittyFeatureTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid OHLC"):
             compute_kitty_features(candles)
 
+    def test_invalid_high_low_bounds_fail_closed(self):
+        candles = sample_candles()
+        candles[-1]["high"] = min(candles[-1]["open"], candles[-1]["close"]) - 1.0
+        with self.assertRaisesRegex(ValueError, "invalid OHLC candle range"):
+            compute_kitty_features(candles)
+
 
 if __name__ == "__main__":
     unittest.main()
