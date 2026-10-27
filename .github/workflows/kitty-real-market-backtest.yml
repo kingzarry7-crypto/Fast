@@ -59,7 +59,7 @@ jobs:
     environment: "my screty"
     timeout-minutes: 15
     env:
-      CANDLE_LIMIT: ${{ github.event.inputs.limit || '5000' }}
+      CANDLE_LIMIT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.limit || '15000' }}
       TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY || secrets.TWELVE_DATA_API_KEY }}
     steps:
       - uses: actions/checkout@v4
