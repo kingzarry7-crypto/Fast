@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      CANDLE_LIMIT: ${{ github.event.inputs.limit || '15000' }}
+      CANDLE_LIMIT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.limit || '15000' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
