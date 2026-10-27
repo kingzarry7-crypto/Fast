@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from kitty_realistic_backtest import BacktestConfig, backtest_ohlc, build_mtf_signals
-from run_kitty_realistic_backtest import evaluate_csv
+from run_kitty_realistic_backtest import _candidate_stability_key, evaluate_csv
 
 
 class KittyRealisticBacktestTests(unittest.TestCase):
@@ -129,6 +129,26 @@ class KittyRealisticBacktestTests(unittest.TestCase):
             self.assertEqual(entry_time - signal_time, pd.Timedelta(minutes=5))
             self.assertLessEqual(exit_time - entry_time, pd.Timedelta(hours=2))
 
+
+
+    def test_candidate_selection_prioritizes_worst_validation_fold_over_peak_return(self):
+        stable = {
+            "fold_results": [
+                {"compounded_net_return": 0.004},
+                {"compounded_net_return": 0.006},
+                {"compounded_net_return": 0.003},
+            ],
+            "validation": {"profit_factor": 1.25, "compounded_net_return": 0.018},
+        }
+        volatile = {
+            "fold_results": [
+                {"compounded_net_return": -0.025},
+                {"compounded_net_return": 0.030},
+                {"compounded_net_return": 0.040},
+            ],
+            "validation": {"profit_factor": 1.8, "compounded_net_return": 0.060},
+        }
+        self.assertGreater(_candidate_stability_key(stable), _candidate_stability_key(volatile))
 
     def test_runner_selects_parameters_only_on_validation_and_fails_closed_without_edge(self):
         idx = pd.date_range("2026-01-01", periods=1800, freq="5min", tz="UTC")
