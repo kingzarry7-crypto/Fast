@@ -54,7 +54,6 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
     validation_end = int(len(frame) * 0.8)
     # Build causal indicators across the history, but report validation and the
     # final chronological holdout separately. Never tune on the final 20%.
-    signals = build_mtf_signals(frame)
     validation = frame.iloc[train_end:validation_end].copy()
     holdout = frame.iloc[validation_end:].copy()
     # Select risk parameters on validation only. The final holdout is evaluated
@@ -65,7 +64,12 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
         else ([0.002, 0.003, 0.004], [0.004, 0.006, 0.008], [12, 24, 36])
     )
     candidates = []
-    for stop_pct in stop_grid:
+    strategy_signals = {
+        strategy: build_mtf_signals(frame, strategy=strategy)
+        for strategy in ("mtf_cross", "mtf_trend", "mtf_momentum")
+    }
+    for strategy, strategy_signal in strategy_signals.items():
+      for stop_pct in stop_grid:
         for target_pct in target_grid:
             for max_hold_bars in hold_grid:
                 candidate_config = BacktestConfig(
@@ -77,7 +81,7 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
                     slippage_bps_per_side=2.0,
                 )
                 validation_result = backtest_ohlc(
-                    validation, signals.reindex(validation.index), candidate_config
+                    validation, strategy_signal.reindex(validation.index), candidate_config
                 )
                 # Edge gate is deliberately conservative; no candidate is
                 # selected merely because it is the least bad one.
@@ -89,6 +93,8 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
                     and validation_result["max_drawdown"] >= -0.05
                 )
                 candidates.append({
+                    "strategy": strategy,
+                    "signals": strategy_signal,
                     "config": candidate_config,
                     "validation": validation_result,
                     "eligible": eligible,
@@ -108,14 +114,17 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
         slippage_bps_per_side=2.0,
     )
     chosen_config = selected["config"] if selected else diagnostic_config
+    chosen_strategy = selected["strategy"] if selected else "mtf_cross"
+    chosen_signals = selected["signals"] if selected else strategy_signals["mtf_cross"]
     validation_full = backtest_ohlc(
-        validation, signals.reindex(validation.index), chosen_config
+        validation, chosen_signals.reindex(validation.index), chosen_config
     )
-    result = backtest_ohlc(holdout, signals.reindex(holdout.index), chosen_config)
+    result = backtest_ohlc(holdout, chosen_signals.reindex(holdout.index), chosen_config)
     candidate_selection = {
         "selected": selected is not None,
         "reason": "validation_edge_gate_passed" if selected else "no_validation_candidate_passed_edge_gate",
         "candidates_evaluated": len(candidates),
+        "strategies_evaluated": ["mtf_cross", "mtf_trend", "mtf_momentum"],
         "eligible_candidates": len(eligible_candidates),
         "minimum_validation_trades": 20,
         "minimum_validation_profit_factor": 1.10,
@@ -123,6 +132,7 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
         "maximum_validation_drawdown": -0.05,
         "parameter_tuning_on_holdout": False,
         "selected_config": ({
+            "strategy": chosen_strategy,
             "stop_pct": chosen_config.stop_pct,
             "target_pct": chosen_config.target_pct,
             "max_hold_bars": chosen_config.max_hold_bars,
