@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -74,6 +75,25 @@ class KittyRealisticBacktestTests(unittest.TestCase):
         self.assertFalse(report["production_ready"])
         self.assertFalse(report["automatic_order_execution_enabled"])
         self.assertIn("compounded_net_return", report["result"])
+
+
+    def test_normal_market_session_gaps_do_not_disable_signals_for_days(self):
+        idx = list(pd.date_range("2026-01-01", periods=1600, freq="5min", tz="UTC"))
+        idx[1400:] = list(pd.date_range(idx[1400] + pd.Timedelta(days=2), periods=200, freq="5min", tz="UTC"))
+        close = np.full(len(idx), 100.0)
+        frame = pd.DataFrame({
+            "timestamp": idx, "open": close, "high": close + .01,
+            "low": close - .01, "close": close,
+        })
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "gap.csv"
+            frame.to_csv(path, index=False)
+            forced_signals = pd.Series(1, index=pd.DatetimeIndex(idx))
+            with patch("run_kitty_realistic_backtest.build_mtf_signals", return_value=forced_signals):
+                report = evaluate_csv(path, "BTC", 2.0)
+        self.assertGreater(report["result"]["trade_count"], 0)
 
     def test_mtf_signals_are_valid_and_warmup_is_no_trade(self):
         idx = pd.date_range("2025-01-01", periods=1200, freq="5min", tz="UTC")
