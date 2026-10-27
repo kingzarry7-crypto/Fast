@@ -1,4 +1,5 @@
 name: Kitty real-market 5m holdout backtest
+# Research pipeline: 15k candles by default; manual runs may override the sample size.
 
 on:
   push:
