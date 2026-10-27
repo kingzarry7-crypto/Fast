@@ -114,5 +114,38 @@ class KittyMarketDatasetTests(unittest.TestCase):
             builder.build_dataset(short)
 
 
+    def _valid_ohlc_frame(self, count=600):
+        rng = np.random.default_rng(901)
+        returns = rng.normal(0.0001, 0.002, count)
+        closes = 60000 * np.cumprod(1 + returns)
+        opens = np.concatenate(([closes[0] * (1 - returns[0]),], closes[:-1]))
+        return pd.DataFrame({
+            "timestamp": pd.date_range("2025-01-01", periods=count, freq="h", tz="UTC"),
+            "open": opens,
+            "high": np.maximum(opens, closes) * 1.001,
+            "low": np.minimum(opens, closes) * 0.999,
+            "close": closes,
+            "volume": np.ones(count),
+        })
+
+    def test_rejects_duplicate_candle_timestamps_instead_of_silently_training(self):
+        frame = self._valid_ohlc_frame()
+        frame.loc[301, "timestamp"] = frame.loc[300, "timestamp"]
+        with self.assertRaisesRegex(ValueError, "duplicate candle timestamps"):
+            builder.build_dataset(frame)
+
+    def test_rejects_ohlc_candles_where_high_does_not_cover_open_and_close(self):
+        frame = self._valid_ohlc_frame()
+        frame.loc[300, "high"] = min(frame.loc[300, "open"], frame.loc[300, "close"]) * 0.99
+        with self.assertRaisesRegex(ValueError, "OHLC candle invariants"):
+            builder.build_dataset(frame)
+
+    def test_rejects_ohlc_candles_with_nonpositive_or_nonfinite_prices(self):
+        frame = self._valid_ohlc_frame()
+        frame.loc[300, "low"] = 0.0
+        with self.assertRaisesRegex(ValueError, "OHLC prices must be finite and positive"):
+            builder.build_dataset(frame)
+
+
 if __name__ == "__main__":
     unittest.main()
