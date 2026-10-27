@@ -147,5 +147,23 @@ class KittyMarketDatasetTests(unittest.TestCase):
             builder.build_dataset(frame)
 
 
+    def test_dataset_features_match_runtime_feature_transform(self):
+        from kitty_features import compute_kitty_features
+
+        frame = self._valid_ohlc_frame()
+        dataset = builder.build_dataset(frame, threshold=0.001)
+        candle_index = 300
+        timestamp = frame.loc[candle_index, "timestamp"]
+        dataset_row = dataset.loc[dataset["timestamp"] == timestamp].iloc[0]
+        runtime_features = compute_kitty_features(
+            frame.iloc[:candle_index + 1][["open", "high", "low", "close"]].to_dict("records")
+        )
+        for feature in builder.FEATURES:
+            self.assertAlmostEqual(
+                float(dataset_row[feature]), float(runtime_features[feature]),
+                delta=1e-8, msg=f"training/runtime feature mismatch: {feature}",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
