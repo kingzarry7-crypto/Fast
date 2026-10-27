@@ -26,7 +26,7 @@ class KittyFxDatasetTests(unittest.TestCase):
     def test_normalizes_twelve_data_ohlc_and_missing_volume(self, mock_get):
         values = []
         for i in range(500):
-            stamp = pd.Timestamp("2024-01-01", tz="UTC") + pd.Timedelta(hours=i)
+            stamp = pd.Timestamp.now(tz="UTC").floor("h") - pd.Timedelta(hours=500 - i)
             price = 100 + i * 0.1
             values.append({"datetime": stamp.strftime("%Y-%m-%d %H:%M:%S"),
                            "open": str(price), "high": str(price + 1),
@@ -75,7 +75,8 @@ class KittyFxDatasetTests(unittest.TestCase):
     @patch("prepare_kitty_fx_market_dataset.requests.get")
     def test_uses_free_yahoo_hourly_data_when_twelve_data_key_is_missing(self, mock_get):
         with patch.dict(os.environ, {"TWELVEDATA_API_KEY": "", "TWELVE_DATA_API_KEY": ""}):
-            timestamps = [1704067200 + i * 3600 for i in range(500)]
+            start = int((pd.Timestamp.now(tz="UTC").floor("h") - pd.Timedelta(hours=500)).timestamp())
+            timestamps = [start + i * 3600 for i in range(500)]
             quotes = {
                 "open": [100.0 + i * 0.1 for i in range(500)],
                 "high": [101.0 + i * 0.1 for i in range(500)],
@@ -125,6 +126,22 @@ class KittyFxDatasetTests(unittest.TestCase):
             frame.attrs.get("data_source"),
             "Yahoo Finance GC=F gold futures proxy (not XAU/USD spot)",
         )
+    @patch("prepare_kitty_fx_market_dataset.requests.get")
+    def test_twelve_data_rejects_stale_hourly_market_data(self, mock_get):
+        values = []
+        for i in range(600):
+            stamp = pd.Timestamp("2025-01-01", tz="UTC") + pd.Timedelta(hours=i)
+            values.append({
+                "datetime": stamp.strftime("%Y-%m-%d %H:%M:%S"),
+                "open": "2300", "high": "2301", "low": "2299", "close": "2300.5",
+            })
+        response = Mock()
+        response.json.return_value = {"values": values}
+        response.raise_for_status.return_value = None
+        mock_get.return_value = response
+        with self.assertRaisesRegex(RuntimeError, "stale hourly market data"):
+            builder.fetch_hourly_candles("XAUUSD", api_key="test-key", outputsize=600, require_spot=True)
+
 
 if __name__ == "__main__":
     unittest.main()
