@@ -66,7 +66,11 @@ def _validate_candles(candles, timeframe, symbol):
     except (TypeError, ValueError) as exc:
         raise ValueError(symbol + ': candle timestamps could not be ordered') from exc
 
-    stamp = _candle_time(candles[-1])
+    ordered_times = [_candle_time(candle) for candle in candles]
+    if len(set(ordered_times)) != len(ordered_times):
+        raise ValueError(symbol + ': duplicate candle timestamps')
+
+    stamp = ordered_times[-1]
     age = datetime.now(timezone.utc) - stamp
     limit = timedelta(days=3) if timeframe == '1d' else timedelta(hours=6)
     if age < timedelta(minutes=-10) or age > limit:
@@ -75,10 +79,18 @@ def _validate_candles(candles, timeframe, symbol):
             f"(age_seconds={int(age.total_seconds())}, timeframe={timeframe})"
         )
     for candle in candles[-35:]:
+        prices = {}
         for key in ('open', 'high', 'low', 'close'):
             value = float(candle[key])
             if not isfinite(value) or value <= 0:
                 raise ValueError(symbol + ': invalid candle price')
+            prices[key] = value
+        if (
+            prices['high'] < max(prices['open'], prices['close'])
+            or prices['low'] > min(prices['open'], prices['close'])
+            or prices['high'] < prices['low']
+        ):
+            raise ValueError(symbol + ': invalid OHLC bounds')
     return stamp.isoformat()
 
 def _gold_features(candles):
