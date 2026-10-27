@@ -286,6 +286,25 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         self.assertEqual(result["trade_count"], 1)
         self.assertGreater(result["average_net_return"], 0.0)
 
+    def test_holdout_cost_sensitivity_is_diagnostic_and_higher_cost_reduces_return(self):
+        class StrongDirectionalModel(torch.nn.Module):
+            def forward(self, x):
+                return torch.log(torch.tensor([0.01, 0.04, 0.95], dtype=torch.float32)).repeat(len(x), 1)
+
+        result = kitty.evaluate_cost_sensitivity(
+            StrongDirectionalModel(), np.zeros((7, 18), dtype=np.float32),
+            np.full(7, 0.01, dtype=np.float64), round_trip_cost=0.001,
+            min_confidence=0.50, label_threshold=0.003,
+        )
+        scenarios = result["scenarios"]
+        base = scenarios["1x_assumed_cost"]["average_net_return"]
+        stressed = scenarios["2x_assumed_cost"]["average_net_return"]
+        self.assertEqual(result["purpose"],
+            "holdout robustness diagnostic only; not used for model or threshold selection")
+        self.assertGreater(base, stressed)
+        self.assertEqual(scenarios["1x_assumed_cost"]["trade_count"], 1)
+        self.assertEqual(scenarios["2x_assumed_cost"]["trade_count"], 1)
+
     def test_architecture_variants_return_three_class_logits(self):
         for variant in ("baseline", "batchnorm", "leaky_relu"):
             model = kitty.KittyExperimentNet(variant=variant)
