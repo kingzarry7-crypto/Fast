@@ -498,8 +498,13 @@ def select_confidence_threshold(threshold_trials: list[dict], min_trades: int = 
 
 
 
-def should_disable_signals(selected_confidence: float, holdout_metrics: dict, min_trades: int = 30) -> bool:
-    """Fail closed unless untouched holdout has 30+ trades, >=1% net return, and <=5% drawdown."""
+def should_disable_signals(
+    selected_confidence: float,
+    holdout_metrics: dict,
+    min_trades: int = 30,
+    baseline_metrics: dict | None = None,
+) -> bool:
+    """Fail closed unless holdout is profitable and beats any sufficiently sampled rule baseline."""
     if not np.isfinite(selected_confidence) or selected_confidence > 1.0:
         return True
     try:
@@ -510,14 +515,39 @@ def should_disable_signals(selected_confidence: float, holdout_metrics: dict, mi
         profit_factor = float(holdout_metrics.get("profit_factor"))
     except (TypeError, ValueError, OverflowError):
         return True
-    return not (
+    if not (
         trade_count >= min_trades
         and np.isfinite(average) and average > 0.0
         and np.isfinite(compounded) and compounded >= 0.01
         and np.isfinite(drawdown) and drawdown >= -0.05
         and np.isfinite(profit_factor) and profit_factor >= 1.10
-    )
+    ):
+        return True
 
+    # A profitable-looking neural net is not enough if a simple rule performs
+    # better on the same untouched holdout. Compare only baselines with enough
+    # non-overlapping trades; this is a deployment veto, never a tuning signal.
+    eligible_baselines = []
+    for name, metrics in (baseline_metrics or {}).items():
+        if not isinstance(metrics, dict):
+            continue
+        try:
+            baseline_trades = int(metrics.get("trade_count", 0) or 0)
+            baseline_average = float(metrics.get("average_net_return"))
+            baseline_compounded = float(metrics.get("compounded_net_return"))
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if (
+            baseline_trades >= min_trades
+            and np.isfinite(baseline_average)
+            and np.isfinite(baseline_compounded)
+        ):
+            eligible_baselines.append((name, baseline_average, baseline_compounded))
+    if eligible_baselines:
+        best_baseline = max(eligible_baselines, key=lambda item: (item[2], item[1]))
+        if compounded <= best_baseline[2] or average <= best_baseline[1]:
+            return True
+    return False
 
 
 def select_validation_candidate(candidate_trials: list[dict], min_trades: int = 30) -> dict | None:
@@ -680,6 +710,7 @@ def main() -> None:
     test_returns = forward_returns[val_end:]
     if len(val_returns) != len(y_val) or len(test_returns) != len(y_test):
         raise ValueError("Forward-return slices do not match the purged validation/test partitions")
+    x_test_raw = x_test.copy()  # Keep unscaled returns/features for rule-baseline comparison.
     scaler = StandardScaler()
     x_train = scaler.fit_transform(x_train).astype(np.float32)
     x_val = scaler.transform(x_val).astype(np.float32)
@@ -825,6 +856,23 @@ def main() -> None:
         label_threshold=args.label_threshold,
     )
     test_metrics["paper_backtest_after_assumed_costs"] = paper_metrics
+    # Compare Kitty with predeclared rules on the exact same untouched holdout.
+    # Baselines are diagnostics and a safety veto, not a way to tune the model.
+    baseline_threshold = args.label_threshold if args.label_threshold is not None else 0.003
+    baseline_comparison = {
+        "momentum_baseline_after_assumed_costs": evaluate_directional_rule(
+            x_test_raw[:, FEATURES.index("ret_6h")], test_returns,
+            threshold=baseline_threshold, round_trip_cost=args.round_trip_cost,
+        ),
+        "trend_confirmation_baseline_after_assumed_costs": evaluate_trend_confirmation_rule(
+            x_test_raw[:, FEATURES.index("ret_6h")],
+            x_test_raw[:, FEATURES.index("ret_24h")],
+            x_test_raw[:, FEATURES.index("close_vs_sma20")],
+            test_returns,
+            threshold=baseline_threshold, round_trip_cost=args.round_trip_cost,
+        ),
+    }
+    test_metrics["baseline_comparison_after_assumed_costs"] = baseline_comparison
     # Stress-test the untouched holdout at higher costs. These results are
     # diagnostic only and must never be used to tune or select the candidate.
     test_metrics["holdout_cost_sensitivity"] = evaluate_cost_sensitivity(
@@ -834,7 +882,9 @@ def main() -> None:
     test_metrics["selected_min_confidence_from_validation"] = selected_confidence
     test_metrics["validation_threshold_trials"] = threshold_trials
     test_metrics["threshold_selection_note"] = threshold_selection_note
-    test_metrics["signals_disabled_for_no_validated_edge"] = should_disable_signals(selected_confidence, paper_metrics)
+    test_metrics["signals_disabled_for_no_validated_edge"] = should_disable_signals(
+        selected_confidence, paper_metrics, baseline_metrics=baseline_comparison,
+    )
     # Reference points make it harder to mistake a weak classifier for a useful
     # trading model. These are diagnostics, not competing deployable models.
     test_metrics["majority_class_baseline_accuracy"] = float(
