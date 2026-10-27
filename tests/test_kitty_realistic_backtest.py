@@ -121,6 +121,29 @@ class KittyRealisticBacktestTests(unittest.TestCase):
             self.assertEqual(entry_time - signal_time, pd.Timedelta(minutes=5))
             self.assertLessEqual(exit_time - entry_time, pd.Timedelta(hours=2))
 
+
+    def test_runner_selects_parameters_only_on_validation_and_fails_closed_without_edge(self):
+        idx = pd.date_range("2026-01-01", periods=1800, freq="5min", tz="UTC")
+        close = 100 + np.sin(np.arange(len(idx)) / 5) * 0.1
+        frame = pd.DataFrame({
+            "timestamp": idx, "open": close, "high": close + .03,
+            "low": close - .03, "close": close,
+        })
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "btc.csv"
+            frame.to_csv(path, index=False)
+            forced = pd.Series(0, index=idx)
+            with patch("run_kitty_realistic_backtest.build_mtf_signals", return_value=forced):
+                report = evaluate_csv(path, "BTC", 2.0)
+        self.assertFalse(report["production_ready"])
+        self.assertFalse(report["automatic_order_execution_enabled"])
+        self.assertFalse(report["candidate_selection"]["selected"])
+        self.assertEqual(report["candidate_selection"]["reason"], "no_validation_candidate_passed_edge_gate")
+        self.assertTrue(report["candidate_selection"]["parameter_tuning_on_holdout"] is False)
+        self.assertEqual(report["result"]["trade_count"], 0)
+
     def test_mtf_signals_are_valid_and_warmup_is_no_trade(self):
         idx = pd.date_range("2025-01-01", periods=1200, freq="5min", tz="UTC")
         close = 100 + np.arange(len(idx)) * 0.01 + np.sin(np.arange(len(idx)) / 8) * 0.1
