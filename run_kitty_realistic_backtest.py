@@ -57,7 +57,49 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
     signals = build_mtf_signals(frame)
     validation = frame.iloc[train_end:validation_end].copy()
     holdout = frame.iloc[validation_end:].copy()
-    config = BacktestConfig(
+    # Select risk parameters on validation only. The final holdout is evaluated
+    # once with the selected parameters and never used to choose them.
+    stop_grid, target_grid, hold_grid = (
+        ([0.003, 0.005, 0.007], [0.006, 0.010, 0.014], [12, 24, 36])
+        if symbol == "BTC"
+        else ([0.002, 0.003, 0.004], [0.004, 0.006, 0.008], [12, 24, 36])
+    )
+    candidates = []
+    for stop_pct in stop_grid:
+        for target_pct in target_grid:
+            for max_hold_bars in hold_grid:
+                candidate_config = BacktestConfig(
+                    stop_pct=stop_pct,
+                    target_pct=target_pct,
+                    max_hold_bars=max_hold_bars,
+                    spread_bps_per_side=cost_bps_per_side,
+                    commission_bps_per_side=0.0,
+                    slippage_bps_per_side=2.0,
+                )
+                validation_result = backtest_ohlc(
+                    validation, signals.reindex(validation.index), candidate_config
+                )
+                # Edge gate is deliberately conservative; no candidate is
+                # selected merely because it is the least bad one.
+                eligible = (
+                    validation_result["trade_count"] >= 20
+                    and validation_result["compounded_net_return"] > 0
+                    and validation_result["profit_factor"] is not None
+                    and validation_result["profit_factor"] >= 1.10
+                    and validation_result["max_drawdown"] >= -0.05
+                )
+                candidates.append({
+                    "config": candidate_config,
+                    "validation": validation_result,
+                    "eligible": eligible,
+                })
+    eligible_candidates = [item for item in candidates if item["eligible"]]
+    selected = max(
+        eligible_candidates,
+        key=lambda item: item["validation"]["compounded_net_return"],
+        default=None,
+    )
+    diagnostic_config = BacktestConfig(
         stop_pct=0.005 if symbol == "BTC" else 0.003,
         target_pct=0.010 if symbol == "BTC" else 0.006,
         max_hold_bars=24,
@@ -65,8 +107,27 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
         commission_bps_per_side=0.0,
         slippage_bps_per_side=2.0,
     )
-    validation_full = backtest_ohlc(validation, signals.reindex(validation.index), config)
-    result = backtest_ohlc(holdout, signals.reindex(holdout.index), config)
+    chosen_config = selected["config"] if selected else diagnostic_config
+    validation_full = backtest_ohlc(
+        validation, signals.reindex(validation.index), chosen_config
+    )
+    result = backtest_ohlc(holdout, signals.reindex(holdout.index), chosen_config)
+    candidate_selection = {
+        "selected": selected is not None,
+        "reason": "validation_edge_gate_passed" if selected else "no_validation_candidate_passed_edge_gate",
+        "candidates_evaluated": len(candidates),
+        "eligible_candidates": len(eligible_candidates),
+        "minimum_validation_trades": 20,
+        "minimum_validation_profit_factor": 1.10,
+        "minimum_validation_compounded_return": 0.0,
+        "maximum_validation_drawdown": -0.05,
+        "parameter_tuning_on_holdout": False,
+        "selected_config": ({
+            "stop_pct": chosen_config.stop_pct,
+            "target_pct": chosen_config.target_pct,
+            "max_hold_bars": chosen_config.max_hold_bars,
+        } if selected else None),
+    }
     return {
         "symbol": symbol,
         "data_file": str(path),
@@ -78,6 +139,7 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
         "validation_start": validation.index[0].isoformat(),
         "validation_rows": len(validation),
         "validation_result": {key: value for key, value in validation_full.items() if key != "trades"},
+        "candidate_selection": candidate_selection,
         "holdout_start": holdout.index[0].isoformat(),
         "holdout_rows": len(holdout),
         "holdout_fraction": 0.2,
