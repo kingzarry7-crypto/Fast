@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from kitty_realistic_backtest import BacktestConfig, backtest_ohlc, build_mtf_signals
+from run_kitty_realistic_backtest import evaluate_csv
 
 
 class KittyRealisticBacktestTests(unittest.TestCase):
@@ -51,6 +52,28 @@ class KittyRealisticBacktestTests(unittest.TestCase):
         no_trade = backtest_ohlc(frame, pd.Series([0, 0, 0], index=frame.index))
         self.assertEqual(no_trade["trade_count"], 0)
         self.assertIsNone(no_trade["profit_factor"])
+
+    def test_csv_runner_uses_chronological_holdout_and_keeps_orders_disabled(self):
+        idx = pd.date_range("2026-01-01", periods=1200, freq="5min", tz="UTC")
+        close = 100 + np.arange(len(idx)) * 0.005 + np.sin(np.arange(len(idx)) / 8) * 0.1
+        frame = pd.DataFrame({
+            "timestamp": idx,
+            "open": close,
+            "high": close + .05,
+            "low": close - .05,
+            "close": close,
+        })
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "btc.csv"
+            frame.to_csv(path, index=False)
+            report = evaluate_csv(path, "BTC", 2.0)
+        self.assertEqual(report["holdout_rows"], 240)
+        self.assertFalse(report["parameter_tuning_on_holdout"])
+        self.assertFalse(report["production_ready"])
+        self.assertFalse(report["automatic_order_execution_enabled"])
+        self.assertIn("compounded_net_return", report["result"])
 
     def test_mtf_signals_are_valid_and_warmup_is_no_trade(self):
         idx = pd.date_range("2025-01-01", periods=1200, freq="5min", tz="UTC")
