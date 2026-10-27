@@ -79,6 +79,20 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
     }
 
 
+def _json_safe(value):
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, float) and not pd.notna(value):
+        return None
+    if isinstance(value, float) and value == float("inf"):
+        return "Infinity"
+    if isinstance(value, float) and value == float("-inf"):
+        return "-Infinity"
+    return value
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--symbol", choices=("BTC", "XAUUSD"), required=True)
@@ -89,7 +103,7 @@ def main() -> None:
     args = parser.parse_args()
     report = evaluate_csv(args.csv, args.symbol, args.spread_bps_per_side)
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, indent=2, allow_nan=False) + "\\n", encoding="utf-8")
+    args.output.write_text(json.dumps(_json_safe(report), indent=2, allow_nan=False) + "\\n", encoding="utf-8")
     print(json.dumps({**report, "trade_log": f"{len(report['trade_log'])} trades saved in output"}, indent=2, allow_nan=False))
 
 
