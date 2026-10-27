@@ -147,10 +147,22 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
     chosen_strategy = selected["strategy"] if selected else "mtf_cross"
     chosen_direction_mode = selected["direction_mode"] if selected else "both"
     chosen_signals = selected["signals"] if selected else strategy_signals[("mtf_cross", "both")]
-    validation_full = backtest_ohlc(
+    # Always compute the fallback for diagnostics, but never report it as the
+    # selected holdout result when no candidate passes the validation edge gate.
+    diagnostic_validation = backtest_ohlc(
         validation, chosen_signals.reindex(validation.index), chosen_config
     )
-    result = backtest_ohlc(holdout, chosen_signals.reindex(holdout.index), chosen_config)
+    diagnostic_holdout = backtest_ohlc(
+        holdout, chosen_signals.reindex(holdout.index), chosen_config
+    )
+    if selected is not None:
+        validation_full = diagnostic_validation
+        result = diagnostic_holdout
+    else:
+        no_trade_validation = pd.Series(0, index=validation.index, dtype=int)
+        no_trade_holdout = pd.Series(0, index=holdout.index, dtype=int)
+        validation_full = backtest_ohlc(validation, no_trade_validation, chosen_config)
+        result = backtest_ohlc(holdout, no_trade_holdout, chosen_config)
     candidate_selection = {
         "selected": selected is not None,
         "reason": "validation_edge_gate_passed" if selected else "no_validation_candidate_passed_edge_gate",
@@ -185,6 +197,10 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
         "validation_start": validation.index[0].isoformat(),
         "validation_rows": len(validation),
         "validation_result": {key: value for key, value in validation_full.items() if key != "trades"},
+        "diagnostic_validation_result": (
+            {key: value for key, value in diagnostic_validation.items() if key != "trades"}
+            if selected is None else None
+        ),
         "candidate_selection": candidate_selection,
         "holdout_start": holdout.index[0].isoformat(),
         "holdout_rows": len(holdout),
@@ -197,7 +213,12 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
             "spread_is_measured_JustMarkets_spread": False,
         },
         "result": {key: value for key, value in result.items() if key != "trades"},
+        "diagnostic_result": (
+            {key: value for key, value in diagnostic_holdout.items() if key != "trades"}
+            if selected is None else None
+        ),
         "trade_log": result["trades"],
+        "diagnostic_trade_log": diagnostic_holdout["trades"] if selected is None else [],
         "research_only": True,
         "holdout_edge_gate_passed": bool(
             selected is not None

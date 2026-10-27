@@ -93,7 +93,11 @@ class KittyRealisticBacktestTests(unittest.TestCase):
             forced_signals = pd.Series(1, index=pd.DatetimeIndex(idx))
             with patch("run_kitty_realistic_backtest.build_mtf_signals", return_value=forced_signals):
                 report = evaluate_csv(path, "BTC", 2.0)
-        self.assertGreater(report["result"]["trade_count"], 0)
+        effective_or_diagnostic = (
+            report["result"] if report["candidate_selection"]["selected"]
+            else report["diagnostic_result"]
+        )
+        self.assertGreater(effective_or_diagnostic["trade_count"], 0)
 
 
     def test_xauusd_filters_weekend_quotes_and_does_not_hold_through_closure(self):
@@ -112,7 +116,11 @@ class KittyRealisticBacktestTests(unittest.TestCase):
             with patch("run_kitty_realistic_backtest.build_mtf_signals", return_value=forced_signals):
                 report = evaluate_csv(path, "XAUUSD", 5.0)
         self.assertLess(report["source_rows"], report["raw_rows"])
-        self.assertGreater(report["result"]["trade_count"], 0)
+        effective_or_diagnostic = (
+            report["result"] if report["candidate_selection"]["selected"]
+            else report["diagnostic_result"]
+        )
+        self.assertGreater(effective_or_diagnostic["trade_count"], 0)
         for trade in report["trade_log"]:
             signal_time = pd.Timestamp(trade["signal_time"])
             entry_time = pd.Timestamp(trade["entry_time"])
@@ -162,6 +170,34 @@ class KittyRealisticBacktestTests(unittest.TestCase):
             candidate = build_mtf_signals(frame, strategy=strategy)
             self.assertEqual(len(candidate), len(frame))
             self.assertTrue(candidate.isin([-1, 0, 1]).all())
+
+
+    def test_unvalidated_fallback_is_diagnostic_only_and_never_reported_as_selected_result(self):
+        idx = pd.date_range("2026-01-01", periods=1800, freq="5min", tz="UTC")
+        close = 100 + np.sin(np.arange(len(idx)) / 5) * 0.1
+        frame = pd.DataFrame({
+            "timestamp": idx,
+            "open": close,
+            "high": close + .03,
+            "low": close - .03,
+            "close": close,
+        })
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "btc.csv"
+            frame.to_csv(path, index=False)
+            forced = pd.Series(1, index=idx)
+            with patch("run_kitty_realistic_backtest.build_mtf_signals", return_value=forced):
+                report = evaluate_csv(path, "BTC", 2.0)
+        self.assertFalse(report["candidate_selection"]["selected"])
+        self.assertEqual(report["result"]["trade_count"], 0)
+        self.assertIsNone(report["result"]["profit_factor"])
+        self.assertIn("diagnostic_result", report)
+        self.assertGreater(report["diagnostic_result"]["trade_count"], 0)
+        self.assertFalse(report["holdout_edge_gate_passed"])
+        self.assertFalse(report["production_ready"])
+        self.assertFalse(report["automatic_order_execution_enabled"])
 
 
 if __name__ == "__main__":
