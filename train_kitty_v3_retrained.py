@@ -254,6 +254,78 @@ def evaluate_directional_rule(
     }
 
 
+
+def evaluate_trend_confirmation_rule(
+    momentum_returns: np.ndarray,
+    medium_term_returns: np.ndarray,
+    trend_distance: np.ndarray,
+    forward_returns: np.ndarray,
+    threshold: float,
+    round_trip_cost: float,
+) -> dict:
+    """Evaluate a predeclared 6h momentum rule gated by 24h momentum and SMA20 trend."""
+    arrays = [
+        np.asarray(values, dtype=np.float64)
+        for values in (momentum_returns, medium_term_returns, trend_distance, forward_returns)
+    ]
+    if any(values.ndim != 1 for values in arrays) or len({len(values) for values in arrays}) != 1:
+        raise ValueError("Trend confirmation inputs must be equal-length one-dimensional arrays")
+    if any(not np.isfinite(values).all() for values in arrays):
+        raise ValueError("Trend confirmation inputs must contain only finite values")
+    if not np.isfinite(threshold) or threshold <= 0:
+        raise ValueError("threshold must be a positive finite return fraction")
+    if not np.isfinite(round_trip_cost) or not 0 <= round_trip_cost < 0.05:
+        raise ValueError("round_trip_cost must be between 0 and 5%")
+
+    momentum, medium_term, trend, returns = arrays
+    trades = []
+    next_entry_index = 0
+    skipped_overlapping_signals = 0
+    confirmation_rejected_signals = 0
+    for index, (short_momentum, medium_momentum, trend_gap, raw_return) in enumerate(
+        zip(momentum, medium_term, trend, returns)
+    ):
+        if index < next_entry_index:
+            skipped_overlapping_signals += 1
+            continue
+        if abs(float(short_momentum)) < threshold:
+            continue
+        direction = 1.0 if short_momentum > 0 else -1.0
+        if direction * medium_momentum <= 0 or direction * trend_gap <= 0:
+            confirmation_rejected_signals += 1
+            continue
+        trades.append(direction * float(raw_return) - round_trip_cost)
+        next_entry_index = index + LABEL_HORIZON_HOURS + 1
+
+    if not trades:
+        return {
+            "trade_count": 0, "win_rate": None, "average_net_return": None,
+            "profit_factor": None, "compounded_net_return": 0.0, "max_drawdown": 0.0,
+            "skipped_overlapping_signals": skipped_overlapping_signals,
+            "confirmation_rejected_signals": confirmation_rejected_signals,
+            "round_trip_cost_assumption": round_trip_cost,
+            "momentum_threshold": threshold,
+        }
+    net = np.asarray(trades, dtype=np.float64)
+    equity = np.cumprod(1.0 + net)
+    peaks = np.maximum.accumulate(np.concatenate(([1.0], equity)))[1:]
+    gross_profit = float(net[net > 0].sum())
+    gross_loss = float(-net[net < 0].sum())
+    return {
+        "trade_count": len(trades),
+        "win_rate": float(np.mean(net > 0)),
+        "average_net_return": float(np.mean(net)),
+        "profit_factor": float(gross_profit / gross_loss if gross_loss > 0 else (999.0 if gross_profit > 0 else 0.0)),
+        "compounded_net_return": float(equity[-1] - 1.0),
+        "max_drawdown": float(np.min(equity / peaks - 1.0)),
+        "skipped_overlapping_signals": skipped_overlapping_signals,
+        "confirmation_rejected_signals": confirmation_rejected_signals,
+        "round_trip_cost_assumption": round_trip_cost,
+        "momentum_threshold": threshold,
+    }
+
+
+
 def evaluate_walk_forward(
     x: np.ndarray,
     y: np.ndarray,
@@ -325,6 +397,14 @@ def evaluate_walk_forward(
             x_test_raw[:, momentum_index], test_returns,
             threshold=label_threshold, round_trip_cost=round_trip_cost,
         )
+        trend_metrics = evaluate_trend_confirmation_rule(
+            x_test_raw[:, momentum_index],
+            x_test_raw[:, FEATURES.index("ret_24h")],
+            x_test_raw[:, FEATURES.index("close_vs_sma20")],
+            test_returns,
+            threshold=label_threshold,
+            round_trip_cost=round_trip_cost,
+        )
         fold_reports.append({
             "fold": fold_index + 1,
             "train_end_index": train_stop,
@@ -337,6 +417,7 @@ def evaluate_walk_forward(
             "threshold_selection_note": selection_note,
             "model_after_costs": model_metrics,
             "momentum_baseline_after_costs": momentum_metrics,
+            "trend_confirmation_baseline_after_costs": trend_metrics,
         })
     return {
         "purpose": "expanding-window robustness diagnostic; each fold threshold is selected on its own prior validation window; final candidate selection is unchanged and final holdout remains untouched",
@@ -350,6 +431,11 @@ def evaluate_walk_forward(
             1 for fold in fold_reports
             if (fold["momentum_baseline_after_costs"].get("average_net_return") or 0.0) > 0.0
             and fold["momentum_baseline_after_costs"].get("trade_count", 0) > 0
+        ),
+        "trend_confirmation_profitable_fold_count": sum(
+            1 for fold in fold_reports
+            if (fold["trend_confirmation_baseline_after_costs"].get("average_net_return") or 0.0) > 0.0
+            and fold["trend_confirmation_baseline_after_costs"].get("trade_count", 0) > 0
         ),
         "folds": fold_reports,
     }
