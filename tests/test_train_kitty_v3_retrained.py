@@ -149,6 +149,34 @@ class KittyTrainingExperimentTests(unittest.TestCase):
         self.assertFalse(kitty.should_disable_signals(0.5, holdout))
         self.assertTrue(kitty.should_disable_signals(1.01, holdout))
 
+    def test_holdout_gate_disables_kitty_when_a_well_sampled_baseline_is_better(self):
+        holdout = {
+            "trade_count": 35, "average_net_return": 0.001,
+            "compounded_net_return": 0.02, "max_drawdown": -0.03,
+            "profit_factor": 1.2,
+        }
+        baselines = {
+            "momentum": {
+                "trade_count": 40, "average_net_return": 0.0015,
+                "compounded_net_return": 0.04,
+            }
+        }
+        self.assertTrue(kitty.should_disable_signals(0.5, holdout, baseline_metrics=baselines))
+
+    def test_holdout_gate_allows_kitty_only_when_it_beats_well_sampled_baselines(self):
+        holdout = {
+            "trade_count": 35, "average_net_return": 0.002,
+            "compounded_net_return": 0.05, "max_drawdown": -0.03,
+            "profit_factor": 1.2,
+        }
+        baselines = {
+            "momentum": {
+                "trade_count": 40, "average_net_return": 0.001,
+                "compounded_net_return": 0.02,
+            }
+        }
+        self.assertFalse(kitty.should_disable_signals(0.5, holdout, baseline_metrics=baselines))
+
     def test_holdout_gate_disables_signals_when_profit_factor_is_below_minimum(self):
         holdout = {"trade_count": 35, "average_net_return": 0.001, "compounded_net_return": 0.02, "max_drawdown": -0.03, "profit_factor": 1.05}
         self.assertTrue(kitty.should_disable_signals(0.5, holdout))
