@@ -87,6 +87,11 @@ def backtest_ohlc(
             i += 1
             continue
         entry_i = i + 1
+        # A signal from before a session/data gap cannot be filled at the next
+        # available bar's open as though the market had remained tradable.
+        if frame.index[entry_i] - frame.index[i] > pd.Timedelta(minutes=5):
+            i += 1
+            continue
         entry = o[entry_i]
         stop = entry * (1 - direction * config.stop_pct)
         target = entry * (1 + direction * config.target_pct)
@@ -109,6 +114,11 @@ def backtest_ohlc(
                 if target_hit:
                     exit_i, exit_price, reason = j, target, "target"
                     break
+            # Do not carry an intraday position through a market closure or a
+            # data outage. Exit on the last tradable candle before the gap.
+            if j < len(frame) - 1 and frame.index[j + 1] - frame.index[j] > pd.Timedelta(minutes=5):
+                exit_i, exit_price, reason = j, c[j], "session_close"
+                break
         gross = direction * (exit_price / entry - 1)
         net = gross - cost
         trades.append({
