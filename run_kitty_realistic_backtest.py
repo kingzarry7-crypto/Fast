@@ -29,20 +29,13 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
     gaps = frame.index.to_series().diff().dropna()
     if (gaps <= pd.Timedelta(0)).any():
         raise ValueError(f"{symbol}: candle timestamps must be strictly increasing")
-    # Gaps are permitted for exchange closures, but suppress signals for 26
-    # completed 4H bars after each gap so the slow trend EMA is not trusted on
-    # a discontinuous history. This is intentionally conservative.
+    # Session/weekend gaps are real market closures, not missing candles to
+    # synthesize. Resampling drops empty intervals; retain prior completed
+    # higher-timeframe context rather than suppressing ~5 days after every gap.
     split = int(len(frame) * 0.8)
     # Generate indicators over prior history for realistic warm-up, but evaluate
     # only signals observed in the final holdout. Entries still occur next open.
     signals = build_mtf_signals(frame)
-    gap_rows = frame.index.to_series().diff().gt(pd.Timedelta(minutes=5))
-    if gap_rows.any():
-        gap_positions = [i for i, value in enumerate(gap_rows.to_numpy()) if value]
-        signal_values = signals.to_numpy(copy=True)
-        for gap_i in gap_positions:
-            signal_values[gap_i:min(len(signal_values), gap_i + 26 * 48)] = 0
-        signals = pd.Series(signal_values, index=frame.index, name="signal")
     holdout = frame.iloc[split:].copy()
     holdout_signals = signals.reindex(holdout.index).copy()
     if len(holdout_signals):
@@ -103,7 +96,7 @@ def main() -> None:
     args = parser.parse_args()
     report = evaluate_csv(args.csv, args.symbol, args.spread_bps_per_side)
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(_json_safe(report), indent=2, allow_nan=False) + "\\n", encoding="utf-8")
+    args.output.write_text(json.dumps(_json_safe(report), indent=2, allow_nan=False) + "\n", encoding="utf-8")
     print(json.dumps({**report, "trade_log": f"{len(report['trade_log'])} trades saved in output"}, indent=2, allow_nan=False))
 
 
