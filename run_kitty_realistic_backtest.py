@@ -15,6 +15,22 @@ import pandas as pd
 from kitty_realistic_backtest import BacktestConfig, backtest_ohlc, build_mtf_signals
 
 
+def _filter_market_session(frame: pd.DataFrame, symbol: str) -> pd.DataFrame:
+    """Remove XAUUSD candles outside a conservative weekday trading session.
+
+    Timestamps are candle close times in UTC. Gold/CFD broker availability is
+    not continuous over weekends; do not trust vendor quotes while closed.
+    """
+    if symbol != "XAUUSD":
+        return frame
+    weekday = frame.index.dayofweek
+    minute_of_day = frame.index.hour * 60 + frame.index.minute
+    valid = weekday < 5
+    valid &= ~((weekday == 4) & (minute_of_day >= 21 * 60))
+    valid |= (weekday == 6) & (minute_of_day >= 22 * 60)
+    return frame.loc[valid].copy()
+
+
 def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dict:
     frame = pd.read_csv(path)
     required = {"timestamp", "open", "high", "low", "close"}
@@ -23,6 +39,8 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
         raise ValueError(f"{symbol}: CSV missing required columns: {sorted(missing)}")
     frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True, errors="raise")
     frame = frame.sort_values("timestamp").drop_duplicates("timestamp").set_index("timestamp")
+    raw_rows = len(frame)
+    frame = _filter_market_session(frame, symbol)
     if len(frame) < 1500:
         raise ValueError(f"{symbol}: need at least 1200 5-minute candles for timeframe warm-up and evaluation; got {len(frame)}")
     # Keep only contiguous five-minute candles so indicators cannot bridge data outages.
@@ -57,6 +75,7 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
     return {
         "symbol": symbol,
         "data_file": str(path),
+        "raw_rows": raw_rows,
         "source_rows": len(frame),
         "source_start": frame.index[0].isoformat(),
         "source_end": frame.index[-1].isoformat(),
