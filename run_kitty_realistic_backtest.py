@@ -88,14 +88,36 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
                 validation_result = backtest_ohlc(
                     validation, strategy_signal.reindex(validation.index), candidate_config
                 )
-                # Require a meaningful trade sample and positive after-cost edge;
-                # the final holdout is never used to select a strategy.
+                # Avoid selecting a one-window fluke: candidate must show a
+                # positive after-cost edge in at least two of three contiguous
+                # validation folds. The final 20% holdout remains untouched.
+                fold_results = []
+                for fold_number in range(3):
+                    fold_start = len(validation) * fold_number // 3
+                    fold_end = len(validation) * (fold_number + 1) // 3
+                    fold = validation.iloc[fold_start:fold_end]
+                    fold_signals = strategy_signal.reindex(fold.index)
+                    fold_result = backtest_ohlc(fold, fold_signals, candidate_config)
+                    fold_results.append({
+                        "trade_count": fold_result["trade_count"],
+                        "compounded_net_return": fold_result["compounded_net_return"],
+                        "profit_factor": fold_result["profit_factor"],
+                        "max_drawdown": fold_result["max_drawdown"],
+                    })
+                positive_folds = sum(
+                    item["trade_count"] >= 8
+                    and item["compounded_net_return"] > 0
+                    and item["profit_factor"] is not None
+                    and item["profit_factor"] >= 1.0
+                    for item in fold_results
+                )
                 eligible = (
                     validation_result["trade_count"] >= 20
                     and validation_result["compounded_net_return"] > 0
                     and validation_result["profit_factor"] is not None
                     and validation_result["profit_factor"] >= 1.10
                     and validation_result["max_drawdown"] >= -0.05
+                    and positive_folds >= 2
                 )
                 candidates.append({
                     "strategy": strategy,
@@ -103,6 +125,8 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
                     "signals": strategy_signal,
                     "config": candidate_config,
                     "validation": validation_result,
+                    "positive_validation_folds": positive_folds,
+                    "fold_results": fold_results,
                     "eligible": eligible,
                 })
     eligible_candidates = [item for item in candidates if item["eligible"]]
@@ -135,6 +159,9 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
         "direction_modes_evaluated": ["both", "long_only", "short_only"],
         "eligible_candidates": len(eligible_candidates),
         "minimum_validation_trades": 20,
+        "validation_folds": 3,
+        "minimum_trades_per_validation_fold": 8,
+        "minimum_positive_validation_folds": 2,
         "minimum_validation_profit_factor": 1.10,
         "minimum_validation_compounded_return": 0.0,
         "maximum_validation_drawdown": -0.05,
