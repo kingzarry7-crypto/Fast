@@ -91,7 +91,7 @@ class KittyMarketDatasetTests(unittest.TestCase):
     @unittest.mock.patch("prepare_kitty_market_dataset.requests.Session.get", side_effect=requests.HTTPError("451 blocked"))
     def test_binance_http_451_uses_public_fallback(self, mock_get, mock_fallback):
         fallback = pd.DataFrame({
-            "timestamp": pd.date_range("2025-01-01", periods=500, freq="h", tz="UTC"),
+            "timestamp": pd.date_range(pd.Timestamp.now(tz="UTC").floor("h") - pd.Timedelta(hours=500), periods=500, freq="h", tz="UTC"),
             "open": np.ones(500), "high": np.ones(500) * 1.01,
             "low": np.ones(500) * 0.99, "close": np.ones(500),
             "volume": np.ones(500),
@@ -163,6 +163,23 @@ class KittyMarketDatasetTests(unittest.TestCase):
                 float(dataset_row[feature]), float(runtime_features[feature]),
                 delta=1e-8, msg=f"training/runtime feature mismatch: {feature}",
             )
+
+    @unittest.mock.patch("prepare_kitty_market_dataset.requests.get")
+    def test_yahoo_hourly_rejects_stale_market_data(self, mock_get):
+        timestamps = [int(pd.Timestamp("2025-01-01", tz="UTC").timestamp()) + i * 3600 for i in range(600)]
+        quotes = {
+            "open": [100.0] * 600, "high": [101.0] * 600,
+            "low": [99.0] * 600, "close": [100.0] * 600,
+            "volume": [1.0] * 600,
+        }
+        response = unittest.mock.Mock()
+        response.json.return_value = {"chart": {"result": [{
+            "timestamp": timestamps, "indicators": {"quote": [quotes]}
+        }], "error": None}}
+        response.raise_for_status.return_value = None
+        mock_get.return_value = response
+        with self.assertRaisesRegex(RuntimeError, "stale hourly market data"):
+            builder.fetch_yahoo_hourly("BTC", limit=500)
 
 
 if __name__ == "__main__":
