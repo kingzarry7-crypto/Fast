@@ -1,0 +1,82 @@
+name: Kitty real-market 5m holdout backtest
+
+on:
+  push:
+    branches:
+      - kitty/realistic-mtf-backtest-20261027
+    paths:
+      - "fetch_kitty_5m_market_data.py"
+      - "run_kitty_realistic_backtest.py"
+      - "kitty_realistic_backtest.py"
+      - ".github/workflows/kitty-real-market-backtest.yml"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: Number of recent 5-minute candles per market (1500-5000)
+        required: true
+        default: "5000"
+        type: choice
+        options: ["1500", "3000", "5000"]
+
+permissions:
+  contents: read
+
+jobs:
+  btc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CANDLE_LIMIT: ${{ github.event.inputs.limit || '5000' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip numpy pandas requests
+      - name: Fetch real BTCUSDT spot candles
+        run: python fetch_kitty_5m_market_data.py --symbol BTC --limit "$CANDLE_LIMIT" --output research-data/BTC_5m.csv
+      - name: Run cost-aware chronological holdout
+        run: python run_kitty_realistic_backtest.py --symbol BTC --csv research-data/BTC_5m.csv --spread-bps-per-side 2.0 --output research-results/BTC_report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kitty-real-market-BTC-${{ github.run_number }}
+          path: |
+            research-data/BTC_5m.csv
+            research-results/BTC_report.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  xauusd:
+    runs-on: ubuntu-latest
+    environment: "my screty"
+    timeout-minutes: 15
+    env:
+      CANDLE_LIMIT: ${{ github.event.inputs.limit || '5000' }}
+      TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY || secrets.TWELVE_DATA_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip numpy pandas requests
+      - name: Require genuine XAU/USD spot API credential
+        run: |
+          if [ -z "$TWELVEDATA_API_KEY" ]; then
+            echo "::error::Set TWELVEDATA_API_KEY or TWELVE_DATA_API_KEY in the 'my screty' GitHub Actions environment."
+            exit 1
+          fi
+          echo "XAU/USD spot credential is configured; its value is not printed."
+      - name: Fetch genuine Twelve Data XAU/USD spot candles
+        run: python fetch_kitty_5m_market_data.py --symbol XAUUSD --limit "$CANDLE_LIMIT" --output research-data/XAUUSD_5m.csv
+      - name: Run cost-aware chronological holdout
+        run: python run_kitty_realistic_backtest.py --symbol XAUUSD --csv research-data/XAUUSD_5m.csv --spread-bps-per-side 5.0 --output research-results/XAUUSD_report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kitty-real-market-XAUUSD-${{ github.run_number }}
+          path: |
+            research-data/XAUUSD_5m.csv
+            research-results/XAUUSD_report.json
+          if-no-files-found: warn
+          retention-days: 30
