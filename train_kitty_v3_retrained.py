@@ -102,7 +102,8 @@ def split_chronologically(x: np.ndarray, y: np.ndarray, purge: int = 0):
 def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.ndarray,
                             round_trip_cost: float = 0.001, min_confidence: float = 0.50,
                             min_margin: float = 0.10, label_threshold: float | None = None,
-                            min_edge_cost_multiple: float = 1.25) -> dict:
+                            min_edge_cost_multiple: float = 1.25,
+                            use_edge_proxy: bool = False) -> dict:
     """One-pass holdout simulation matching inference confidence/margin filters."""
     if len(x) != len(forward_returns):
         raise ValueError("Test features and forward returns must have equal lengths")
@@ -142,7 +143,10 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
         # probability gap, scaled by the dataset's move threshold, to clear
         # the assumed all-in cost by a predeclared safety multiple.
         # This is a conservative edge proxy, not a calibrated return forecast.
-        if label_threshold is not None:
+        if label_threshold is not None and use_edge_proxy:
+            # Optional legacy diagnostic only: a probability gap is not a
+            # calibrated expected-return estimate. Production research selection
+            # instead uses realized validation net returns after assumed costs.
             directional_gap = abs(float(probabilities[2]) - float(probabilities[0]))
             directional_edge_proxy = directional_gap * label_threshold
             if directional_edge_proxy < round_trip_cost * min_edge_cost_multiple:
