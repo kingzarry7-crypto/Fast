@@ -359,8 +359,26 @@ class KittyTrainingExperimentTests(unittest.TestCase):
             test_ranges.append((fold["test_start_index"], fold["test_end_index"]))
             self.assertIn("model_after_costs", fold)
             self.assertIn("momentum_baseline_after_costs", fold)
+            self.assertIn("trend_confirmation_baseline_after_costs", fold)
+        self.assertIn("trend_confirmation_profitable_fold_count", report)
         self.assertEqual(test_ranges[0][1], test_ranges[1][0])
         self.assertEqual(test_ranges[1][1], test_ranges[2][0])
+
+    def test_trend_confirmation_rule_requires_multi_timeframe_alignment(self):
+        momentum = np.full(15, 0.004, dtype=np.float64)
+        medium_term = np.full(15, 0.006, dtype=np.float64)
+        trend = np.full(15, 0.002, dtype=np.float64)
+        medium_term[7:14] = -0.006
+        trend[7:14] = -0.002
+        forward_returns = np.full(15, 0.01, dtype=np.float64)
+        result = kitty.evaluate_trend_confirmation_rule(
+            momentum, medium_term, trend, forward_returns,
+            threshold=0.003, round_trip_cost=0.001,
+        )
+        self.assertEqual(result["trade_count"], 2)
+        self.assertAlmostEqual(result["average_net_return"], 0.009, places=12)
+        self.assertAlmostEqual(result["compounded_net_return"], (1.009 ** 2) - 1.0, places=12)
+        self.assertEqual(result["confirmation_rejected_signals"], 7)
 
 
 if __name__ == "__main__":
