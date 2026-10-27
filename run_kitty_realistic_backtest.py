@@ -50,28 +50,23 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
     # Session/weekend gaps are real market closures, not missing candles to
     # synthesize. Resampling drops empty intervals; retain prior completed
     # higher-timeframe context rather than suppressing ~5 days after every gap.
-    split = int(len(frame) * 0.8)
-    # Generate indicators over prior history for realistic warm-up, but evaluate
-    # only signals observed in the final holdout. Entries still occur next open.
+    train_end = int(len(frame) * 0.6)
+    validation_end = int(len(frame) * 0.8)
+    # Build causal indicators across the history, but report validation and the
+    # final chronological holdout separately. Never tune on the final 20%.
     signals = build_mtf_signals(frame)
-    holdout = frame.iloc[split:].copy()
-    holdout_signals = signals.reindex(holdout.index).copy()
-    if len(holdout_signals):
-        # The first holdout row's signal was formed using history before split;
-        # this is causal, but no trade may be open from the validation segment.
-        pass
-    result = backtest_ohlc(
-        holdout,
-        holdout_signals,
-        BacktestConfig(
-            stop_pct=0.005 if symbol == "BTC" else 0.003,
-            target_pct=0.010 if symbol == "BTC" else 0.006,
-            max_hold_bars=24,
-            spread_bps_per_side=cost_bps_per_side,
-            commission_bps_per_side=0.0,
-            slippage_bps_per_side=2.0,
-        ),
+    validation = frame.iloc[train_end:validation_end].copy()
+    holdout = frame.iloc[validation_end:].copy()
+    config = BacktestConfig(
+        stop_pct=0.005 if symbol == "BTC" else 0.003,
+        target_pct=0.010 if symbol == "BTC" else 0.006,
+        max_hold_bars=24,
+        spread_bps_per_side=cost_bps_per_side,
+        commission_bps_per_side=0.0,
+        slippage_bps_per_side=2.0,
     )
+    validation_full = backtest_ohlc(validation, signals.reindex(validation.index), config)
+    result = backtest_ohlc(holdout, signals.reindex(holdout.index), config)
     return {
         "symbol": symbol,
         "data_file": str(path),
@@ -79,10 +74,20 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
         "source_rows": len(frame),
         "source_start": frame.index[0].isoformat(),
         "source_end": frame.index[-1].isoformat(),
+        "training_context_rows": train_end,
+        "validation_start": validation.index[0].isoformat(),
+        "validation_rows": len(validation),
+        "validation_result": {key: value for key, value in validation_full.items() if key != "trades"},
         "holdout_start": holdout.index[0].isoformat(),
         "holdout_rows": len(holdout),
         "holdout_fraction": 0.2,
         "parameter_tuning_on_holdout": False,
+        "cost_assumptions": {
+            "spread_bps_per_side": cost_bps_per_side,
+            "commission_bps_per_side": 0.0,
+            "slippage_bps_per_side": 2.0,
+            "spread_is_measured_JustMarkets_spread": False,
+        },
         "result": {key: value for key, value in result.items() if key != "trades"},
         "trade_log": result["trades"],
         "research_only": True,
