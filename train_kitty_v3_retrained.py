@@ -190,6 +190,27 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
     }
 
 
+def evaluate_cost_sensitivity(
+    model: nn.Module, x: np.ndarray, forward_returns: np.ndarray,
+    round_trip_cost: float, min_confidence: float,
+    label_threshold: float | None = None,
+) -> dict:
+    """Diagnostic-only holdout stress test; never used to select the model or threshold."""
+    scenarios = {}
+    for multiplier in (1.0, 1.5, 2.0):
+        cost = round_trip_cost * multiplier
+        metrics = evaluate_paper_returns(
+            model, x, forward_returns, round_trip_cost=cost,
+            min_confidence=min_confidence, label_threshold=label_threshold,
+        )
+        scenarios[f"{multiplier:g}x_assumed_cost"] = metrics
+    return {
+        "purpose": "holdout robustness diagnostic only; not used for model or threshold selection",
+        "base_round_trip_cost": round_trip_cost,
+        "scenarios": scenarios,
+    }
+
+
 def select_confidence_threshold(threshold_trials: list[dict], min_trades: int = 30) -> tuple[float, str]:
     """Select only a validation threshold with meaningful net returns, sample size, and bounded drawdown."""
     eligible = []
@@ -540,6 +561,12 @@ def main() -> None:
         label_threshold=args.label_threshold,
     )
     test_metrics["paper_backtest_after_assumed_costs"] = paper_metrics
+    # Stress-test the untouched holdout at higher costs. These results are
+    # diagnostic only and must never be used to tune or select the candidate.
+    test_metrics["holdout_cost_sensitivity"] = evaluate_cost_sensitivity(
+        winning_model, x_test, test_returns, args.round_trip_cost,
+        selected_confidence, args.label_threshold,
+    )
     test_metrics["selected_min_confidence_from_validation"] = selected_confidence
     test_metrics["validation_threshold_trials"] = threshold_trials
     test_metrics["threshold_selection_note"] = threshold_selection_note
