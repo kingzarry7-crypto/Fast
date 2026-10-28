@@ -1,6 +1,6 @@
 """Fetch genuine 5-minute market candles for Kitty research only.
 
-BTC source: Binance public BTCUSDT spot klines.
+BTC source: Coinbase Exchange BTC-USD spot candles.
 XAUUSD source: Twelve Data XAU/USD spot, with no futures/Yahoo fallback.
 Provider timestamps denote bar opens and are shifted to candle-close UTC times.
 """
