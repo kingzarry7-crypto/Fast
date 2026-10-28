@@ -516,6 +516,7 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
             if selected is None else None
         ),
         "candidate_selection": candidate_selection,
+        "candidate_diagnostics": _candidate_diagnostic_summary(candidates),
         "trade_quality_confirmation": quality_confirmation,
         "holdout_start": holdout.index[0].isoformat(),
         "holdout_rows": len(holdout),
