@@ -162,9 +162,18 @@ def backtest_ohlc(
 
 def _completed_timeframe(frame: pd.DataFrame, rule: str, fast: int, slow: int, prefix: str) -> pd.DataFrame:
     """Calculate EMA direction on fully closed resampled candles."""
-    bars = frame[["open", "high", "low", "close"]].resample(rule, closed="right", label="right").agg(
+    # A resample bucket is not necessarily a complete candle: outages and
+    # session boundaries can leave only a few 5-minute bars in a 1H/4H bucket.
+    # Exclude incomplete buckets instead of letting them corrupt the HTF EMA.
+    expected_bars = int(pd.Timedelta(rule) / pd.Timedelta(minutes=5))
+    resampler = frame[["open", "high", "low", "close"]].resample(
+        rule, closed="right", label="right"
+    )
+    counts = resampler["close"].count()
+    bars = resampler.agg(
         {"open": "first", "high": "max", "low": "min", "close": "last"}
     ).dropna()
+    bars = bars.loc[counts.reindex(bars.index).eq(expected_bars)]
     bars[f"{prefix}_fast"] = bars["close"].ewm(span=fast, adjust=False, min_periods=fast).mean()
     bars[f"{prefix}_slow"] = bars["close"].ewm(span=slow, adjust=False, min_periods=slow).mean()
     bars[f"{prefix}_direction"] = np.sign(bars[f"{prefix}_fast"] - bars[f"{prefix}_slow"]).astype(float)
