@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from kitty_realistic_backtest import BacktestConfig, backtest_ohlc, build_mtf_signals, _completed_timeframe
-from run_kitty_realistic_backtest import _candidate_stability_key, evaluate_csv
+from run_kitty_realistic_backtest import _candidate_stability_key, _json_safe, evaluate_csv
 
 
 class KittyRealisticBacktestTests(unittest.TestCase):
@@ -255,6 +255,22 @@ class KittyRealisticBacktestTests(unittest.TestCase):
         signals = build_mtf_signals(frame, strategy="mtf_pullback")
         self.assertEqual(len(signals), len(frame))
         self.assertTrue(signals.isin([-1, 0, 1]).all())
+
+
+    def test_json_safe_converts_infinite_and_nan_metrics_for_console_output(self):
+        report = {
+            "profit_factor": float("inf"),
+            "nan_metric": float("nan"),
+            "nested": [{"ratio": float("-inf")}],
+        }
+        safe = _json_safe(report)
+        self.assertEqual(safe["profit_factor"], "Infinity")
+        self.assertIsNone(safe["nan_metric"])
+        self.assertEqual(safe["nested"][0]["ratio"], "-Infinity")
+        # The same strict JSON mode used by the CLI must now serialize safely.
+        import json
+        json.dumps(safe, allow_nan=False)
+
 
 if __name__ == "__main__":
     unittest.main()
