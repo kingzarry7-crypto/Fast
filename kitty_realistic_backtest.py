@@ -236,7 +236,7 @@ def build_mtf_signals(candles_5m: pd.DataFrame, strategy: str = "mtf_cross") -> 
         timing_short = (momentum < -0.001) & rsi.between(30, 50)
         timing_long &= ~timing_long.shift(1, fill_value=False)
         timing_short &= ~timing_short.shift(1, fill_value=False)
-    else:
+    elif strategy == "mtf_pullback":
         # Pullback continuation: require aligned higher-timeframe regime, a
         # reclaim/loss of the fast EMA, confirmation from the 8/21 EMA stack,
         # moderate RSI, and a non-extended entry relative to ATR.
