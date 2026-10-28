@@ -87,6 +87,12 @@ def backtest_ohlc(
             i += 1
             continue
         entry_i = i + 1
+        # Do not score a new trade unless the full configured holding horizon
+        # is available inside this evaluation segment. Otherwise the segment's
+        # final candle would force an artificially early time exit.
+        if entry_i + config.max_hold_bars - 1 >= len(frame):
+            i += 1
+            continue
         # A signal from before a session/data gap cannot be filled at the next
         # available bar's open as though the market had remained tradable.
         if frame.index[entry_i] - frame.index[i] > pd.Timedelta(minutes=5):
