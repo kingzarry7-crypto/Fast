@@ -187,8 +187,8 @@ def build_mtf_signals(candles_5m: pd.DataFrame, strategy: str = "mtf_cross") -> 
     backward-asof joined only after those candles have closed. Signal at close
     executes no earlier than the next 5-minute candle open in backtest_ohlc.
     """
-    if strategy not in {"mtf_cross", "mtf_trend", "mtf_momentum", "mtf_pullback"}:
-        raise ValueError("strategy must be mtf_cross, mtf_trend, mtf_momentum, or mtf_pullback")
+    if strategy not in {"mtf_cross", "mtf_trend", "mtf_momentum", "mtf_pullback", "mtf_adx_trend"}:
+        raise ValueError("strategy must be mtf_cross, mtf_trend, mtf_momentum, mtf_pullback, or mtf_adx_trend")
     frame = _validate_candles(candles_5m)
     base = frame[["open", "high", "low", "close"]].copy()
     contexts = [
@@ -236,7 +236,7 @@ def build_mtf_signals(candles_5m: pd.DataFrame, strategy: str = "mtf_cross") -> 
         timing_short = (momentum < -0.001) & rsi.between(30, 50)
         timing_long &= ~timing_long.shift(1, fill_value=False)
         timing_short &= ~timing_short.shift(1, fill_value=False)
-    else:
+    elif strategy == "mtf_pullback":
         # Pullback continuation: require aligned higher-timeframe regime, a
         # reclaim/loss of the fast EMA, confirmation from the 8/21 EMA stack,
         # moderate RSI, and a non-extended entry relative to ATR.
@@ -258,6 +258,46 @@ def build_mtf_signals(candles_5m: pd.DataFrame, strategy: str = "mtf_cross") -> 
             previous_above_fast & (close < ema5) & (ema5 < ema21)
             & rsi.between(32, 52) & not_extended
         )
+    elif strategy == "mtf_adx_trend":
+        # Trend-following variant that avoids low-directional-strength regimes.
+        # ADX is calculated causally from OHLC; it is a research candidate, not
+        # a profitability claim. Threshold is fixed before validation/holdout.
+        high = joined["high"]
+        low = joined["low"]
+        previous_high = high.shift(1)
+        previous_low = low.shift(1)
+        plus_dm = (high - previous_high).where(
+            (high - previous_high > previous_low - low)
+            & (high - previous_high > 0), 0.0
+        )
+        minus_dm = (previous_low - low).where(
+            (previous_low - low > high - previous_high)
+            & (previous_low - low > 0), 0.0
+        )
+        true_range = pd.concat([
+            high - low,
+            (high - close.shift(1)).abs(),
+            (low - close.shift(1)).abs(),
+        ], axis=1).max(axis=1)
+        atr = true_range.ewm(alpha=1 / 14, adjust=False, min_periods=14).mean()
+        plus_di = 100 * plus_dm.ewm(alpha=1 / 14, adjust=False, min_periods=14).mean() / atr
+        minus_di = 100 * minus_dm.ewm(alpha=1 / 14, adjust=False, min_periods=14).mean() / atr
+        di_sum = (plus_di + minus_di).replace(0, np.nan)
+        dx = 100 * (plus_di - minus_di).abs() / di_sum
+        adx = dx.ewm(alpha=1 / 14, adjust=False, min_periods=14).mean()
+        directional_strength = adx >= 20
+        timing_long = (
+            (ema5 > close.ewm(span=21, adjust=False, min_periods=21).mean())
+            & (close > ema5) & rsi.between(45, 68) & directional_strength
+            & (plus_di > minus_di)
+        )
+        timing_short = (
+            (ema5 < close.ewm(span=21, adjust=False, min_periods=21).mean())
+            & (close < ema5) & rsi.between(32, 55) & directional_strength
+            & (minus_di > plus_di)
+        )
+        timing_long &= ~timing_long.shift(1, fill_value=False)
+        timing_short &= ~timing_short.shift(1, fill_value=False)
     long_ok = context_long & timing_long
     short_ok = context_short & timing_short
     result = pd.Series(np.select([long_ok, short_ok], [1, -1], default=0), index=frame.index, name="signal")
