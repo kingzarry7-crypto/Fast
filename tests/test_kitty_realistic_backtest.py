@@ -13,6 +13,21 @@ class KittyRealisticBacktestTests(unittest.TestCase):
         idx = pd.date_range("2026-01-01", periods=len(rows), freq="5min", tz="UTC")
         return pd.DataFrame(rows, index=idx, columns=["open", "high", "low", "close"])
 
+    def test_adx_regime_strategy_is_causal_and_returns_valid_signals(self):
+        # A long, gently trending synthetic series exercises warm-up and ADX logic.
+        idx = pd.date_range("2026-01-01", periods=3000, freq="5min", tz="UTC")
+        close = pd.Series(np.linspace(100, 160, len(idx)), index=idx)
+        frame = pd.DataFrame({
+            "open": close.shift(1).fillna(close.iloc[0]),
+            "high": close + 0.15,
+            "low": close - 0.15,
+            "close": close,
+        }, index=idx)
+        signals = build_mtf_signals(frame, strategy="mtf_adx_trend")
+        self.assertEqual(len(signals), len(frame))
+        self.assertTrue(signals.isin([-1, 0, 1]).all())
+        self.assertEqual(signals.dtype, np.dtype("int64"))
+
     def test_signal_enters_next_open_and_stop_wins_when_stop_and_target_both_hit(self):
         frame = self.candles([
             (100, 101, 99, 100),

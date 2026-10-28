@@ -317,7 +317,7 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
     candidates = []
     base_strategy_signals = {
         strategy: build_mtf_signals(frame, strategy=strategy)
-        for strategy in ("mtf_cross", "mtf_trend", "mtf_momentum", "mtf_pullback")
+        for strategy in ("mtf_cross", "mtf_trend", "mtf_momentum", "mtf_pullback", "mtf_adx_trend")
     }
     strategy_signals = {}
     for strategy, base_signal in base_strategy_signals.items():
@@ -475,7 +475,7 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
         "selected": selected is not None,
         "reason": "validation_edge_gate_passed" if selected else "no_validation_candidate_passed_edge_gate",
         "candidates_evaluated": len(candidates),
-        "strategies_evaluated": ["mtf_cross", "mtf_trend", "mtf_momentum", "mtf_pullback"],
+        "strategies_evaluated": ["mtf_cross", "mtf_trend", "mtf_momentum", "mtf_pullback", "mtf_adx_trend"],
         "direction_modes_evaluated": ["both", "long_only", "short_only"],
         "eligible_candidates": len(eligible_candidates),
         "cost_stress_test": {
