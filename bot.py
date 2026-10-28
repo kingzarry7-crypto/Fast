@@ -2420,6 +2420,21 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE, force: b
             if safe["signal"] in {"BUY", "SELL"} and not levels["valid"]:
                 safe = {**safe, "signal": "WAIT", "reason": "Risk levels rejected: " + levels["reason"]}
 
+            # Telegram watcher is signal-only: never notify for WAIT, NO TRADE,
+            # model errors, conflicting timeframes, or rejected risk levels.
+            # The scan still runs on schedule; only actionable, risk-valid BUY/SELL
+            # decisions proceed to message formatting and delivery.
+            if safe.get("signal") not in {"BUY", "SELL"}:
+                logger.info(
+                    "Kitty watcher suppressed non-actionable result: symbol=%s signal=%s candidate=%s candle=%s reason=%s",
+                    feed_symbol,
+                    safe.get("signal", "NO TRADE"),
+                    safe.get("candidate_signal") or prediction.get("class_prediction") or "NO TRADE",
+                    candle_time,
+                    safe.get("reason", "No actionable signal"),
+                )
+                continue
+
             tf4, tf1, tf15, tf5 = (mtf.get(k, {}) for k in ("4h", "1h", "15m", "5m"))
             candidate = str(safe.get("candidate_signal") or prediction.get("class_prediction") or "NO TRADE")
             confidence = float(safe.get("confidence", 0.0) or 0.0)
