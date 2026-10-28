@@ -245,5 +245,16 @@ class KittyRealisticBacktestTests(unittest.TestCase):
         # The slow EMA requires three complete hourly candles to warm up.
         self.assertEqual(list(context.index), expected[2:])
 
+
+    def test_pullback_strategy_is_supported_and_emits_only_valid_signal_values(self):
+        idx = pd.date_range("2026-01-01", periods=1200, freq="5min", tz="UTC")
+        close = 100 + np.arange(len(idx)) * 0.002 + np.sin(np.arange(len(idx)) / 9) * 0.08
+        frame = pd.DataFrame({
+            "open": close, "high": close + .03, "low": close - .03, "close": close
+        }, index=idx)
+        signals = build_mtf_signals(frame, strategy="mtf_pullback")
+        self.assertEqual(len(signals), len(frame))
+        self.assertTrue(signals.isin([-1, 0, 1]).all())
+
 if __name__ == "__main__":
     unittest.main()
