@@ -105,7 +105,12 @@ def _candidate_failure_reasons(candidate: dict) -> list[str]:
 
 
 def _candidate_diagnostic_summary(candidates: list[dict], limit: int = 10) -> dict:
-    """Summarize gate failures and near-misses using validation data only."""
+    """Summarize gate failures and rank candidates by fewest failures, then robustness.
+
+    Candidates passing all gates rank first; rejected candidates follow in order
+    of fewer failed gates, stronger worst/median folds, profit factor, and return.
+    All ranking inputs are validation-only; holdout metrics are never read.
+    """
     from collections import Counter
 
     failure_counts = Counter()
@@ -121,7 +126,7 @@ def _candidate_diagnostic_summary(candidates: list[dict], limit: int = 10) -> di
         median_fold = ordered[len(ordered) // 2] if ordered else float("-inf")
         pf = candidate["validation"].get("profit_factor")
         ranked.append((
-            (len(failures), min(fold_returns, default=float("-inf")),
+            (-len(failures), min(fold_returns, default=float("-inf")),
              median_fold, float(pf) if pf is not None else 0.0,
              float(candidate["validation"]["compounded_net_return"])),
             {
