@@ -240,7 +240,8 @@ class KittyRealisticBacktestTests(unittest.TestCase):
             count = int(((kept > label - pd.Timedelta(hours=1)) & (kept <= label)).sum())
             if count == 12:
                 expected.append(label)
-        self.assertEqual(list(context.index), expected)
+        # The slow EMA requires three complete hourly candles to warm up.
+        self.assertEqual(list(context.index), expected[2:])
 
 if __name__ == "__main__":
     unittest.main()
