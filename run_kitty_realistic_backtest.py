@@ -88,6 +88,9 @@ def _evaluate_trade_quality_confirmation(
     train_signals = signals.reindex(train.index).fillna(0).astype(int)
     train_features = features.reindex(train.index)
     train_labels = label_trade_outcomes(train, train_signals, config)
+    # Do not train on trades truncated by the training partition boundary.
+    if config.max_hold_bars:
+        train_labels.iloc[max(0, len(train_labels) - config.max_hold_bars):] = float("nan")
     model = train_quality_model(train_features, train_labels)
     if model is None:
         return {
@@ -105,6 +108,9 @@ def _evaluate_trade_quality_confirmation(
     probabilities = predict_quality(model, features)
     validation = frame.iloc[train_end:validation_end]
     validation_signals = signals.reindex(validation.index).fillna(0).astype(int)
+    # Exclude entries too close to the segment end to resolve the full risk horizon.
+    if config.max_hold_bars:
+        validation_signals.iloc[max(0, len(validation_signals) - config.max_hold_bars):] = 0
     validation_probabilities = probabilities.reindex(validation.index)
     baseline_validation = backtest_ohlc(validation, validation_signals, config)
     threshold_results = []
@@ -137,6 +143,8 @@ def _evaluate_trade_quality_confirmation(
     )
     holdout = frame.iloc[validation_end:]
     holdout_signals = signals.reindex(holdout.index).fillna(0).astype(int)
+    if config.max_hold_bars:
+        holdout_signals.iloc[max(0, len(holdout_signals) - config.max_hold_bars):] = 0
     baseline_holdout = backtest_ohlc(holdout, holdout_signals, config)
     if chosen is None:
         filtered_holdout = backtest_ohlc(
