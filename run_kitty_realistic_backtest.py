@@ -579,7 +579,8 @@ def main() -> None:
     report = evaluate_csv(args.csv, args.symbol, args.spread_bps_per_side)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(_json_safe(report), indent=2, allow_nan=False) + "\n", encoding="utf-8")
-    print(json.dumps({**report, "trade_log": f"{len(report['trade_log'])} trades saved in output"}, indent=2, allow_nan=False))
+    safe_report = _json_safe(report)
+    print(json.dumps({**safe_report, "trade_log": f"{len(report['trade_log'])} trades saved in output"}, indent=2, allow_nan=False))
 
 
 if __name__ == "__main__":
