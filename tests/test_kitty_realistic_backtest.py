@@ -184,7 +184,7 @@ class KittyRealisticBacktestTests(unittest.TestCase):
         self.assertFalse(report["automatic_order_execution_enabled"])
         self.assertFalse(report["candidate_selection"]["selected"])
         self.assertEqual(report["candidate_selection"]["reason"], "no_validation_candidate_passed_edge_gate")
-        self.assertEqual(report["candidate_selection"]["candidates_evaluated"], 324)
+        self.assertEqual(report["candidate_selection"]["candidates_evaluated"], 405)
         self.assertEqual(report["candidate_selection"]["validation_folds"], 3)
         self.assertEqual(report["candidate_selection"]["minimum_positive_validation_folds"], 3)
         self.assertTrue(report["candidate_selection"]["cost_stress_test"]["enabled"])
@@ -193,7 +193,7 @@ class KittyRealisticBacktestTests(unittest.TestCase):
         self.assertTrue(report["candidate_selection"]["cost_stress_test"]["stress_gate_required_for_selection"])
         self.assertIsNone(report["candidate_selection"]["selected_candidate_validation_folds"])
         self.assertIsNone(report["candidate_selection"]["selected_candidate_stress_validation_folds"])
-        self.assertEqual(report["candidate_selection"]["strategies_evaluated"], ["mtf_cross", "mtf_trend", "mtf_momentum", "mtf_pullback"])
+        self.assertEqual(report["candidate_selection"]["strategies_evaluated"], ["mtf_cross", "mtf_trend", "mtf_momentum", "mtf_pullback", "mtf_adx_trend"])
         self.assertEqual(report["candidate_selection"]["direction_modes_evaluated"], ["both", "long_only", "short_only"])
         self.assertFalse(report["holdout_edge_gate_passed"])
         self.assertTrue(report["candidate_selection"]["parameter_tuning_on_holdout"] is False)
@@ -207,7 +207,7 @@ class KittyRealisticBacktestTests(unittest.TestCase):
         self.assertEqual(len(signals), len(frame))
         self.assertTrue(signals.isin([-1, 0, 1]).all())
         self.assertTrue((signals.iloc[:500] == 0).all())
-        for strategy in ("mtf_cross", "mtf_trend", "mtf_momentum"):
+        for strategy in ("mtf_cross", "mtf_trend", "mtf_momentum", "mtf_pullback", "mtf_adx_trend"):
             candidate = build_mtf_signals(frame, strategy=strategy)
             self.assertEqual(len(candidate), len(frame))
             self.assertTrue(candidate.isin([-1, 0, 1]).all())
