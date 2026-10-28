@@ -276,11 +276,16 @@ if __name__ == "__main__":
     unittest.main()
 
 
-    def test_boundary_filter_excludes_entries_that_cannot_finish_holding_horizon(self):
-        from run_kitty_realistic_backtest import _exclude_boundary_entries
-        idx = pd.date_range("2026-01-01", periods=8, freq="5min", tz="UTC")
-        signals = pd.Series([1, 1, -1, 0, 1, -1, 1, -1], index=idx)
-        filtered = _exclude_boundary_entries(signals, max_hold_bars=3)
-        self.assertEqual(filtered.iloc[:5].tolist(), signals.iloc[:5].tolist())
-        self.assertEqual(filtered.iloc[5:].tolist(), [0, 0, 0])
-        self.assertEqual(filtered.index.tolist(), signals.index.tolist())
+    def test_entries_without_full_holding_horizon_are_excluded(self):
+        frame = self.candles([
+            (100, 101, 99, 100),
+            (100, 101, 99, 100),
+            (100, 101, 99, 100),
+            (100, 101, 99, 100),
+        ])
+        signals = pd.Series([0, 0, 1, 0], index=frame.index)
+        result = backtest_ohlc(frame, signals, BacktestConfig(
+            stop_pct=.05, target_pct=.10, max_hold_bars=3,
+            spread_bps_per_side=0, commission_bps_per_side=0, slippage_bps_per_side=0,
+        ))
+        self.assertEqual(result["trade_count"], 0)
