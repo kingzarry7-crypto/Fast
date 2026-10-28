@@ -169,7 +169,7 @@ class KittyRealisticBacktestTests(unittest.TestCase):
         self.assertFalse(report["automatic_order_execution_enabled"])
         self.assertFalse(report["candidate_selection"]["selected"])
         self.assertEqual(report["candidate_selection"]["reason"], "no_validation_candidate_passed_edge_gate")
-        self.assertEqual(report["candidate_selection"]["candidates_evaluated"], 243)
+        self.assertEqual(report["candidate_selection"]["candidates_evaluated"], 324)
         self.assertEqual(report["candidate_selection"]["validation_folds"], 3)
         self.assertEqual(report["candidate_selection"]["minimum_positive_validation_folds"], 3)
         self.assertTrue(report["candidate_selection"]["cost_stress_test"]["enabled"])
