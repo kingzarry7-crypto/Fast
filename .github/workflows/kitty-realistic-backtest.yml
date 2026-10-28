@@ -16,6 +16,7 @@ on:
       - "kitty_trade_quality.py"
       - "run_kitty_realistic_backtest.py"
       - "tests/test_kitty_realistic_backtest.py"
+      - "tests/test_kitty_trade_quality.py"
       - ".github/workflows/kitty-realistic-backtest.yml"
 
 permissions:
