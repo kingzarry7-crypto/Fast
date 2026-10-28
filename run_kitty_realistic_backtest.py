@@ -13,6 +13,14 @@ from pathlib import Path
 import pandas as pd
 
 from kitty_realistic_backtest import BacktestConfig, backtest_ohlc, build_mtf_signals
+from kitty_trade_quality import (
+    DEFAULT_THRESHOLDS,
+    build_quality_features,
+    filter_signals,
+    label_trade_outcomes,
+    predict_quality,
+    train_quality_model,
+)
 
 
 def _filter_market_session(frame: pd.DataFrame, symbol: str) -> pd.DataFrame:
@@ -60,6 +68,121 @@ def _candidate_stability_key(candidate: dict) -> tuple[float, float, float, floa
         float(candidate["validation"]["compounded_net_return"]),
     )
 
+
+
+def _evaluate_trade_quality_confirmation(
+    frame: pd.DataFrame,
+    signals: pd.Series,
+    config: BacktestConfig,
+    train_end: int,
+    validation_end: int,
+) -> dict:
+    """Evaluate a meta-labeling model with train/validation/holdout separation.
+
+    This is diagnostic research only. The model never changes production signals.
+    Training labels are generated solely inside the training partition; the
+    threshold is chosen only on validation; the final holdout is evaluated once.
+    """
+    features = build_quality_features(frame, signals)
+    train = frame.iloc[:train_end]
+    train_signals = signals.reindex(train.index).fillna(0).astype(int)
+    train_features = features.reindex(train.index)
+    train_labels = label_trade_outcomes(train, train_signals, config)
+    model = train_quality_model(train_features, train_labels)
+    if model is None:
+        return {
+            "evaluated": False,
+            "reason": "insufficient_training_trades_or_outcome_classes",
+            "minimum_training_trades": 40,
+            "minimum_examples_per_outcome_class": 10,
+            "training_labeled_trades": int(train_labels.notna().sum()),
+            "threshold_tuned_on": "validation_only",
+            "holdout_used_for_tuning": False,
+            "production_ready": False,
+            "automatic_order_execution_enabled": False,
+        }
+
+    probabilities = predict_quality(model, features)
+    validation = frame.iloc[train_end:validation_end]
+    validation_signals = signals.reindex(validation.index).fillna(0).astype(int)
+    validation_probabilities = probabilities.reindex(validation.index)
+    baseline_validation = backtest_ohlc(validation, validation_signals, config)
+    threshold_results = []
+    for threshold in DEFAULT_THRESHOLDS:
+        filtered = filter_signals(validation_signals, validation_probabilities, threshold)
+        result = backtest_ohlc(validation, filtered, config)
+        eligible = (
+            result["trade_count"] >= 8
+            and result["compounded_net_return"] > 0
+            and result["profit_factor"] is not None
+            and result["profit_factor"] >= 1.0
+            and result["max_drawdown"] >= -0.05
+        )
+        threshold_results.append({
+            "threshold": threshold,
+            "eligible": eligible,
+            "trade_count": result["trade_count"],
+            "compounded_net_return": result["compounded_net_return"],
+            "profit_factor": result["profit_factor"],
+            "max_drawdown": result["max_drawdown"],
+        })
+    eligible_thresholds = [item for item in threshold_results if item["eligible"]]
+    chosen = max(
+        eligible_thresholds,
+        key=lambda item: (
+            item["compounded_net_return"],
+            item["profit_factor"] if item["profit_factor"] is not None else 0.0,
+        ),
+        default=None,
+    )
+    holdout = frame.iloc[validation_end:]
+    holdout_signals = signals.reindex(holdout.index).fillna(0).astype(int)
+    baseline_holdout = backtest_ohlc(holdout, holdout_signals, config)
+    if chosen is None:
+        filtered_holdout = backtest_ohlc(
+            holdout, pd.Series(0, index=holdout.index, dtype=int), config
+        )
+    else:
+        filtered = filter_signals(
+            holdout_signals, probabilities.reindex(holdout.index), chosen["threshold"]
+        )
+        filtered_holdout = backtest_ohlc(holdout, filtered, config)
+    holdout_gate = bool(
+        chosen is not None
+        and filtered_holdout["trade_count"] >= 8
+        and filtered_holdout["compounded_net_return"] > 0
+        and filtered_holdout["profit_factor"] is not None
+        and filtered_holdout["profit_factor"] >= 1.10
+        and filtered_holdout["max_drawdown"] >= -0.05
+        and filtered_holdout["compounded_net_return"] > baseline_holdout["compounded_net_return"]
+    )
+    summary_keys = (
+        "trade_count", "win_rate", "average_net_return", "profit_factor",
+        "compounded_net_return", "max_drawdown", "estimated_round_trip_cost",
+    )
+    return {
+        "evaluated": True,
+        "model": "RandomForestClassifier",
+        "training_labeled_trades": int(train_labels.notna().sum()),
+        "training_positive_outcomes": int(train_labels.eq(1).sum()),
+        "training_negative_outcomes": int(train_labels.eq(0).sum()),
+        "features": list(features.columns),
+        "threshold_candidates": list(DEFAULT_THRESHOLDS),
+        "threshold_selection": "validation-only; minimum 8 trades, positive return, profit factor >= 1, drawdown >= -5%",
+        "validation_threshold_results": threshold_results,
+        "selected_threshold": chosen["threshold"] if chosen else None,
+        "validation_baseline": {key: baseline_validation[key] for key in summary_keys},
+        "holdout_baseline": {key: baseline_holdout[key] for key in summary_keys},
+        "holdout_filtered": {key: filtered_holdout[key] for key in summary_keys},
+        "holdout_return_improvement": (
+            filtered_holdout["compounded_net_return"] - baseline_holdout["compounded_net_return"]
+        ),
+        "holdout_edge_gate_passed": holdout_gate,
+        "holdout_used_for_tuning": False,
+        "production_ready": False,
+        "automatic_order_execution_enabled": False,
+        "research_only": True,
+    }
 
 def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dict:
     frame = pd.read_csv(path)
@@ -227,6 +350,13 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
     chosen_strategy = selected["strategy"] if selected else "mtf_cross"
     chosen_direction_mode = selected["direction_mode"] if selected else "both"
     chosen_signals = selected["signals"] if selected else strategy_signals[("mtf_cross", "both")]
+    quality_confirmation = _evaluate_trade_quality_confirmation(
+        frame,
+        chosen_signals.reindex(frame.index).fillna(0).astype(int),
+        chosen_config,
+        train_end,
+        validation_end,
+    )
     # Always compute the fallback for diagnostics, but never report it as the
     # selected holdout result when no candidate passes the validation edge gate.
     diagnostic_validation = backtest_ohlc(
@@ -293,6 +423,7 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
             if selected is None else None
         ),
         "candidate_selection": candidate_selection,
+        "trade_quality_confirmation": quality_confirmation,
         "holdout_start": holdout.index[0].isoformat(),
         "holdout_rows": len(holdout),
         "holdout_fraction": 0.2,
