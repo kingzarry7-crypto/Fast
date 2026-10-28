@@ -22,8 +22,8 @@ jobs:
     env:
       CANDLE_LIMIT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.limit || '15000' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: python -m pip install --upgrade pip numpy pandas requests
@@ -31,7 +31,7 @@ jobs:
         run: python fetch_kitty_5m_market_data.py --symbol BTC --limit "$CANDLE_LIMIT" --output research-data/BTC_5m.csv
       - name: Run cost-aware chronological holdout
         run: python run_kitty_realistic_backtest.py --symbol BTC --csv research-data/BTC_5m.csv --spread-bps-per-side 2.0 --output research-results/BTC_report.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: kitty-real-market-BTC-${{ github.run_number }}
@@ -49,8 +49,8 @@ jobs:
       CANDLE_LIMIT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.limit || '15000' }}
       TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY || secrets.TWELVE_DATA_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: python -m pip install --upgrade pip numpy pandas requests
@@ -65,7 +65,7 @@ jobs:
         run: python fetch_kitty_5m_market_data.py --symbol XAUUSD --limit "$CANDLE_LIMIT" --output research-data/XAUUSD_5m.csv
       - name: Run cost-aware chronological holdout
         run: python run_kitty_realistic_backtest.py --symbol XAUUSD --csv research-data/XAUUSD_5m.csv --spread-bps-per-side 5.0 --output research-results/XAUUSD_report.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: kitty-real-market-XAUUSD-${{ github.run_number }}
