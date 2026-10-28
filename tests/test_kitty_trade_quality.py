@@ -9,6 +9,7 @@ from kitty_trade_quality import (
     filter_signals,
     label_trade_outcomes,
     train_quality_model,
+    predict_quality,
 )
 
 
@@ -54,6 +55,16 @@ class KittyTradeQualityTests(unittest.TestCase):
         labels = pd.Series(np.nan, index=self.index)
         labels.iloc[100:110] = [0, 1] * 5
         self.assertIsNone(train_quality_model(features, labels))
+
+    def test_model_fits_only_when_both_outcome_classes_have_enough_examples(self):
+        features = build_quality_features(self.candles, self.signals)
+        labels = pd.Series(np.nan, index=self.index)
+        labels.iloc[100:500] = np.arange(400) % 2
+        model = train_quality_model(features, labels)
+        self.assertIsNotNone(model)
+        scores = predict_quality(model, features)
+        self.assertTrue(scores.dropna().between(0, 1).all())
+        self.assertGreater(scores.notna().sum(), 100)
 
     def test_filter_rejects_low_confidence_and_non_signal_rows(self):
         probabilities = pd.Series(0.9, index=self.index)
