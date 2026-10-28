@@ -70,6 +70,91 @@ def _candidate_stability_key(candidate: dict) -> tuple[float, float, float, floa
 
 
 
+def _candidate_failure_reasons(candidate: dict) -> list[str]:
+    """Explain every validation-only gate that rejects a candidate.
+
+    This intentionally never reads holdout metrics: diagnostics must not turn
+    the final holdout into another tuning surface.
+    """
+    validation = candidate["validation"]
+    stress = candidate["stress_validation"]
+    failures = []
+    if validation["trade_count"] < 20:
+        failures.append("validation_trade_count_below_20")
+    if validation["compounded_net_return"] <= 0:
+        failures.append("validation_return_not_positive")
+    pf = validation.get("profit_factor")
+    if pf is None or pf < 1.10:
+        failures.append("validation_profit_factor_below_1_10")
+    if validation["max_drawdown"] < -0.05:
+        failures.append("validation_drawdown_below_minus_5_percent")
+    if candidate["positive_validation_folds"] < 3:
+        failures.append("fewer_than_3_positive_validation_folds")
+    if stress["trade_count"] < 20:
+        failures.append("stress_trade_count_below_20")
+    if stress["compounded_net_return"] <= 0:
+        failures.append("stress_return_not_positive")
+    stress_pf = stress.get("profit_factor")
+    if stress_pf is None or stress_pf < 1.10:
+        failures.append("stress_profit_factor_below_1_10")
+    if stress["max_drawdown"] < -0.05:
+        failures.append("stress_drawdown_below_minus_5_percent")
+    if candidate["positive_stress_validation_folds"] < 3:
+        failures.append("fewer_than_3_positive_stress_folds")
+    return failures
+
+
+def _candidate_diagnostic_summary(candidates: list[dict], limit: int = 10) -> dict:
+    """Summarize gate failures and near-misses using validation data only."""
+    from collections import Counter
+
+    failure_counts = Counter()
+    ranked = []
+    for candidate in candidates:
+        failures = _candidate_failure_reasons(candidate)
+        failure_counts.update(failures)
+        fold_returns = [
+            float(fold["compounded_net_return"])
+            for fold in candidate["fold_results"]
+        ]
+        ordered = sorted(fold_returns)
+        median_fold = ordered[len(ordered) // 2] if ordered else float("-inf")
+        pf = candidate["validation"].get("profit_factor")
+        ranked.append((
+            (len(failures), min(fold_returns, default=float("-inf")),
+             median_fold, float(pf) if pf is not None else 0.0,
+             float(candidate["validation"]["compounded_net_return"])),
+            {
+                "strategy": candidate["strategy"],
+                "direction_mode": candidate["direction_mode"],
+                "config": {
+                    "stop_pct": candidate["config"].stop_pct,
+                    "target_pct": candidate["config"].target_pct,
+                    "max_hold_bars": candidate["config"].max_hold_bars,
+                },
+                "failure_reasons": failures,
+                "validation": {
+                    key: candidate["validation"][key]
+                    for key in ("trade_count", "compounded_net_return", "profit_factor", "max_drawdown")
+                },
+                "validation_fold_results": candidate["fold_results"],
+                "stress_validation": {
+                    key: candidate["stress_validation"][key]
+                    for key in ("trade_count", "compounded_net_return", "profit_factor", "max_drawdown")
+                },
+                "positive_validation_folds": candidate["positive_validation_folds"],
+                "positive_stress_validation_folds": candidate["positive_stress_validation_folds"],
+            },
+        ))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return {
+        "computed_from": "validation_only",
+        "holdout_used": False,
+        "gate_failure_counts": dict(sorted(failure_counts.items())),
+        "near_miss_candidates": [item[1] for item in ranked[:max(0, limit)]],
+    }
+
+
 def _evaluate_trade_quality_confirmation(
     frame: pd.DataFrame,
     signals: pd.Series,
