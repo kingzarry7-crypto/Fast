@@ -272,5 +272,34 @@ class KittyRealisticBacktestTests(unittest.TestCase):
         json.dumps(safe, allow_nan=False)
 
 
+    def test_short_timeframe_indicators_warm_up_again_after_data_gap(self):
+        first = pd.date_range("2026-01-01", periods=1200, freq="5min", tz="UTC")
+        second = pd.date_range(first[-1] + pd.Timedelta(days=2), periods=100, freq="5min", tz="UTC")
+        idx = first.append(second)
+        close = 100 + np.arange(len(idx)) * 0.01 + np.sin(np.arange(len(idx)) / 8) * 0.1
+        frame = pd.DataFrame({
+            "open": close, "high": close + .05, "low": close - .05, "close": close
+        }, index=idx)
+        signals = build_mtf_signals(frame, strategy="mtf_cross")
+        # RSI/EMA state must warm up from the post-gap segment, not leak the
+        # pre-gap state into its first bars.
+        self.assertTrue((signals.loc[second[:13]] == 0).all())
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_entries_without_full_holding_horizon_are_excluded(self):
+        frame = self.candles([
+            (100, 101, 99, 100),
+            (100, 101, 99, 100),
+            (100, 101, 99, 100),
+            (100, 101, 99, 100),
+        ])
+        signals = pd.Series([0, 0, 1, 0], index=frame.index)
+        result = backtest_ohlc(frame, signals, BacktestConfig(
+            stop_pct=.05, target_pct=.10, max_hold_bars=3,
+            spread_bps_per_side=0, commission_bps_per_side=0, slippage_bps_per_side=0,
+        ))
+        self.assertEqual(result["trade_count"], 0)

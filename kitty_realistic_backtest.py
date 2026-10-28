@@ -87,6 +87,12 @@ def backtest_ohlc(
             i += 1
             continue
         entry_i = i + 1
+        # Do not score a new trade unless the full configured holding horizon
+        # is available inside this evaluation segment. Otherwise the segment's
+        # final candle would force an artificially early time exit.
+        if entry_i + config.max_hold_bars - 1 >= len(frame):
+            i += 1
+            continue
         # A signal from before a session/data gap cannot be filled at the next
         # available bar's open as though the market had remained tradable.
         if frame.index[entry_i] - frame.index[i] > pd.Timedelta(minutes=5):
@@ -201,13 +207,28 @@ def build_mtf_signals(candles_5m: pd.DataFrame, strategy: str = "mtf_cross") -> 
         right = context.reset_index(names="timestamp").sort_values("timestamp")
         joined = pd.merge_asof(joined, right, on="timestamp", direction="backward", allow_exact_matches=True)
     close = joined["close"]
-    ema5 = close.ewm(span=8, adjust=False, min_periods=8).mean()
-    prior_close, prior_ema = close.shift(1), ema5.shift(1)
+    # Reset short-timeframe indicators after a missing 5-minute candle. Keeping
+    # the old EMA/RSI state across a multi-hour/weekend gap treats distant prices
+    # as consecutive intraday observations and can create misleading entries.
+    segment_ids = pd.Series(
+        frame.index.to_series().diff().gt(pd.Timedelta(minutes=5)).cumsum().to_numpy(),
+        index=joined.index,
+    )
+    grouped_close = close.groupby(segment_ids)
+    ema5 = grouped_close.transform(
+        lambda values: values.ewm(span=8, adjust=False, min_periods=8).mean()
+    )
+    prior_close = grouped_close.shift(1)
+    prior_ema = ema5.groupby(segment_ids).shift(1)
     timing_long = (close > ema5) & (prior_close <= prior_ema)
     timing_short = (close < ema5) & (prior_close >= prior_ema)
-    rsi_delta = close.diff()
-    gain = rsi_delta.clip(lower=0).ewm(alpha=1 / 14, adjust=False, min_periods=14).mean()
-    loss = (-rsi_delta.clip(upper=0)).ewm(alpha=1 / 14, adjust=False, min_periods=14).mean()
+    rsi_delta = grouped_close.diff()
+    gain = rsi_delta.clip(lower=0).groupby(segment_ids).transform(
+        lambda values: values.ewm(alpha=1 / 14, adjust=False, min_periods=14).mean()
+    )
+    loss = (-rsi_delta.clip(upper=0)).groupby(segment_ids).transform(
+        lambda values: values.ewm(alpha=1 / 14, adjust=False, min_periods=14).mean()
+    )
     relative_strength = gain / loss.replace(0, np.nan)
     rsi = 100 - 100 / (1 + relative_strength)
     rsi = rsi.mask((loss == 0) & (gain > 0), 100.0).mask((loss == 0) & (gain == 0), 50.0)
@@ -223,7 +244,9 @@ def build_mtf_signals(candles_5m: pd.DataFrame, strategy: str = "mtf_cross") -> 
         timing_long = timing_long & rsi.between(45, 70)
         timing_short = timing_short & rsi.between(30, 55)
     elif strategy == "mtf_trend":
-        ema21 = close.ewm(span=21, adjust=False, min_periods=21).mean()
+        ema21 = grouped_close.transform(
+            lambda values: values.ewm(span=21, adjust=False, min_periods=21).mean()
+        )
         timing_long = (ema5 > ema21) & (close > ema5) & rsi.between(45, 70)
         timing_short = (ema5 < ema21) & (close < ema5) & rsi.between(30, 55)
         # Enter only on the first bar of a new aligned state; avoid repeatedly
@@ -231,7 +254,7 @@ def build_mtf_signals(candles_5m: pd.DataFrame, strategy: str = "mtf_cross") -> 
         timing_long &= ~timing_long.shift(1, fill_value=False)
         timing_short &= ~timing_short.shift(1, fill_value=False)
     elif strategy == "mtf_momentum":
-        momentum = close.pct_change(12)
+        momentum = grouped_close.pct_change(12)
         timing_long = (momentum > 0.001) & rsi.between(50, 70)
         timing_short = (momentum < -0.001) & rsi.between(30, 50)
         timing_long &= ~timing_long.shift(1, fill_value=False)
@@ -240,15 +263,23 @@ def build_mtf_signals(candles_5m: pd.DataFrame, strategy: str = "mtf_cross") -> 
         # Pullback continuation: require aligned higher-timeframe regime, a
         # reclaim/loss of the fast EMA, confirmation from the 8/21 EMA stack,
         # moderate RSI, and a non-extended entry relative to ATR.
-        ema21 = close.ewm(span=21, adjust=False, min_periods=21).mean()
-        previous_below_fast = (close.shift(1) <= ema5.shift(1)) & (close.shift(2) <= ema5.shift(2))
-        previous_above_fast = (close.shift(1) >= ema5.shift(1)) & (close.shift(2) >= ema5.shift(2))
+        ema21 = grouped_close.transform(
+            lambda values: values.ewm(span=21, adjust=False, min_periods=21).mean()
+        )
+        previous_close_1 = grouped_close.shift(1)
+        previous_close_2 = grouped_close.shift(2)
+        previous_ema_1 = ema5.groupby(segment_ids).shift(1)
+        previous_ema_2 = ema5.groupby(segment_ids).shift(2)
+        previous_below_fast = (previous_close_1 <= previous_ema_1) & (previous_close_2 <= previous_ema_2)
+        previous_above_fast = (previous_close_1 >= previous_ema_1) & (previous_close_2 >= previous_ema_2)
         true_range = pd.concat([
             joined["high"] - joined["low"],
-            (joined["high"] - close.shift(1)).abs(),
-            (joined["low"] - close.shift(1)).abs(),
+            (joined["high"] - grouped_close.shift(1)).abs(),
+            (joined["low"] - grouped_close.shift(1)).abs(),
         ], axis=1).max(axis=1)
-        atr = true_range.rolling(14, min_periods=14).mean()
+        atr = true_range.groupby(segment_ids).transform(
+            lambda values: values.rolling(14, min_periods=14).mean()
+        )
         not_extended = (close - ema21).abs() <= 1.5 * atr
         timing_long = (
             previous_below_fast & (close > ema5) & (ema5 > ema21)

@@ -1,6 +1,6 @@
 """Fetch genuine 5-minute market candles for Kitty research only.
 
-BTC source: Binance public BTCUSDT spot klines.
+BTC source: Coinbase Exchange BTC-USD spot candles.
 XAUUSD source: Twelve Data XAU/USD spot, with no futures/Yahoo fallback.
 Provider timestamps denote bar opens and are shifted to candle-close UTC times.
 """
@@ -16,6 +16,8 @@ import requests
 
 COINBASE_URL = "https://api.exchange.coinbase.com/products/BTC-USD/candles"
 TWELVEDATA_URL = "https://api.twelvedata.com/time_series"
+BTC_SOURCE_NAME = "Coinbase Exchange BTC-USD spot"
+XAUUSD_SOURCE_NAME = "Twelve Data XAU/USD spot"
 
 
 def fetch_btc(output: Path, limit: int = 5000) -> pd.DataFrame:
@@ -104,7 +106,7 @@ def main() -> None:
     frame = fetch_btc(args.output, args.limit) if args.symbol == "BTC" else fetch_xauusd(args.output, args.limit)
     # Only non-secret provenance and timestamps are emitted.
     print({
-        "symbol": args.symbol, "source": "Binance BTCUSDT spot" if args.symbol == "BTC" else "Twelve Data XAU/USD spot",
+        "symbol": args.symbol, "source": BTC_SOURCE_NAME if args.symbol == "BTC" else XAUUSD_SOURCE_NAME,
         "rows": len(frame), "first_close_time": frame["timestamp"].iloc[0].isoformat(),
         "last_close_time": frame["timestamp"].iloc[-1].isoformat(),
         "output": str(args.output),
