@@ -178,7 +178,7 @@ class KittyRealisticBacktestTests(unittest.TestCase):
         self.assertTrue(report["candidate_selection"]["cost_stress_test"]["stress_gate_required_for_selection"])
         self.assertIsNone(report["candidate_selection"]["selected_candidate_validation_folds"])
         self.assertIsNone(report["candidate_selection"]["selected_candidate_stress_validation_folds"])
-        self.assertEqual(report["candidate_selection"]["strategies_evaluated"], ["mtf_cross", "mtf_trend", "mtf_momentum"])
+        self.assertEqual(report["candidate_selection"]["strategies_evaluated"], ["mtf_cross", "mtf_trend", "mtf_momentum", "mtf_pullback"])
         self.assertEqual(report["candidate_selection"]["direction_modes_evaluated"], ["both", "long_only", "short_only"])
         self.assertFalse(report["holdout_edge_gate_passed"])
         self.assertTrue(report["candidate_selection"]["parameter_tuning_on_holdout"] is False)
