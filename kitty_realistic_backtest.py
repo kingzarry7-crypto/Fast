@@ -187,8 +187,8 @@ def build_mtf_signals(candles_5m: pd.DataFrame, strategy: str = "mtf_cross") -> 
     backward-asof joined only after those candles have closed. Signal at close
     executes no earlier than the next 5-minute candle open in backtest_ohlc.
     """
-    if strategy not in {"mtf_cross", "mtf_trend", "mtf_momentum"}:
-        raise ValueError("strategy must be mtf_cross, mtf_trend, or mtf_momentum")
+    if strategy not in {"mtf_cross", "mtf_trend", "mtf_momentum", "mtf_pullback"}:
+        raise ValueError("strategy must be mtf_cross, mtf_trend, mtf_momentum, or mtf_pullback")
     frame = _validate_candles(candles_5m)
     base = frame[["open", "high", "low", "close"]].copy()
     contexts = [
@@ -230,12 +230,34 @@ def build_mtf_signals(candles_5m: pd.DataFrame, strategy: str = "mtf_cross") -> 
         # signaling while the same trend condition stays true.
         timing_long &= ~timing_long.shift(1, fill_value=False)
         timing_short &= ~timing_short.shift(1, fill_value=False)
-    else:
+    elif strategy == "mtf_momentum":
         momentum = close.pct_change(12)
         timing_long = (momentum > 0.001) & rsi.between(50, 70)
         timing_short = (momentum < -0.001) & rsi.between(30, 50)
         timing_long &= ~timing_long.shift(1, fill_value=False)
         timing_short &= ~timing_short.shift(1, fill_value=False)
+    else:
+        # Pullback continuation: require aligned higher-timeframe regime, a
+        # reclaim/loss of the fast EMA, confirmation from the 8/21 EMA stack,
+        # moderate RSI, and a non-extended entry relative to ATR.
+        ema21 = close.ewm(span=21, adjust=False, min_periods=21).mean()
+        previous_below_fast = (close.shift(1) <= ema5.shift(1)) & (close.shift(2) <= ema5.shift(2))
+        previous_above_fast = (close.shift(1) >= ema5.shift(1)) & (close.shift(2) >= ema5.shift(2))
+        true_range = pd.concat([
+            joined["high"] - joined["low"],
+            (joined["high"] - close.shift(1)).abs(),
+            (joined["low"] - close.shift(1)).abs(),
+        ], axis=1).max(axis=1)
+        atr = true_range.rolling(14, min_periods=14).mean()
+        not_extended = (close - ema21).abs() <= 1.5 * atr
+        timing_long = (
+            previous_below_fast & (close > ema5) & (ema5 > ema21)
+            & rsi.between(48, 68) & not_extended
+        )
+        timing_short = (
+            previous_above_fast & (close < ema5) & (ema5 < ema21)
+            & rsi.between(32, 52) & not_extended
+        )
     long_ok = context_long & timing_long
     short_ok = context_short & timing_short
     result = pd.Series(np.select([long_ok, short_ok], [1, -1], default=0), index=frame.index, name="signal")
