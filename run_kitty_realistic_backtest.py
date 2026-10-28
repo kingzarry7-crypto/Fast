@@ -182,7 +182,7 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
                     and stress_validation["profit_factor"] is not None
                     and stress_validation["profit_factor"] >= 1.10
                     and stress_validation["max_drawdown"] >= -0.05
-                    and positive_stress_folds >= 2
+                    and positive_stress_folds >= 3
                 )
                 eligible = (
                     validation_result["trade_count"] >= 20
@@ -190,7 +190,7 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
                     and validation_result["profit_factor"] is not None
                     and validation_result["profit_factor"] >= 1.10
                     and validation_result["max_drawdown"] >= -0.05
-                    and positive_folds >= 2
+                    and positive_folds >= 3
                     and stress_eligible
                 )
                 candidates.append({
@@ -256,17 +256,19 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
             "slippage_bps_per_side": 3.0,
             "minimum_stress_validation_trades": 20,
             "minimum_stress_validation_profit_factor": 1.10,
-            "minimum_positive_stress_folds": 2,
+            "minimum_positive_stress_folds": 3,
             "stress_gate_required_for_selection": True,
         },
         "minimum_validation_trades": 20,
         "validation_folds": 3,
         "minimum_trades_per_validation_fold": 8,
-        "minimum_positive_validation_folds": 2,
+        "minimum_positive_validation_folds": 3,
         "minimum_validation_profit_factor": 1.10,
         "minimum_validation_compounded_return": 0.0,
         "maximum_validation_drawdown": -0.05,
         "parameter_tuning_on_holdout": False,
+        "selected_candidate_validation_folds": selected["fold_results"] if selected else None,
+        "selected_candidate_stress_validation_folds": selected["stress_fold_results"] if selected else None,
         "selected_config": ({
             "strategy": chosen_strategy,
             "direction_mode": chosen_direction_mode,
