@@ -4,7 +4,7 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 
-from kitty_realistic_backtest import BacktestConfig, backtest_ohlc, build_mtf_signals
+from kitty_realistic_backtest import BacktestConfig, backtest_ohlc, build_mtf_signals, _completed_timeframe
 from run_kitty_realistic_backtest import _candidate_stability_key, evaluate_csv
 
 
@@ -223,6 +223,25 @@ class KittyRealisticBacktestTests(unittest.TestCase):
         self.assertFalse(report["production_ready"])
         self.assertFalse(report["automatic_order_execution_enabled"])
 
+
+    def test_higher_timeframe_context_rejects_partial_bars_after_data_gaps(self):
+        idx = pd.date_range("2026-01-01", periods=24 * 12, freq="5min", tz="UTC")
+        # Simulate a one-hour data outage. A partially populated 1h candle
+        # must not be treated as a completed higher-timeframe candle.
+        kept = idx.delete(np.arange(12 * 12 + 1, 12 * 12 + 12))
+        close = 100 + np.arange(len(kept)) * 0.01
+        frame = pd.DataFrame({
+            "open": close, "high": close + .02, "low": close - .02, "close": close
+        }, index=kept)
+        context = _completed_timeframe(frame, "1h", 2, 3, "h1")
+        # Every emitted context row must be backed by all twelve 5-minute bars.
+        expected = []
+        for label in pd.date_range(kept[0].ceil("1h"), kept[-1].floor("1h"), freq="1h", tz="UTC"):
+            count = int(((kept > label - pd.Timedelta(hours=1)) & (kept <= label)).sum())
+            if count == 12:
+                expected.append(label)
+        # The slow EMA requires three complete hourly candles to warm up.
+        self.assertEqual(list(context.index), expected[2:])
 
 if __name__ == "__main__":
     unittest.main()
