@@ -67,7 +67,9 @@ class KittyCandidateDiagnosticsTests(unittest.TestCase):
         self.assertEqual(report["computed_from"], "validation_only")
         self.assertFalse(report["holdout_used"])
         self.assertEqual(len(report["near_miss_candidates"]), 2)
+        # Candidates that pass every gate must rank ahead of rejected candidates.
         self.assertEqual(report["near_miss_candidates"][0]["failure_reasons"], [])
+        self.assertIn("validation_return_not_positive", report["near_miss_candidates"][1]["failure_reasons"])
         self.assertGreater(
             report["gate_failure_counts"]["validation_return_not_positive"], 0
         )
