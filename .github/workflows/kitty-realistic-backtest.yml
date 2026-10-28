@@ -4,8 +4,10 @@ on:
   pull_request:
     paths:
       - "kitty_realistic_backtest.py"
+      - "kitty_trade_quality.py"
       - "run_kitty_realistic_backtest.py"
       - "tests/test_kitty_realistic_backtest.py"
+      - "tests/test_kitty_trade_quality.py"
       - ".github/workflows/kitty-realistic-backtest.yml"
   push:
     branches: [main]
@@ -26,5 +28,5 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - run: python -m pip install --upgrade pip numpy pandas
+      - run: python -m pip install --upgrade pip numpy pandas scikit-learn
       - run: python -m unittest discover -s tests -p 'test_kitty_realistic_backtest.py' -v
