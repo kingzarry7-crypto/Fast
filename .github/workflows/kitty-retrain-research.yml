@@ -49,9 +49,9 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -104,7 +104,7 @@ jobs:
           PY
       - name: Upload BTC runtime research checkpoint
         if: matrix.symbol == 'BTC'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: kitty-BTC-checkpoint-${{ github.run_number }}
           path: research-model/kitty_BTC_checkpoint.pt
@@ -112,7 +112,7 @@ jobs:
           retention-days: 7
       - name: Publish research artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: kitty-${{ matrix.symbol }}-retraining-${{ github.run_number }}
           path: kitty-training-output/
@@ -132,9 +132,9 @@ jobs:
       TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY || secrets.TWELVE_DATA_API_KEY }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -234,7 +234,7 @@ jobs:
           PY
       - name: Upload XAUUSD runtime research checkpoint
         if: matrix.symbol == 'XAUUSD'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: kitty-XAUUSD-checkpoint-${{ github.run_number }}
           path: research-model/kitty_XAUUSD_checkpoint.pt
@@ -242,7 +242,7 @@ jobs:
           retention-days: 7
       - name: Publish gold and forex research artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: kitty-${{ matrix.symbol }}-retraining-${{ github.run_number }}
           path: kitty-training-output/${{ matrix.symbol }}/
@@ -255,25 +255,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
       - name: Set up Python for checkpoint validation
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
       - name: Install checkpoint validation dependencies
         run: python -m pip install --upgrade pip numpy scikit-learn torch
       - name: Download BTC checkpoint
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         continue-on-error: true
         with:
           name: kitty-BTC-checkpoint-${{ github.run_number }}
           path: downloaded/btc
       - name: Download XAUUSD checkpoint
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         continue-on-error: true
         with:
           name: kitty-XAUUSD-checkpoint-${{ github.run_number }}
