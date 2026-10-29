@@ -37,5 +37,16 @@ class KittyUnvalidatedSignalSafetyTests(unittest.TestCase):
         self.assertTrue(result["research_only"])
 
 
+    def test_candidate_buy_includes_directional_atr_risk_references_but_stays_non_actionable(self):
+        result = _technical_signal(rising_candles(), "BTC/USD", "1h")
+        entry = result["price"]
+        levels = result["candidate_risk_levels"]
+        self.assertEqual(result["candidate_signal"], "BUY")
+        self.assertLess(levels["stop_reference"], entry)
+        self.assertGreater(levels["target_1_reference"], entry)
+        self.assertGreater(levels["target_2_reference"], levels["target_1_reference"])
+        self.assertEqual(result["signal"], "NO TRADE")
+        self.assertFalse(result["trading_enabled"])
+
 if __name__ == "__main__":
     unittest.main()
