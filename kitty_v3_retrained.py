@@ -148,7 +148,7 @@ def apply_research_signal_gate(raw_signal: str, confidence: float, checkpoint: d
         return "NO TRADE", "holdout_validation_metrics_incomplete_or_unprofitable"
     if (
         test_metrics.get("signals_disabled_for_no_validated_edge") is not False
-        or trade_count < 30
+        or trade_count < 50
         or not math.isfinite(average_net)
         or not math.isfinite(compounded_net)
         or not math.isfinite(max_drawdown)

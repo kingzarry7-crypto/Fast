@@ -237,7 +237,7 @@ class KittyTrainingExperimentTests(unittest.TestCase):
             "test_metrics": {
                 "signals_disabled_for_no_validated_edge": False,
                 "paper_backtest_after_assumed_costs": {
-                    "trade_count": 35, "average_net_return": 0.01,
+                    "trade_count": 50, "average_net_return": 0.01,
                     "compounded_net_return": 0.03, "max_drawdown": -0.02,
                     "profit_factor": 1.2,
                 },
