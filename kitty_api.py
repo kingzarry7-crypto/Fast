@@ -364,15 +364,21 @@ def _technical_signal(candles, symbol: str, timeframe: str) -> dict:
         signal = "NO TRADE"
         direction = 0
         score = max(bull, bear)
-    # Technical confluence has not passed per-market out-of-sample validation
-    # after realistic costs. Preserve the raw setup for research, but fail closed:
-    # it must never be surfaced as a directional signal or used by the paper engine.
+    # Preserve the technical candidate as a clearly labelled research setup.
+    # It is useful for observation and paper evaluation, but is not an approved
+    # trading signal: the public/actionable signal remains NO TRADE until this
+    # exact market/strategy passes an untouched after-cost validation gate.
     candidate_signal = signal
+    candidate_direction = direction
+    price = closes[-1]
+    if candidate_direction:
+        stop = price - candidate_direction * 1.5 * atr
+        target1 = price + candidate_direction * 1.5 * atr
+        target2 = price + candidate_direction * 2.5 * atr
+    else:
+        stop = target1 = target2 = None
     signal = "NO TRADE"
     direction = 0
-    price = closes[-1]
-    # No actionable risk levels are emitted for an unvalidated candidate.
-    stop = target1 = target2 = None
     raw_time = candles[-1].get("datetime") or candles[-1].get("time") or candles[-1].get("timestamp")
     try:
         from kitty_features import normalize_candle_timestamp
@@ -382,6 +388,13 @@ def _technical_signal(candles, symbol: str, timeframe: str) -> dict:
     return {
         "symbol": symbol, "timeframe": timeframe, "signal": signal,
         "candidate_signal": candidate_signal,
+        "candidate_direction": "LONG" if candidate_direction > 0 else "SHORT" if candidate_direction < 0 else "NONE",
+        "candidate_risk_levels": {
+            "stop_reference": round(stop, 8) if stop is not None else None,
+            "target_1_reference": round(target1, 8) if target1 is not None else None,
+            "target_2_reference": round(target2, 8) if target2 is not None else None,
+            "method": "candidate-only 1.5x ATR stop and 1.5x/2.5x ATR targets; not approved for execution",
+        },
         "signal_gate_reason": "no_validated_net_edge_for_rule_based_strategy",
         "strategy_edge_validated": False,
         "signal_type": "rule_based_technical_confluence_research_only",
@@ -409,7 +422,7 @@ def _technical_signal(candles, symbol: str, timeframe: str) -> dict:
         "model_used": False,
         "research_only": True, "trading_enabled": False,
         "automatic_order_execution_enabled": False,
-        "warning": "The technical setup is unvalidated and is exposed only as candidate_signal. The actionable signal is forced to NO TRADE until this strategy demonstrates positive net edge on sufficient unseen per-market data after realistic costs.",
+        "warning": "candidate_signal and candidate_risk_levels are research-only observations. The actionable signal remains NO TRADE until this strategy demonstrates positive net edge on sufficient unseen per-market data after realistic costs.",
     }
 
 
