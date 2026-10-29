@@ -286,9 +286,6 @@ class KittyRealisticBacktestTests(unittest.TestCase):
         self.assertTrue((signals.loc[second[:13]] == 0).all())
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
     def test_entries_without_full_holding_horizon_are_excluded(self):
         frame = self.candles([
@@ -303,3 +300,7 @@ if __name__ == "__main__":
             spread_bps_per_side=0, commission_bps_per_side=0, slippage_bps_per_side=0,
         ))
         self.assertEqual(result["trade_count"], 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
