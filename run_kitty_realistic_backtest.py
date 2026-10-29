@@ -295,7 +295,7 @@ def _holdout_edge_gate_passed(selected: dict | None, result: dict) -> bool:
     )
 
 
-def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float, commission_bps_per_side: float = 0.0) -> dict:
+def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float, commission_bps_per_side: float) -> dict:
     frame = pd.read_csv(path)
     required = {"timestamp", "open", "high", "low", "close"}
     missing = required - set(frame.columns)
