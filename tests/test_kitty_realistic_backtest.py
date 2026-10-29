@@ -5,13 +5,29 @@ import numpy as np
 import pandas as pd
 
 from kitty_realistic_backtest import BacktestConfig, backtest_ohlc, build_mtf_signals, _completed_timeframe
-from run_kitty_realistic_backtest import _candidate_stability_key, _json_safe, evaluate_csv
+from run_kitty_realistic_backtest import _candidate_stability_key, _holdout_edge_gate_passed, _json_safe, evaluate_csv
 
 
 class KittyRealisticBacktestTests(unittest.TestCase):
     def candles(self, rows):
         idx = pd.date_range("2026-01-01", periods=len(rows), freq="5min", tz="UTC")
         return pd.DataFrame(rows, index=idx, columns=["open", "high", "low", "close"])
+
+    def test_holdout_edge_gate_requires_50_trades_and_positive_after_cost_metrics(self):
+        selected = {"strategy": "mtf_cross"}
+        passing = {
+            "trade_count": 50,
+            "compounded_net_return": 0.02,
+            "profit_factor": 1.15,
+            "max_drawdown": -0.04,
+        }
+        self.assertTrue(_holdout_edge_gate_passed(selected, passing))
+        self.assertFalse(_holdout_edge_gate_passed(selected, {**passing, "trade_count": 49}))
+        self.assertFalse(_holdout_edge_gate_passed(selected, {**passing, "compounded_net_return": 0.0}))
+        self.assertFalse(_holdout_edge_gate_passed(selected, {**passing, "profit_factor": 1.09}))
+        self.assertFalse(_holdout_edge_gate_passed(selected, {**passing, "max_drawdown": -0.051}))
+        self.assertFalse(_holdout_edge_gate_passed(None, passing))
+
 
     def test_signal_enters_next_open_and_stop_wins_when_stop_and_target_both_hit(self):
         frame = self.candles([
