@@ -8,35 +8,34 @@ import streaming_chat
 
 
 class StreamingProviderOrderTests(unittest.TestCase):
-    def test_streaming_order_matches_normal_chat_fallback_priority(self):
-        env = {"AI_PROVIDER": "AUTO", "ZARRY_API_URL": "https://zarry.example/generate"}
-        with patch.dict(os.environ, env, clear=False), \\
-             patch.object(ai_engine, "HF_TOKEN", "hf-test"), \\
-             patch.object(ai_engine, "CLOUDFLARE_AI_TOKEN", "cf-test"), \\
-             patch.object(ai_engine, "OPENAI_API_KEY", "openai-test"), \\
-             patch.object(ai_engine, "GEMINI_API_KEY", "gemini-test"), \\
-             patch.object(streaming_chat, "_GROQ_KEY", "groq-test"), \\
-             patch.object(streaming_chat, "_OPENROUTER_KEY", "router-test"), \\
-             patch.object(streaming_chat, "_CHUTES_KEY", "chutes-test"):
-            names = [name for name, _stream in streaming_chat._provider_streams([])]
+    def _configured_providers(self, preferred):
+        env = {"AI_PROVIDER": preferred, "ZARRY_API_URL": "https://zarry.example/generate" if preferred == "AUTO" else ""}
+        with patch.dict(os.environ, env, clear=False):
+            with patch.multiple(
+                ai_engine,
+                HF_TOKEN="hf-test",
+                HF_MODEL_ID="openai/gpt-oss-120b:cheapest",
+                HF_FALLBACK_MODEL_ID="openai/gpt-oss-120b:cheapest",
+                CLOUDFLARE_AI_TOKEN="cf-test",
+                OPENAI_API_KEY="openai-test",
+                GEMINI_API_KEY="gemini-test",
+            ):
+                with patch.multiple(
+                    streaming_chat,
+                    _GROQ_KEY="groq-test",
+                    _OPENROUTER_KEY="router-test",
+                    _CHUTES_KEY="chutes-test",
+                ):
+                    return [name for name, _stream in streaming_chat._provider_streams([])]
 
+    def test_streaming_order_matches_normal_chat_fallback_priority(self):
         self.assertEqual(
-            names,
+            self._configured_providers("AUTO"),
             ["zarry", "openai", "groq", "gemini", "chutes", "openrouter", "cloudflare", "huggingface"],
         )
 
     def test_explicit_provider_is_first_but_fallbacks_remain_available(self):
-        env = {"AI_PROVIDER": "openrouter", "ZARRY_API_URL": ""}
-        with patch.dict(os.environ, env, clear=False), \\
-             patch.object(ai_engine, "HF_TOKEN", "hf-test"), \\
-             patch.object(ai_engine, "CLOUDFLARE_AI_TOKEN", "cf-test"), \\
-             patch.object(ai_engine, "OPENAI_API_KEY", "openai-test"), \\
-             patch.object(ai_engine, "GEMINI_API_KEY", "gemini-test"), \\
-             patch.object(streaming_chat, "_GROQ_KEY", "groq-test"), \\
-             patch.object(streaming_chat, "_OPENROUTER_KEY", "router-test"), \\
-             patch.object(streaming_chat, "_CHUTES_KEY", "chutes-test"):
-            names = [name for name, _stream in streaming_chat._provider_streams([])]
-
+        names = self._configured_providers("openrouter")
         self.assertEqual(names[0], "openrouter")
         self.assertIn("openai", names[1:])
         self.assertIn("groq", names[1:])
