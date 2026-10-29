@@ -41,7 +41,7 @@ def has_validated_edge(checkpoint: dict[str, Any]) -> bool:
         and isinstance(metrics, dict)
         and metrics.get("signals_disabled_for_no_validated_edge") is False
         and 0.0 <= minimum_confidence <= 1.0
-        and trade_count >= 30
+        and trade_count >= 50
         and math.isfinite(average_net)
         and math.isfinite(compounded_net)
         and math.isfinite(max_drawdown)
