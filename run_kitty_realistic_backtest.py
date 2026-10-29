@@ -370,7 +370,7 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float, commis
                     target_pct=target_pct,
                     max_hold_bars=max_hold_bars,
                     spread_bps_per_side=cost_bps_per_side * 1.5,
-                    commission_bps_per_side=0.0,
+                    commission_bps_per_side=commission_bps_per_side,
                     slippage_bps_per_side=3.0,
                 )
                 stress_validation = backtest_ohlc(
@@ -441,7 +441,7 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float, commis
         target_pct=0.010 if symbol == "BTC" else 0.006,
         max_hold_bars=24,
         spread_bps_per_side=cost_bps_per_side,
-        commission_bps_per_side=0.0,
+        commission_bps_per_side=commission_bps_per_side,
         slippage_bps_per_side=2.0,
     )
     chosen_config = selected["config"] if selected else diagnostic_config
