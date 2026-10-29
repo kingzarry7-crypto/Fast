@@ -1384,18 +1384,13 @@ async def register(payload: RegisterRequest, request: Request, response: Respons
 
         # Email verification gate
         if REQUIRE_EMAIL_VERIFY:
-            code = await asyncio.to_thread(_issue_email_code, email, "verify")
-            result = {
+            await asyncio.to_thread(_issue_email_code, email, "verify")
+            return {
                 "status": "success",
-                "message": "Account created. Enter the 6-digit code we sent to your email.",
+                "message": "Account created. If the verification email does not arrive, contact support.",
                 "requires_verification": True,
                 "email": email,
             }
-            # Dev only: surface code when Resend is not configured
-            if not RESEND_API_KEY:
-                result["dev_code"] = code
-                result["message"] += " (RESEND_API_KEY missing — code also in Railway logs / dev_code)"
-            return result
 
         raw_token = await asyncio.to_thread(_create_session, user_id, request)
         _set_session_cookie(response, raw_token)
@@ -1521,9 +1516,7 @@ async def resend_code(payload: ResendCodeRequest):
         "message": "If that email is registered and needs verification, a new code was sent.",
     }
     if user_row and REQUIRE_EMAIL_VERIFY and not await asyncio.to_thread(_is_email_verified, user_row):
-        code = await asyncio.to_thread(_issue_email_code, email, "verify")
-        if not RESEND_API_KEY:
-            result["dev_code"] = code
+        await asyncio.to_thread(_issue_email_code, email, "verify")
     return result
 
 
@@ -1536,9 +1529,7 @@ async def forgot_password(payload: ForgotPasswordRequest):
     }
     user_row = await asyncio.to_thread(_find_user_by_email, email)
     if user_row:
-        code = await asyncio.to_thread(_issue_email_code, email, "reset")
-        if not RESEND_API_KEY:
-            result["dev_code"] = code
+        await asyncio.to_thread(_issue_email_code, email, "reset")
     return result
 
 
