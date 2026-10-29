@@ -282,6 +282,19 @@ def _evaluate_trade_quality_confirmation(
         "research_only": True,
     }
 
+def _holdout_edge_gate_passed(selected: dict | None, result: dict) -> bool:
+    """Apply a conservative final holdout gate without tuning on holdout metrics."""
+    profit_factor = result.get("profit_factor")
+    return bool(
+        selected is not None
+        and result.get("trade_count", 0) >= 50
+        and result.get("compounded_net_return", 0.0) > 0
+        and profit_factor is not None
+        and profit_factor >= 1.10
+        and result.get("max_drawdown", -1.0) >= -0.05
+    )
+
+
 def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float, commission_bps_per_side: float = 0.0) -> dict:
     frame = pd.read_csv(path)
     required = {"timestamp", "open", "high", "low", "close"}
@@ -541,14 +554,8 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float, commis
         "trade_log": result["trades"],
         "diagnostic_trade_log": diagnostic_holdout["trades"] if selected is None else [],
         "research_only": True,
-        "holdout_edge_gate_passed": bool(
-            selected is not None
-            and result["trade_count"] >= 20
-            and result["compounded_net_return"] > 0
-            and result["profit_factor"] is not None
-            and result["profit_factor"] >= 1.10
-            and result["max_drawdown"] >= -0.05
-        ),
+        "minimum_holdout_trades_required": 50,
+        "holdout_edge_gate_passed": _holdout_edge_gate_passed(selected, result),
         "production_ready": False,
         "automatic_order_execution_enabled": False,
     }
