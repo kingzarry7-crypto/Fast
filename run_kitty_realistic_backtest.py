@@ -282,7 +282,7 @@ def _evaluate_trade_quality_confirmation(
         "research_only": True,
     }
 
-def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dict:
+def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float, commission_bps_per_side: float = 0.0) -> dict:
     frame = pd.read_csv(path)
     required = {"timestamp", "open", "high", "low", "close"}
     missing = required - set(frame.columns)
@@ -333,7 +333,7 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
                     target_pct=target_pct,
                     max_hold_bars=max_hold_bars,
                     spread_bps_per_side=cost_bps_per_side,
-                    commission_bps_per_side=0.0,
+                    commission_bps_per_side=commission_bps_per_side,
                     slippage_bps_per_side=2.0,
                 )
                 validation_result = backtest_ohlc(
@@ -529,7 +529,7 @@ def evaluate_csv(path: str | Path, symbol: str, cost_bps_per_side: float) -> dic
         "parameter_tuning_on_holdout": False,
         "cost_assumptions": {
             "spread_bps_per_side": cost_bps_per_side,
-            "commission_bps_per_side": 0.0,
+            "commission_bps_per_side": commission_bps_per_side,
             "slippage_bps_per_side": 2.0,
             "spread_is_measured_JustMarkets_spread": False,
         },
@@ -574,9 +574,15 @@ def main() -> None:
     parser.add_argument("--csv", type=Path, required=True)
     parser.add_argument("--spread-bps-per-side", type=float, required=True,
                         help="Measured or explicitly assumed spread per side; 2 bps slippage per side is added separately")
+    parser.add_argument("--commission-bps-per-side", type=float, default=None,
+                        help="Commission per side in basis points; must be explicitly supplied for a calibrated run")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    report = evaluate_csv(args.csv, args.symbol, args.spread_bps_per_side)
+    if args.commission_bps_per_side is None:
+        raise SystemExit("--commission-bps-per-side is required; use the actual venue/account fee or explicitly pass 0 for a diagnostic-only run")
+    if args.commission_bps_per_side < 0:
+        raise SystemExit("--commission-bps-per-side cannot be negative")
+    report = evaluate_csv(args.csv, args.symbol, args.spread_bps_per_side, args.commission_bps_per_side)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(_json_safe(report), indent=2, allow_nan=False) + "\n", encoding="utf-8")
     safe_report = _json_safe(report)
