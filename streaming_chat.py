@@ -245,7 +245,7 @@ def _provider_streams(messages: list):
     if preferred == "hf":
         preferred = "huggingface"
 
-    default_order = ["zarry", "huggingface", "cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"]
+    # Keep streaming failover aligned with llm_client.ask(): local Zarry is\n    # attempted first, then the same configured-provider priority. Hugging Face\n    # belongs after paid/known-good providers so a stale custom HF model or\n    # exhausted HF credits cannot delay OpenAI/Groq/OpenRouter responses.\n    default_order = ["zarry", "openai", "groq", "gemini", "chutes", "openrouter", "cloudflare", "huggingface"]
     if not os.getenv("ZARRY_API_URL", "").strip():
         default_order = default_order[1:]
     if not ai_engine.HF_TOKEN:
