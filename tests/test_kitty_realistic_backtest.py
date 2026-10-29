@@ -85,7 +85,7 @@ class KittyRealisticBacktestTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "btc.csv"
             frame.to_csv(path, index=False)
-            report = evaluate_csv(path, "BTC", 2.0)
+            report = evaluate_csv(path, "BTC", 2.0, 0.0)
         self.assertEqual(report["holdout_rows"], 320)
         self.assertFalse(report["parameter_tuning_on_holdout"])
         self.assertFalse(report["production_ready"])
@@ -108,7 +108,7 @@ class KittyRealisticBacktestTests(unittest.TestCase):
             frame.to_csv(path, index=False)
             forced_signals = pd.Series(1, index=pd.DatetimeIndex(idx))
             with patch("run_kitty_realistic_backtest.build_mtf_signals", return_value=forced_signals):
-                report = evaluate_csv(path, "BTC", 2.0)
+                report = evaluate_csv(path, "BTC", 2.0, 0.0)
         effective_or_diagnostic = (
             report["result"] if report["candidate_selection"]["selected"]
             else report["diagnostic_result"]
@@ -130,7 +130,7 @@ class KittyRealisticBacktestTests(unittest.TestCase):
             frame.to_csv(path, index=False)
             forced_signals = pd.Series(1, index=idx)
             with patch("run_kitty_realistic_backtest.build_mtf_signals", return_value=forced_signals):
-                report = evaluate_csv(path, "XAUUSD", 5.0)
+                report = evaluate_csv(path, "XAUUSD", 5.0, 0.0)
         self.assertLess(report["source_rows"], report["raw_rows"])
         effective_or_diagnostic = (
             report["result"] if report["candidate_selection"]["selected"]
@@ -180,7 +180,7 @@ class KittyRealisticBacktestTests(unittest.TestCase):
             frame.to_csv(path, index=False)
             forced = pd.Series(0, index=idx)
             with patch("run_kitty_realistic_backtest.build_mtf_signals", return_value=forced):
-                report = evaluate_csv(path, "BTC", 2.0)
+                report = evaluate_csv(path, "BTC", 2.0, 0.0)
         self.assertFalse(report["production_ready"])
         self.assertFalse(report["automatic_order_execution_enabled"])
         self.assertFalse(report["candidate_selection"]["selected"])
@@ -231,7 +231,7 @@ class KittyRealisticBacktestTests(unittest.TestCase):
             frame.to_csv(path, index=False)
             forced = pd.Series(1, index=idx)
             with patch("run_kitty_realistic_backtest.build_mtf_signals", return_value=forced):
-                report = evaluate_csv(path, "BTC", 2.0)
+                report = evaluate_csv(path, "BTC", 2.0, 0.0)
         self.assertFalse(report["candidate_selection"]["selected"])
         self.assertEqual(report["result"]["trade_count"], 0)
         self.assertIsNone(report["result"]["profit_factor"])
