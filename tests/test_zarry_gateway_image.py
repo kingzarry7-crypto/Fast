@@ -1,6 +1,5 @@
 import unittest
 from uuid import uuid4
-from PIL import Image
 
 from zarry_gateway.image import HuggingFaceImageProvider
 
@@ -18,7 +17,7 @@ class FakeLedger:
 
 class FakeClient:
     def __init__(self, image=None):
-        self.image = image or Image.new("RGB", (2, 2))
+        self.image = image or object()
         self.calls = []
     def text_to_image(self, **kwargs):
         self.calls.append(kwargs)
@@ -75,11 +74,11 @@ class ImageProviderTests(unittest.TestCase):
         self.assertEqual([c[0] for c in ledger.calls], ["reserve"])
         self.assertEqual(storage.saved, [])
 
-    def test_provider_failure_releases_reservation(self):
+    def test_ambiguous_provider_failure_keeps_reservation(self):
         ledger = FakeLedger()
         class BrokenClient:
             def text_to_image(self, **kwargs):
-                raise TimeoutError("failed before confirmed provider response")
+                raise TimeoutError("provider outcome is unknown")
         provider = HuggingFaceImageProvider(
             api_key="hf_secret", model="test/model", ledger=ledger,
             cost_estimator=lambda model, size: "0.01",
@@ -88,7 +87,7 @@ class ImageProviderTests(unittest.TestCase):
         )
         with self.assertRaises(TimeoutError):
             provider.generate("test", request_id=uuid4(), size="1024x1024")
-        self.assertEqual([c[0] for c in ledger.calls], ["reserve", "release"])
+        self.assertEqual([c[0] for c in ledger.calls], ["reserve"])
 
 
 if __name__ == "__main__":
