@@ -82,7 +82,7 @@ class SmokeLifecycleTests(unittest.TestCase):
     def test_success_records_outcome_and_returns_verified_public_image(self):
         import requests
         class PublicResponse:
-            content = bytes([0x89]) + b"PNG\\r\\n\\x1a\\nimage-bytes"
+            content = bytes([0x89]) + b"PNG\r\n\x1a\nimage-bytes"
             def raise_for_status(self):
                 return None
 
@@ -105,7 +105,7 @@ class SmokeLifecycleTests(unittest.TestCase):
         self.state["claimed_keys"].add("replicate-one-shot-v1")
         import requests
         class PublicResponse:
-            content = bytes([0x89]) + b"PNG\\r\\n\\x1a\\nimage-bytes"
+            content = bytes([0x89]) + b"PNG\r\n\x1a\nimage-bytes"
             def raise_for_status(self):
                 return None
 
