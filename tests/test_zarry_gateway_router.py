@@ -12,6 +12,35 @@ class GatewayRouterTests(unittest.TestCase):
             if not self.authenticated: raise HTTPException(status_code=401,detail="Authentication required")
             return {"id":"user-123"}
         self.app=FastAPI(); self.app.include_router(create_general_router(require_user,FakeGateway(),enabled_check=lambda:True)); self.client=TestClient(self.app)
+    def test_admin_connection_test_requires_admin(self):
+        app=FastAPI()
+        def deny_admin(request):
+            raise HTTPException(status_code=403, detail="Admin access denied")
+        app.include_router(create_general_router(lambda request: {"id":"u"}, FakeGateway(), admin_check=deny_admin))
+        response=TestClient(app).post("/api/assistant/admin/connection-test")
+        self.assertEqual(response.status_code,403)
+
+    def test_admin_connection_test_calls_model_and_returns_safe_metadata(self):
+        gateway=FakeGateway()
+        app=FastAPI()
+        app.include_router(create_general_router(lambda request: {"id":"u"}, gateway, admin_check=lambda request: ({"id":"admin-1"}, "admin@example.com")))
+        response=TestClient(app).post("/api/assistant/admin/connection-test")
+        self.assertEqual(response.status_code,200)
+        body=response.json()
+        self.assertEqual(body["status"],"ok")
+        self.assertEqual(body["provider"],"local")
+        self.assertNotIn("response",body)
+
+    def test_admin_connection_test_fails_closed_on_provider_error(self):
+        class BrokenGateway(FakeGateway):
+            def chat(self, principal, payload):
+                raise TimeoutError("secret provider details")
+        app=FastAPI()
+        app.include_router(create_general_router(lambda request: {"id":"u"}, BrokenGateway(), admin_check=lambda request: ({"id":"admin-1"}, "admin@example.com")))
+        response=TestClient(app, raise_server_exceptions=False).post("/api/assistant/admin/connection-test")
+        self.assertEqual(response.status_code,502)
+        self.assertNotIn("secret provider details",response.text)
+
     def test_chat_requires_authenticated_web_session(self):
         self.authenticated=False; self.assertEqual(self.client.post("/api/assistant/chat",json={"message":"hi"}).status_code,401)
     def test_chat_returns_contract(self):
