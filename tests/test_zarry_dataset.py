@@ -1,7 +1,10 @@
 import unittest
+import tempfile
+from pathlib import Path
 
 from zarry_dataset import (
     build_feature_dataset,
+    build_feature_dataset_from_csv,
     chronological_split,
     normalize_asset,
     validate_paper_trade_rows,
@@ -9,6 +12,14 @@ from zarry_dataset import (
 
 
 class ZarryDatasetTests(unittest.TestCase):
+    def test_csv_builder_reads_artifact_and_preserves_provenance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "btc.csv"
+            path.write_text("timestamp,target,data_source,close\n2026-01-01T00:00:00Z,2,feed,50000\n", encoding="utf-8")
+            rows = build_feature_dataset_from_csv("BTCUSD", path, "actions://artifact-1")
+        self.assertEqual(rows[0]["features"]["close"], 50000.0)
+        self.assertEqual(rows[0]["provenance"], "actions://artifact-1")
+
     def test_feature_rows_keep_forward_labels_distinct_from_paper_outcomes(self):
         rows = [
             {"timestamp": "2026-01-01T00:00:00Z", "target": "2",
