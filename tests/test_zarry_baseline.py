@@ -100,8 +100,9 @@ class ZarryBaselineTests(unittest.TestCase):
     def test_missing_or_nonfinite_trade_return_is_rejected(self):
         rows = [sample(forward_return=float("nan")) for _ in range(9)]
         predictions = [2] + [1] * 8
-        with self.assertRaises(ValueError):
-            simulate_predictions(rows, predictions, asset="BTCUSD")
+        result = simulate_predictions(rows, predictions, asset="BTCUSD")
+        self.assertEqual(result["completed_trades"], 0)
+        self.assertEqual(result["incomplete_outcome_skips"], 1)
 
 
 if __name__ == "__main__":
