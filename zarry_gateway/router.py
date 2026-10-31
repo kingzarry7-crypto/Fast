@@ -125,41 +125,81 @@ def create_general_router(
 
     @router.post("/admin/image-generation-smoke-test")
     async def admin_image_generation_smoke_test(request: Request):
-        # Persistent one-use claim is committed before any paid provider call.
+        # Admin authorization always happens before the persistent one-use claim.
         if admin_check is None:
             raise HTTPException(status_code=503, detail="Image smoke test is unavailable")
         try:
             admin = admin_check(request)
             if inspect.isawaitable(admin):
                 await admin
-            from database import get_db_cursor
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=403, detail="Admin access denied")
+
+        from database import get_db_cursor
+        from uuid import uuid4
+        from urllib.parse import urlsplit
+        import requests
+
+        request_id = str(uuid4())
+        claimed = False
+
+        def record_outcome(status, provider_name=None, image_url=None, error_type=None):
+            # The lock row is the durable audit record; never store credentials or prompts.
+            with get_db_cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE zarry_image_smoke_test_lock
+                    SET status = %s, request_id = %s, provider = %s,
+                        image_url = %s, error_type = %s,
+                        completed_at = CASE WHEN %s IN ('succeeded', 'failed')
+                                            THEN NOW() ELSE completed_at END
+                    WHERE lock_key = 'replicate-one-shot-v1'
+                    """,
+                    (status, request_id, provider_name, image_url, error_type, status),
+                )
+
+        try:
             with get_db_cursor() as cur:
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS zarry_image_smoke_test_lock (
                         lock_key TEXT PRIMARY KEY,
-                        claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                        claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        status TEXT NOT NULL DEFAULT 'claimed',
+                        request_id TEXT,
+                        provider TEXT,
+                        image_url TEXT,
+                        error_type TEXT,
+                        completed_at TIMESTAMPTZ
                     )
                 """)
+                # Upgrade installations that created the original minimal lock table.
+                cur.execute("ALTER TABLE zarry_image_smoke_test_lock ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'claimed'")
+                cur.execute("ALTER TABLE zarry_image_smoke_test_lock ADD COLUMN IF NOT EXISTS request_id TEXT")
+                cur.execute("ALTER TABLE zarry_image_smoke_test_lock ADD COLUMN IF NOT EXISTS provider TEXT")
+                cur.execute("ALTER TABLE zarry_image_smoke_test_lock ADD COLUMN IF NOT EXISTS image_url TEXT")
+                cur.execute("ALTER TABLE zarry_image_smoke_test_lock ADD COLUMN IF NOT EXISTS error_type TEXT")
+                cur.execute("ALTER TABLE zarry_image_smoke_test_lock ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ")
                 cur.execute("""
-                    INSERT INTO zarry_image_smoke_test_lock (lock_key)
-                    VALUES ('replicate-one-shot-v1')
+                    INSERT INTO zarry_image_smoke_test_lock (lock_key, status, request_id)
+                    VALUES ('replicate-one-shot-v1', 'claimed', %s)
                     ON CONFLICT (lock_key) DO NOTHING
                     RETURNING lock_key
-                """)
-                claimed = cur.fetchone()
+                """, (request_id,))
+                claimed = cur.fetchone() is not None
             if not claimed:
                 raise HTTPException(status_code=409, detail="The one-time image test has already been used")
+
             provider = getattr(gateway, "image_provider", None)
             storage = getattr(gateway, "image_storage", None) or getattr(provider, "storage", None)
             if provider is None or storage is None:
-                raise HTTPException(status_code=503, detail="Image generation and storage are not configured")
-            from uuid import uuid4
-            from urllib.parse import urlsplit
-            import requests
-            request_id = uuid4()
+                raise RuntimeError("Image generation and storage are not configured")
+
+            record_outcome("running")
             result = provider.generate(
                 "A simple photorealistic studio photograph of a single ripe orange on a clean neutral background.",
-                request_id=request_id, width=1024, height=1024,
+                request_id=uuid4(), width=1024, height=1024,
             )
             image_url = result.get("image_url") if isinstance(result, dict) else None
             parsed = urlsplit(str(image_url or ""))
@@ -170,10 +210,13 @@ def create_general_router(
             response.raise_for_status()
             if not response.content.startswith(b"\\x89PNG\\r\\n\\x1a\\n"):
                 raise RuntimeError("Generated object was not a PNG")
+
+            provider_name = str(result.get("provider", "replicate-z-image-turbo"))
+            record_outcome("succeeded", provider_name=provider_name, image_url=image_url)
             return {
                 "status": "ok",
-                "request_id": str(request_id),
-                "provider": str(result.get("provider", "replicate-z-image-turbo")),
+                "request_id": request_id,
+                "provider": provider_name,
                 "image_url": image_url,
                 "public_retrieval": "verified",
                 "public_generation_enabled": False,
@@ -182,6 +225,11 @@ def create_general_router(
         except HTTPException:
             raise
         except Exception as exc:
+            if claimed:
+                try:
+                    record_outcome("failed", error_type=type(exc).__name__)
+                except Exception as audit_exc:
+                    logger.error("One-shot image audit update failed (%s)", type(audit_exc).__name__)
             logger.error("One-shot image generation smoke test failed (%s)", type(exc).__name__)
             raise HTTPException(status_code=502, detail="One-time image generation test failed; lock remains consumed")
 
