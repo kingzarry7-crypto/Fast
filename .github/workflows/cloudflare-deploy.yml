@@ -18,6 +18,7 @@ concurrency:
 jobs:
   deploy:
     name: Build and deploy Cloudflare Worker
+    environment: ZARRY
     runs-on: ubuntu-latest
     defaults:
       run:
