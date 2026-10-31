@@ -139,16 +139,19 @@ def chronological_split(
         raise ValueError("duplicate timestamps cannot be split")
     first = int(len(ordered) * train_fraction)
     second = int(len(ordered) * (train_fraction + validation_fraction))
+    # The label at t uses prices through t+7. Purge those seven rows
+    # immediately before each raw boundary; do not purge again after it.
+    # This yields the archived run-106 partitions (14 rows removed total).
     train_end = max(0, first - purge_rows)
-    validation_start = min(len(ordered), first + purge_rows)
+    validation_start = first
     validation_end = max(validation_start, second - purge_rows)
-    test_start = min(len(ordered), second + purge_rows)
+    test_start = second
     return {
         "train": ordered[:train_end],
         "validation": ordered[validation_start:validation_end],
         "test": ordered[test_start:],
         "purged_rows": (validation_start - train_end) + (test_start - validation_end),
-        "split_method": "chronological_with_purged_boundaries",
+        "split_method": "chronological_with_trailing_boundary_purge",
         "purge_rows_per_boundary": purge_rows,
     }
 
