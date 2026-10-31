@@ -9,6 +9,7 @@ from __future__ import annotations
 from decimal import Decimal
 from io import BytesIO
 import os
+import re
 import time
 from urllib.parse import urlsplit
 
@@ -63,6 +64,8 @@ class ReplicateZImageTurboProvider:
     def generate(self, prompt: str, *, request_id, width: int, height: int) -> dict:
         if not self.api_token or not self.model_version:
             raise RuntimeError("Replicate token and pinned Z-Image-Turbo version are required")
+        if not re.fullmatch(r"[0-9a-f]{64}", self.model_version):
+            raise RuntimeError("Replicate model version must be an immutable 64-character version ID")
         if not isinstance(prompt, str) or not prompt.strip():
             raise ValueError("Image prompt is required")
         price = Decimal(replicate_zimage_turbo_cost_usd(width, height))
