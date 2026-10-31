@@ -99,6 +99,42 @@ class ZarryServiceTests(unittest.TestCase):
         self.assertIn("disk_free_mb", body)
         self.assertIn("requests_total", body)
 
+    def test_preserves_buy_and_sell_decisions(self):
+        for decision in ("BUY", "SELL"):
+            with self.subTest(decision=decision):
+                payload = self.payload()
+                payload["kitty_assessment"]["decision"] = decision
+                response = self.client.post(
+                    "/v1/explain",
+                    json=payload,
+                    headers={"Authorization": "Bearer test-secret"},
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()["decision"], decision)
+
+    def test_rejects_nested_context_values(self):
+        payload = self.payload()
+        payload["context"]["nested"] = {"unsafe": "object"}
+        response = self.client.post(
+            "/v1/explain", json=payload,
+            headers={"Authorization": "Bearer test-secret"},
+        )
+        self.assertEqual(response.status_code, 422)
+
+    def test_rejects_oversized_context_strings(self):
+        payload = self.payload()
+        payload["context"]["note"] = "x" * 1001
+        response = self.client.post(
+            "/v1/explain", json=payload,
+            headers={"Authorization": "Bearer test-secret"},
+        )
+        self.assertEqual(response.status_code, 422)
+
+    def test_replaces_untrusted_request_id(self):
+        response = self.client.get("/", headers={"X-Request-ID": "bad\\r\\ninjected"})
+        self.assertNotEqual(response.headers["X-Request-ID"], "bad\\r\\ninjected")
+        self.assertRegex(response.headers["X-Request-ID"], r"^[0-9a-f-]{36}$")
+
     def test_requires_bearer_secret(self):
         self.assertEqual(self.client.post("/v1/explain", json=self.payload()).status_code, 401)
 
