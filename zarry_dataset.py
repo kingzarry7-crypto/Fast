@@ -122,10 +122,12 @@ def chronological_split(
     validation_fraction: float = 0.15,
     purge_rows: int = 7,
 ) -> dict[str, Any]:
-    """Chronological split with a row embargo on both partition boundaries.
+    """Chronological split with a trailing purge before each raw boundary.
 
-    The current default contract is hourly samples with a six-hour label horizon;
-    callers using another cadence/horizon must choose a matching purge_rows value.
+    For a label horizon of H rows, the final H samples before each boundary
+    are excluded from the earlier partition. No rows are additionally removed
+    after the boundary. Callers using another cadence/horizon must choose a
+    matching purge_rows value.
     """
     if purge_rows < 0:
         raise ValueError("purge_rows cannot be negative")
@@ -139,16 +141,19 @@ def chronological_split(
         raise ValueError("duplicate timestamps cannot be split")
     first = int(len(ordered) * train_fraction)
     second = int(len(ordered) * (train_fraction + validation_fraction))
+    # The label at t uses prices through t+7. Purge those seven rows
+    # immediately before each raw boundary; do not purge again after it.
+    # This yields the archived run-106 partitions (14 rows removed total).
     train_end = max(0, first - purge_rows)
-    validation_start = min(len(ordered), first + purge_rows)
+    validation_start = first
     validation_end = max(validation_start, second - purge_rows)
-    test_start = min(len(ordered), second + purge_rows)
+    test_start = second
     return {
         "train": ordered[:train_end],
         "validation": ordered[validation_start:validation_end],
         "test": ordered[test_start:],
         "purged_rows": (validation_start - train_end) + (test_start - validation_end),
-        "split_method": "chronological_with_purged_boundaries",
+        "split_method": "chronological_with_trailing_boundary_purge",
         "purge_rows_per_boundary": purge_rows,
     }
 
