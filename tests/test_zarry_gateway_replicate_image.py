@@ -85,6 +85,24 @@ class ReplicateZImageTurboPricingTests(unittest.TestCase):
         self.assertEqual(raised.exception.failure_stage, "replicate_poll")
         self.assertIsNone(raised.exception.http_status_code)
 
+    def test_request_failure_discards_boolean_http_status(self):
+        class Response:
+            status_code = True
+
+        class Session:
+            def get(self, *args, **kwargs):
+                error = RuntimeError("private response")
+                error.response = Response()
+                raise error
+
+        provider = ReplicateZImageTurboProvider(
+            api_token="replicate-token", model_version="a" * 64,
+            ledger=object(), storage=object(), session=Session(),
+        )
+        with self.assertRaises(ReplicateRequestError) as raised:
+            provider._request("replicate_poll", "get", "https://api.replicate.com/v1/predictions/id")
+        self.assertIsNone(raised.exception.http_status_code)
+
 
 
 if __name__ == "__main__":
