@@ -845,7 +845,10 @@ def _require_current_user(request: Request) -> Any:
 try:
     from zarry_gateway.router import create_general_router
     from zarry_gateway.service import AssistantService
-    _zarry_general_service = AssistantService()
+    from zarry_gateway.memory import PostgresConversationMemory
+    _zarry_general_service = AssistantService(
+        memory_store=PostgresConversationMemory()
+    )
     app.include_router(
         create_general_router(_require_current_user, gateway=_zarry_general_service)
     )
