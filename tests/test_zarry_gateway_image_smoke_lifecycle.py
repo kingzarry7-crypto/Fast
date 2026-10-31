@@ -24,7 +24,7 @@ class FakeCursor:
                 self.state["request_id"] = params[0]
 
         if "UPDATE zarry_image_smoke_test_lock" in sql:
-            self.state["outcomes"].append((params[0], params[1], params[2], params[3], params[4]))
+            self.state["outcomes"].append(tuple(params[i] if i < len(params) else None for i in range(7)))
 
     def fetchone(self):
         if "INSERT INTO zarry_image_smoke_test_lock" in self.last_sql and self.state.get("insert_won"):
@@ -122,6 +122,8 @@ class SmokeLifecycleTests(unittest.TestCase):
         self.assertNotIn("private provider details", response.text)
         self.assertEqual(self.state["outcomes"][-1][0], "failed")
         self.assertEqual(self.state["outcomes"][-1][4], "TimeoutError")
+        self.assertEqual(self.state["outcomes"][-1][5], "provider_generate_other")
+        self.assertIsNone(self.state["outcomes"][-1][6])
         self.assertFalse(public_get.called)
 
 
