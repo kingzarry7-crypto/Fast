@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timedelta, timezone
 import tempfile
 from pathlib import Path
 
@@ -42,8 +43,8 @@ class ZarryDatasetTests(unittest.TestCase):
             ], "artifact://mixed.csv")
 
     def test_chronological_split_purges_boundary_rows(self):
-        rows = [{"timestamp": f"2026-01-{day:02d}T00:00:00Z", "i": day}
-                for day in range(1, 21)]
+        rows = [{"timestamp": (datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(hours=i)).isoformat(), "i": i}
+                for i in range(100)]
         split = chronological_split(rows, purge_rows=2)
         self.assertLess(max(r["timestamp"] for r in split["train"]),
                         min(r["timestamp"] for r in split["validation"]))
