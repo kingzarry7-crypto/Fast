@@ -876,8 +876,17 @@ try:
         memory_store=PostgresConversationMemory(),
         image_provider=_zarry_image_provider,
     )
+    # Resolve the existing admin guard at request time; it is defined later
+    # in this module alongside the rest of the admin session helpers.
+    def _require_zarry_admin(request):
+        return _require_admin(request)
+
     app.include_router(
-        create_general_router(_require_current_user, gateway=_zarry_general_service)
+        create_general_router(
+            _require_current_user,
+            gateway=_zarry_general_service,
+            admin_check=_require_zarry_admin,
+        )
     )
 except Exception as _zarry_general_import_error:
     logger.warning("ZARRY general gateway unavailable: %s", type(_zarry_general_import_error).__name__)
