@@ -6,10 +6,15 @@ from datetime import datetime, timezone
 from decimal import Decimal
 import os
 import uuid
+import pathlib
+import sys
 
 import psycopg2
 
 from zarry_gateway.budget import BudgetDenied, PostgresMonthlyBudgetLedger
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 DSN = os.environ["ZARRY_TEST_DATABASE_URL"]
 
