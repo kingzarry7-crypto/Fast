@@ -102,6 +102,14 @@ class ZarryServiceTests(unittest.TestCase):
     def test_requires_bearer_secret(self):
         self.assertEqual(self.client.post("/v1/explain", json=self.payload()).status_code, 401)
 
+    def test_accepts_case_insensitive_bearer_scheme(self):
+        response = self.client.post(
+            "/v1/explain",
+            json=self.payload(),
+            headers={"Authorization": "bearer test-secret"},
+        )
+        self.assertEqual(response.status_code, 200)
+
     def test_preserves_kitty_decision_and_returns_explanation(self):
         response = self.client.post(
             "/v1/explain",
