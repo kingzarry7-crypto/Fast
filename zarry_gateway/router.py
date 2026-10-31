@@ -142,7 +142,8 @@ def create_general_router(
         from urllib.parse import urlsplit
         import requests
 
-        request_id = str(uuid4())
+        request_uuid = uuid4()
+        request_id = str(request_uuid)
         claimed = False
 
         def record_outcome(status, provider_name=None, image_url=None, error_type=None):
@@ -199,7 +200,7 @@ def create_general_router(
             record_outcome("running")
             result = provider.generate(
                 "A simple photorealistic studio photograph of a single ripe orange on a clean neutral background.",
-                request_id=uuid4(), width=1024, height=1024,
+                request_id=request_uuid, width=1024, height=1024,
             )
             image_url = result.get("image_url") if isinstance(result, dict) else None
             parsed = urlsplit(str(image_url or ""))
