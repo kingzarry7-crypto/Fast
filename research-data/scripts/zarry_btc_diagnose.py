@@ -99,7 +99,7 @@ def main() -> None:
         weight_decay=1e-4, seed=args.seed, purge=PURGE_ROWS,
     )
     label_sensitivity = evaluate_label_threshold_sensitivity(
-        x, returns, thresholds=(0.001, 0.003, 0.002),
+        x, returns, thresholds=(0.002, 0.003, 0.004),
         round_trip_cost=args.round_trip_cost,
         folds=3, epochs=30, patience=5, batch_size=128,
         weight_decay=1e-4, seed=args.seed, purge=PURGE_ROWS,
