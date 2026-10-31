@@ -1,6 +1,6 @@
 # ZARRY generated-image storage
 
-Generated images are stored in Cloudflare R2 through its S3-compatible API.
+Generated images are stored in Cloudflare R2 through its S3-compatible API. The verified bucket in the connected Cloudflare account is `zarrry` (region `WEUR`).
 The adapter is `zarry_gateway.image_storage.CloudflareR2ImageStorage`.
 
 ## Server-only configuration
@@ -10,8 +10,8 @@ Set these variables on the Fast API service that will host the gateway:
 - `R2_ENDPOINT_URL`: the account's Cloudflare R2 S3 API endpoint, using HTTPS.
 - `R2_ACCESS_KEY_ID`: an R2 API token access key with object-write permission for the target bucket.
 - `R2_SECRET_ACCESS_KEY`: the matching secret.
-- `R2_BUCKET`: the private bucket name.
-- `R2_PUBLIC_BASE_URL`: an HTTPS custom domain or public R2 URL mapped to that bucket.
+- `R2_BUCKET`: `zarrry`.
+- `R2_PUBLIC_BASE_URL`: `https://pub-93af13628c2041bfb07c627e14b65ebe.r2.dev` for development only. This bucket currently has no custom domain connected; use a Cloudflare custom domain before production.
 
 Never put these credentials in frontend variables or source control. Do not use an account-wide Cloudflare API token where scoped R2 object access credentials are available.
 
