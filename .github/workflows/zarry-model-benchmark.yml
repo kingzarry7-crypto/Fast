@@ -39,10 +39,10 @@ jobs:
           CMAKE_ARGS="-DGGML_NATIVE=OFF" python -m pip install "llama-cpp-python==0.3.16" "huggingface_hub>=0.30,<2"
       - name: Run selected model benchmark
         run: |
-          python research-data/scripts/zarry_model_benchmark.py --models \${{ inputs.models }} --threads 2 --output research-data/reports/zarry-model-benchmark-run-\${{ github.run_id }}.json
+          python research-data/scripts/zarry_model_benchmark.py --models ${{ inputs.models }} --threads 2 --output research-data/reports/zarry-model-benchmark-run-${{ github.run_id }}.json
       - uses: actions/upload-artifact@v6
         with:
-          name: zarry-model-benchmark-\${{ github.run_id }}
-          path: research-data/reports/zarry-model-benchmark-run-\${{ github.run_id }}.json
+          name: zarry-model-benchmark-${{ github.run_id }}
+          path: research-data/reports/zarry-model-benchmark-run-${{ github.run_id }}.json
           if-no-files-found: error
           retention-days: 90
