@@ -37,6 +37,14 @@ class ZarryKittyAdapterTests(unittest.TestCase):
         self.assertFalse(manifest["realized_paper_outcomes_included"])
         self.assertEqual(rows[0]["provenance"], "sha256:" + manifest["source_file_sha256"])
 
+    def test_btc_accepts_actual_yahoo_finance_fallback_artifact_provenance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "btc.csv"
+            write_fixture(path, source="Yahoo Finance fallback")
+            rows, manifest = adapt_kitty_hourly_csv("BTCUSD", path)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(manifest["market_data_sources"], ["Yahoo Finance fallback"])
+
     def test_gold_requires_real_twelve_data_spot_provenance(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "gold.csv"
