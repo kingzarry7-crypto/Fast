@@ -597,6 +597,11 @@ export type AdminImageStorageTest = {
   public_host?: string;
 };
 
+export type AdminImageGenerationSmokeTest = { status: "ok"; request_id: string; provider: string; image_url: string; public_retrieval: "verified"; public_generation_enabled: false; budget_reservation_usd: "0.01" };
+export async function adminImageGenerationSmokeTest(signal?: AbortSignal) {
+  return request<AdminImageGenerationSmokeTest>("/api/assistant/admin/image-generation-smoke-test", { method: "POST", signal });
+}
+
 export async function adminImageStorageTest(signal?: AbortSignal) {
   return request<AdminImageStorageTest>("/api/assistant/admin/image-storage-test", {
     method: "POST",
