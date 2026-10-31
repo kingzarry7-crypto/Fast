@@ -6,7 +6,9 @@ separate record types. This module does not train models or change Kitty.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import csv
 import math
+from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 ASSET_ALIASES = {
@@ -169,3 +171,22 @@ def validate_paper_trade_rows(rows: Iterable[Mapping[str, Any]]) -> list[dict[st
             "provenance": str(row.get("provenance", "paper_ledger")),
         })
     return sorted(output, key=lambda item: item["closed_at"])
+
+
+def build_feature_dataset_from_csv(
+    asset: str,
+    csv_path: str | Path,
+    provenance: str,
+    *,
+    timeframe: str = "1h",
+    feature_version: str = "kitty-hourly-v1",
+) -> list[dict[str, Any]]:
+    """Load an exported feature CSV and normalize it with the same strict contract."""
+    with Path(csv_path).open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if not reader.fieldnames:
+            raise ValueError("feature CSV must include a header row")
+        rows = list(reader)
+    return build_feature_dataset(
+        asset, rows, provenance, timeframe=timeframe, feature_version=feature_version
+    )
