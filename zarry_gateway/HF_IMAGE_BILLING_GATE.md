@@ -1,55 +1,74 @@
-# ZARRY Hugging Face image-billing gate
+# ZARRY image-generation billing decision
 
 ## Decision
 
-Paid Hugging Face image generation remains disabled. Do not wire
-`HuggingFaceImageProvider` into `/api/assistant/image` until request-level
-cost can be estimated conservatively before dispatch and reconciled from a
-verified source after dispatch.
+ZARRY uses the direct Replicate API for `prunaai/z-image-turbo`, not Hugging
+Face-routed billing. This avoids relying on delayed Hugging Face aggregate usage
+records for request settlement. The Hugging Face token is not used for this
+provider path.
 
-## What the current Hugging Face documentation establishes
+Official model pricing page:
+https://replicate.com/prunaai/z-image-turbo
 
-- Routed Inference Providers requests are billed at the underlying provider's
-  rates; Hugging Face passes through provider costs.
-- The Inference Providers settings page exposes a past-month usage breakdown by
-  model and provider.
-- The documented organization usage API is Enterprise-only, reports daily
-  aggregates, rounds costs to cents per row, and may take up to two hours for
-  requests to appear. It is not a request-level settlement feed and cannot
-  safely settle a per-request microdollar reservation.
-- The `InferenceClient.text_to_image` result is an image object; the image
-  bytes are not proof of the provider's billed amount.
+The published resolution tiers are:
 
-References:
-- https://huggingface.co/docs/inference-providers/pricing
-- https://huggingface.co/docs/hub/billing
-- https://huggingface.co/docs/inference-providers/register-as-a-provider
+| Output pixels | Published price |
+| ---: | ---: |
+| Up to 500,000 | $0.0025 |
+| Up to 1,000,000 | $0.005 |
+| Up to 2,000,000 | $0.01 |
 
-## Requirements before enabling
+The model page identifies this as PrunaAI's optimized Z-Image-Turbo model,
+based on Tongyi-MAI's Z-Image-Turbo. It is not interchangeable with the
+unoptimized base model identifier.
 
-1. Select and pin a specific provider and model; do not use automatic provider
-   routing where provider-specific pricing is needed.
-2. Obtain an authoritative price schedule and a conservative upper-bound
-   estimator for the exact model, provider, and image parameters.
-3. Confirm how provider billing behaves for errors, timeouts, retries, and
-   partially completed generations.
-4. Obtain a request-correlated actual-cost source with sufficient precision and
-   latency for settlement. Daily account aggregates rounded to cents are not
-   sufficient.
-5. Test the estimator and settlement against real provider invoices/usage
-   records, including concurrent requests and ambiguous timeouts.
-6. Keep the application-side USD 2/month cap, but explain that it is not an
-   account-wide Hugging Face spending limit.
-7. Only after all gates pass, wire the provider behind a default-off feature
-   flag and add an authenticated end-to-end acceptance test.
+## Budget behavior
 
-## Current safe behavior
+- The adapter rejects outputs above 2 megapixels.
+- It reserves the maximum currently published tier ($0.01) before submitting
+  a prediction. This is conservative across all supported resolutions.
+- Once Replicate reports `succeeded`, it settles the reservation using the
+  published tier for the requested output dimensions.
+- Failed, timed-out, or ambiguous predictions retain their reservation. They
+  are not automatically retried or released because the provider may have
+  accepted the request before the client observed the failure.
+- The existing PostgreSQL USD 2/month ledger remains the application-side cap.
+  It is not an account-wide Replicate spending limit.
+- Price schedules can change. Before production activation, re-check the
+  provider's published price and update the price contract/tests if it changes.
 
-- The image provider adapter is contract-only and is not wired into the route.
-- The image route returns `503 Image generation is unavailable` when no image
-  handler is configured.
-- Unknown estimates and unknown actual costs fail closed.
-- Do not substitute a guessed flat price, image dimensions, or delayed daily
-  aggregates for a verified request-level cost.
-- No paid inference request should be sent as part of CI or deployment smoke
-  tests.
+## Required server configuration
+
+Set these on the **Fast API service** that hosts `api.py`, not only on the
+separate ZARRY model-inference service:
+
+- `REPLICATE_API_TOKEN`: direct Replicate API token.
+- `ZARRY_REPLICATE_MODEL_VERSION`: an immutable version ID copied from the
+  selected Replicate model's API/version page.
+- `R2_ENDPOINT_URL`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET`
+- `R2_PUBLIC_BASE_URL`
+
+Never put credentials in frontend variables or source control. The adapter is
+constructed only when every required variable exists. Invalid image-storage
+configuration must not disable the separate ZARRY text gateway.
+
+## Activation
+
+`ZARRY_IMAGE_ENABLED` defaults to false. Keep it false until the Replicate
+token and immutable model version are configured on the Fast API service,
+the R2 upload path is verified, and a user-approved low-cost live smoke test
+confirms the provider and billing behavior. CI tests use fakes and never send
+paid provider requests.
+
+## Safety limits
+
+- No automatic provider fallback.
+- No Hugging Face token is sent to Replicate.
+- No unpinned model version or automatic model alias.
+- No output URL is downloaded unless it uses HTTPS on a Replicate delivery
+  hostname.
+- The route remains unavailable when the feature flag is off or provider
+  configuration is incomplete.
