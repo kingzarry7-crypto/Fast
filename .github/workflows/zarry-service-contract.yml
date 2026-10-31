@@ -4,12 +4,16 @@ on:
   pull_request:
     paths:
       - "zarry-service/**"
+      - "zarry_gateway/**"
+      - "tests/test_zarry_gateway_*.py"
       - "api.py"
       - ".github/workflows/zarry-service-contract.yml"
   push:
     branches: ["main", "feat/zarry-inference-service-prototype"]
     paths:
       - "zarry-service/**"
+      - "zarry_gateway/**"
+      - "tests/test_zarry_gateway_*.py"
       - "api.py"
       - ".github/workflows/zarry-service-contract.yml"
 
@@ -23,8 +27,8 @@ jobs:
           python-version: "3.12"
       - name: Install lightweight service test dependencies
         run: python -m pip install "fastapi==0.142.4" "pydantic==2.12.5" "httpx" "requests"
-      - name: Compile service
-        run: python -m compileall -q zarry-service
+      - name: Compile service and gateway
+        run: python -m compileall -q zarry-service zarry_gateway
       - name: Validate Railway config
         run: python -m json.tool zarry-service/railway.json > /dev/null
       - name: Validate Railway startup script
@@ -33,5 +37,7 @@ jobs:
         run: python -m py_compile zarry-service/smoke_test.py
       - name: Run service contract tests
         run: python -m unittest discover -s zarry-service/tests -p "test_*.py" -v
+      - name: Run gateway text contract tests
+        run: python -m unittest tests.test_zarry_gateway_text -v
       - name: Compile Fast API integration
         run: python -m py_compile api.py
