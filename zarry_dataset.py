@@ -18,6 +18,7 @@ TARGET_LABELS = {"0": "SHORT", "1": "NO TRADE", "2": "LONG"}
 RESERVED_FEATURE_FIELDS = {
     "timestamp", "datetime", "date", "target", "symbol", "asset",
     "data_source", "source", "label", "label_type", "realized_net_return",
+    "forward_return_6h", "entry_price_next_open", "exit_price_after_6h",
 }
 
 
