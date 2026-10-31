@@ -69,6 +69,17 @@ class ZarryBaselineTests(unittest.TestCase):
         self.assertIn("macro_f1", result)
         self.assertEqual(result["class_distribution"]["LONG"], 2)
 
+    def test_runner_reports_classification_and_both_cost_scenarios(self):
+        from zarry_baseline import run_baseline_benchmark
+        train = [sample("SHORT"), sample("SHORT"), sample("LONG")]
+        evaluation = [sample("LONG", ret_6h=0.004, forward_return=0.01) for _ in range(12)]
+        result = run_baseline_benchmark("majority", train, evaluation, asset="BTCUSD")
+        self.assertEqual(result["policy"], "majority")
+        self.assertIn("classification", result)
+        self.assertIn("base_cost", result["trading"])
+        self.assertIn("stress_1_5x_cost", result["trading"])
+        self.assertEqual(result["trading"]["base_cost"]["completed_trades"], 0)
+
     def test_asset_cost_defaults_are_frozen(self):
         self.assertEqual(BTC_ROUND_TRIP_COST, 0.001)
         self.assertEqual(XAU_ROUND_TRIP_COST, 0.0005)
