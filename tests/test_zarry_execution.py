@@ -29,6 +29,18 @@ class SharedExecutionTests(unittest.TestCase):
         self.assertEqual(result["skipped_overlapping_signals"], 1)
         self.assertEqual(result["skipped_incomplete_outcomes"], 1)
 
+    def test_finite_precomputed_return_at_slice_tail_is_not_discarded(self):
+        result = simulate_non_overlapping_trades(
+            forward_returns=[0.01, 0.0, 0.0],
+            directions=[1, 0, 0],
+            round_trip_cost=0.001,
+            outcome_horizon_rows=7,
+        )
+        self.assertEqual(result["trade_count"], 1)
+        self.assertEqual(result["trade_indices"], [
+            {"entry_index": 0, "exit_index": 7},
+        ])
+
     def test_costs_and_drawdown_match_compounded_trade_sequence(self):
         result = simulate_non_overlapping_trades(
             forward_returns=[-0.01] + [0.0] * 6 + [0.02] + [0.0] * 7,
