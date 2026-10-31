@@ -91,6 +91,31 @@ def create_general_router(
         except Exception:
             raise HTTPException(status_code=502, detail="ZARRY connection test failed")
 
+    @router.post("/admin/image-storage-test")
+    async def admin_image_storage_test(request: Request):
+        # This test is admin-only and does not invoke Replicate or image generation.
+        if admin_check is None:
+            raise HTTPException(status_code=503, detail="Image storage test is unavailable")
+        try:
+            admin = admin_check(request)
+            if inspect.isawaitable(admin):
+                await admin
+            provider = getattr(gateway, "image_provider", None)
+            storage = getattr(gateway, "image_storage", None) or getattr(provider, "storage", None)
+            verifier = getattr(storage, "verify_public_round_trip", None)
+            if not callable(verifier):
+                raise HTTPException(status_code=503, detail="R2 storage is not configured")
+            result = verifier()
+            if inspect.isawaitable(result):
+                result = await result
+            if not isinstance(result, dict) or result.get("status") != "ok":
+                raise RuntimeError("R2 storage verification did not complete")
+            return result
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=502, detail="R2 public storage verification failed")
+
     @router.post("/chat", response_model=AssistantResponse)
     async def chat(payload: AssistantRequest, request: Request):
         if not enabled_check():

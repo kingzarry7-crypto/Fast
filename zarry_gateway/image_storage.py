@@ -7,23 +7,11 @@ from urllib.parse import urlsplit
 
 
 class CloudflareR2ImageStorage:
-    """Store generated PNGs in R2 and return their HTTPS public URL.
+    """Store generated PNGs in R2 and return their HTTPS public URL."""
 
-    Configure R2_ENDPOINT_URL, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
-    R2_BUCKET, and R2_PUBLIC_BASE_URL on the server. Never expose R2
-    credentials to clients.
-    """
-
-    def __init__(
-        self,
-        *,
-        bucket: str,
-        public_base_url: str,
-        client=None,
-        endpoint_url: str | None = None,
-        access_key_id: str | None = None,
-        secret_access_key: str | None = None,
-    ):
+    def __init__(self, *, bucket: str, public_base_url: str, client=None,
+                 endpoint_url: str | None = None, access_key_id: str | None = None,
+                 secret_access_key: str | None = None, public_get=None):
         self.bucket = (bucket or "").strip()
         self.public_base_url = (public_base_url or "").strip().rstrip("/")
         parsed = urlsplit(self.public_base_url)
@@ -31,11 +19,13 @@ class CloudflareR2ImageStorage:
             raise ValueError("R2 bucket is required")
         if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError("R2 public base URL must be an HTTPS URL")
+        self.public_host = parsed.hostname
         self.client = client or self._make_client(
             endpoint_url=endpoint_url or os.getenv("R2_ENDPOINT_URL", ""),
             access_key_id=access_key_id or os.getenv("R2_ACCESS_KEY_ID", ""),
             secret_access_key=secret_access_key or os.getenv("R2_SECRET_ACCESS_KEY", ""),
         )
+        self.public_get = public_get
 
     @staticmethod
     def _make_client(*, endpoint_url: str, access_key_id: str, secret_access_key: str):
@@ -45,30 +35,39 @@ class CloudflareR2ImageStorage:
             import boto3
         except ImportError as exc:
             raise RuntimeError("boto3 is required for Cloudflare R2 image storage") from exc
-        return boto3.client(
-            "s3",
-            endpoint_url=endpoint_url,
-            aws_access_key_id=access_key_id,
-            aws_secret_access_key=secret_access_key,
-            region_name="auto",
-        )
+        return boto3.client("s3", endpoint_url=endpoint_url,
+                            aws_access_key_id=access_key_id,
+                            aws_secret_access_key=secret_access_key,
+                            region_name="auto")
 
     def save(self, image, request_id) -> str:
-        # Provider image objects are PIL-compatible; normalize to PNG before upload.
         from io import BytesIO
-
         buffer = BytesIO()
         image.save(buffer, format="PNG")
         payload = buffer.getvalue()
         if not payload:
             raise RuntimeError("Generated image encoded to an empty payload")
         key = f"zarry/{uuid4().hex}.png"
-        self.client.put_object(
-            Bucket=self.bucket,
-            Key=key,
-            Body=payload,
-            ContentType="image/png",
-            CacheControl="public, max-age=31536000, immutable",
-            Metadata={"request-id": str(request_id)},
-        )
+        self.client.put_object(Bucket=self.bucket, Key=key, Body=payload,
+                               ContentType="image/png",
+                               CacheControl="public, max-age=31536000, immutable",
+                               Metadata={"request-id": str(request_id)})
         return f"{self.public_base_url}/{key}"
+
+    def verify_public_round_trip(self) -> dict:
+        """Upload a disposable object, read it publicly, and always delete it."""
+        import requests
+        key = f"zarry/diagnostics/{uuid4().hex}.txt"
+        payload = f"zarry-r2-probe:{uuid4().hex}".encode("ascii")
+        self.client.put_object(Bucket=self.bucket, Key=key, Body=payload,
+                               ContentType="text/plain", CacheControl="no-store")
+        try:
+            getter = self.public_get or requests.get
+            response = getter(f"{self.public_base_url}/{key}", timeout=(5, 15))
+            response.raise_for_status()
+            if response.content != payload:
+                raise RuntimeError("Public R2 retrieval content did not match uploaded test object")
+        finally:
+            self.client.delete_object(Bucket=self.bucket, Key=key)
+        return {"status": "ok", "public_host": self.public_host,
+                "upload": "ok", "public_retrieval": "ok", "cleanup": "ok"}

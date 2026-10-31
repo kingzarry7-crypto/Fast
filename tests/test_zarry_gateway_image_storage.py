@@ -1,5 +1,7 @@
 import io
 import unittest
+from unittest.mock import Mock
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from zarry_gateway.image_storage import CloudflareR2ImageStorage
@@ -8,8 +10,17 @@ from zarry_gateway.image_storage import CloudflareR2ImageStorage
 class FakeS3:
     def __init__(self):
         self.calls = []
+        self.objects = {}
+
     def put_object(self, **kwargs):
         self.calls.append(kwargs)
+        self.objects[(kwargs["Bucket"], kwargs["Key"])] = kwargs["Body"]
+
+    def get_object(self, **kwargs):
+        return {"Body": io.BytesIO(self.objects[(kwargs["Bucket"], kwargs["Key"])])}
+
+    def delete_object(self, **kwargs):
+        self.objects.pop((kwargs["Bucket"], kwargs["Key"]), None)
 
 
 class R2StorageTests(unittest.TestCase):
@@ -17,16 +28,18 @@ class R2StorageTests(unittest.TestCase):
         client = FakeS3()
         storage = CloudflareR2ImageStorage(
             bucket="zarrry",
-            public_base_url="https://pub-93af13628c2041bfb07c627e14b65ebe.r2.dev/",
+            public_base_url="https://images.kingzarry.bid/",
             client=client,
         )
+
         class FakeImage:
             def save(self, buffer, format):
                 self.assert_format = format
                 buffer.write(b"PNGDATA")
+
         request_id = uuid4()
         url = storage.save(FakeImage(), request_id)
-        self.assertTrue(url.startswith("https://pub-93af13628c2041bfb07c627e14b65ebe.r2.dev/zarry/"))
+        self.assertTrue(url.startswith("https://images.kingzarry.bid/zarry/"))
         self.assertTrue(url.endswith(".png"))
         self.assertEqual(len(client.calls), 1)
         upload = client.calls[0]
@@ -36,6 +49,40 @@ class R2StorageTests(unittest.TestCase):
         self.assertEqual(upload["CacheControl"], "public, max-age=31536000, immutable")
         self.assertEqual(upload["Metadata"]["request-id"], str(request_id))
         self.assertNotIn(str(request_id), upload["Key"])
+
+    def test_public_round_trip_uploads_reads_and_deletes_temporary_object(self):
+        client = FakeS3()
+
+        def read_uploaded_object(url, *, timeout):
+            key = urlsplit(url).path.lstrip("/")
+            return Mock(status_code=200, content=client.objects[("zarrry", key)])
+
+        public_get = Mock(side_effect=read_uploaded_object)
+        storage = CloudflareR2ImageStorage(
+            bucket="zarrry",
+            public_base_url="https://images.kingzarry.bid",
+            client=client,
+            public_get=public_get,
+        )
+        result = storage.verify_public_round_trip()
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["public_host"], "images.kingzarry.bid")
+        public_get.assert_called_once()
+        self.assertEqual(len(client.calls), 1)
+        self.assertEqual(client.objects, {})
+
+    def test_public_round_trip_deletes_object_when_public_read_fails(self):
+        client = FakeS3()
+        public_get = Mock(side_effect=RuntimeError("DNS lookup failed"))
+        storage = CloudflareR2ImageStorage(
+            bucket="zarrry",
+            public_base_url="https://images.kingzarry.bid",
+            client=client,
+            public_get=public_get,
+        )
+        with self.assertRaisesRegex(RuntimeError, "DNS lookup failed"):
+            storage.verify_public_round_trip()
+        self.assertEqual(client.objects, {})
 
     def test_rejects_non_https_public_url(self):
         with self.assertRaises(ValueError):

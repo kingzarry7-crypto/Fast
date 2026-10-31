@@ -41,6 +41,36 @@ class GatewayRouterTests(unittest.TestCase):
         self.assertEqual(response.status_code,502)
         self.assertNotIn("secret provider details",response.text)
 
+    def test_admin_image_storage_test_verifies_storage_without_generation(self):
+        class Storage:
+            def verify_public_round_trip(self):
+                return {"status":"ok","public_host":"images.kingzarry.bid","upload":"ok","public_retrieval":"ok","cleanup":"ok"}
+        class ImageProvider:
+            storage=Storage()
+            def generate(self, *args, **kwargs):
+                raise AssertionError("diagnostic must not generate an image")
+        gateway=FakeGateway()
+        gateway.image_provider=ImageProvider()
+        app=FastAPI()
+        app.include_router(create_general_router(lambda request: {"id":"u"}, gateway, admin_check=lambda request: ({"id":"admin-1"}, "admin")))
+        response=TestClient(app).post("/api/assistant/admin/image-storage-test")
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json()["public_retrieval"],"ok")
+
+    def test_admin_image_storage_test_rejects_non_admin(self):
+        app=FastAPI()
+        def deny_admin(request):
+            raise HTTPException(status_code=403, detail="Admin access denied")
+        app.include_router(create_general_router(lambda request: {"id":"u"}, FakeGateway(), admin_check=deny_admin))
+        response=TestClient(app).post("/api/assistant/admin/image-storage-test")
+        self.assertEqual(response.status_code,403)
+
+    def test_admin_image_storage_test_fails_when_storage_is_missing(self):
+        app=FastAPI()
+        app.include_router(create_general_router(lambda request: {"id":"u"}, FakeGateway(), admin_check=lambda request: ({"id":"admin-1"}, "admin")))
+        response=TestClient(app).post("/api/assistant/admin/image-storage-test")
+        self.assertEqual(response.status_code,503)
+
     def test_chat_requires_authenticated_web_session(self):
         self.authenticated=False; self.assertEqual(self.client.post("/api/assistant/chat",json={"message":"hi"}).status_code,401)
     def test_chat_returns_contract(self):
