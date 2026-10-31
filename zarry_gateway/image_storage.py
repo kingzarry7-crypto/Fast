@@ -69,5 +69,6 @@ class CloudflareR2ImageStorage:
             Body=payload,
             ContentType="image/png",
             CacheControl="public, max-age=31536000, immutable",
+            Metadata={"request-id": str(request_id)},
         )
         return f"{self.public_base_url}/{key}"
