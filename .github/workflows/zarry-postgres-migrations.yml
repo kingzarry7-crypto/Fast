@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "zarry_gateway/migrations/**"
+      - "scripts/apply_zarry_migrations.py"
       - "tests/test_zarry_gateway_postgres_migrations.py"
       - ".github/workflows/zarry-postgres-migrations.yml"
 
@@ -33,5 +34,7 @@ jobs:
           python-version: "3.12"
       - name: Install PostgreSQL test driver
         run: python -m pip install "psycopg2-binary==2.9.10"
-      - name: Apply migrations and verify database constraints
+      - name: Compile guarded migration runner
+        run: python -m py_compile scripts/apply_zarry_migrations.py
+      - name: Apply migrations twice and verify idempotency and constraints
         run: python tests/test_zarry_gateway_postgres_migrations.py
