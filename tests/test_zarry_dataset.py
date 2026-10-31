@@ -1,7 +1,4 @@
-import csv
-import tempfile
 import unittest
-from pathlib import Path
 
 from zarry_dataset import (
     build_feature_dataset,
@@ -22,6 +19,7 @@ class ZarryDatasetTests(unittest.TestCase):
         result = build_feature_dataset("BTC/USD", rows, "artifact://btc.csv")
         self.assertEqual(result[0]["label_type"], "forward_price_proxy")
         self.assertNotIn("realized_net_return", result[0])
+        self.assertNotIn("forward_return_6h", result[0]["features"])
         self.assertEqual(result[0]["label"], "LONG")
 
     def test_asset_aliases_are_normalized_and_mixed_assets_rejected(self):
@@ -40,7 +38,7 @@ class ZarryDatasetTests(unittest.TestCase):
                         min(r["timestamp"] for r in split["validation"]))
         self.assertLess(max(r["timestamp"] for r in split["validation"]),
                         min(r["timestamp"] for r in split["test"]))
-        self.assertEqual(split["purged_rows"], 4)
+        self.assertEqual(split["purged_rows"], 8)
 
     def test_paper_outcomes_require_closed_trade_and_net_return(self):
         valid = [{"asset": "BTCUSD", "status": "closed",
