@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from uuid import UUID, uuid4
+import os
 
 from .identity import AuthenticatedPrincipal
 from .providers import SelfHostedZarryProvider
@@ -16,6 +17,20 @@ class AssistantService:
         self.memory_store = memory_store
         self.image_provider = image_provider
         self.image_storage = image_storage or getattr(image_provider, "storage", None)
+        if self.image_storage is None:
+            required = ("R2_ENDPOINT_URL", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY",
+                        "R2_BUCKET", "R2_PUBLIC_BASE_URL")
+            if all(os.getenv(name, "").strip() for name in required):
+                from .image_storage import CloudflareR2ImageStorage
+                try:
+                    self.image_storage = CloudflareR2ImageStorage(
+                        bucket=os.environ["R2_BUCKET"],
+                        public_base_url=os.environ["R2_PUBLIC_BASE_URL"],
+                    )
+                except Exception:
+                    # Keep the service available; the admin diagnostic reports
+                    # storage as unavailable without leaking configuration details.
+                    self.image_storage = None
 
     def image(self, *, principal: AuthenticatedPrincipal, payload):
         if not isinstance(principal, AuthenticatedPrincipal):
