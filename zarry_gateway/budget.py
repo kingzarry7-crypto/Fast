@@ -60,6 +60,19 @@ class PostgresMonthlyBudgetLedger:
             raise BudgetDenied("Request estimate exceeds the monthly budget")
         month = self._month(now)
         with self.cursor_factory() as cur:
+            # Lock any existing reservation first, matching settle/release lock order.
+            cur.execute(
+                "SELECT billing_month, reserved_micro_usd, status FROM "
+                "zarry_hf_budget_reservations WHERE request_id=%s FOR UPDATE",
+                (str(request_id),),
+            )
+            existing = cur.fetchone()
+            if existing:
+                same_month = _row_value(existing, "billing_month", 0) == month
+                same_estimate = int(_row_value(existing, "reserved_micro_usd", 1)) == estimate
+                if same_month and same_estimate and _row_value(existing, "status", 2) == "reserved":
+                    return estimate
+                raise BudgetDenied("Request ID has already been used")
             cur.execute(
                 """INSERT INTO zarry_hf_monthly_budget
                    (billing_month, limit_micro_usd)
@@ -74,9 +87,11 @@ class PostgresMonthlyBudgetLedger:
             bucket = cur.fetchone()
             if not bucket:
                 raise BudgetLedgerError("Monthly budget bucket could not be locked")
+            # Recheck after taking the bucket lock: another request with the same
+            # id may have inserted while this transaction waited.
             cur.execute(
-                "SELECT billing_month, reserved_micro_usd, status "
-                "FROM zarry_hf_budget_reservations WHERE request_id=%s",
+                "SELECT billing_month, reserved_micro_usd, status FROM "
+                "zarry_hf_budget_reservations WHERE request_id=%s FOR UPDATE",
                 (str(request_id),),
             )
             existing = cur.fetchone()
