@@ -47,5 +47,7 @@ jobs:
         run: python -m unittest discover -s tests -p "test_zarry_gateway_image.py" -v
       - name: Run gateway image storage contract tests
         run: python -m unittest discover -s tests -p "test_zarry_gateway_image_storage.py" -v
+      - name: Run gateway router contract tests
+        run: python -m unittest discover -s tests -p "test_zarry_gateway_router.py" -v
       - name: Compile Fast API integration
         run: python -m py_compile api.py
