@@ -8,6 +8,9 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import resource
+import shutil
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Literal
@@ -133,6 +136,7 @@ def create_app(model_loader=_load_model) -> FastAPI:
         app.state.model = None
 
     app = FastAPI(title="ZARRY Inference Service", version="1.0.0", lifespan=lifespan)
+    app.state.request_metrics = {"requests": 0, "errors": 0}
 
     @app.middleware("http")
     async def request_metadata(request: Request, call_next):
@@ -140,6 +144,9 @@ def create_app(model_loader=_load_model) -> FastAPI:
         request_id = request.headers.get("X-Request-ID", "")[:128] or str(uuid4())
         started = time.perf_counter()
         response = await call_next(request)
+        request.app.state.request_metrics["requests"] += 1
+        if response.status_code >= 500:
+            request.app.state.request_metrics["errors"] += 1
         response.headers["X-Request-ID"] = request_id
         response.headers["X-ZARRY-Latency-Ms"] = str(round((time.perf_counter() - started) * 1000, 2))
         response.headers["X-ZARRY-API-Version"] = "1.0.0"
@@ -180,6 +187,21 @@ def create_app(model_loader=_load_model) -> FastAPI:
         if request.app.state.model is None:
             raise HTTPException(status_code=503, detail="model is not loaded")
         return {"status": "ready", "model_loaded": True, "model": os.getenv("ZARRY_MODEL_REPO", "configured-model"), "api_version": "1.0.0"}
+
+    @app.get("/metrics", dependencies=[Depends(authenticate)])
+    async def metrics(request: Request):
+        usage = resource.getrusage(resource.RUSAGE_SELF)
+        model_path = os.getenv("ZARRY_MODEL_PATH", "").strip()
+        disk = shutil.disk_usage(model_path if model_path and os.path.exists(model_path) else "/")
+        counts = dict(request.app.state.request_metrics)
+        return {
+            "api_version": "1.0.0",
+            "requests_total": counts["requests"],
+            "server_errors_total": counts["errors"],
+            "process_cpu_seconds": round(time.process_time(), 3),
+            "process_max_rss_mb": round(usage.ru_maxrss / 1024, 2),
+            "disk_free_mb": round(disk.free / (1024 * 1024), 2),
+        }
 
     @app.post("/v1/explain", response_model=ExplainResponse, dependencies=[Depends(authenticate)])
     def explain(payload: ExplainRequest, request: Request):
