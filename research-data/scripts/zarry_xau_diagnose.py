@@ -20,6 +20,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 import train_kitty_v3_retrained as trainer  # noqa: E402
+from zarry_calibration import evaluate_calibrated_walk_forward  # noqa: E402
 
 EXPECTED_CSV_SHA256 = "09dc53065c2026178b50046398b93cdb441568bacf681c7f9f429b0fde7d6a9c"
 PURGE_ROWS = 7
@@ -79,7 +80,7 @@ def main() -> None:
     if not np.isfinite(returns).all():
         raise SystemExit("Forward returns contain non-finite values")
 
-    walk_forward = trainer.evaluate_walk_forward(
+    walk_forward = evaluate_calibrated_walk_forward(
         x, y, returns,
         round_trip_cost=args.round_trip_cost,
         label_threshold=LABEL_THRESHOLD,
@@ -94,8 +95,13 @@ def main() -> None:
             test_returns, threshold=LABEL_THRESHOLD,
             round_trip_cost=args.round_trip_cost * 1.5,
         )
-        if fold["model_after_costs"].get("trade_count", 0) == 0:
-            fold["model_stress_1_5x"] = {"trade_count": 0, "compounded_net_return": 0.0}
+        fold["trend_confirmation_stress_1_5x"] = trainer.evaluate_trend_confirmation_rule(
+            raw_test[:, trainer.FEATURES.index("ret_6h")],
+            raw_test[:, trainer.FEATURES.index("ret_24h")],
+            raw_test[:, trainer.FEATURES.index("close_vs_sma20")],
+            test_returns, threshold=LABEL_THRESHOLD,
+            round_trip_cost=args.round_trip_cost * 1.5,
+        )
 
     n = len(x)
     output = {
@@ -121,7 +127,7 @@ def main() -> None:
         "output": str(args.output),
         "fold_count": walk_forward["fold_count"],
         "model_profitable_fold_count": walk_forward["model_profitable_fold_count"],
-        "selected_thresholds": [f["selected_min_confidence_from_validation"] for f in walk_forward["folds"]],
+        "selected_thresholds": [f["selected_min_confidence"] for f in walk_forward["folds"]],
     }, indent=2))
 
 
