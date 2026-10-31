@@ -53,8 +53,8 @@ class ExplainResponse(StrictModel):
     uncertainty: str = Field(max_length=1500)
     cited_fields: list[str]
     numeric_claims: list[float | int]
-    authority: Literal["KITTY_DETERMINISTIC_ENGINE"]
-    mode: Literal["explanation_only"]
+    authority: Literal["KITTY_DETERMINISTIC_ENGINE"] = "KITTY_DETERMINISTIC_ENGINE"
+    mode: Literal["explanation_only"] = "explanation_only"
 
 
 SYSTEM_PROMPT = """You are ZARRY, an explanation-only model.
