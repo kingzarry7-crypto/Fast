@@ -11,9 +11,23 @@ from .schemas import AssistantRequest
 class AssistantService:
     """ZARRY-first text service with explicit opt-in conversation memory."""
 
-    def __init__(self, text_provider=None, memory_store=None):
+    def __init__(self, text_provider=None, memory_store=None, image_provider=None):
         self.text_provider = text_provider or SelfHostedZarryProvider()
         self.memory_store = memory_store
+        self.image_provider = image_provider
+
+    def image(self, *, principal: AuthenticatedPrincipal, payload):
+        if not isinstance(principal, AuthenticatedPrincipal):
+            raise PermissionError("An authenticated principal is required")
+        if self.image_provider is None:
+            raise RuntimeError("Image generation is unavailable")
+        width, height = (int(value) for value in payload.size.split("x", 1))
+        return self.image_provider.generate(
+            payload.prompt,
+            request_id=payload.request_id,
+            width=width,
+            height=height,
+        )
 
     def chat(self, *, principal: AuthenticatedPrincipal, payload: AssistantRequest) -> dict:
         if not isinstance(principal, AuthenticatedPrincipal):
