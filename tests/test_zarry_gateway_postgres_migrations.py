@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise guarded ZARRY migrations against the disposable CI PostgreSQL service."""
 import os
+import unittest
 import pathlib
 import subprocess
 import sys
@@ -10,6 +11,8 @@ import psycopg2
 from psycopg2 import IntegrityError
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+if not os.environ.get("ZARRY_TEST_DATABASE_URL"):
+    raise unittest.SkipTest("ZARRY_TEST_DATABASE_URL is required for PostgreSQL migration tests")
 dsn = os.environ["ZARRY_TEST_DATABASE_URL"]
 runner = ROOT / "scripts" / "apply_zarry_migrations.py"
 conn = psycopg2.connect(dsn)
