@@ -50,7 +50,34 @@ class ZarryDatasetTests(unittest.TestCase):
                         min(r["timestamp"] for r in split["validation"]))
         self.assertLess(max(r["timestamp"] for r in split["validation"]),
                         min(r["timestamp"] for r in split["test"]))
-        self.assertEqual(split["purged_rows"], 8)
+        self.assertEqual(split["purged_rows"], 4)
+        self.assertEqual(split["train"][-1]["timestamp"],
+                         (datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(hours=67)).isoformat())
+        self.assertEqual(split["validation"][0]["timestamp"],
+                         (datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(hours=70)).isoformat())
+        self.assertEqual(split["validation"][-1]["timestamp"],
+                         (datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(hours=82)).isoformat())
+        self.assertEqual(split["test"][0]["timestamp"],
+                         (datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(hours=85)).isoformat())
+
+    def test_seven_row_trailing_purge_reproduces_archived_btc_and_gold_counts(self):
+        expected = {
+            4888: (3414, 726, 734),
+            4943: (3453, 734, 742),
+        }
+        start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        for sample_count, expected_counts in expected.items():
+            with self.subTest(sample_count=sample_count):
+                rows = [
+                    {"timestamp": (start + timedelta(hours=i)).isoformat(), "i": i}
+                    for i in range(sample_count)
+                ]
+                split = chronological_split(rows, purge_rows=7)
+                actual_counts = (
+                    len(split["train"]), len(split["validation"]), len(split["test"])
+                )
+                self.assertEqual(actual_counts, expected_counts)
+                self.assertEqual(split["purged_rows"], 14)
 
     def test_paper_outcomes_require_closed_trade_and_net_return(self):
         valid = [{"asset": "BTCUSD", "status": "closed", "mode": "paper",
