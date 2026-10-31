@@ -8,6 +8,8 @@ from __future__ import annotations
 import math
 import os
 import time
+import threading
+from collections import defaultdict, deque
 from datetime import datetime, timezone
 from uuid import uuid4
 from typing import Any, Callable, Literal
@@ -115,11 +117,28 @@ def create_router(
     """Build the proxy router; dependencies are injected for deterministic tests."""
     upstream_post = post or requests.post
     router = APIRouter(tags=["zarry"])
+    request_times: dict[str, deque[float]] = defaultdict(deque)
+    request_times_lock = threading.Lock()
 
     @router.post("/api/zarry/explain", response_model=ZarryExplainResponse)
     def explain(payload: ZarryExplainRequest, request: Request):
         # Use the same web session authentication as Fast's existing chat API.
-        require_user(request)
+        user = require_user(request)
+        user_id = str(user.get("id", "authenticated-user")) if isinstance(user, dict) else str(getattr(user, "id", "authenticated-user"))
+        try:
+            max_requests = int(os.getenv("ZARRY_MAX_REQUESTS_PER_MINUTE", "20"))
+        except ValueError:
+            raise HTTPException(status_code=503, detail="ZARRY rate-limit configuration is invalid")
+        if max_requests < 1 or max_requests > 120:
+            raise HTTPException(status_code=503, detail="ZARRY rate limit must be between 1 and 120 per minute")
+        now = time.monotonic()
+        with request_times_lock:
+            bucket = request_times[user_id]
+            while bucket and now - bucket[0] >= 60:
+                bucket.popleft()
+            if len(bucket) >= max_requests:
+                raise HTTPException(status_code=429, detail="ZARRY explanation rate limit exceeded", headers={"Retry-After": "60"})
+            bucket.append(now)
 
         if os.getenv("ZARRY_ENABLED", "").strip().lower() != "true":
             raise HTTPException(status_code=503, detail="ZARRY explanations are disabled")
@@ -127,6 +146,10 @@ def create_router(
         api_key = os.getenv("ZARRY_API_KEY", "").strip()
         if not service_url.startswith(("https://", "http://")) or not api_key:
             raise HTTPException(status_code=503, detail="ZARRY service is not configured")
+        if service_url.startswith("http://"):
+            host = service_url[len("http://"):].split("/", 1)[0].split(":", 1)[0].lower()
+            if not host.endswith(".railway.internal"):
+                raise HTTPException(status_code=503, detail="unencrypted ZARRY URLs are allowed only on Railway private networking")
 
         request_id = request.headers.get("X-Request-ID", "")[:128] or str(uuid4())
         upstream = None
