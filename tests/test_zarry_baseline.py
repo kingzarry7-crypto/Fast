@@ -1,6 +1,7 @@
 import unittest
 
 from zarry_baseline import (
+    classification_metrics,
     predict_baseline,
     simulate_predictions,
     BTC_ROUND_TRIP_COST,
@@ -55,6 +56,18 @@ class ZarryBaselineTests(unittest.TestCase):
         self.assertEqual(result["overlap_skips"], 1)
         self.assertAlmostEqual(result["net_trade_returns"][0], 0.009)
         self.assertAlmostEqual(result["compounded_net_return"], (1.009 ** 2) - 1)
+
+    def test_classification_metrics_include_three_class_confusion_and_macro_scores(self):
+        result = classification_metrics(
+            ["SHORT", "NO TRADE", "LONG", "LONG"],
+            [0, 1, 1, 2],
+        )
+        self.assertEqual(result["sample_count"], 4)
+        self.assertEqual(result["confusion_matrix"], [[1, 0, 0], [0, 1, 0], [0, 1, 1]])
+        self.assertAlmostEqual(result["accuracy"], 0.75)
+        self.assertAlmostEqual(result["balanced_accuracy"], 2 / 3)
+        self.assertIn("macro_f1", result)
+        self.assertEqual(result["class_distribution"]["LONG"], 2)
 
     def test_asset_cost_defaults_are_frozen(self):
         self.assertEqual(BTC_ROUND_TRIP_COST, 0.001)
