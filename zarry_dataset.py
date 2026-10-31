@@ -122,10 +122,12 @@ def chronological_split(
     validation_fraction: float = 0.15,
     purge_rows: int = 7,
 ) -> dict[str, Any]:
-    """Chronological split with a row embargo on both partition boundaries.
+    """Chronological split with a trailing purge before each raw boundary.
 
-    The current default contract is hourly samples with a six-hour label horizon;
-    callers using another cadence/horizon must choose a matching purge_rows value.
+    For a label horizon of H rows, the final H samples before each boundary
+    are excluded from the earlier partition. No rows are additionally removed
+    after the boundary. Callers using another cadence/horizon must choose a
+    matching purge_rows value.
     """
     if purge_rows < 0:
         raise ValueError("purge_rows cannot be negative")
