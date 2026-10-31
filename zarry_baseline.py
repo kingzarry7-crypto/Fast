@@ -4,6 +4,8 @@ from __future__ import annotations
 import math
 from typing import Any, Iterable, Mapping, Sequence
 
+from zarry_execution import simulate_non_overlapping_trades
+
 SHORT, NO_TRADE, LONG = 0, 1, 2
 LABEL_TO_CLASS = {"SHORT": SHORT, "NO TRADE": NO_TRADE, "LONG": LONG, "0": SHORT, "1": NO_TRADE, "2": LONG}
 CLASS_NAMES = ("SHORT", "NO TRADE", "LONG")
@@ -132,15 +134,9 @@ def simulate_predictions(
     stress_multiplier: float = 1.0,
     outcome_horizon_rows: int = 7,
 ) -> dict[str, Any]:
-    """Simulate non-overlapping proxy trades after fixed round-trip costs.
-
-    A decision at row t exits at t+7. The forward return is a proxy label, not
-    a realized broker fill or paper-ledger outcome.
-    """
+    """Use the shared Kitty-compatible next-open / t+7-close execution simulator."""
     if len(rows) != len(predictions):
         raise ValueError("rows and predictions must have equal lengths")
-    if outcome_horizon_rows < 1:
-        raise ValueError("outcome_horizon_rows must be positive")
     normalized_asset = str(asset).upper().replace("/", "").replace("-", "")
     if normalized_asset not in ROUND_TRIP_COSTS:
         raise ValueError("asset must be BTCUSD or XAUUSD")
@@ -148,66 +144,35 @@ def simulate_predictions(
     multiplier = _finite(stress_multiplier, "stress_multiplier")
     if cost < 0 or multiplier <= 0:
         raise ValueError("cost must be non-negative and stress multiplier positive")
-    next_available_index = 0
-    net_returns: list[float] = []
-    overlap_skips = 0
-    incomplete_skips = 0
-    trade_indices: list[dict[str, int]] = []
-    for index, (row, prediction) in enumerate(zip(rows, predictions)):
+    directions = []
+    returns = []
+    for row, prediction in zip(rows, predictions):
         action = int(prediction)
         if action not in (SHORT, NO_TRADE, LONG):
             raise ValueError(f"invalid prediction class: {prediction!r}")
-        if action == NO_TRADE:
-            continue
-        if index < next_available_index:
-            overlap_skips += 1
-            continue
-        exit_index = index + outcome_horizon_rows
-        if exit_index >= len(rows):
-            incomplete_skips += 1
-            continue
-        forward_return = _finite(row.get("forward_return"), "forward_return")
-        direction = 1.0 if action == LONG else -1.0
-        net_returns.append(direction * forward_return - cost * multiplier)
-        trade_indices.append({"entry_index": index, "exit_index": exit_index})
-        # A decision on the prior exit candle enters on the following open,
-        # after the prior trade has closed; it is therefore non-overlapping.
-        next_available_index = exit_index
-
-    equity = 1.0
-    peak = 1.0
-    max_drawdown = 0.0
-    gross_profit = 0.0
-    gross_loss = 0.0
-    wins = 0
-    for result in net_returns:
-        equity *= 1.0 + result
-        peak = max(peak, equity)
-        max_drawdown = max(max_drawdown, (peak - equity) / peak)
-        if result > 0:
-            wins += 1
-            gross_profit += result
-        elif result < 0:
-            gross_loss += abs(result)
-    trade_count = len(net_returns)
+        directions.append(-1 if action == SHORT else (1 if action == LONG else 0))
+        returns.append(_finite(row.get("forward_return"), "forward_return"))
+    metrics = simulate_non_overlapping_trades(
+        returns, directions, round_trip_cost=cost * multiplier,
+        outcome_horizon_rows=outcome_horizon_rows,
+    )
     return {
         "asset": normalized_asset,
-        "completed_trades": trade_count,
-        "win_rate": wins / trade_count if trade_count else None,
-        "average_net_trade_return": sum(net_returns) / trade_count if trade_count else 0.0,
-        "expectancy": sum(net_returns) / trade_count if trade_count else 0.0,
-        "profit_factor": gross_profit / gross_loss if gross_loss else None,
-        "compounded_net_return": equity - 1.0,
-        "max_drawdown": max_drawdown,
-        "exposure_fraction": (sum(outcome_horizon_rows - 1 for _ in trade_indices) / len(rows)) if rows else 0.0,
-        "overlap_skips": overlap_skips,
-        "incomplete_outcome_skips": incomplete_skips,
+        "completed_trades": metrics["trade_count"],
+        "win_rate": metrics["win_rate"],
+        "average_net_trade_return": metrics["average_net_return"] or 0.0,
+        "expectancy": metrics["average_net_return"] or 0.0,
+        "profit_factor": metrics["profit_factor"],
+        "compounded_net_return": metrics["compounded_net_return"],
+        "max_drawdown": abs(metrics["max_drawdown"]),
+        "exposure_fraction": metrics["exposure_fraction"],
+        "overlap_skips": metrics["skipped_overlapping_signals"],
+        "incomplete_outcome_skips": metrics["skipped_incomplete_outcomes"],
         "round_trip_cost": cost * multiplier,
-        "net_trade_returns": net_returns,
-        "trades": trade_indices,
-        "outcome_type": "forward_price_proxy_not_realized_paper_trade",
+        "net_trade_returns": metrics["net_trade_returns"],
+        "trades": metrics["trade_indices"],
+        "outcome_type": metrics["outcome_type"],
     }
-
 
 def run_baseline_benchmark(
     policy: str,
