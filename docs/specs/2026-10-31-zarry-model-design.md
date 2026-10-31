@@ -203,7 +203,15 @@ The user approved:
 - Service responses expose request ID, API version, and per-request latency headers.
 - Authenticated operational metrics expose request/error counts, process CPU time, peak resident memory, and free disk space.
 - Fast proxy applies a per-user rate limit (20 requests/minute by default), allows plain HTTP only for Railway private-network hostnames, and retries one transient connection failure. Model timeouts are not retried.
-- Contract tests cover decision preservation, NO TRADE preservation, authentication, invalid/ungrounded output rejection, freshness, metadata, metrics authorization, rate limiting, and transient connection retry.
+- Contract tests cover BUY/SELL/WAIT/NO TRADE decision preservation, authentication (including case-insensitive Bearer scheme parsing), invalid/ungrounded output rejection, freshness, bounded scalar context, request-ID sanitization, metadata, metrics authorization, rate limiting, and transient connection retry.
+
+### Latest hardening changes (staged; CI pending)
+
+- Service and Fast proxy sanitize caller-supplied request IDs before forwarding or returning them.
+- Service context validation now matches the proxy's scalar-value and 1,000-character string limits.
+- Added service and proxy regression cases for BUY and SELL preservation, nested/oversized context rejection, unsafe request IDs, and timeout non-retry behavior.
+- The service accepts the standard case-insensitive HTTP Bearer authentication scheme while continuing to compare the credential itself exactly.
+- These newest changes have been committed to the PR branch, but have not yet been executed by a verified CI run. They are not production deployed.
 
 ### Verification checkpoint
 
