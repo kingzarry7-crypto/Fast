@@ -1,9 +1,12 @@
 import os
+import sys
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app import create_app
 
 
@@ -29,7 +32,7 @@ class FakeModel:
 
 class ZarryServiceTests(unittest.TestCase):
     def setUp(self):
-        self.env = patch.dict(os.environ, {"ZARRY_API_KEY": "test-secret"}, clear=False)
+        self.env = patch.dict(os.environ, {"ZARRY_API_KEY": "test-secret", "ZARRY_MODEL_PATH": "/fake/model.gguf"}, clear=False)
         self.env.start()
         self.client = TestClient(create_app(model_loader=lambda *args: FakeModel()))
         self.client.__enter__()
