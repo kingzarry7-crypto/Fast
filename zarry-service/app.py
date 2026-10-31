@@ -27,7 +27,14 @@ class StrictModel(BaseModel):
 
 class KittyAssessment(StrictModel):
     decision: Literal["BUY", "SELL", "WAIT", "NO TRADE"]
-    reason_codes: list[str] = Field(default_factory=list)
+    reason_codes: list[str] = Field(default_factory=list, max_length=40)
+
+    @field_validator("reason_codes")
+    @classmethod
+    def validate_reason_codes(cls, value: list[str]) -> list[str]:
+        if any(not code or len(code) > 80 for code in value):
+            raise ValueError("reason codes must contain 1 to 80 characters")
+        return value
 
 
 class ExplainRequest(StrictModel):
@@ -76,8 +83,8 @@ class ExplainResponse(StrictModel):
     decision: Literal["BUY", "SELL", "WAIT", "NO TRADE"]
     summary: str = Field(min_length=1, max_length=3000)
     uncertainty: str = Field(max_length=1500)
-    cited_fields: list[str]
-    numeric_claims: list[float | int]
+    cited_fields: list[str] = Field(max_length=80)
+    numeric_claims: list[float | int] = Field(max_length=80)
     authority: Literal["KITTY_DETERMINISTIC_ENGINE"] = "KITTY_DETERMINISTIC_ENGINE"
     mode: Literal["explanation_only"] = "explanation_only"
 
