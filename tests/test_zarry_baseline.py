@@ -80,6 +80,19 @@ class ZarryBaselineTests(unittest.TestCase):
         self.assertIn("stress_1_5x_cost", result["trading"])
         self.assertEqual(result["trading"]["base_cost"]["completed_trades"], 1)
 
+    def test_signal_at_prior_exit_candle_is_not_overlapping_and_exposure_is_six_hours(self):
+        rows = [sample(forward_return=0.01) for _ in range(23)]
+        predictions = [1] * 23
+        predictions[0] = predictions[7] = 2
+        result = simulate_predictions(rows, predictions, asset="BTCUSD")
+        self.assertEqual(result["completed_trades"], 2)
+        self.assertEqual(result["overlap_skips"], 0)
+        self.assertEqual(result["trades"], [
+            {"entry_index": 0, "exit_index": 7},
+            {"entry_index": 7, "exit_index": 14},
+        ])
+        self.assertAlmostEqual(result["exposure_fraction"], 12 / 23)
+
     def test_asset_cost_defaults_are_frozen(self):
         self.assertEqual(BTC_ROUND_TRIP_COST, 0.001)
         self.assertEqual(XAU_ROUND_TRIP_COST, 0.0005)
