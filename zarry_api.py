@@ -31,6 +31,13 @@ class KittyAssessment(StrictModel):
     decision: Decision
     reason_codes: list[str] = Field(default_factory=list, max_length=40)
 
+    @field_validator("reason_codes")
+    @classmethod
+    def validate_reason_codes(cls, value: list[str]) -> list[str]:
+        if any(not code or len(code) > 80 for code in value):
+            raise ValueError("reason codes must contain 1 to 80 characters")
+        return value
+
 
 class ZarryExplainRequest(StrictModel):
     symbol: Literal["BTCUSD", "XAUUSD"]
