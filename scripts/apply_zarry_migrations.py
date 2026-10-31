@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Explicit, checksum-tracked runner for ZARRY PostgreSQL migrations.
 
-Dry-run is the default. Applying requires both --apply and
-ZARRY_ALLOW_MIGRATIONS=1. Never invoke automatically during application startup.
+The default mode is a genuinely read-only status/dry-run check. Applying requires
+both --apply and ZARRY_ALLOW_MIGRATIONS=1. Never invoke automatically at startup.
 """
 from __future__ import annotations
 
@@ -25,30 +25,53 @@ def load_migrations():
 
 
 def run(dsn: str, apply: bool) -> list[str]:
+    """Return pending/applied migration names; status mode performs no writes."""
+    migrations = load_migrations()
     conn = psycopg2.connect(dsn, connect_timeout=10)
     applied_now: list[str] = []
     try:
         with conn:
             with conn.cursor() as cur:
+                if not apply:
+                    # Must be the first statement in this transaction. PostgreSQL
+                    # rejects accidental DDL/DML even if this code regresses.
+                    cur.execute("SET TRANSACTION READ ONLY")
+
+                cur.execute("SELECT current_database(), current_schema()")
+                database_name, schema_name = cur.fetchone()
+                print(f"Database: {database_name} (schema: {schema_name})")
+
                 cur.execute("SELECT to_regclass('public.web_users')")
                 if cur.fetchone()[0] is None:
                     raise RuntimeError("Required parent table public.web_users does not exist; refusing ZARRY migrations")
-                cur.execute("SELECT pg_advisory_xact_lock(%s)", (LOCK_ID,))
-                cur.execute(
-                    """CREATE TABLE IF NOT EXISTS zarry_schema_migrations (
-                           migration_name TEXT PRIMARY KEY,
-                           sha256 CHAR(64) NOT NULL,
-                           applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                       )"""
-                )
-                for name, sql, digest in load_migrations():
+
+                cur.execute("SELECT to_regclass('public.zarry_schema_migrations')")
+                ledger_exists = cur.fetchone()[0] is not None
+                if apply:
+                    cur.execute("SELECT pg_advisory_xact_lock(%s)", (LOCK_ID,))
                     cur.execute(
-                        "SELECT sha256 FROM zarry_schema_migrations WHERE migration_name=%s",
-                        (name,),
+                        """CREATE TABLE IF NOT EXISTS public.zarry_schema_migrations (
+                               migration_name TEXT PRIMARY KEY,
+                               sha256 CHAR(64) NOT NULL,
+                               applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                           )"""
                     )
-                    row = cur.fetchone()
-                    if row:
-                        if row[0].strip() != digest:
+                    ledger_exists = True
+
+                recorded = {}
+                if ledger_exists:
+                    cur.execute("SELECT migration_name, sha256 FROM public.zarry_schema_migrations")
+                    recorded = {name: digest.strip() for name, digest in cur.fetchall()}
+
+                known = {name: (sql, digest) for name, sql, digest in migrations}
+                unknown = sorted(set(recorded) - set(known))
+                if unknown:
+                    raise RuntimeError("Unknown migration entries in database ledger: " + ", ".join(unknown))
+
+                for name, sql, digest in migrations:
+                    previous = recorded.get(name)
+                    if previous is not None:
+                        if previous != digest:
                             raise RuntimeError(f"Applied migration checksum changed: {name}")
                         continue
                     if not apply:
@@ -56,7 +79,7 @@ def run(dsn: str, apply: bool) -> list[str]:
                         continue
                     cur.execute(sql)
                     cur.execute(
-                        "INSERT INTO zarry_schema_migrations (migration_name, sha256) VALUES (%s, %s)",
+                        "INSERT INTO public.zarry_schema_migrations (migration_name, sha256) VALUES (%s, %s)",
                         (name, digest),
                     )
                     applied_now.append(name)
@@ -88,3 +111,4 @@ if __name__ == "__main__":
     except Exception as exc:
         print(f"Migration failed: {type(exc).__name__}: {exc}", file=sys.stderr)
         raise SystemExit(1)
+
