@@ -19,6 +19,10 @@ class GatewayRouterTests(unittest.TestCase):
     def test_chat_disabled_returns_503(self):
         app=FastAPI(); app.include_router(create_general_router(lambda request:{"id":"u"},FakeGateway(),enabled_check=lambda:False))
         self.assertEqual(TestClient(app).post("/api/assistant/chat",json={"message":"hi"}).status_code,503)
+    def test_image_generation_stays_unavailable_without_configured_provider(self):
+        response = self.client.post("/api/assistant/image", json={"prompt": "a red kite"})
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["detail"], "Image generation is unavailable")
     def test_image_provider_failure_returns_controlled_502(self):
         class BrokenImageGateway(FakeGateway):
             def image(self, principal, payload):
