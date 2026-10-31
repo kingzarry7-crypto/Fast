@@ -96,6 +96,29 @@ class MigrationStatusTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 get_migration_status()
 
+    def test_admin_endpoint_returns_status_without_exposing_connection_details(self):
+        app = FastAPI()
+        app.include_router(
+            create_general_router(
+                lambda request: {"id": "user"},
+                object(),
+                admin_check=lambda request: ({"id": "admin"}, "admin@example.com"),
+            )
+        )
+        expected = {
+            "status": "ok",
+            "migrations": [
+                {"name": "004_image_smoke_diagnostics.sql", "status": "pending"},
+                {"name": "005_image_smoke_v2_authorization.sql", "status": "applied"},
+            ],
+        }
+        with patch("zarry_gateway.migration_status.get_migration_status", return_value=expected):
+            response = TestClient(app).get("/api/assistant/admin/migration-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), expected)
+        self.assertNotIn("database_url", response.text)
+        self.assertNotIn("sha256", response.text)
+
     def test_admin_endpoint_requires_existing_admin_gate(self):
         app = FastAPI()
 
