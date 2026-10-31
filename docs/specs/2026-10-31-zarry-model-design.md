@@ -203,6 +203,7 @@ The user approved:
 - Service responses expose request ID, API version, and per-request latency headers.
 - Authenticated operational metrics expose request/error counts, process CPU time, peak resident memory, and free disk space.
 - Fast proxy applies a per-user rate limit (20 requests/minute by default), allows plain HTTP only for Railway private-network hostnames, and retries one transient connection failure. Model timeouts are not retried.
+- Fast proxy accepts the already-provisioned `ZARRY_API_URL` variable as a fallback when `ZARRY_SERVICE_URL` is not set, avoiding a deployment-variable name mismatch without enabling the integration.
 - Contract tests cover BUY/SELL/WAIT/NO TRADE decision preservation, authentication (including case-insensitive Bearer scheme parsing), invalid/ungrounded output rejection, freshness, bounded scalar context, request-ID sanitization, metadata, metrics authorization, rate limiting, and transient connection retry.
 
 ### Latest hardening changes (staged; CI pending)
