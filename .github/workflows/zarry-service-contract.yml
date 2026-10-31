@@ -9,7 +9,7 @@ on:
       - "tests/test_zarry_api.py"
       - ".github/workflows/zarry-service-contract.yml"
   push:
-    branches: ["main", "feat/zarry-inference-service-prototype"]
+    branches: ["main", "feat/zarry-inference-service-prototype", "feat/zarry-complete-integration"]
     paths:
       - "zarry-service/**"
       - "zarry_api.py"

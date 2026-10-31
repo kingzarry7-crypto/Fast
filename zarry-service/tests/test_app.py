@@ -63,8 +63,97 @@ class ZarryServiceTests(unittest.TestCase):
         self.assertEqual(self.client.get("/health").status_code, 200)
         self.assertEqual(self.client.get("/ready").status_code, 200)
 
+    def test_stale_timestamp_is_rejected(self):
+        payload = self.payload()
+        payload["timestamp"] = "2020-01-01T00:00:00Z"
+        response = self.client.post(
+            "/v1/explain", json=payload,
+            headers={"Authorization": "Bearer test-secret"},
+        )
+        self.assertEqual(response.status_code, 422)
+
+    def test_timezone_free_timestamp_is_rejected(self):
+        payload = self.payload()
+        payload["timestamp"] = "2026-10-30T12:00:00"
+        response = self.client.post(
+            "/v1/explain", json=payload,
+            headers={"Authorization": "Bearer test-secret"},
+        )
+        self.assertEqual(response.status_code, 422)
+
+    def test_request_metadata_headers_are_returned(self):
+        response = self.client.get("/", headers={"X-Request-ID": "zarry-test-123"})
+        self.assertEqual(response.headers["X-Request-ID"], "zarry-test-123")
+        self.assertIn("X-ZARRY-Latency-Ms", response.headers)
+        self.assertEqual(response.headers["X-ZARRY-API-Version"], "1.0.0")
+
+    def test_metrics_endpoint_requires_authentication(self):
+        self.assertEqual(self.client.get("/metrics").status_code, 401)
+
+    def test_authenticated_metrics_report_operational_values(self):
+        response = self.client.get("/metrics", headers={"Authorization": "Bearer test-secret"})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["api_version"], "1.0.0")
+        self.assertIn("process_max_rss_mb", body)
+        self.assertIn("disk_free_mb", body)
+        self.assertIn("requests_total", body)
+
+    def test_preserves_buy_and_sell_decisions(self):
+        for decision in ("BUY", "SELL"):
+            with self.subTest(decision=decision):
+                payload = self.payload()
+                payload["kitty_assessment"]["decision"] = decision
+                response = self.client.post(
+                    "/v1/explain",
+                    json=payload,
+                    headers={"Authorization": "Bearer test-secret"},
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()["decision"], decision)
+
+    def test_rejects_too_many_kitty_reason_codes(self):
+        payload = self.payload()
+        payload["kitty_assessment"]["reason_codes"] = [f"CODE_{i}" for i in range(41)]
+        response = self.client.post(
+            "/v1/explain", json=payload,
+            headers={"Authorization": "Bearer test-secret"},
+        )
+        self.assertEqual(response.status_code, 422)
+
+    def test_rejects_nested_context_values(self):
+        payload = self.payload()
+        payload["context"]["nested"] = {"unsafe": "object"}
+        response = self.client.post(
+            "/v1/explain", json=payload,
+            headers={"Authorization": "Bearer test-secret"},
+        )
+        self.assertEqual(response.status_code, 422)
+
+    def test_rejects_oversized_context_strings(self):
+        payload = self.payload()
+        payload["context"]["note"] = "x" * 1001
+        response = self.client.post(
+            "/v1/explain", json=payload,
+            headers={"Authorization": "Bearer test-secret"},
+        )
+        self.assertEqual(response.status_code, 422)
+
+    def test_replaces_untrusted_request_id(self):
+        response = self.client.get("/", headers={"X-Request-ID": "bad\\r\\ninjected"})
+        self.assertNotEqual(response.headers["X-Request-ID"], "bad\\r\\ninjected")
+        self.assertRegex(response.headers["X-Request-ID"], r"^[0-9a-f-]{36}$")
+
     def test_requires_bearer_secret(self):
         self.assertEqual(self.client.post("/v1/explain", json=self.payload()).status_code, 401)
+
+    def test_accepts_case_insensitive_bearer_scheme(self):
+        response = self.client.post(
+            "/v1/explain",
+            json=self.payload(),
+            headers={"Authorization": "bearer test-secret"},
+        )
+        self.assertEqual(response.status_code, 200)
 
     def test_preserves_kitty_decision_and_returns_explanation(self):
         response = self.client.post(

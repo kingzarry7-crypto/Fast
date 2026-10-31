@@ -8,8 +8,14 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import re
+import resource
+import shutil
+import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any, Literal
+from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -21,7 +27,14 @@ class StrictModel(BaseModel):
 
 class KittyAssessment(StrictModel):
     decision: Literal["BUY", "SELL", "WAIT", "NO TRADE"]
-    reason_codes: list[str] = Field(default_factory=list)
+    reason_codes: list[str] = Field(default_factory=list, max_length=40)
+
+    @field_validator("reason_codes")
+    @classmethod
+    def validate_reason_codes(cls, value: list[str]) -> list[str]:
+        if any(not code or len(code) > 80 for code in value):
+            raise ValueError("reason codes must contain 1 to 80 characters")
+        return value
 
 
 class ExplainRequest(StrictModel):
@@ -30,6 +43,23 @@ class ExplainRequest(StrictModel):
     context: dict[str, Any]
     kitty_assessment: KittyAssessment
     task: Literal["explain"] = "explain"
+
+    @field_validator("timestamp")
+    @classmethod
+    def validate_timestamp(cls, value: str) -> str:
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("timestamp must be ISO-8601") from exc
+        if parsed.tzinfo is None:
+            raise ValueError("timestamp must include a timezone")
+        age_limit = int(os.getenv("ZARRY_MAX_CONTEXT_AGE_SECONDS", "86400"))
+        age = (datetime.now(timezone.utc) - parsed.astimezone(timezone.utc)).total_seconds()
+        if age_limit > 0 and age > age_limit:
+            raise ValueError("market context timestamp is stale")
+        if age < -60:
+            raise ValueError("market context timestamp is in the future")
+        return value
 
     @field_validator("context")
     @classmethod
@@ -41,6 +71,8 @@ class ExplainRequest(StrictModel):
                 raise ValueError("invalid context key")
             if item is not None and not isinstance(item, (str, int, float, bool)):
                 raise ValueError("context values must be scalar")
+            if isinstance(item, str) and len(item) > 1000:
+                raise ValueError("context strings are limited to 1000 characters")
             if isinstance(item, float) and (item != item or abs(item) == float("inf")):
                 raise ValueError("context numbers must be finite")
         return value
@@ -51,8 +83,8 @@ class ExplainResponse(StrictModel):
     decision: Literal["BUY", "SELL", "WAIT", "NO TRADE"]
     summary: str = Field(min_length=1, max_length=3000)
     uncertainty: str = Field(max_length=1500)
-    cited_fields: list[str]
-    numeric_claims: list[float | int]
+    cited_fields: list[str] = Field(max_length=80)
+    numeric_claims: list[float | int] = Field(max_length=80)
     authority: Literal["KITTY_DETERMINISTIC_ENGINE"] = "KITTY_DETERMINISTIC_ENGINE"
     mode: Literal["explanation_only"] = "explanation_only"
 
@@ -113,7 +145,23 @@ def create_app(model_loader=_load_model) -> FastAPI:
         yield
         app.state.model = None
 
-    app = FastAPI(title="ZARRY Inference Service", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="ZARRY Inference Service", version="1.0.0", lifespan=lifespan)
+    app.state.request_metrics = {"requests": 0, "errors": 0}
+
+    @app.middleware("http")
+    async def request_metadata(request: Request, call_next):
+        import time
+        candidate_id = request.headers.get("X-Request-ID", "")[:128]
+        request_id = candidate_id if re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", candidate_id) else str(uuid4())
+        started = time.perf_counter()
+        response = await call_next(request)
+        request.app.state.request_metrics["requests"] += 1
+        if response.status_code >= 500:
+            request.app.state.request_metrics["errors"] += 1
+        response.headers["X-Request-ID"] = request_id
+        response.headers["X-ZARRY-Latency-Ms"] = str(round((time.perf_counter() - started) * 1000, 2))
+        response.headers["X-ZARRY-API-Version"] = "1.0.0"
+        return response
 
     async def authenticate(
         request: Request,
@@ -122,7 +170,8 @@ def create_app(model_loader=_load_model) -> FastAPI:
         expected = os.getenv("ZARRY_API_KEY", "")
         if not expected:
             raise HTTPException(status_code=503, detail="service authentication is not configured")
-        supplied = authorization.removeprefix("Bearer ").strip() if authorization else ""
+        parts = authorization.split() if authorization else []
+        supplied = parts[1] if len(parts) == 2 and parts[0].lower() == "bearer" else ""
         if not hmac.compare_digest(supplied, expected):
             raise HTTPException(status_code=401, detail="unauthorized")
 
@@ -149,7 +198,22 @@ def create_app(model_loader=_load_model) -> FastAPI:
     async def ready(request: Request):
         if request.app.state.model is None:
             raise HTTPException(status_code=503, detail="model is not loaded")
-        return {"status": "ready", "model_loaded": True}
+        return {"status": "ready", "model_loaded": True, "model": os.getenv("ZARRY_MODEL_REPO", "configured-model"), "api_version": "1.0.0"}
+
+    @app.get("/metrics", dependencies=[Depends(authenticate)])
+    async def metrics(request: Request):
+        usage = resource.getrusage(resource.RUSAGE_SELF)
+        model_path = os.getenv("ZARRY_MODEL_PATH", "").strip()
+        disk = shutil.disk_usage(model_path if model_path and os.path.exists(model_path) else "/")
+        counts = dict(request.app.state.request_metrics)
+        return {
+            "api_version": "1.0.0",
+            "requests_total": counts["requests"],
+            "server_errors_total": counts["errors"],
+            "process_cpu_seconds": round(time.process_time(), 3),
+            "process_max_rss_mb": round(usage.ru_maxrss / 1024, 2),
+            "disk_free_mb": round(disk.free / (1024 * 1024), 2),
+        }
 
     @app.post("/v1/explain", response_model=ExplainResponse, dependencies=[Depends(authenticate)])
     def explain(payload: ExplainRequest, request: Request):
