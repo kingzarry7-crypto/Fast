@@ -24,6 +24,21 @@ class ReplicateZImageTurboPricingTests(unittest.TestCase):
             provider.generate("a lighthouse", request_id="request-1", width=512, height=512)
         self.assertEqual(ledger.calls, [])
 
+    def test_rejects_mutable_model_alias_before_reserving(self):
+        class Ledger:
+            def __init__(self):
+                self.calls = []
+            def reserve(self, *args):
+                self.calls.append(args)
+        ledger = Ledger()
+        provider = ReplicateZImageTurboProvider(
+            api_token="replicate-token", model_version="latest",
+            ledger=ledger, storage=object(), session=object(),
+        )
+        with self.assertRaisesRegex(RuntimeError, "immutable 64-character"):
+            provider.generate("a lighthouse", request_id="request-2", width=512, height=512)
+        self.assertEqual(ledger.calls, [])
+
     def test_rejects_dimensions_outside_published_price_schedule(self):
         with self.assertRaises(ValueError):
             replicate_zimage_turbo_cost_usd(2048, 2048)
