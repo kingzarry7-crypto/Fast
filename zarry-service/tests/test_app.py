@@ -112,6 +112,15 @@ class ZarryServiceTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.json()["decision"], decision)
 
+    def test_rejects_too_many_kitty_reason_codes(self):
+        payload = self.payload()
+        payload["kitty_assessment"]["reason_codes"] = [f"CODE_{i}" for i in range(41)]
+        response = self.client.post(
+            "/v1/explain", json=payload,
+            headers={"Authorization": "Bearer test-secret"},
+        )
+        self.assertEqual(response.status_code, 422)
+
     def test_rejects_nested_context_values(self):
         payload = self.payload()
         payload["context"]["nested"] = {"unsafe": "object"}
