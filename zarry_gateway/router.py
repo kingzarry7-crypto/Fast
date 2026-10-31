@@ -101,7 +101,7 @@ def create_general_router(
             if inspect.isawaitable(admin):
                 await admin
             provider = getattr(gateway, "image_provider", None)
-            storage = getattr(provider, "storage", None)
+            storage = getattr(gateway, "image_storage", None) or getattr(provider, "storage", None)
             verifier = getattr(storage, "verify_public_round_trip", None)
             if not callable(verifier):
                 raise HTTPException(status_code=503, detail="R2 storage is not configured")
