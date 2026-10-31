@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from decimal import Decimal
 import os
+import unittest
 import uuid
 import pathlib
 import sys
@@ -16,6 +17,8 @@ import psycopg2
 
 from zarry_gateway.budget import BudgetDenied, PostgresMonthlyBudgetLedger
 
+if not os.environ.get("ZARRY_TEST_DATABASE_URL"):
+    raise unittest.SkipTest("ZARRY_TEST_DATABASE_URL is required for PostgreSQL integration tests")
 DSN = os.environ["ZARRY_TEST_DATABASE_URL"]
 
 
