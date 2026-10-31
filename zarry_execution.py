@@ -90,7 +90,7 @@ def simulate_non_overlapping_trades(
         "skipped_incomplete_outcomes": incomplete_skips,
         "net_trade_returns": net_returns,
         "trade_indices": trade_indices,
-        "exposure_fraction": (count * (outcome_horizon_rows - 1) / len(forward_returns)) if forward_returns else 0.0,
+        "exposure_fraction": (count * (outcome_horizon_rows - 1) / len(forward_returns)) if len(forward_returns) else 0.0,
         "round_trip_cost_assumption": cost,
         "outcome_type": "forward_price_proxy_not_realized_paper_trade",
     }
