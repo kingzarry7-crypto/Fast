@@ -1,15 +1,16 @@
-name: ZARRY PostgreSQL migration contract
+name: ZARRY PostgreSQL migration and budget contracts
 
 on:
   pull_request:
     paths:
-      - "zarry_gateway/migrations/**"
+      - "zarry_gateway/**"
       - "scripts/apply_zarry_migrations.py"
       - "tests/test_zarry_gateway_postgres_migrations.py"
+      - "tests/test_zarry_gateway_budget_postgres.py"
       - ".github/workflows/zarry-postgres-migrations.yml"
 
 jobs:
-  migrations:
+  postgres-contracts:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -38,3 +39,5 @@ jobs:
         run: python -m py_compile scripts/apply_zarry_migrations.py
       - name: Apply migrations twice and verify idempotency and constraints
         run: python tests/test_zarry_gateway_postgres_migrations.py
+      - name: Verify real PostgreSQL budget concurrency and settlement
+        run: python tests/test_zarry_gateway_budget_postgres.py
