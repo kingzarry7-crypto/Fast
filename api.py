@@ -844,7 +844,11 @@ def _require_current_user(request: Request) -> Any:
 # General assistant gateway is independently default-off; Kitty remains separate.
 try:
     from zarry_gateway.router import create_general_router
-    app.include_router(create_general_router(_require_current_user, gateway=None))
+    from zarry_gateway.service import AssistantService
+    _zarry_general_service = AssistantService()
+    app.include_router(
+        create_general_router(_require_current_user, gateway=_zarry_general_service)
+    )
 except Exception as _zarry_general_import_error:
     logger.warning("ZARRY general gateway unavailable: %s", type(_zarry_general_import_error).__name__)
 
