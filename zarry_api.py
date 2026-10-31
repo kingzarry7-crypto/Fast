@@ -7,6 +7,9 @@ from __future__ import annotations
 
 import math
 import os
+import time
+from datetime import datetime, timezone
+from uuid import uuid4
 from typing import Any, Callable, Literal
 
 import requests
@@ -31,6 +34,23 @@ class ZarryExplainRequest(StrictModel):
     timestamp: str = Field(min_length=10, max_length=40)
     context: dict[str, Any]
     kitty_assessment: KittyAssessment
+
+    @field_validator("timestamp")
+    @classmethod
+    def validate_timestamp(cls, value: str) -> str:
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("timestamp must be ISO-8601") from exc
+        if parsed.tzinfo is None:
+            raise ValueError("timestamp must include a timezone")
+        max_age = int(os.getenv("ZARRY_MAX_CONTEXT_AGE_SECONDS", "86400"))
+        age = (datetime.now(timezone.utc) - parsed.astimezone(timezone.utc)).total_seconds()
+        if max_age > 0 and age > max_age:
+            raise ValueError("market context timestamp is stale")
+        if age < -60:
+            raise ValueError("market context timestamp is in the future")
+        return value
 
     @field_validator("context")
     @classmethod
@@ -108,21 +128,33 @@ def create_router(
         if not service_url.startswith(("https://", "http://")) or not api_key:
             raise HTTPException(status_code=503, detail="ZARRY service is not configured")
 
-        try:
-            upstream = upstream_post(
-                service_url + "/v1/explain",
-                json=payload.model_dump(),
-                headers={"Authorization": "Bearer " + api_key, "Content-Type": "application/json"},
-                timeout=_timeout_seconds(),
-            )
-        except requests.Timeout as exc:
-            raise HTTPException(status_code=504, detail="ZARRY explanation timed out") from exc
-        except requests.RequestException as exc:
-            raise HTTPException(status_code=502, detail="ZARRY service is unavailable") from exc
-        except HTTPException:
-            raise
-        except Exception as exc:
-            raise HTTPException(status_code=502, detail="ZARRY request failed") from exc
+        request_id = request.headers.get("X-Request-ID", "")[:128] or str(uuid4())
+        upstream = None
+        for attempt in range(2):
+            try:
+                upstream = upstream_post(
+                    service_url + "/v1/explain",
+                    json=payload.model_dump(),
+                    headers={
+                        "Authorization": "Bearer " + api_key,
+                        "Content-Type": "application/json",
+                        "X-Request-ID": request_id,
+                    },
+                    timeout=_timeout_seconds(),
+                )
+                break
+            except requests.ConnectionError as exc:
+                if attempt == 1:
+                    raise HTTPException(status_code=502, detail="ZARRY service is unavailable") from exc
+                time.sleep(0.2)
+            except requests.Timeout as exc:
+                raise HTTPException(status_code=504, detail="ZARRY explanation timed out") from exc
+            except requests.RequestException as exc:
+                raise HTTPException(status_code=502, detail="ZARRY service is unavailable") from exc
+            except HTTPException:
+                raise
+            except Exception as exc:
+                raise HTTPException(status_code=502, detail="ZARRY request failed") from exc
 
         if getattr(upstream, "status_code", None) != 200:
             raise HTTPException(status_code=502, detail="ZARRY service rejected the explanation request")
