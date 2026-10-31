@@ -41,7 +41,7 @@ class ReplicateRequestError(RuntimeError):
     """Provider HTTP/network failure with safe diagnostic metadata."""
     def __init__(self, stage: str, status_code: int | None = None):
         self.failure_stage = stage
-        self.http_status_code = status_code if isinstance(status_code, int) and 100 <= status_code <= 599 else None
+        self.http_status_code = status_code if isinstance(status_code, int) and not isinstance(status_code, bool) and 100 <= status_code <= 599 else None
         super().__init__("Replicate request failed")
 
 
