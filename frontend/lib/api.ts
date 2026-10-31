@@ -589,6 +589,21 @@ export async function adminUnbanUser(userId: string, signal?: AbortSignal) {
   return request<{ status?: string }>("/api/admin/users/unban", { method: "POST", body: { user_id: userId }, signal });
 }
 
+export type ZarryMigrationStatus = {
+  status: "ok";
+  migrations: Array<{
+    name: string;
+    status: "applied" | "pending" | "checksum_mismatch" | "migration_file_missing";
+  }>;
+};
+
+export async function getZarryMigrationStatus(signal?: AbortSignal) {
+  return request<ZarryMigrationStatus>("/api/assistant/admin/migration-status", {
+    method: "GET",
+    signal,
+  });
+}
+
 export type AdminImageStorageTest = {
   status: "ok";
   upload: "ok";
