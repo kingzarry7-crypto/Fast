@@ -1,6 +1,7 @@
 import io
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from zarry_gateway.image_storage import CloudflareR2ImageStorage
@@ -30,10 +31,12 @@ class R2StorageTests(unittest.TestCase):
             public_base_url="https://images.kingzarry.bid/",
             client=client,
         )
+
         class FakeImage:
             def save(self, buffer, format):
                 self.assert_format = format
                 buffer.write(b"PNGDATA")
+
         request_id = uuid4()
         url = storage.save(FakeImage(), request_id)
         self.assertTrue(url.startswith("https://images.kingzarry.bid/zarry/"))
@@ -49,7 +52,12 @@ class R2StorageTests(unittest.TestCase):
 
     def test_public_round_trip_uploads_reads_and_deletes_temporary_object(self):
         client = FakeS3()
-        public_get = Mock(return_value=Mock(status_code=200, content=b"zarry-r2-probe"))
+
+        def read_uploaded_object(url, *, timeout):
+            key = urlsplit(url).path.lstrip("/")
+            return Mock(status_code=200, content=client.objects[("zarrry", key)])
+
+        public_get = Mock(side_effect=read_uploaded_object)
         storage = CloudflareR2ImageStorage(
             bucket="zarrry",
             public_base_url="https://images.kingzarry.bid",
