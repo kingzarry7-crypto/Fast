@@ -206,13 +206,13 @@ The user approved:
 - Fast proxy accepts the already-provisioned `ZARRY_API_URL` variable as a fallback when `ZARRY_SERVICE_URL` is not set, avoiding a deployment-variable name mismatch without enabling the integration.
 - Contract tests cover BUY/SELL/WAIT/NO TRADE decision preservation, authentication (including case-insensitive Bearer scheme parsing), invalid/ungrounded output rejection, freshness, bounded scalar context, request-ID sanitization, metadata, metrics authorization, rate limiting, and transient connection retry.
 
-### Latest hardening changes (staged; CI pending)
+### Latest hardening changes (staged; contract CI passed)
 
 - Service and Fast proxy sanitize caller-supplied request IDs before forwarding or returning them.
 - Service context validation now matches the proxy's scalar-value and 1,000-character string limits.
 - Added service and proxy regression cases for BUY and SELL preservation, nested/oversized context rejection, unsafe request IDs, and timeout non-retry behavior.
 - The service accepts the standard case-insensitive HTTP Bearer authentication scheme while continuing to compare the credential itself exactly.
-- These newest changes have been committed to the PR branch, but have not yet been executed by a verified CI run. They are not production deployed.
+- Contract workflow run 68 (`41191456234`) passed on code commit `2d38a85c8e993abb048002d44cc842dff32fc736`; the subsequent documentation-only commit is `e3e82dc0f4838d293b2588244efd60c028457e3f`. These changes are not production deployed.
 
 ### Verification checkpoint
 
