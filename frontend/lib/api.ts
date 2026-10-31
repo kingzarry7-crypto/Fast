@@ -959,7 +959,7 @@ export const api = {
   getBaseUrl, getMe, getCurrentUser, login, register, verifyEmail, resendVerification, forgotPassword, resetPassword, logout,
   listConversations, createConversation, getConversation, getConversationMessages, chat, sendChatMessage, streamChatMessage, decideGoogleApproval, generateChatSuggestions, healthCheck,
   getRealtimeStatus, startRealtimeCall, saveRealtimeTranscript, getPlatformStatus, getChatBehaviorPreferences, saveChatBehaviorPreferences, createMemoryLinkCode, createCheckoutSession, getBillingConfig,
-  getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, adminImageStorageTest, adminEmailBroadcast, ttsSpeak, synthesizeSpeech,
+  getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, adminImageStorageTest, adminImageGenerationSmokeTest, adminEmailBroadcast, ttsSpeak, synthesizeSpeech,
   getMarkets, getMarketDetail, getSignals, getNews,
   getKittyMultiPaperStatus, getKittyMultiPaperSettings, saveKittyMultiPaperSettings, runKittyMultiPaperCycle,
   getAgentStatus, runAgentGoal, generateMorningBrief, getLatestMorningBrief, listAgentJobs, approveAgentJob,
