@@ -159,7 +159,8 @@ def create_app(model_loader=_load_model) -> FastAPI:
         expected = os.getenv("ZARRY_API_KEY", "")
         if not expected:
             raise HTTPException(status_code=503, detail="service authentication is not configured")
-        supplied = authorization.removeprefix("Bearer ").strip() if authorization else ""
+        parts = authorization.split() if authorization else []
+        supplied = parts[1] if len(parts) == 2 and parts[0].lower() == "bearer" else ""
         if not hmac.compare_digest(supplied, expected):
             raise HTTPException(status_code=401, detail="unauthorized")
 
