@@ -116,6 +116,16 @@ class ZarryProxyTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self.upstream.call_count, 2)
 
+    def test_proxy_rejects_oversized_reason_codes(self):
+        payload = dict(self.payload)
+        payload["kitty_assessment"] = {
+            "decision": "NO TRADE",
+            "reason_codes": [f"CODE_{i}" for i in range(41)],
+        }
+        response = self.client.post("/api/zarry/explain", json=payload)
+        self.assertEqual(response.status_code, 422)
+        self.upstream.assert_not_called()
+
     def test_proxy_rejects_stale_market_context(self):
         payload = dict(self.payload)
         payload["timestamp"] = "2020-01-01T00:00:00Z"
