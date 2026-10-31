@@ -170,7 +170,9 @@ def simulate_predictions(
         direction = 1.0 if action == LONG else -1.0
         net_returns.append(direction * forward_return - cost * multiplier)
         trade_indices.append({"entry_index": index, "exit_index": exit_index})
-        next_available_index = exit_index + 1
+        # A decision on the prior exit candle enters on the following open,
+        # after the prior trade has closed; it is therefore non-overlapping.
+        next_available_index = exit_index
 
     equity = 1.0
     peak = 1.0
@@ -197,7 +199,7 @@ def simulate_predictions(
         "profit_factor": gross_profit / gross_loss if gross_loss else None,
         "compounded_net_return": equity - 1.0,
         "max_drawdown": max_drawdown,
-        "exposure_fraction": (sum(item["exit_index"] - item["entry_index"] + 1 for item in trade_indices) / len(rows)) if rows else 0.0,
+        "exposure_fraction": (sum(outcome_horizon_rows - 1 for _ in trade_indices) / len(rows)) if rows else 0.0,
         "overlap_skips": overlap_skips,
         "incomplete_outcome_skips": incomplete_skips,
         "round_trip_cost": cost * multiplier,
