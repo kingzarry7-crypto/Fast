@@ -1,6 +1,12 @@
 name: ZARRY BTCUSD calibrated walk-forward
 
 on:
+  pull_request:
+    paths:
+      - "research-data/scripts/zarry_btc_diagnose.py"
+      - "zarry_calibration.py"
+      - "tests/test_zarry_btc_diagnose.py"
+      - ".github/workflows/zarry-btc-calibrated-walkforward.yml"
   workflow_dispatch:
 
 permissions:
@@ -32,7 +38,7 @@ jobs:
       - name: Install research dependencies
         run: python -m pip install --upgrade pip numpy pandas scikit-learn torch
       - name: Verify BTC artifact guard
-        run: python -m unittest tests.test_zarry_btc_diagnose -v
+        run: python -m unittest discover -s tests -p 'test_zarry_btc_diagnose.py' -v
       - name: Run three-fold calibrated BTCUSD evaluation
         run: |
           python research-data/scripts/zarry_btc_diagnose.py \
