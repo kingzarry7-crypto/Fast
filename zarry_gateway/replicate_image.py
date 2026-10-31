@@ -37,6 +37,14 @@ def replicate_zimage_turbo_cost_usd(width: int, height: int) -> str:
     return "0.01"
 
 
+class ReplicateRequestError(RuntimeError):
+    """Provider HTTP/network failure with safe diagnostic metadata."""
+    def __init__(self, stage: str, status_code: int | None = None):
+        self.failure_stage = stage
+        self.http_status_code = status_code if isinstance(status_code, int) and not isinstance(status_code, bool) and 100 <= status_code <= 599 else None
+        super().__init__("Replicate request failed")
+
+
 class ReplicateZImageTurboProvider:
     """Generate one image through a pinned Replicate version with budget gating."""
 
@@ -61,6 +69,15 @@ class ReplicateZImageTurboProvider:
         self.poll_interval_seconds = max(0.1, float(poll_interval_seconds))
         self.max_polls = max(1, min(int(max_polls), 300))
 
+    def _request(self, stage: str, method: str, *args, **kwargs):
+        try:
+            response = getattr(self.session, method)(*args, **kwargs)
+            response.raise_for_status()
+            return response
+        except Exception as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            raise ReplicateRequestError(stage, status) from exc
+
     def generate(self, prompt: str, *, request_id, width: int, height: int) -> dict:
         if not self.api_token or not self.model_version:
             raise RuntimeError("Replicate token and pinned Z-Image-Turbo version are required")
@@ -81,7 +98,8 @@ class ReplicateZImageTurboProvider:
             "Prefer": "wait=60",
         }
         try:
-            response = self.session.post(
+            response = self._request(
+                "replicate_submit", "post",
                 "https://api.replicate.com/v1/predictions",
                 headers=headers,
                 json={
@@ -90,7 +108,6 @@ class ReplicateZImageTurboProvider:
                 },
                 timeout=(10, 75),
             )
-            response.raise_for_status()
             prediction = response.json()
             prediction_id = prediction.get("id")
             get_url = prediction.get("urls", {}).get("get")
@@ -108,8 +125,9 @@ class ReplicateZImageTurboProvider:
                     raise RuntimeError("Replicate image prediction did not succeed")
                 if attempt:
                     time.sleep(self.poll_interval_seconds)
-                poll = self.session.get(get_url, headers=headers, timeout=(10, 30))
-                poll.raise_for_status()
+                poll = self._request(
+                    "replicate_poll", "get", get_url, headers=headers, timeout=(10, 30)
+                )
                 prediction = poll.json()
             else:
                 # An unknown outcome retains its reservation. Never retry a
@@ -132,8 +150,9 @@ class ReplicateZImageTurboProvider:
                 or parsed_output.password
             ):
                 raise RuntimeError("Replicate returned an untrusted image URL")
-            image_response = self.session.get(output_url, timeout=(10, 60))
-            image_response.raise_for_status()
+            image_response = self._request(
+                "provider_image_download", "get", output_url, timeout=(10, 60)
+            )
             try:
                 from PIL import Image
             except ImportError as exc:
@@ -143,7 +162,10 @@ class ReplicateZImageTurboProvider:
             # Replicate's published tariff is resolution-based and deterministic
             # for this pinned model family; settle the matching tier after success.
             self.ledger.settle(request_id, price)
-            image_url = self.storage.save(image, request_id)
+            try:
+                image_url = self.storage.save(image, request_id)
+            except Exception as exc:
+                raise ReplicateRequestError("storage_save") from exc
             if not isinstance(image_url, str) or not image_url.startswith("https://"):
                 raise RuntimeError("Image storage did not return a secure public URL")
             return {
