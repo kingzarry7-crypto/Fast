@@ -143,7 +143,12 @@ def create_router(
 
         if os.getenv("ZARRY_ENABLED", "").strip().lower() != "true":
             raise HTTPException(status_code=503, detail="ZARRY explanations are disabled")
-        service_url = os.getenv("ZARRY_SERVICE_URL", "").strip().rstrip("/")
+        # ZARRY_API_URL is the established Fast deployment variable; retain
+        # ZARRY_SERVICE_URL as a backward-compatible explicit override.
+        service_url = (
+            os.getenv("ZARRY_SERVICE_URL", "").strip()
+            or os.getenv("ZARRY_API_URL", "").strip()
+        ).rstrip("/")
         api_key = os.getenv("ZARRY_API_KEY", "").strip()
         if not service_url.startswith(("https://", "http://")) or not api_key:
             raise HTTPException(status_code=503, detail="ZARRY service is not configured")
