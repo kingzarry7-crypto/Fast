@@ -76,6 +76,16 @@ class ZarryProxyTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         self.upstream.assert_not_called()
 
+    def test_proxy_preserves_buy_and_sell_decisions(self):
+        for decision in ("BUY", "SELL"):
+            with self.subTest(decision=decision):
+                payload = dict(self.payload)
+                payload["kitty_assessment"] = {"decision": decision, "reason_codes": []}
+                self.valid_upstream(decision=decision)
+                response = self.client.post("/api/zarry/explain", json=payload)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()["decision"], decision)
+
     def test_proxy_fails_closed_when_model_changes_kitty_decision(self):
         self.valid_upstream(decision="BUY")
         response = self.client.post("/api/zarry/explain", json=self.payload)
@@ -86,6 +96,7 @@ class ZarryProxyTests(unittest.TestCase):
         self.upstream.side_effect = requests.Timeout("slow model")
         response = self.client.post("/api/zarry/explain", json=self.payload)
         self.assertEqual(response.status_code, 504)
+        self.upstream.assert_called_once()
 
     def test_proxy_retries_one_transient_connection_failure(self):
         self.valid_upstream()
