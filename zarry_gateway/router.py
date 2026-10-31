@@ -2,14 +2,17 @@
 import inspect
 from fastapi import APIRouter, HTTPException, Request
 from .identity import AuthenticatedPrincipal
-from .policy import general_gateway_enabled
+from .policy import general_gateway_enabled, image_generation_enabled
 from .schemas import (
     AssistantRequest, AssistantResponse, ImageRequest, ImageResponse,
     MemoryPreferenceRequest,
 )
 
 
-def create_general_router(require_web_user, gateway, enabled_check=general_gateway_enabled):
+def create_general_router(
+    require_web_user, gateway, enabled_check=general_gateway_enabled,
+    image_enabled_check=image_generation_enabled,
+):
     router = APIRouter(prefix="/api/assistant", tags=["ZARRY general assistant"])
 
     async def principal_for(request: Request):
@@ -66,8 +69,8 @@ def create_general_router(require_web_user, gateway, enabled_check=general_gatew
 
     @router.post("/image", response_model=ImageResponse)
     async def image(payload: ImageRequest, request: Request):
-        if not enabled_check():
-            raise HTTPException(status_code=503, detail="ZARRY general assistant is not enabled")
+        if not enabled_check() or not image_enabled_check():
+            raise HTTPException(status_code=503, detail="ZARRY image generation is not enabled")
         principal = await principal_for(request)
         handler = getattr(gateway, "image", None)
         if not callable(handler):
