@@ -76,7 +76,7 @@ class SmokeLifecycleTests(unittest.TestCase):
     def test_success_records_outcome_and_returns_verified_public_image(self):
         import requests
         class PublicResponse:
-            content = b"\\x89PNG\\r\\n\\x1a\\nimage-bytes"
+            content = bytes([0x89]) + b"PNG\r\n\x1a\nimage-bytes"
             def raise_for_status(self):
                 return None
 
