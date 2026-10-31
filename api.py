@@ -841,6 +841,13 @@ def _require_current_user(request: Request) -> Any:
         raise HTTPException(status_code=401, detail="Authentication required")
     return user_row
 
+# General assistant gateway is independently default-off; Kitty remains separate.
+try:
+    from zarry_gateway.router import create_general_router
+    app.include_router(create_general_router(_require_current_user, gateway=None))
+except Exception as _zarry_general_import_error:
+    logger.warning("ZARRY general gateway unavailable: %s", type(_zarry_general_import_error).__name__)
+
 # ============================================================
 # CONVERSATIONS
 # ============================================================
