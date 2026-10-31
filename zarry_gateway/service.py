@@ -11,10 +11,11 @@ from .schemas import AssistantRequest
 class AssistantService:
     """ZARRY-first text service with explicit opt-in conversation memory."""
 
-    def __init__(self, text_provider=None, memory_store=None, image_provider=None):
+    def __init__(self, text_provider=None, memory_store=None, image_provider=None, image_storage=None):
         self.text_provider = text_provider or SelfHostedZarryProvider()
         self.memory_store = memory_store
         self.image_provider = image_provider
+        self.image_storage = image_storage or getattr(image_provider, "storage", None)
 
     def image(self, *, principal: AuthenticatedPrincipal, payload):
         if not isinstance(principal, AuthenticatedPrincipal):
