@@ -22,6 +22,8 @@ from sklearn.preprocessing import StandardScaler
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
+from zarry_execution import simulate_non_overlapping_trades
+
 FEATURES = [
     "ret_1h", "ret_3h", "ret_6h", "ret_12h", "ret_24h",
     "close_vs_sma6", "close_vs_sma20", "close_vs_sma50",
@@ -103,8 +105,9 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
                             round_trip_cost: float = 0.001, min_confidence: float = 0.50,
                             min_margin: float = 0.10, label_threshold: float | None = None,
                             min_edge_cost_multiple: float = 1.25,
-                            use_edge_proxy: bool = False) -> dict:
-    """One-pass holdout simulation matching inference confidence/margin filters."""
+                            use_edge_proxy: bool = False,
+                            temperature: float = 1.0) -> dict:
+    """Confidence-gated model evaluation using the shared execution simulator."""
     if len(x) != len(forward_returns):
         raise ValueError("Test features and forward returns must have equal lengths")
     if not 0 <= round_trip_cost < 0.05:
@@ -113,87 +116,61 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
         raise ValueError("min_confidence must be between 0.50 and 1.01; 1.01 is the fail-closed no-signal sentinel")
     if not 0.0 <= min_margin <= 1.0:
         raise ValueError("min_margin must be between 0 and 1")
+    if not np.isfinite(temperature) or temperature <= 0:
+        raise ValueError("temperature must be a positive finite number")
     if label_threshold is not None and (not np.isfinite(label_threshold) or label_threshold <= 0):
         raise ValueError("label_threshold must be a positive finite return fraction")
     if not np.isfinite(min_edge_cost_multiple) or min_edge_cost_multiple < 1.0:
         raise ValueError("min_edge_cost_multiple must be finite and at least 1.0")
     model.eval()
     with torch.inference_mode():
-        probs = torch.softmax(model(torch.from_numpy(x)), dim=1).cpu().numpy()
-    trades = []
-    next_entry_index = 0
-    skipped_overlapping_signals = 0
+        logits = model(torch.from_numpy(x)).cpu().numpy() / float(temperature)
+    logits = logits - logits.max(axis=1, keepdims=True)
+    probs = np.exp(logits)
+    probs /= probs.sum(axis=1, keepdims=True)
+    directions = []
     skipped_low_margin_signals = 0
-    for index, (probabilities, raw_return) in enumerate(zip(probs, forward_returns)):
-        if index < next_entry_index:
-            skipped_overlapping_signals += 1
-            continue
-        if not np.isfinite(raw_return):
-            continue
+    for probabilities in probs:
         ranked = np.argsort(probabilities)
         side_class = int(ranked[-1])
         confidence = float(probabilities[side_class])
         margin = confidence - float(probabilities[int(ranked[-2])])
         if side_class == 1 or confidence < min_confidence:
+            directions.append(0)
             continue
         if margin < min_margin:
             skipped_low_margin_signals += 1
+            directions.append(0)
             continue
-        # Confidence is not an estimate of profit. Require the directional
-        # probability gap, scaled by the dataset's move threshold, to clear
-        # the assumed all-in cost by a predeclared safety multiple.
-        # This is a conservative edge proxy, not a calibrated return forecast.
         if label_threshold is not None and use_edge_proxy:
-            # Optional legacy diagnostic only: a probability gap is not a
-            # calibrated expected-return estimate. Production research selection
-            # instead uses realized validation net returns after assumed costs.
             directional_gap = abs(float(probabilities[2]) - float(probabilities[0]))
-            directional_edge_proxy = directional_gap * label_threshold
-            if directional_edge_proxy < round_trip_cost * min_edge_cost_multiple:
+            if directional_gap * label_threshold < round_trip_cost * min_edge_cost_multiple:
                 skipped_low_margin_signals += 1
+                directions.append(0)
                 continue
-        gross = -float(raw_return) if side_class == 0 else float(raw_return)
-        trades.append(gross - round_trip_cost)
-        # A signal after candle t closes enters at t+1 open and exits at t+7 close.
-        # The exit candle is part of the holding window, so the next eligible
-        # signal is t+7; t+6 would overlap the prior trade's exit candle.
-        next_entry_index = index + 7
-    if not trades:
-        return {
-            "trade_count": 0, "win_rate": None, "average_net_return": None, "profit_factor": None,
-            "compounded_net_return": 0.0, "max_drawdown": 0.0,
-            "skipped_overlapping_signals": skipped_overlapping_signals,
-            "skipped_low_margin_signals": skipped_low_margin_signals,
-            "round_trip_cost_assumption": round_trip_cost,
-            "minimum_class_confidence": min_confidence,
-            "minimum_probability_margin": min_margin,
-            "label_threshold_for_edge_proxy": label_threshold,
-            "minimum_edge_cost_multiple": min_edge_cost_multiple,
-        }
-    net = np.asarray(trades, dtype=np.float64)
-    equity = np.cumprod(1.0 + net)
-    peaks = np.maximum.accumulate(np.concatenate(([1.0], equity)))[1:]
-    drawdowns = equity / peaks - 1.0
-    gross_profit = float(net[net > 0].sum())
-    gross_loss = float(-net[net < 0].sum())
-    profit_factor = gross_profit / gross_loss if gross_loss > 0 else (999.0 if gross_profit > 0 else 0.0)
+        directions.append(1 if side_class == 2 else -1)
+    metrics = simulate_non_overlapping_trades(
+        forward_returns, directions, round_trip_cost=round_trip_cost,
+        outcome_horizon_rows=LABEL_HORIZON_HOURS + 1,
+    )
     return {
-        "trade_count": len(trades),
-        "profit_factor": float(profit_factor),
-        "skipped_overlapping_signals": skipped_overlapping_signals,
+        "trade_count": metrics["trade_count"],
+        "win_rate": metrics["win_rate"],
+        "average_net_return": metrics["average_net_return"],
+        "profit_factor": metrics["profit_factor"],
+        "compounded_net_return": metrics["compounded_net_return"],
+        "max_drawdown": metrics["max_drawdown"],
+        "skipped_overlapping_signals": metrics["skipped_overlapping_signals"],
         "skipped_low_margin_signals": skipped_low_margin_signals,
-        "minimum_probability_margin": min_margin,
-        "win_rate": float(np.mean(np.asarray(trades) > 0)),
-        "average_net_return": float(np.mean(trades)),
-        "compounded_net_return": float(equity[-1] - 1.0),
-        "max_drawdown": float(np.min(drawdowns)),
         "round_trip_cost_assumption": round_trip_cost,
         "minimum_class_confidence": min_confidence,
+        "minimum_probability_margin": min_margin,
         "label_threshold_for_edge_proxy": label_threshold,
         "minimum_edge_cost_multiple": min_edge_cost_multiple,
+        "probability_temperature": float(temperature),
+        "trade_indices": metrics["trade_indices"],
+        "net_trade_returns": metrics["net_trade_returns"],
     }
-
-
 
 def evaluate_directional_rule(
     momentum_returns: np.ndarray,
@@ -201,7 +178,7 @@ def evaluate_directional_rule(
     threshold: float,
     round_trip_cost: float,
 ) -> dict:
-    """Evaluate a simple six-hour momentum rule with the same costs and holding window."""
+    """Evaluate the fixed six-hour momentum rule with shared execution semantics."""
     momentum_returns = np.asarray(momentum_returns, dtype=np.float64)
     forward_returns = np.asarray(forward_returns, dtype=np.float64)
     if momentum_returns.ndim != 1 or forward_returns.ndim != 1 or len(momentum_returns) != len(forward_returns):
@@ -212,48 +189,23 @@ def evaluate_directional_rule(
         raise ValueError("momentum threshold must be a positive finite return fraction")
     if not np.isfinite(round_trip_cost) or not 0 <= round_trip_cost < 0.05:
         raise ValueError("round_trip_cost must be between 0 and 5%")
-
-    trades = []
-    next_entry_index = 0
-    skipped_overlapping_signals = 0
-    for index, (momentum, raw_return) in enumerate(zip(momentum_returns, forward_returns)):
-        if index < next_entry_index:
-            skipped_overlapping_signals += 1
-            continue
-        if abs(float(momentum)) < threshold:
-            continue
-        side = 1.0 if momentum > 0 else -1.0
-        trades.append(side * float(raw_return) - round_trip_cost)
-        next_entry_index = index + LABEL_HORIZON_HOURS + 1
-
-    if not trades:
-        return {
-            "trade_count": 0, "win_rate": None, "average_net_return": None,
-            "profit_factor": None, "compounded_net_return": 0.0, "max_drawdown": 0.0,
-            "skipped_overlapping_signals": skipped_overlapping_signals,
-            "round_trip_cost_assumption": round_trip_cost,
-            "momentum_threshold": threshold,
-        }
-    net = np.asarray(trades, dtype=np.float64)
-    equity = np.cumprod(1.0 + net)
-    peaks = np.maximum.accumulate(np.concatenate(([1.0], equity)))[1:]
-    drawdowns = equity / peaks - 1.0
-    gross_profit = float(net[net > 0].sum())
-    gross_loss = float(-net[net < 0].sum())
-    profit_factor = gross_profit / gross_loss if gross_loss > 0 else (999.0 if gross_profit > 0 else 0.0)
+    directions = np.where(np.abs(momentum_returns) >= threshold, np.sign(momentum_returns), 0).astype(int)
+    metrics = simulate_non_overlapping_trades(
+        forward_returns, directions, round_trip_cost=round_trip_cost,
+        outcome_horizon_rows=LABEL_HORIZON_HOURS + 1,
+    )
     return {
-        "trade_count": len(trades),
-        "win_rate": float(np.mean(net > 0)),
-        "average_net_return": float(np.mean(net)),
-        "profit_factor": float(profit_factor),
-        "compounded_net_return": float(equity[-1] - 1.0),
-        "max_drawdown": float(np.min(drawdowns)),
-        "skipped_overlapping_signals": skipped_overlapping_signals,
+        "trade_count": metrics["trade_count"],
+        "win_rate": metrics["win_rate"],
+        "average_net_return": metrics["average_net_return"],
+        "profit_factor": metrics["profit_factor"],
+        "compounded_net_return": metrics["compounded_net_return"],
+        "max_drawdown": metrics["max_drawdown"],
+        "skipped_overlapping_signals": metrics["skipped_overlapping_signals"],
+        "skipped_incomplete_outcomes": metrics["skipped_incomplete_outcomes"],
         "round_trip_cost_assumption": round_trip_cost,
         "momentum_threshold": threshold,
     }
-
-
 
 def evaluate_trend_confirmation_rule(
     momentum_returns: np.ndarray,
@@ -263,7 +215,7 @@ def evaluate_trend_confirmation_rule(
     threshold: float,
     round_trip_cost: float,
 ) -> dict:
-    """Evaluate a predeclared 6h momentum rule gated by 24h momentum and SMA20 trend."""
+    """Evaluate predeclared momentum/trend confirmation with shared execution."""
     arrays = [
         np.asarray(values, dtype=np.float64)
         for values in (momentum_returns, medium_term_returns, trend_distance, forward_returns)
@@ -276,55 +228,34 @@ def evaluate_trend_confirmation_rule(
         raise ValueError("threshold must be a positive finite return fraction")
     if not np.isfinite(round_trip_cost) or not 0 <= round_trip_cost < 0.05:
         raise ValueError("round_trip_cost must be between 0 and 5%")
-
     momentum, medium_term, trend, returns = arrays
-    trades = []
-    next_entry_index = 0
-    skipped_overlapping_signals = 0
+    directions = np.zeros(len(momentum), dtype=int)
     confirmation_rejected_signals = 0
-    for index, (short_momentum, medium_momentum, trend_gap, raw_return) in enumerate(
-        zip(momentum, medium_term, trend, returns)
-    ):
-        if index < next_entry_index:
-            skipped_overlapping_signals += 1
+    for index, value in enumerate(momentum):
+        if abs(value) < threshold:
             continue
-        if abs(float(short_momentum)) < threshold:
-            continue
-        direction = 1.0 if short_momentum > 0 else -1.0
-        if direction * medium_momentum <= 0 or direction * trend_gap <= 0:
+        direction = 1 if value > 0 else -1
+        if direction * medium_term[index] <= 0 or direction * trend[index] <= 0:
             confirmation_rejected_signals += 1
             continue
-        trades.append(direction * float(raw_return) - round_trip_cost)
-        next_entry_index = index + LABEL_HORIZON_HOURS + 1
-
-    if not trades:
-        return {
-            "trade_count": 0, "win_rate": None, "average_net_return": None,
-            "profit_factor": None, "compounded_net_return": 0.0, "max_drawdown": 0.0,
-            "skipped_overlapping_signals": skipped_overlapping_signals,
-            "confirmation_rejected_signals": confirmation_rejected_signals,
-            "round_trip_cost_assumption": round_trip_cost,
-            "momentum_threshold": threshold,
-        }
-    net = np.asarray(trades, dtype=np.float64)
-    equity = np.cumprod(1.0 + net)
-    peaks = np.maximum.accumulate(np.concatenate(([1.0], equity)))[1:]
-    gross_profit = float(net[net > 0].sum())
-    gross_loss = float(-net[net < 0].sum())
+        directions[index] = direction
+    metrics = simulate_non_overlapping_trades(
+        returns, directions, round_trip_cost=round_trip_cost,
+        outcome_horizon_rows=LABEL_HORIZON_HOURS + 1,
+    )
     return {
-        "trade_count": len(trades),
-        "win_rate": float(np.mean(net > 0)),
-        "average_net_return": float(np.mean(net)),
-        "profit_factor": float(gross_profit / gross_loss if gross_loss > 0 else (999.0 if gross_profit > 0 else 0.0)),
-        "compounded_net_return": float(equity[-1] - 1.0),
-        "max_drawdown": float(np.min(equity / peaks - 1.0)),
-        "skipped_overlapping_signals": skipped_overlapping_signals,
+        "trade_count": metrics["trade_count"],
+        "win_rate": metrics["win_rate"],
+        "average_net_return": metrics["average_net_return"],
+        "profit_factor": metrics["profit_factor"],
+        "compounded_net_return": metrics["compounded_net_return"],
+        "max_drawdown": metrics["max_drawdown"],
+        "skipped_overlapping_signals": metrics["skipped_overlapping_signals"],
+        "skipped_incomplete_outcomes": metrics["skipped_incomplete_outcomes"],
         "confirmation_rejected_signals": confirmation_rejected_signals,
         "round_trip_cost_assumption": round_trip_cost,
         "momentum_threshold": threshold,
     }
-
-
 
 def evaluate_walk_forward(
     x: np.ndarray,
