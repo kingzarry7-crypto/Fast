@@ -34,9 +34,9 @@ Classification degradation is also clear: accuracy fell from 57.49% to 50.81%, b
 |---|---:|---:|---:|
 | 6-hour volatility mean, relative to validation | 1.000 | 0.891 | -10.9% |
 | 24-hour volatility mean, relative to validation | 1.000 | 0.888 | -11.2% |
-| Forward-return standard deviation | 0.593% | 0.488% | -17.4% |
+| Forward-return standard deviation | 0.593% | 0.488% | -17.7% |
 | SHORT label share | 32.4% | 32.3% | -0.1 pp |
-| NO TRADE label share | 39.5% | 43.8% | +4.3 pp |
+| NO TRADE label share | 39.6% | 43.8% | +4.3 pp |
 | LONG label share | 27.9% | 23.9% | -4.0 pp |
 
 The largest validation-to-test feature mean shift was volatility_24h at about -0.17 training-standard-deviations; the maximum feature mean shift across train-to-test was about 0.29 standard deviations. This is measurable but not an extreme wholesale distribution break. The forward-return distribution narrowed and the class mix shifted toward NO TRADE. The checkpoint's directional predictions did not adjust to that mix: SHORT predictions rose while LONG predictions fell. This supports a generalization/calibration and regime-sensitivity problem; it does not prove that volatility alone caused the decline.
