@@ -4,14 +4,12 @@ on:
   pull_request:
     paths:
       - "zarry-service/**"
-      - "zarry_api.py"
       - "api.py"
       - ".github/workflows/zarry-service-contract.yml"
   push:
     branches: ["main", "feat/zarry-inference-service-prototype"]
     paths:
       - "zarry-service/**"
-      - "zarry_api.py"
       - "api.py"
       - ".github/workflows/zarry-service-contract.yml"
 
@@ -35,5 +33,5 @@ jobs:
         run: python -m py_compile zarry-service/smoke_test.py
       - name: Run service contract tests
         run: python -m unittest discover -s zarry-service/tests -p "test_*.py" -v
-      - name: Compile Fast proxy modules
-        run: python -m py_compile zarry_api.py api.py
+      - name: Compile Fast API integration
+        run: python -m py_compile api.py
