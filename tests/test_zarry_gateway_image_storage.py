@@ -34,6 +34,7 @@ class R2StorageTests(unittest.TestCase):
         self.assertEqual(upload["Body"], b"PNGDATA")
         self.assertEqual(upload["ContentType"], "image/png")
         self.assertEqual(upload["CacheControl"], "public, max-age=31536000, immutable")
+        self.assertEqual(upload["Metadata"]["request-id"], str(request_id))
         self.assertNotIn(str(request_id), upload["Key"])
 
     def test_rejects_non_https_public_url(self):
