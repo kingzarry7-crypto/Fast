@@ -1,0 +1,199 @@
+{
+  "schema_version": "zarry-artifact-manifest-v1",
+  "created_at_utc": "2026-10-31",
+  "purpose": "Provenance record for the Task 1 BTCUSD and XAUUSD historical research datasets and selected research checkpoints. This manifest does not authorize model promotion.",
+  "repository": "kingzarry7-crypto/Fast",
+  "source_workflow": {
+    "workflow_path": ".github/workflows/kitty-retrain-research.yml",
+    "workflow_run_id": 41173387628,
+    "run_number": 106,
+    "run_url": "https://github.com/kingzarry7-crypto/Fast/actions/runs/41173387628",
+    "source_commit": "7d37df7e104f388a1197cfd8c9c1f70c0733565a",
+    "event": "workflow_dispatch",
+    "conclusion": "success",
+    "completed_jobs": [
+      "retrain-market-research (BTC)",
+      "retrain-gold-forex-research (XAUUSD)",
+      "Publish BTC and XAUUSD research checkpoints"
+    ]
+  },
+  "artifacts": {
+    "btc_dataset_and_candidates": {
+      "artifact_id": 13031792153,
+      "name": "kitty-BTC-retraining-106",
+      "github_sha256": "b47d8a76828ca5a4a1e10eca549818cafc08cb7093855b2069d597ae821da36d",
+      "expires_at": "2026-11-30T05:40:22Z"
+    },
+    "xauusd_dataset_and_candidates": {
+      "artifact_id": 13031557658,
+      "name": "kitty-XAUUSD-retraining-106",
+      "github_sha256": "217906baf0d5c9796f86344e7a8f687fbd9d33f5a66dffa1aead30fb4e9d6544",
+      "expires_at": "2026-11-30T05:40:28Z"
+    },
+    "btc_selected_checkpoint": {
+      "artifact_id": 13031657365,
+      "name": "kitty-BTC-checkpoint-106",
+      "github_sha256": "0224d8057a9a8328b9d7c1d4587c5eb30024d54df365ed48c6bb24a5c5659642",
+      "expires_at": "2026-11-07T05:40:21Z"
+    },
+    "xauusd_selected_checkpoint": {
+      "artifact_id": 13031662317,
+      "name": "kitty-XAUUSD-checkpoint-106",
+      "github_sha256": "6ea25416ea38f10053a5b89894a38bac9e47d2b00df3ea321da7d1b15b17770a",
+      "expires_at": "2026-11-07T05:40:26Z"
+    }
+  },
+  "datasets": {
+    "BTCUSD": {
+      "artifact_member": "BTC/hourly_features.csv",
+      "sample_count": 4888,
+      "first_timestamp": "2026-04-07T21:00:00Z",
+      "last_timestamp": "2026-10-30T21:00:00Z",
+      "data_sources": [
+        "Yahoo Finance fallback"
+      ],
+      "feature_columns": [
+        "ret_1h",
+        "ret_3h",
+        "ret_6h",
+        "ret_12h",
+        "ret_24h",
+        "close_vs_sma6",
+        "close_vs_sma20",
+        "close_vs_sma50",
+        "sma6_vs_sma20",
+        "rsi_14",
+        "macd_norm",
+        "macd_signal_norm",
+        "macd_hist_norm",
+        "volatility_6h",
+        "volatility_24h",
+        "range_pct",
+        "body_pct",
+        "close_position"
+      ],
+      "class_counts": {
+        "SHORT": 1562,
+        "NO TRADE": 1710,
+        "LONG": 1616
+      },
+      "duplicate_timestamps": 0,
+      "missing_cells": 0,
+      "nonfinite_numeric_values": 0,
+      "csv_sha256": "c4c017a7a32ed98c3a336e92c33e51bd9a489fe403e003a89bee6623a58674d5",
+      "checkpoint_sha256": "926c34af3b06127bb87d67446914501d6faa386101ce47007e04b52a68a3cee3",
+      "checkpoint_dataset_sha256_matches_csv": true,
+      "split_sizes": {
+        "train": 3414,
+        "validation": 726,
+        "test": 734
+      },
+      "selected_candidate": "baseline_adam_seed42_candidate.pt",
+      "architecture": [
+        18,
+        64,
+        32,
+        3
+      ],
+      "model_variant": "baseline",
+      "seed": 42,
+      "label_horizon_hours": 6,
+      "label_threshold": 0.003,
+      "assumed_round_trip_cost": 0.001,
+      "holdout": {
+        "accuracy": 0.39509536784741145,
+        "macro_f1": 0.3632391794238183,
+        "paper_trade_count": 0,
+        "compounded_net_return": 0,
+        "signals_disabled_for_no_validated_edge": true
+      }
+    },
+    "XAUUSD": {
+      "artifact_member": "hourly_features.csv",
+      "sample_count": 4943,
+      "first_timestamp": "2026-04-07T23:00:00Z",
+      "last_timestamp": "2026-10-30T21:00:00Z",
+      "data_sources": [
+        "Twelve Data XAU/USD"
+      ],
+      "feature_columns": [
+        "ret_1h",
+        "ret_3h",
+        "ret_6h",
+        "ret_12h",
+        "ret_24h",
+        "close_vs_sma6",
+        "close_vs_sma20",
+        "close_vs_sma50",
+        "sma6_vs_sma20",
+        "rsi_14",
+        "macd_norm",
+        "macd_signal_norm",
+        "macd_hist_norm",
+        "volatility_6h",
+        "volatility_24h",
+        "range_pct",
+        "body_pct",
+        "close_position"
+      ],
+      "class_counts": {
+        "SHORT": 1602,
+        "NO TRADE": 1995,
+        "LONG": 1346
+      },
+      "duplicate_timestamps": 0,
+      "missing_cells": 0,
+      "nonfinite_numeric_values": 0,
+      "csv_sha256": "09dc53065c2026178b50046398b93cdb441568bacf681c7f9f429b0fde7d6a9c",
+      "checkpoint_sha256": "5da5b2130a793ee315fa6ce2ed8e34e2b5e5b689f45a81c677a280d26f0a69f6",
+      "checkpoint_dataset_sha256_matches_csv": true,
+      "split_sizes": {
+        "train": 3453,
+        "validation": 734,
+        "test": 742
+      },
+      "selected_candidate": "baseline_adam_seed59_candidate.pt",
+      "architecture": [
+        18,
+        64,
+        32,
+        3
+      ],
+      "model_variant": "baseline",
+      "seed": 59,
+      "label_horizon_hours": 6,
+      "label_threshold": 0.0015,
+      "assumed_round_trip_cost": 0.0005,
+      "holdout": {
+        "accuracy": 0.5080862533692723,
+        "macro_f1": 0.4835002573387303,
+        "paper_trade_count": 26,
+        "win_rate": 0.4230769230769231,
+        "profit_factor": 1.0699007795913442,
+        "compounded_net_return": 0.0034594502623264134,
+        "compounded_net_return_at_1_5x_cost": -0.0030419278903071056,
+        "momentum_baseline_compounded_net_return": 0.034991965968683925,
+        "signals_disabled_for_no_validated_edge": true
+      }
+    }
+  },
+  "verification": {
+    "downloaded_artifact_zip_hashes_match_github_artifact_digests": true,
+    "csv_hashes_match_selected_checkpoint_dataset_sha256": true,
+    "csv_schema_matches_18_feature_kitty_contract": true,
+    "timestamps_timezone_aware_and_unique": true,
+    "missing_values_absent": true,
+    "numeric_nonfinite_values_absent": true,
+    "xauusd_source_is_twelve_data_spot": true,
+    "checkpoint_symbols_match_assets": true,
+    "both_checkpoints_research_only": true,
+    "both_checkpoints_production_ready_false": true,
+    "both_checkpoints_automatic_order_execution_disabled": true
+  },
+  "retention_warning": "GitHub Actions artifacts are temporary: dataset artifacts expire 2026-11-30 and selected checkpoint artifacts expire 2026-11-07. This manifest records provenance and hashes but does not archive the artifact bytes permanently. Preserve them in an approved durable artifact store before expiry.",
+  "safety": {
+    "live_trading_enabled": false,
+    "production_signal_promotion_authorized": false,
+    "model_training_or_deployment_changed_by_this_manifest": false
+  }
+}
