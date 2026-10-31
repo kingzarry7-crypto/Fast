@@ -29,7 +29,7 @@ class CloudflareR2ImageStorage:
         parsed = urlsplit(self.public_base_url)
         if not self.bucket:
             raise ValueError("R2 bucket is required")
-        if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
+        if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError("R2 public base URL must be an HTTPS URL")
         self.client = client or self._make_client(
             endpoint_url=endpoint_url or os.getenv("R2_ENDPOINT_URL", ""),
