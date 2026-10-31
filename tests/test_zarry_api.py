@@ -87,6 +87,27 @@ class ZarryProxyTests(unittest.TestCase):
         response = self.client.post("/api/zarry/explain", json=self.payload)
         self.assertEqual(response.status_code, 504)
 
+    def test_proxy_retries_one_transient_connection_failure(self):
+        self.valid_upstream()
+        self.upstream.side_effect = [requests.ConnectionError("temporary"), self.upstream.return_value]
+        response = self.client.post("/api/zarry/explain", json=self.payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.upstream.call_count, 2)
+
+    def test_proxy_rejects_stale_market_context(self):
+        payload = dict(self.payload)
+        payload["timestamp"] = "2020-01-01T00:00:00Z"
+        response = self.client.post("/api/zarry/explain", json=payload)
+        self.assertEqual(response.status_code, 422)
+        self.upstream.assert_not_called()
+
+    def test_proxy_rejects_timezone_free_timestamp(self):
+        payload = dict(self.payload)
+        payload["timestamp"] = "2026-10-31T09:00:00"
+        response = self.client.post("/api/zarry/explain", json=payload)
+        self.assertEqual(response.status_code, 422)
+        self.upstream.assert_not_called()
+
     def test_proxy_rejects_unconfigured_service_credentials(self):
         os.environ.pop("ZARRY_API_KEY", None)
         response = self.client.post("/api/zarry/explain", json=self.payload)
