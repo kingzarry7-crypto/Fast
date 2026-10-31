@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Research-only benchmark for small ZARRY GGUF explanation models."""
-import argparse, json, os, re, statistics, time
+import argparse, json, os, statistics, time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -30,7 +30,6 @@ def load_cases(path):
 
 def parse_output(raw):
  text=raw.strip()
- text=re.sub(r"^\\s*\`\`\`(?:json)?\\s*|\\s*\`\`\`\\s*$","",text,flags=re.I)
  a,b=text.find("{"),text.rfind("}")
  if a<0 or b<=a: raise ValueError("No JSON object")
  value=json.loads(text[a:b+1])
@@ -92,7 +91,7 @@ def main():
   except Exception as exc: reports.append({"model":name,"repo_id":MODELS[name]["repo_id"],"status":"failed","error":f"{type(exc).__name__}: {exc}"})
  successful=[x for x in reports if x.get("case_count")]
  out=Path(args.output); out.parent.mkdir(parents=True,exist_ok=True)
- out.write_text(json.dumps({"benchmark":"zarry-explanation-v1","research_only":True,"trading_authority":"KITTY_DETERMINISTIC_ENGINE_ONLY","case_count":len(cases),"models":reports,"selection_policy":"No automatic winner; inspect all safety metrics."},indent=2)+"\\n")
+ out.write_text(json.dumps({"benchmark":"zarry-explanation-v1","research_only":True,"trading_authority":"KITTY_DETERMINISTIC_ENGINE_ONLY","case_count":len(cases),"models":reports,"selection_policy":"No automatic winner; inspect all safety metrics."},indent=2)+"\n")
  print(json.dumps({"output":str(out),"case_count":len(cases),"successful_models":len(successful),"models":[{"model":x["model"],"status":x.get("status","completed"),"decision_preservation_rate":x.get("decision_preserved_rate"),"valid_json_rate":x.get("valid_json_rate"),"mean_latency_seconds":x.get("mean_latency_seconds")} for x in reports]},indent=2))
  return 0 if successful else 1
 if __name__=="__main__": raise SystemExit(main())
