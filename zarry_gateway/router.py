@@ -159,7 +159,7 @@ def create_general_router(
                         failure_stage = %s, http_status_code = %s,
                         completed_at = CASE WHEN %s IN ('succeeded', 'failed')
                                             THEN NOW() ELSE completed_at END
-                    WHERE lock_key = 'replicate-one-shot-v1'
+                    WHERE lock_key = 'replicate-one-shot-v2'
                     """,
                     (status, request_id, provider_name, image_url, error_type,
                      failure_stage_value, http_status_code, status),
@@ -171,7 +171,7 @@ def create_general_router(
             with get_db_cursor() as cur:
                 cur.execute("""
                     INSERT INTO zarry_image_smoke_test_lock (lock_key, status, request_id)
-                    VALUES ('replicate-one-shot-v1', 'claimed', %s)
+                    VALUES ('replicate-one-shot-v2', 'claimed', %s)
                     ON CONFLICT (lock_key) DO NOTHING
                     RETURNING lock_key
                 """, (request_id,))
