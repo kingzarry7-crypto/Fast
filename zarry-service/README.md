@@ -16,7 +16,7 @@ The service validates ISO-8601 timestamps with an explicit timezone. By default,
 
 Responses include `X-Request-ID`, `X-ZARRY-Latency-Ms`, and `X-ZARRY-API-Version` headers. The authenticated `/metrics` endpoint reports request/error counts, process CPU time, peak resident memory, and free disk space. The readiness response reports the configured model repository and API version. Fast's proxy forwards a request ID and retries one transient connection failure only; it does not retry model timeouts.
 
-Fast already mounts `/api/zarry/explain` behind the existing web-session authentication. It remains disabled unless `ZARRY_ENABLED=true`. The endpoint is an explicit, authenticated explanation request with schema bounds, freshness validation, rate limiting, and fail-closed response checks. It is not an automatic part of Kitty's signal generation or order path. Keep the flag false until the deployed authenticated smoke test, Fast-to-ZARRY private-network check, and acceptance review are complete.
+Fast already mounts `/api/zarry/explain` behind the existing web-session authentication. It remains disabled unless `ZARRY_ENABLED=true`. The upstream URL is read from `ZARRY_SERVICE_URL` (preferred) or the existing Fast deployment variable `ZARRY_API_URL`; the shared `ZARRY_API_KEY` must be configured as a Railway secret on Fast and ZARRY. The endpoint is an explicit, authenticated explanation request with schema bounds, freshness validation, rate limiting, and fail-closed response checks. It is not an automatic part of Kitty's signal generation or order path. Keep the flag false until the deployed authenticated smoke test, Fast-to-ZARRY private-network check, and acceptance review are complete.
 
 Run contract tests with:
 
