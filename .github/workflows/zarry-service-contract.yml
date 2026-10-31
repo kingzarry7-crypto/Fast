@@ -31,6 +31,8 @@ jobs:
         run: python -m compileall -q zarry-service
       - name: Validate Railway config
         run: python -m json.tool zarry-service/railway.json > /dev/null
+      - name: Validate Railway startup script
+        run: sh -n zarry-service/start.sh
       - name: Compile deployment smoke test
         run: python -m py_compile zarry-service/smoke_test.py
       - name: Run service contract tests
