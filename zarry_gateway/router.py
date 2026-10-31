@@ -145,8 +145,10 @@ def create_general_router(
         request_uuid = uuid4()
         request_id = str(request_uuid)
         claimed = False
+        failure_stage = "provider_generate_other"
 
-        def record_outcome(status, provider_name=None, image_url=None, error_type=None):
+        def record_outcome(status, provider_name=None, image_url=None, error_type=None,
+                           failure_stage_value=None, http_status_code=None):
             # The lock row is the durable audit record; never store credentials or prompts.
             with get_db_cursor() as cur:
                 cur.execute(
@@ -154,11 +156,13 @@ def create_general_router(
                     UPDATE zarry_image_smoke_test_lock
                     SET status = %s, request_id = %s, provider = %s,
                         image_url = %s, error_type = %s,
+                        failure_stage = %s, http_status_code = %s,
                         completed_at = CASE WHEN %s IN ('succeeded', 'failed')
                                             THEN NOW() ELSE completed_at END
                     WHERE lock_key = 'replicate-one-shot-v1'
                     """,
-                    (status, request_id, provider_name, image_url, error_type, status),
+                    (status, request_id, provider_name, image_url, error_type,
+                     failure_stage_value, http_status_code, status),
                 )
 
         try:
@@ -181,15 +185,18 @@ def create_general_router(
                 raise RuntimeError("Image generation and storage are not configured")
 
             record_outcome("running")
+            failure_stage = "provider_generate_other"
             result = provider.generate(
                 "A simple photorealistic studio photograph of a single ripe orange on a clean neutral background.",
                 request_id=request_uuid, width=1024, height=1024,
             )
+            failure_stage = "image_validation"
             image_url = result.get("image_url") if isinstance(result, dict) else None
             parsed = urlsplit(str(image_url or ""))
             expected_host = str(getattr(storage, "public_host", "") or "").lower()
             if parsed.scheme != "https" or not parsed.hostname or parsed.hostname.lower() != expected_host:
                 raise RuntimeError("Generated image URL did not match the configured public storage host")
+            failure_stage = "r2_public_retrieval"
             response = requests.get(image_url, timeout=20)
             response.raise_for_status()
             if not response.content.startswith(bytes([0x89]) + b"PNG\r\n\x1a\n"):
@@ -211,7 +218,23 @@ def create_general_router(
         except Exception as exc:
             if claimed:
                 try:
-                    record_outcome("failed", error_type=type(exc).__name__)
+                    safe_stage = getattr(exc, "failure_stage", failure_stage)
+                allowed_stages = {
+                    "replicate_submit", "replicate_poll", "provider_image_download",
+                    "provider_generate_other", "image_validation",
+                    "r2_public_retrieval", "storage_save",
+                }
+                if safe_stage not in allowed_stages:
+                    safe_stage = "provider_generate_other"
+                status_code = getattr(exc, "http_status_code", None)
+                if status_code is None:
+                    status_code = getattr(getattr(exc, "response", None), "status_code", None)
+                if not isinstance(status_code, int) or isinstance(status_code, bool) or not 100 <= status_code <= 599:
+                    status_code = None
+                record_outcome(
+                    "failed", error_type=type(exc).__name__,
+                    failure_stage_value=safe_stage, http_status_code=status_code,
+                )
                 except Exception as audit_exc:
                     logger.error("One-shot image audit update failed (%s)", type(audit_exc).__name__)
             logger.error("One-shot image generation smoke test failed (%s)", type(exc).__name__)
