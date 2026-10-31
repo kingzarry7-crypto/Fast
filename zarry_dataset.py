@@ -120,7 +120,7 @@ def chronological_split(
     *,
     train_fraction: float = 0.70,
     validation_fraction: float = 0.15,
-    purge_rows: int = 6,
+    purge_rows: int = 7,
 ) -> dict[str, Any]:
     """Chronological split with a row embargo on both partition boundaries.
 
