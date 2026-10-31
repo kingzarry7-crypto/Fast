@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/hooks/useAuth";
-import { api, ApiError, type AdminStats } from "@/lib/api";
+import { api, ApiError, type AdminStats, type AdminImageStorageTest } from "@/lib/api";
 
 function Stat({
   label,
@@ -45,6 +45,9 @@ export default function AdminPage() {
   const [emailAudience, setEmailAudience] = useState<"active" | "all" | "subscribers">("active");
   const [emailSending, setEmailSending] = useState(false);
   const [emailResult, setEmailResult] = useState<string | null>(null);
+  const [r2Testing, setR2Testing] = useState(false);
+  const [r2Result, setR2Result] = useState<AdminImageStorageTest | null>(null);
+  const [r2Error, setR2Error] = useState<string | null>(null);
 
   const loadMeAndStats = async () => {
     setLoading(true);
@@ -106,6 +109,25 @@ export default function AdminPage() {
       );
     } finally {
       setUnlocking(false);
+    }
+  };
+
+  const runR2StorageTest = async () => {
+    if (r2Testing) return;
+    setR2Testing(true);
+    setR2Error(null);
+    setR2Result(null);
+    try {
+      const result = await api.adminImageStorageTest();
+      setR2Result(result);
+    } catch (err) {
+      setR2Error(
+        err instanceof ApiError
+          ? `${err.status}: ${err.detail || err.message}`
+          : "R2 storage diagnostic failed. Check Railway logs."
+      );
+    } finally {
+      setR2Testing(false);
     }
   };
 
@@ -229,6 +251,33 @@ export default function AdminPage() {
 
         {!loading && isAdmin && !requiresPassword && stats && (
           <div className="space-y-8">
+          <section className="kz-panel p-6">
+            <p className="font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/50 mb-2">
+              ZARRY · R2 PUBLIC STORAGE
+            </p>
+            <p className="text-xs text-cyan-100/60 mb-4">
+              Runs a disposable upload, public HTTPS read-back, byte comparison, and cleanup. This does not generate an image or call Replicate.
+            </p>
+            <button
+              type="button"
+              onClick={runR2StorageTest}
+              disabled={r2Testing}
+              className="px-4 py-2 rounded-lg bg-cyan-400 text-black text-xs font-bold tracking-widest disabled:opacity-40"
+            >
+              {r2Testing ? "TESTING R2…" : "RUN R2 STORAGE TEST"}
+            </button>
+            {r2Result && (
+              <div className="mt-4 text-xs font-mono-tech text-emerald-200 space-y-1" role="status">
+                <p>R2 public round trip: PASSED</p>
+                <p>Upload: {r2Result.upload} · Public retrieval: {r2Result.public_retrieval} · Cleanup: {r2Result.cleanup}</p>
+                {r2Result.public_host && <p>Public host: {r2Result.public_host}</p>}
+              </div>
+            )}
+            {r2Error && (
+              <p className="mt-4 text-xs font-mono-tech text-amber-200" role="alert">{r2Error}</p>
+            )}
+          </section>
+
             <section>
               <p className="font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/40 mb-3">
                 USERS
