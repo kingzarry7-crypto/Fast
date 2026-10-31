@@ -118,8 +118,17 @@ class ReplicateZImageTurboProvider:
             if not isinstance(output_url, str):
                 raise RuntimeError("Replicate prediction returned no image")
             parsed_output = urlsplit(output_url)
-            if parsed_output.scheme != "https" or not parsed_output.hostname:
-                raise RuntimeError("Replicate returned an insecure image URL")
+            if (
+                parsed_output.scheme != "https"
+                or not parsed_output.hostname
+                or not (
+                    parsed_output.hostname == "replicate.delivery"
+                    or parsed_output.hostname.endswith(".replicate.delivery")
+                )
+                or parsed_output.username
+                or parsed_output.password
+            ):
+                raise RuntimeError("Replicate returned an untrusted image URL")
             image_response = self.session.get(output_url, timeout=(10, 60))
             image_response.raise_for_status()
             try:
