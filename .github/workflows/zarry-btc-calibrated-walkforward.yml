@@ -1,0 +1,48 @@
+name: ZARRY BTCUSD calibrated walk-forward
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  btc-calibrated-walkforward:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Download frozen BTCUSD run-106 dataset artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p research-data/input
+          gh api "repos/$REPOSITORY/actions/artifacts/13031792153/zip" > /tmp/kitty-btc-run106.zip
+          unzip -q /tmp/kitty-btc-run106.zip -d /tmp/kitty-btc-run106
+          test -f /tmp/kitty-btc-run106/BTC/hourly_features.csv
+          cp /tmp/kitty-btc-run106/BTC/hourly_features.csv research-data/input/btc_run106_hourly_features.csv
+          sha256sum research-data/input/btc_run106_hourly_features.csv
+      - name: Install research dependencies
+        run: python -m pip install --upgrade pip numpy pandas scikit-learn torch
+      - name: Verify BTC artifact guard
+        run: python -m unittest tests.test_zarry_btc_diagnose -v
+      - name: Run three-fold calibrated BTCUSD evaluation
+        run: |
+          python research-data/scripts/zarry_btc_diagnose.py \
+            --csv research-data/input/btc_run106_hourly_features.csv \
+            --output research-data/reports/zarry-task2-btc-calibrated-walkforward-run-001.json \
+            --round-trip-cost 0.001
+      - name: Upload BTCUSD walk-forward report
+        uses: actions/upload-artifact@v6
+        with:
+          name: zarry-btc-calibrated-walkforward-run-001
+          path: research-data/reports/zarry-task2-btc-calibrated-walkforward-run-001.json
+          if-no-files-found: error
+          retention-days: 90
