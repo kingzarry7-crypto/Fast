@@ -205,3 +205,55 @@ def simulate_predictions(
         "trades": trade_indices,
         "outcome_type": "forward_price_proxy_not_realized_paper_trade",
     }
+
+
+def run_baseline_benchmark(
+    policy: str,
+    train_rows: Sequence[Mapping[str, Any]],
+    evaluation_rows: Sequence[Mapping[str, Any]],
+    *,
+    asset: str,
+) -> dict[str, Any]:
+    """Evaluate one frozen baseline on a supplied chronological partition.
+
+    Inputs must already be verified Task 1 samples from the same asset and
+    partition. This function never loads new market data or fits on evaluation
+    labels; only the majority policy reads train labels.
+    """
+    train = list(train_rows)
+    evaluation = list(evaluation_rows)
+    if not evaluation:
+        raise ValueError("evaluation_rows must not be empty")
+    name = str(policy).strip().lower()
+    predictions = predict_baseline(
+        name,
+        evaluation,
+        train_rows=train if name == "majority" else None,
+        asset=asset,
+    )
+    truth = [row.get("label") for row in evaluation]
+    classification = classification_metrics(truth, predictions)
+    base_cost = ROUND_TRIP_COSTS.get(str(asset).upper().replace("/", "").replace("-", ""))
+    if base_cost is None:
+        raise ValueError("asset must be BTCUSD or XAUUSD")
+    base_result = simulate_predictions(
+        evaluation, predictions, asset=asset, round_trip_cost=base_cost
+    )
+    stress_result = simulate_predictions(
+        evaluation, predictions, asset=asset, round_trip_cost=base_cost,
+        stress_multiplier=1.5,
+    )
+    return {
+        "policy": name,
+        "asset": str(asset).upper().replace("/", "").replace("-", ""),
+        "train_sample_count": len(train),
+        "evaluation_sample_count": len(evaluation),
+        "predictions": predictions,
+        "classification": classification,
+        "trading": {
+            "base_cost": base_result,
+            "stress_1_5x_cost": stress_result,
+        },
+        "research_only": True,
+        "outcome_type": "forward_price_proxy_not_realized_paper_trade",
+    }
