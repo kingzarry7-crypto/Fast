@@ -20,7 +20,10 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 import train_kitty_v3_retrained as trainer  # noqa: E402
-from zarry_calibration import evaluate_calibrated_walk_forward  # noqa: E402
+from zarry_calibration import (  # noqa: E402
+    evaluate_calibrated_walk_forward,
+    evaluate_label_threshold_sensitivity,
+)
 
 EXPECTED_CSV_SHA256 = "09dc53065c2026178b50046398b93cdb441568bacf681c7f9f429b0fde7d6a9c"
 PURGE_ROWS = 7
@@ -87,6 +90,12 @@ def main() -> None:
         folds=3, epochs=30, patience=5, batch_size=128,
         weight_decay=1e-4, seed=args.seed, purge=PURGE_ROWS,
     )
+    label_sensitivity = evaluate_label_threshold_sensitivity(
+        x, returns, thresholds=(0.001, 0.0015, 0.002),
+        round_trip_cost=args.round_trip_cost,
+        folds=3, epochs=30, patience=5, batch_size=128,
+        weight_decay=1e-4, seed=args.seed, purge=PURGE_ROWS,
+    )
     for fold in walk_forward["folds"]:
         start, end = fold["test_start_index"], fold["test_end_index"]
         raw_test, test_returns = x[start:end], returns[start:end]
@@ -113,6 +122,7 @@ def main() -> None:
         "stress_cost_multiplier": 1.5,
         "purge_rows": PURGE_ROWS,
         "fold_trained_walk_forward": walk_forward,
+        "label_threshold_sensitivity": label_sensitivity,
         "final_split_feature_drift": feature_drift(x, y, int(n * .70), int(n * .85)),
         "safety": {
             "production_checkpoint_modified": False,
