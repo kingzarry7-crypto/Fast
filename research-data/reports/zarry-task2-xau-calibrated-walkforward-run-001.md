@@ -69,6 +69,18 @@ No policy-selection slice passed the predeclared trading gate. All three fold mo
 
 Momentum is positive at base costs in all three folds but loses its edge under stress in fold 3. Trend confirmation is inconsistent and materially negative in folds 1 and 2. Neither rule passes the full promotion/robustness gate.
 
+## Label-threshold sensitivity (exploratory, not selected)
+
+I also regenerated the three-class target from the same archived six-hour forward returns at ±0.10%, ±0.15% (the frozen definition), and ±0.20%. The same fold boundaries, seeds, separate early-stopping/calibration/policy/test windows, temperature fitting, and confidence gate were retained. The confidence gate was not relaxed.
+
+| Label move threshold | Full archive SHORT / NO TRADE / LONG counts | Fold 1 test macro-F1 | Fold 2 test macro-F1 | Fold 3 test macro-F1 | Selected confidence in all folds | Test trades |
+|---|---:|---:|---:|---:|---:|---:|
+| ±0.10% | 1,737 / 1,742 / 1,464 | 0.532 | 0.587 | 0.639 | 1.01 (disabled) | 0 |
+| ±0.15% | 1,602 / 1,995 / 1,346 | 0.509 | 0.554 | 0.579 | 1.01 (disabled) | 0 |
+| ±0.20% | 1,466 / 2,251 / 1,226 | 0.481 | 0.520 | 0.551 | 1.01 (disabled) | 0 |
+
+The narrower ±0.10% target produced higher macro-F1 under its own label definition in these folds, while ±0.20% produced lower scores. These macro-F1 values are not directly interchangeable because changing the threshold changes what SHORT, NO TRADE, and LONG mean. Most importantly, none of the nine fold/label-threshold combinations passed the after-cost validation trading gate; every candidate remained disabled with zero test trades. This is a sensitivity result, not evidence that ±0.10% is a better trading label, and no label threshold was selected using test outcomes.
+
 ## Conclusion
 
 - Shared execution semantics now remove separate trade-timing implementations between Kitty and the rule baselines.
