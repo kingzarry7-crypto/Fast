@@ -169,7 +169,7 @@ try:
         assert cur.fetchone()[0] == 0
 
     conn.commit()
-    print("PASS: guarded migration runner applied both migrations once; constraints and cascades verified.")
+    print("PASS: guarded migration runner applied all migrations once; constraints, one-shot lock, and cascades verified.")
 except Exception:
     conn.rollback()
     raise
