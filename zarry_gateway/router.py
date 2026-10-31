@@ -199,6 +199,7 @@ def create_general_router(
             failure_stage = "r2_public_retrieval"
             response = requests.get(image_url, timeout=20)
             response.raise_for_status()
+            failure_stage = "image_validation"
             if not response.content.startswith(bytes([0x89]) + b"PNG\r\n\x1a\n"):
                 raise RuntimeError("Generated object was not a PNG")
 
