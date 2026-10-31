@@ -9,7 +9,9 @@ import hmac
 import json
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any, Literal
+from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -30,6 +32,23 @@ class ExplainRequest(StrictModel):
     context: dict[str, Any]
     kitty_assessment: KittyAssessment
     task: Literal["explain"] = "explain"
+
+    @field_validator("timestamp")
+    @classmethod
+    def validate_timestamp(cls, value: str) -> str:
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("timestamp must be ISO-8601") from exc
+        if parsed.tzinfo is None:
+            raise ValueError("timestamp must include a timezone")
+        age_limit = int(os.getenv("ZARRY_MAX_CONTEXT_AGE_SECONDS", "86400"))
+        age = (datetime.now(timezone.utc) - parsed.astimezone(timezone.utc)).total_seconds()
+        if age_limit > 0 and age > age_limit:
+            raise ValueError("market context timestamp is stale")
+        if age < -60:
+            raise ValueError("market context timestamp is in the future")
+        return value
 
     @field_validator("context")
     @classmethod
@@ -149,7 +168,7 @@ def create_app(model_loader=_load_model) -> FastAPI:
     async def ready(request: Request):
         if request.app.state.model is None:
             raise HTTPException(status_code=503, detail="model is not loaded")
-        return {"status": "ready", "model_loaded": True}
+        return {"status": "ready", "model_loaded": True, "model": os.getenv("ZARRY_MODEL_REPO", "configured-model"), "api_version": "1.0.0"}
 
     @app.post("/v1/explain", response_model=ExplainResponse, dependencies=[Depends(authenticate)])
     def explain(payload: ExplainRequest, request: Request):
