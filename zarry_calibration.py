@@ -167,6 +167,11 @@ def evaluate_calibrated_walk_forward(
             min_confidence=selected, label_threshold=label_threshold,
             temperature=temperature,
         )
+        model_stress = trainer.evaluate_paper_returns(
+            model, x_test, test_returns, round_trip_cost=round_trip_cost * 1.5,
+            min_confidence=selected, label_threshold=label_threshold,
+            temperature=temperature,
+        )
         test_metrics["classification"] = trainer.evaluate(model, x_test, y_test)
         test_metrics["probability_calibration_at_test"] = None
         model.eval()
@@ -186,6 +191,14 @@ def evaluate_calibrated_walk_forward(
         )
         reports.append({
             "fold": fold + 1,
+            "train_end_index": core_stop,
+            "early_stopping_start_index": early_start,
+            "validation_start_index": train_end,
+            "calibration_end_index": calibration_stop,
+            "policy_selection_start_index": validation_mid,
+            "policy_selection_end_index": validation_stop,
+            "test_start_index": validation_end,
+            "test_end_index": test_end,
             "train_samples": len(y_train),
             "early_stopping_samples": len(y_early),
             "calibration_samples": len(y_cal),
@@ -196,6 +209,7 @@ def evaluate_calibrated_walk_forward(
             "selected_min_confidence": selected,
             "threshold_selection_note": selection_note,
             "model_after_costs": test_metrics,
+            "model_stress_1_5x": model_stress,
             "momentum_baseline_after_costs": momentum,
             "trend_confirmation_baseline_after_costs": trend,
         })
