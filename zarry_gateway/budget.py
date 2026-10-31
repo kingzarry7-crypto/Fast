@@ -106,7 +106,15 @@ class PostgresMonthlyBudgetLedger:
         return estimate
 
     def settle(self, request_id: UUID, actual_cost_usd) -> int:
-        actual = 0 if actual_cost_usd is None or Decimal(str(actual_cost_usd)) == 0 else _to_micro_usd(actual_cost_usd)
+        if actual_cost_usd is None:
+            raise BudgetDenied("A verified actual provider cost is required to settle")
+        try:
+            actual_decimal = Decimal(str(actual_cost_usd))
+        except (InvalidOperation, ValueError):
+            raise BudgetDenied("Actual provider cost is invalid")
+        if not actual_decimal.is_finite() or actual_decimal < 0:
+            raise BudgetDenied("Actual provider cost must be finite and non-negative")
+        actual = int((actual_decimal * Decimal(1_000_000)).to_integral_value(rounding=ROUND_CEILING))
         with self.cursor_factory() as cur:
             cur.execute(
                 "SELECT billing_month, reserved_micro_usd, status, settled_micro_usd FROM "
