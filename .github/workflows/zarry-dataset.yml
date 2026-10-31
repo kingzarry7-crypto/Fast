@@ -5,7 +5,9 @@ on:
     branches: ["main"]
     paths:
       - "zarry_dataset.py"
+      - "zarry_kitty_adapter.py"
       - "tests/test_zarry_dataset.py"
+      - "tests/test_zarry_kitty_adapter.py"
       - ".github/workflows/zarry-dataset.yml"
 
 permissions:
@@ -19,7 +21,9 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - name: Compile dataset module and tests
-        run: python -m compileall -q zarry_dataset.py tests/test_zarry_dataset.py
+      - name: Compile dataset modules and tests
+        run: python -m compileall -q zarry_dataset.py zarry_kitty_adapter.py tests/test_zarry_dataset.py tests/test_zarry_kitty_adapter.py
       - name: Run ZARRY dataset contract tests
-        run: python -m unittest discover -s tests -p "test_zarry_dataset.py" -v
+        run: |
+          python -m unittest discover -s tests -p "test_zarry_dataset.py" -v
+          python -m unittest discover -s tests -p "test_zarry_kitty_adapter.py" -v
