@@ -26,12 +26,15 @@ class SelfHostedZarryProvider:
         self.timeout = timeout
         self.session = session or requests
 
-    def generate(self, *, message: str, request_id: UUID, timeout=None) -> str:
+    def generate(self, *, message: str, request_id: UUID, messages=None, timeout=None) -> str:
         if not self.base_url.startswith("https://") or not self.api_key:
             raise RuntimeError("ZARRY text provider is not configured")
+        bounded_messages = messages or [{"role": "user", "content": message}]
+        if not isinstance(bounded_messages, list) or not 1 <= len(bounded_messages) <= 20:
+            raise ValueError("Conversation history is outside the supported bounds")
         response = self.session.post(
             self.base_url + "/v1/chat",
-            json={"request_id": str(request_id), "messages": [{"role": "user", "content": message}]},
+            json={"request_id": str(request_id), "messages": bounded_messages},
             headers={"Authorization": "Bearer " + self.api_key},
             timeout=timeout or self.timeout,
         )
