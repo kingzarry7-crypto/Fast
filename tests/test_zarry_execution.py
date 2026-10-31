@@ -39,7 +39,7 @@ class SharedExecutionTests(unittest.TestCase):
         self.assertAlmostEqual(result["net_trade_returns"][0], -0.011)
         self.assertAlmostEqual(result["net_trade_returns"][1], 0.019)
         self.assertAlmostEqual(result["compounded_net_return"], (0.989 * 1.019) - 1.0)
-        self.assertAlmostEqual(result["max_drawdown"], 0.011)
+        self.assertAlmostEqual(result["max_drawdown"], -0.011)
 
 
 if __name__ == "__main__":
