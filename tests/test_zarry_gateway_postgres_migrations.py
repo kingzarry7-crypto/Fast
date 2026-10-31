@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Apply ZARRY migrations to a disposable PostgreSQL database and verify constraints."""
+"""Exercise guarded ZARRY migrations against the disposable CI PostgreSQL service."""
 import os
 import pathlib
+import subprocess
+import sys
 import uuid
 
 import psycopg2
@@ -9,6 +11,7 @@ from psycopg2 import IntegrityError
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 dsn = os.environ["ZARRY_TEST_DATABASE_URL"]
+runner = ROOT / "scripts" / "apply_zarry_migrations.py"
 conn = psycopg2.connect(dsn)
 conn.autocommit = False
 
@@ -28,15 +31,26 @@ def must_reject(cur, sql, params=()):
 
 try:
     with conn.cursor() as cur:
-        # Minimal parent table matching the production FK target; this database is
-        # created for this workflow run and is never the user's Neon database.
+        # Minimal parent table matching the production FK target. The workflow
+        # creates this disposable database; it is never the user's Neon database.
         cur.execute("CREATE TABLE web_users (id UUID PRIMARY KEY)")
-        for migration in (
-            "zarry_gateway/migrations/001_general_memory.sql",
-            "zarry_gateway/migrations/002_hf_budget.sql",
-        ):
-            cur.execute((ROOT / migration).read_text(encoding="utf-8"))
+    conn.commit()
 
+    guarded_env = os.environ.copy()
+    guarded_env["ZARRY_MIGRATION_DATABASE_URL"] = dsn
+    guarded_env["ZARRY_ALLOW_MIGRATIONS"] = "1"
+    first = subprocess.run(
+        [sys.executable, str(runner), "--apply"],
+        cwd=ROOT, env=guarded_env, text=True, capture_output=True, check=True,
+    )
+    assert "Applied:" in first.stdout
+    second = subprocess.run(
+        [sys.executable, str(runner), "--apply"],
+        cwd=ROOT, env=guarded_env, text=True, capture_output=True, check=True,
+    )
+    assert "none; schema is current" in second.stdout
+
+    with conn.cursor() as cur:
         user_id = uuid.uuid4()
         conversation_id = uuid.uuid4()
         request_id = uuid.uuid4()
@@ -125,7 +139,7 @@ try:
         assert cur.fetchone()[0] == 0
 
     conn.commit()
-    print("PASS: both ZARRY migrations applied; defaults, constraints, FKs and cascade verified.")
+    print("PASS: guarded migration runner applied both migrations once; constraints and cascades verified.")
 except Exception:
     conn.rollback()
     raise
