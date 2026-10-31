@@ -7,3 +7,6 @@ def general_gateway_enabled() -> bool:
     return enabled("ZARRY_GENERAL_ENABLED", False)
 def shared_memory_enabled() -> bool:
     return enabled("ZARRY_SHARED_MEMORY_ENABLED", False)
+
+def image_generation_enabled() -> bool:
+    return enabled("ZARRY_IMAGE_ENABLED", False)
