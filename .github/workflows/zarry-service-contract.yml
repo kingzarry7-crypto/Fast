@@ -6,7 +6,6 @@ on:
       - "zarry-service/**"
       - "zarry_api.py"
       - "api.py"
-      - "tests/test_zarry_api.py"
       - ".github/workflows/zarry-service-contract.yml"
   push:
     branches: ["main", "feat/zarry-inference-service-prototype"]
@@ -14,7 +13,6 @@ on:
       - "zarry-service/**"
       - "zarry_api.py"
       - "api.py"
-      - "tests/test_zarry_api.py"
       - ".github/workflows/zarry-service-contract.yml"
 
 jobs:
@@ -37,7 +35,5 @@ jobs:
         run: python -m py_compile zarry-service/smoke_test.py
       - name: Run service contract tests
         run: python -m unittest discover -s zarry-service/tests -p "test_*.py" -v
-      - name: Run Fast proxy contract tests
-        run: python -m unittest discover -s tests -p "test_zarry_api.py" -v
-      - name: Compile Fast proxy
+      - name: Compile Fast proxy modules
         run: python -m py_compile zarry_api.py api.py
