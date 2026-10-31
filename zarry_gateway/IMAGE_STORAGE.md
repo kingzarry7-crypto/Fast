@@ -27,6 +27,14 @@ Never put these credentials in frontend variables or source control. Do not use 
 The adapter has contract tests using an injected S3-compatible client. It has not
 been connected to a live R2 bucket or deployed. A bucket, scoped credentials,
 public hostname, and an authorized integration test are still required.
-The image route remains unavailable until the provider, verified cost estimator,
-actual-cost reconciliation, and storage are wired together behind the default-off
-feature flag.
+
+The image route uses direct Replicate Z-Image-Turbo and requires these additional
+server-only variables on the **Fast API service** (the service running `api.py`):
+
+- `REPLICATE_API_TOKEN`
+- `ZARRY_REPLICATE_MODEL_VERSION` (immutable version ID, not a mutable alias)
+
+The image feature flag `ZARRY_IMAGE_ENABLED` remains false by default. The
+provider is constructed only when all Replicate and R2 variables are present.
+The route remains unavailable until credentials, model version and R2 storage
+are configured and a user-approved live smoke test is completed.
