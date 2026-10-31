@@ -123,6 +123,68 @@ def create_general_router(
             logger.error("R2 public storage verification failed (%s)", type(exc).__name__)
             raise HTTPException(status_code=502, detail="R2 public storage verification failed")
 
+    @router.post("/admin/image-generation-smoke-test")
+    async def admin_image_generation_smoke_test(request: Request):
+        # Persistent one-use claim is committed before any paid provider call.
+        if admin_check is None:
+            raise HTTPException(status_code=503, detail="Image smoke test is unavailable")
+        try:
+            admin = admin_check(request)
+            if inspect.isawaitable(admin):
+                await admin
+            from database import get_db_cursor
+            with get_db_cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS zarry_image_smoke_test_lock (
+                        lock_key TEXT PRIMARY KEY,
+                        claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+                cur.execute("""
+                    INSERT INTO zarry_image_smoke_test_lock (lock_key)
+                    VALUES ('replicate-one-shot-v1')
+                    ON CONFLICT (lock_key) DO NOTHING
+                    RETURNING lock_key
+                """)
+                claimed = cur.fetchone()
+            if not claimed:
+                raise HTTPException(status_code=409, detail="The one-time image test has already been used")
+            provider = getattr(gateway, "image_provider", None)
+            storage = getattr(gateway, "image_storage", None) or getattr(provider, "storage", None)
+            if provider is None or storage is None:
+                raise HTTPException(status_code=503, detail="Image generation and storage are not configured")
+            from uuid import uuid4
+            from urllib.parse import urlsplit
+            import requests
+            request_id = uuid4()
+            result = provider.generate(
+                "A simple photorealistic studio photograph of a single ripe orange on a clean neutral background.",
+                request_id=request_id, width=1024, height=1024,
+            )
+            image_url = result.get("image_url") if isinstance(result, dict) else None
+            parsed = urlsplit(str(image_url or ""))
+            expected_host = str(getattr(storage, "public_host", "") or "").lower()
+            if parsed.scheme != "https" or not parsed.hostname or parsed.hostname.lower() != expected_host:
+                raise RuntimeError("Generated image URL did not match the configured public storage host")
+            response = requests.get(image_url, timeout=20)
+            response.raise_for_status()
+            if not response.content.startswith(b"\\x89PNG\\r\\n\\x1a\\n"):
+                raise RuntimeError("Generated object was not a PNG")
+            return {
+                "status": "ok",
+                "request_id": str(request_id),
+                "provider": str(result.get("provider", "replicate-z-image-turbo")),
+                "image_url": image_url,
+                "public_retrieval": "verified",
+                "public_generation_enabled": False,
+                "budget_reservation_usd": "0.01",
+            }
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.error("One-shot image generation smoke test failed (%s)", type(exc).__name__)
+            raise HTTPException(status_code=502, detail="One-time image generation test failed; lock remains consumed")
+
     @router.post("/chat", response_model=AssistantResponse)
     async def chat(payload: AssistantRequest, request: Request):
         if not enabled_check():
