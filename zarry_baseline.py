@@ -164,7 +164,7 @@ def simulate_predictions(
         "expectancy": metrics["average_net_return"] or 0.0,
         "profit_factor": metrics["profit_factor"],
         "compounded_net_return": metrics["compounded_net_return"],
-        "max_drawdown": abs(metrics["max_drawdown"]),
+        "max_drawdown": metrics["max_drawdown"],
         "exposure_fraction": metrics["exposure_fraction"],
         "overlap_skips": metrics["skipped_overlapping_signals"],
         "incomplete_outcome_skips": metrics["skipped_incomplete_outcomes"],
