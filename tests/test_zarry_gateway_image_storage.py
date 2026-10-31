@@ -16,8 +16,8 @@ class R2StorageTests(unittest.TestCase):
     def test_uploads_encoded_image_to_private_object_key_and_returns_https_url(self):
         client = FakeS3()
         storage = CloudflareR2ImageStorage(
-            bucket="zarry-images",
-            public_base_url="https://images.example.com/",
+            bucket="zarrry",
+            public_base_url="https://pub-93af13628c2041bfb07c627e14b65ebe.r2.dev/",
             client=client,
         )
         class FakeImage:
@@ -26,11 +26,11 @@ class R2StorageTests(unittest.TestCase):
                 buffer.write(b"PNGDATA")
         request_id = uuid4()
         url = storage.save(FakeImage(), request_id)
-        self.assertTrue(url.startswith("https://images.example.com/zarry/"))
+        self.assertTrue(url.startswith("https://pub-93af13628c2041bfb07c627e14b65ebe.r2.dev/zarry/"))
         self.assertTrue(url.endswith(".png"))
         self.assertEqual(len(client.calls), 1)
         upload = client.calls[0]
-        self.assertEqual(upload["Bucket"], "zarry-images")
+        self.assertEqual(upload["Bucket"], "zarrry")
         self.assertEqual(upload["Body"], b"PNGDATA")
         self.assertEqual(upload["ContentType"], "image/png")
         self.assertEqual(upload["CacheControl"], "public, max-age=31536000, immutable")
