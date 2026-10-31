@@ -5,12 +5,12 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 from .identity import AuthenticatedPrincipal
 from .policy import general_gateway_enabled, image_generation_enabled
-logger = logging.getLogger(__name__)
-
 from .schemas import (
     AssistantRequest, AssistantResponse, ImageRequest, ImageResponse,
     MemoryPreferenceRequest,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def create_general_router(
