@@ -849,6 +849,14 @@ try:
 except Exception as _zarry_api_import_error:
     logger.warning("ZARRY explanation proxy unavailable: %s", type(_zarry_api_import_error).__name__)
 
+# General-assistant gateway foundation. It is independently disabled by default;
+# Kitty and the explanation-only ZARRY route remain separate and unchanged.
+try:
+    from zarry_gateway.router import create_general_router
+    app.include_router(create_general_router(_require_current_user, gateway=None))
+except Exception as _zarry_general_import_error:
+    logger.warning("ZARRY general gateway unavailable: %s", type(_zarry_general_import_error).__name__)
+
 # ============================================================
 # CONVERSATIONS
 # ============================================================
