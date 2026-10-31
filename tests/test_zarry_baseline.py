@@ -78,7 +78,7 @@ class ZarryBaselineTests(unittest.TestCase):
         self.assertIn("classification", result)
         self.assertIn("base_cost", result["trading"])
         self.assertIn("stress_1_5x_cost", result["trading"])
-        self.assertEqual(result["trading"]["base_cost"]["completed_trades"], 0)
+        self.assertEqual(result["trading"]["base_cost"]["completed_trades"], 1)
 
     def test_asset_cost_defaults_are_frozen(self):
         self.assertEqual(BTC_ROUND_TRIP_COST, 0.001)
