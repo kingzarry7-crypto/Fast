@@ -20,7 +20,7 @@ class SharedExecutionTests(unittest.TestCase):
 
     def test_overlapping_signals_and_incomplete_outcomes_are_counted(self):
         result = simulate_non_overlapping_trades(
-            forward_returns=[0.01] * 10,
+            forward_returns=[0.01] * 8 + [float("nan"), 0.01],
             directions=[1, 1, 0, 0, 0, 0, 0, 0, 1, 0],
             round_trip_cost=0.001,
             outcome_horizon_rows=7,
