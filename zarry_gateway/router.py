@@ -219,22 +219,22 @@ def create_general_router(
             if claimed:
                 try:
                     safe_stage = getattr(exc, "failure_stage", failure_stage)
-                allowed_stages = {
-                    "replicate_submit", "replicate_poll", "provider_image_download",
-                    "provider_generate_other", "image_validation",
-                    "r2_public_retrieval", "storage_save",
-                }
-                if safe_stage not in allowed_stages:
-                    safe_stage = "provider_generate_other"
-                status_code = getattr(exc, "http_status_code", None)
-                if status_code is None:
-                    status_code = getattr(getattr(exc, "response", None), "status_code", None)
-                if not isinstance(status_code, int) or isinstance(status_code, bool) or not 100 <= status_code <= 599:
-                    status_code = None
-                record_outcome(
-                    "failed", error_type=type(exc).__name__,
-                    failure_stage_value=safe_stage, http_status_code=status_code,
-                )
+                    allowed_stages = {
+                        "replicate_submit", "replicate_poll", "provider_image_download",
+                        "provider_generate_other", "image_validation",
+                        "r2_public_retrieval", "storage_save",
+                    }
+                    if safe_stage not in allowed_stages:
+                        safe_stage = "provider_generate_other"
+                    status_code = getattr(exc, "http_status_code", None)
+                    if status_code is None:
+                        status_code = getattr(getattr(exc, "response", None), "status_code", None)
+                    if not isinstance(status_code, int) or isinstance(status_code, bool) or not 100 <= status_code <= 599:
+                        status_code = None
+                    record_outcome(
+                        "failed", error_type=type(exc).__name__,
+                        failure_stage_value=safe_stage, http_status_code=status_code,
+                    )
                 except Exception as audit_exc:
                     logger.error("One-shot image audit update failed (%s)", type(audit_exc).__name__)
             logger.error("One-shot image generation smoke test failed (%s)", type(exc).__name__)
