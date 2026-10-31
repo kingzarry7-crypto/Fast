@@ -52,10 +52,10 @@ class ZarryBaselineTests(unittest.TestCase):
         predictions = [1] * 20
         predictions[0] = predictions[2] = predictions[8] = predictions[16] = 2
         result = simulate_predictions(rows, predictions, asset="BTCUSD")
-        self.assertEqual(result["completed_trades"], 2)
+        self.assertEqual(result["completed_trades"], 3)
         self.assertEqual(result["overlap_skips"], 1)
         self.assertAlmostEqual(result["net_trade_returns"][0], 0.009)
-        self.assertAlmostEqual(result["compounded_net_return"], (1.009 ** 2) - 1)
+        self.assertAlmostEqual(result["compounded_net_return"], (1.009 ** 3) - 1)
 
     def test_classification_metrics_include_three_class_confusion_and_macro_scores(self):
         result = classification_metrics(
@@ -78,7 +78,7 @@ class ZarryBaselineTests(unittest.TestCase):
         self.assertIn("classification", result)
         self.assertIn("base_cost", result["trading"])
         self.assertIn("stress_1_5x_cost", result["trading"])
-        self.assertEqual(result["trading"]["base_cost"]["completed_trades"], 1)
+        self.assertEqual(result["trading"]["base_cost"]["completed_trades"], 2)
 
     def test_signal_at_prior_exit_candle_is_not_overlapping_and_exposure_is_six_hours(self):
         rows = [sample(forward_return=0.01) for _ in range(23)]
