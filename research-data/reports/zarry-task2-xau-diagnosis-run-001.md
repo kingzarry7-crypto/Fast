@@ -1,3 +1,5 @@
+> **SUPERSEDED — 2026-10-31:** This earlier diagnosis used a separate simulator that dropped valid finite forward-return outcomes when the t+7 exit index fell beyond the evaluation slice. The canonical corrected analysis now uses the shared simulator and disjoint calibration/policy windows. See [the calibrated XAUUSD walk-forward report](zarry-task2-xau-calibrated-walkforward-run-001.md).
+
 # ZARRY Task 2 — XAUUSD Validation/Test Diagnosis and Fold-Trained Walk-Forward
 
 **Run:** `zarry-task2-xau-diagnosis-run-001`  
