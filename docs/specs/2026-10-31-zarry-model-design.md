@@ -176,7 +176,9 @@ These figures are checkpoint evidence, not a claim of future performance. Both c
 
 **Task 2 entry gate:** freeze and document the dataset manifests, source hashes, feature schema, label/entry/exit convention, split boundaries, purge/embargo rules, and evaluation script before running any comparative benchmark. Compare BTCUSD and XAUUSD separately. Use identical chronological partitions for every candidate and baseline, prevent overlapping outcomes from leaking across partitions, and include fees/slippage in trade-level results. Keep a simple non-ML baseline. Do not select a model based on accuracy alone, do not tune on holdout data, and do not promote a checkpoint unless it beats the relevant baseline consistently across multiple unseen periods after realistic costs.
 
-The existing adapter and dataset contract are ingestion/validation components only. They do not by themselves prove that the original downloaded artifacts, manifests, and checkpoints are permanently archived or independently reproducible. That artifact-archive and manifest-verification task must be completed before model benchmarking proceeds.
+The existing adapter and dataset contract are ingestion/validation components only. Task 1 artifact recovery has now located successful workflow run 106 (run ID 41173387628), downloaded the BTCUSD/XAUUSD dataset artifacts and selected research checkpoints, and verified the archive digests, CSV hashes, checkpoint dataset hashes, schema, timestamps, source identity, split sizes, and research-only safety flags. The reproducible provenance record is `research-data/manifests/zarry-task1-run-106.json`.
+
+**Retention remains unresolved:** GitHub's dataset artifacts expire on 2026-11-30 and the selected checkpoint artifacts expire on 2026-11-07. The manifest records their IDs and hashes but does not preserve their bytes permanently. Before benchmarking, copy the original CSVs, candidate reports/checkpoints, and selected checkpoints into an approved durable artifact store, then verify the stored bytes against the recorded hashes. Do not assume the GitHub Actions artifact retention is a permanent archive.
 
 ## 12. Approval record
 
