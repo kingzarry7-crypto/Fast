@@ -14,14 +14,14 @@
 
 ## Execution protocol reconciled
 
-All research model and rule evaluations now call the shared `zarry_execution.py` simulator:
+All research model and rule evaluations now call the shared `zarry_execution.py` simulator. The simulator consumes the already-computed `forward_return_6h` per decision row, so it does not discard a finite return just because the local evaluation slice ends before row t+7; it uses t+7 only to suppress overlapping decisions. It skips only missing/non-finite outcomes. The rules are:
 
 1. Decision at candle close (t).
 2. Entry at next candle open.
 3. Exit at close of (t+7), representing the six-hour holding window.
 4. A decision on the previous exit candle (t+7) is eligible; a decision at (t+6) remains overlapping.
 5. Non-overlapping returns compound sequentially; drawdown is reported as a signed negative peak-to-trough fraction.
-6. Incomplete final outcomes are skipped and counted.
+6. Only missing/non-finite precomputed forward outcomes are skipped and counted. A finite precomputed return remains valid even if its t+7 exit index falls beyond the local evaluation slice.
 7. Returns remain forward-price proxies, not broker fills or a realized paper-trade ledger.
 
 The shared simulator is used by the baseline policy runner, Kitty confidence-gated model evaluation, six-hour momentum, and trend-confirmation evaluation. Regression tests cover the exit-candle boundary, overlap suppression, incomplete outcomes, cost deductions, compounding, and signed drawdown.
@@ -63,9 +63,9 @@ No policy-selection slice passed the predeclared trading gate. All three fold mo
 
 | Fold | Momentum trades | Momentum base return | Momentum 1.5× return | Trend-confirmation trades | Trend-confirmation base return |
 |---|---:|---:|---:|---:|---:|
-| 1 | 49 | +2.09% | +0.84% | 44 | -4.28% |
-| 2 | 49 | +3.52% | +2.26% | 42 | -3.04% |
-| 3 | 50 | +0.57% | -0.68% | 40 | +1.19% |
+| 1 | 50 | +1.87% | +0.60% | 45 | -2.79% |
+| 2 | 50 | +3.53% | +2.24% | 43 | -2.93% |
+| 3 | 51 | +0.74% | -0.54% | 41 | +1.18% |
 
 Momentum is positive at base costs in all three folds but loses its edge under stress in fold 3. Trend confirmation is inconsistent and materially negative in folds 1 and 2. Neither rule passes the full promotion/robustness gate.
 
