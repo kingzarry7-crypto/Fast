@@ -151,7 +151,7 @@ def simulate_predictions(
         if action not in (SHORT, NO_TRADE, LONG):
             raise ValueError(f"invalid prediction class: {prediction!r}")
         directions.append(-1 if action == SHORT else (1 if action == LONG else 0))
-        returns.append(_finite(row.get("forward_return"), "forward_return"))
+        returns.append(row.get("forward_return"))
     metrics = simulate_non_overlapping_trades(
         returns, directions, round_trip_cost=cost * multiplier,
         outcome_horizon_rows=outcome_horizon_rows,
