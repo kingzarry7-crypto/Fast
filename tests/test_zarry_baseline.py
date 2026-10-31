@@ -65,7 +65,7 @@ class ZarryBaselineTests(unittest.TestCase):
         self.assertEqual(result["sample_count"], 4)
         self.assertEqual(result["confusion_matrix"], [[1, 0, 0], [0, 1, 0], [0, 1, 1]])
         self.assertAlmostEqual(result["accuracy"], 0.75)
-        self.assertAlmostEqual(result["balanced_accuracy"], 2 / 3)
+        self.assertAlmostEqual(result["balanced_accuracy"], 5 / 6)
         self.assertIn("macro_f1", result)
         self.assertEqual(result["class_distribution"]["LONG"], 2)
 
