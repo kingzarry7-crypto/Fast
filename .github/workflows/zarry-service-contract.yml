@@ -1,0 +1,55 @@
+name: ZARRY inference service contract
+
+on:
+  pull_request:
+    paths:
+      - "zarry-service/**"
+      - "zarry_gateway/**"
+      - "tests/test_zarry_gateway_*.py"
+      - "api.py"
+      - ".github/workflows/zarry-service-contract.yml"
+  push:
+    branches: ["main", "feat/zarry-inference-service-prototype"]
+    paths:
+      - "zarry-service/**"
+      - "zarry_gateway/**"
+      - "tests/test_zarry_gateway_*.py"
+      - "api.py"
+      - ".github/workflows/zarry-service-contract.yml"
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install lightweight service test dependencies
+        run: python -m pip install "fastapi==0.142.4" "pydantic==2.12.5" "httpx" "requests"
+      - name: Compile service and gateway
+        run: python -m compileall -q zarry-service zarry_gateway
+      - name: Validate Railway config
+        run: python -m json.tool zarry-service/railway.json > /dev/null
+      - name: Validate Railway startup script
+        run: sh -n zarry-service/start.sh
+      - name: Compile deployment smoke test
+        run: python -m py_compile zarry-service/smoke_test.py
+      - name: Run service contract tests
+        run: python -m unittest discover -s zarry-service/tests -p "test_*.py" -v
+      - name: Run gateway text contract tests
+        run: python -m unittest discover -s tests -p "test_zarry_gateway_text.py" -v
+      - name: Run gateway memory contract tests
+        run: python -m unittest discover -s tests -p "test_zarry_gateway_memory.py" -v
+      - name: Run gateway budget contract tests
+        run: python -m unittest discover -s tests -p "test_zarry_gateway_budget.py" -v
+      - name: Run gateway image provider contract tests
+        run: python -m unittest discover -s tests -p "test_zarry_gateway_image.py" -v
+      - name: Run Replicate Z-Image Turbo pricing contract tests
+        run: python -m unittest discover -s tests -p "test_zarry_gateway_replicate_image.py" -v
+      - name: Run gateway image storage contract tests
+        run: python -m unittest discover -s tests -p "test_zarry_gateway_image_storage.py" -v
+      - name: Run gateway router contract tests
+        run: python -m unittest discover -s tests -p "test_zarry_gateway_router.py" -v
+      - name: Compile Fast API integration
+        run: python -m py_compile api.py

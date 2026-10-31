@@ -19,5 +19,17 @@ class GatewayRouterTests(unittest.TestCase):
     def test_chat_disabled_returns_503(self):
         app=FastAPI(); app.include_router(create_general_router(lambda request:{"id":"u"},FakeGateway(),enabled_check=lambda:False))
         self.assertEqual(TestClient(app).post("/api/assistant/chat",json={"message":"hi"}).status_code,503)
+    def test_image_generation_stays_unavailable_without_configured_provider(self):
+        response = self.client.post("/api/assistant/image", json={"prompt": "a red kite"})
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["detail"], "ZARRY image generation is not enabled")
+    def test_image_provider_failure_returns_controlled_502(self):
+        class BrokenImageGateway(FakeGateway):
+            def image(self, principal, payload):
+                raise RuntimeError("provider details must not escape")
+        app=FastAPI(); app.include_router(create_general_router(lambda request:{"id":"u"},BrokenImageGateway(),enabled_check=lambda:True,image_enabled_check=lambda:True))
+        response=TestClient(app, raise_server_exceptions=False).post("/api/assistant/image",json={"prompt":"a red kite"})
+        self.assertEqual(response.status_code,502)
+        self.assertEqual(response.json()["detail"],"ZARRY image request failed")
     def test_oversized_request_rejected(self): self.assertEqual(self.client.post("/api/assistant/chat",json={"message":"x"*8001}).status_code,422)
 if __name__ == "__main__": unittest.main()

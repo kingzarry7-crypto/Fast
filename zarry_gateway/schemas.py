@@ -24,3 +24,6 @@ class ImageResponse(StrictModel):
     image_url: str = Field(min_length=1, max_length=2048)
     provider: str = Field(min_length=1, max_length=80)
     fallback_used: bool = False
+
+class MemoryPreferenceRequest(StrictModel):
+    enabled: bool

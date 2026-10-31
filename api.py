@@ -844,7 +844,41 @@ def _require_current_user(request: Request) -> Any:
 # General assistant gateway is independently default-off; Kitty remains separate.
 try:
     from zarry_gateway.router import create_general_router
-    app.include_router(create_general_router(_require_current_user, gateway=None))
+    from zarry_gateway.service import AssistantService
+    from zarry_gateway.memory import PostgresConversationMemory
+    _zarry_image_provider = None
+    _image_env_required = (
+        "REPLICATE_API_TOKEN", "ZARRY_REPLICATE_MODEL_VERSION",
+        "R2_ENDPOINT_URL", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY",
+        "R2_BUCKET", "R2_PUBLIC_BASE_URL",
+    )
+    if all(os.getenv(name, "").strip() for name in _image_env_required):
+        try:
+            from zarry_gateway.budget import PostgresMonthlyBudgetLedger
+            from zarry_gateway.image_storage import CloudflareR2ImageStorage
+            from zarry_gateway.replicate_image import ReplicateZImageTurboProvider
+            _image_storage = CloudflareR2ImageStorage(
+                bucket=os.environ["R2_BUCKET"],
+                public_base_url=os.environ["R2_PUBLIC_BASE_URL"],
+            )
+            _zarry_image_provider = ReplicateZImageTurboProvider(
+                api_token=os.environ["REPLICATE_API_TOKEN"],
+                model_version=os.environ["ZARRY_REPLICATE_MODEL_VERSION"],
+                ledger=PostgresMonthlyBudgetLedger(),
+                storage=_image_storage,
+            )
+        except Exception as _zarry_image_config_error:
+            logger.warning(
+                "ZARRY image provider configuration unavailable: %s",
+                type(_zarry_image_config_error).__name__,
+            )
+    _zarry_general_service = AssistantService(
+        memory_store=PostgresConversationMemory(),
+        image_provider=_zarry_image_provider,
+    )
+    app.include_router(
+        create_general_router(_require_current_user, gateway=_zarry_general_service)
+    )
 except Exception as _zarry_general_import_error:
     logger.warning("ZARRY general gateway unavailable: %s", type(_zarry_general_import_error).__name__)
 
