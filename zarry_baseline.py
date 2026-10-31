@@ -194,7 +194,7 @@ def simulate_predictions(
         "win_rate": wins / trade_count if trade_count else None,
         "average_net_trade_return": sum(net_returns) / trade_count if trade_count else 0.0,
         "expectancy": sum(net_returns) / trade_count if trade_count else 0.0,
-        "profit_factor": gross_profit / gross_loss if gross_loss else (math.inf if gross_profit else None),
+        "profit_factor": gross_profit / gross_loss if gross_loss else None,
         "compounded_net_return": equity - 1.0,
         "max_drawdown": max_drawdown,
         "exposure_fraction": (sum(item["exit_index"] - item["entry_index"] + 1 for item in trade_indices) / len(rows)) if rows else 0.0,
