@@ -128,6 +128,33 @@ try:
             (str(uuid.uuid4()),),
         )
 
+        # The one-shot admin smoke-test lock is provisioned by migration 003.
+        # Its primary key makes duplicate claims atomic across app replicas.
+        cur.execute(
+            """INSERT INTO zarry_image_smoke_test_lock (lock_key, status, request_id)
+               VALUES ('replicate-one-shot-v1', 'claimed', %s)
+               ON CONFLICT (lock_key) DO NOTHING RETURNING lock_key""",
+            (str(uuid.uuid4()),),
+        )
+        assert cur.fetchone()[0] == "replicate-one-shot-v1"
+        cur.execute(
+            """INSERT INTO zarry_image_smoke_test_lock (lock_key, status, request_id)
+               VALUES ('replicate-one-shot-v1', 'claimed', %s)
+               ON CONFLICT (lock_key) DO NOTHING RETURNING lock_key""",
+            (str(uuid.uuid4()),),
+        )
+        assert cur.fetchone() is None
+        must_reject(
+            cur,
+            """INSERT INTO zarry_image_smoke_test_lock (lock_key, status)
+               VALUES ('unexpected-key', 'claimed')""",
+        )
+        must_reject(
+            cur,
+            """UPDATE zarry_image_smoke_test_lock SET status='unknown'
+               WHERE lock_key='replicate-one-shot-v1'""",
+        )
+
         # Both tables must cascade with deletion of the owning web account.
         cur.execute("DELETE FROM web_users WHERE id=%s", (str(user_id),))
         cur.execute(
