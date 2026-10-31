@@ -63,6 +63,30 @@ class ZarryServiceTests(unittest.TestCase):
         self.assertEqual(self.client.get("/health").status_code, 200)
         self.assertEqual(self.client.get("/ready").status_code, 200)
 
+    def test_stale_timestamp_is_rejected(self):
+        payload = self.payload()
+        payload["timestamp"] = "2020-01-01T00:00:00Z"
+        response = self.client.post(
+            "/v1/explain", json=payload,
+            headers={"Authorization": "Bearer test-secret"},
+        )
+        self.assertEqual(response.status_code, 422)
+
+    def test_timezone_free_timestamp_is_rejected(self):
+        payload = self.payload()
+        payload["timestamp"] = "2026-10-30T12:00:00"
+        response = self.client.post(
+            "/v1/explain", json=payload,
+            headers={"Authorization": "Bearer test-secret"},
+        )
+        self.assertEqual(response.status_code, 422)
+
+    def test_request_metadata_headers_are_returned(self):
+        response = self.client.get("/", headers={"X-Request-ID": "zarry-test-123"})
+        self.assertEqual(response.headers["X-Request-ID"], "zarry-test-123")
+        self.assertIn("X-ZARRY-Latency-Ms", response.headers)
+        self.assertEqual(response.headers["X-ZARRY-API-Version"], "1.0.0")
+
     def test_requires_bearer_secret(self):
         self.assertEqual(self.client.post("/v1/explain", json=self.payload()).status_code, 401)
 
