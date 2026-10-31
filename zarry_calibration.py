@@ -222,3 +222,63 @@ def evaluate_calibrated_walk_forward(
         ),
         "folds": reports,
     }
+
+
+def labels_from_forward_returns(forward_returns: np.ndarray, threshold: float) -> np.ndarray:
+    """Rebuild SHORT/NO TRADE/LONG targets from the six-hour forward-return proxy."""
+    values = np.asarray(forward_returns, dtype=np.float64)
+    if values.ndim != 1 or not np.isfinite(values).all():
+        raise ValueError("forward returns must be a finite one-dimensional array")
+    if not np.isfinite(threshold) or threshold <= 0:
+        raise ValueError("label threshold must be positive and finite")
+    return np.where(values <= -threshold, 0, np.where(values >= threshold, 2, 1)).astype(np.int64)
+
+
+def evaluate_label_threshold_sensitivity(
+    x: np.ndarray,
+    forward_returns: np.ndarray,
+    *,
+    thresholds: tuple[float, ...] = (0.001, 0.0015, 0.002),
+    round_trip_cost: float,
+    folds: int = 3,
+    epochs: int = 30,
+    patience: int = 5,
+    batch_size: int = 128,
+    weight_decay: float = 1e-4,
+    seed: int = 42,
+    purge: int = 7,
+) -> dict:
+    """Compare label definitions without selecting a threshold on test outcomes."""
+    values = np.asarray(forward_returns, dtype=np.float64)
+    if len(set(thresholds)) != len(thresholds) or not thresholds:
+        raise ValueError("label thresholds must be a non-empty unique sequence")
+    results = []
+    for threshold in thresholds:
+        labels = labels_from_forward_returns(values, threshold)
+        walk = evaluate_calibrated_walk_forward(
+            x, labels, values, round_trip_cost=round_trip_cost,
+            label_threshold=threshold, folds=folds, epochs=epochs,
+            patience=patience, batch_size=batch_size,
+            weight_decay=weight_decay, seed=seed, purge=purge,
+        )
+        results.append({
+            "label_threshold": threshold,
+            "full_dataset_class_counts_short_no_trade_long": np.bincount(labels, minlength=3).tolist(),
+            "folds": [
+                {
+                    "fold": fold["fold"],
+                    "best_epoch": fold["best_epoch"],
+                    "temperature": fold["probability_calibration"]["temperature"],
+                    "calibration_nll_before": fold["probability_calibration"]["before"]["nll"],
+                    "calibration_nll_after": fold["probability_calibration"]["after"]["nll"],
+                    "selected_confidence": fold["selected_min_confidence"],
+                    "test_trades": fold["model_after_costs"]["trade_count"],
+                    "test_macro_f1": fold["model_after_costs"]["classification"]["macro_f1"],
+                }
+                for fold in walk["folds"]
+            ],
+        })
+    return {
+        "selection_policy": "descriptive sensitivity only; no label threshold is selected using fold test results",
+        "thresholds": results,
+    }
