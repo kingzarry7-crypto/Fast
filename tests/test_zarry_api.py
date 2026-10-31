@@ -147,6 +147,14 @@ class ZarryProxyTests(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.upstream.assert_not_called()
 
+    def test_proxy_supports_existing_zarry_api_url_variable(self):
+        os.environ.pop("ZARRY_SERVICE_URL", None)
+        os.environ["ZARRY_API_URL"] = "https://zarry.internal"
+        self.valid_upstream()
+        response = self.client.post("/api/zarry/explain", json=self.payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.upstream.call_args.args[0], "https://zarry.internal/v1/explain")
+
     def test_proxy_rejects_unconfigured_service_credentials(self):
         os.environ.pop("ZARRY_API_KEY", None)
         response = self.client.post("/api/zarry/explain", json=self.payload)
