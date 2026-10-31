@@ -13,7 +13,6 @@ import time
 from urllib.parse import urlsplit
 
 import requests
-from PIL import Image
 
 
 MODEL = "prunaai/z-image-turbo"
@@ -123,6 +122,10 @@ class ReplicateZImageTurboProvider:
                 raise RuntimeError("Replicate returned an insecure image URL")
             image_response = self.session.get(output_url, timeout=(10, 60))
             image_response.raise_for_status()
+            try:
+                from PIL import Image
+            except ImportError as exc:
+                raise RuntimeError("Pillow is required for Replicate image decoding") from exc
             image = Image.open(BytesIO(image_response.content)).convert("RGB")
 
             # Replicate's published tariff is resolution-based and deterministic
