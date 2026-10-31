@@ -1,7 +1,7 @@
 # ZARRY Model Service — Design Specification
 
 **Date:** 2026-10-31  
-**Status:** Design approved by the user; implementation not yet approved  
+**Status:** Design approved; implementation authorized by the user on 2026-10-31; production activation and live trading remain unapproved  
 **Repository:** `kingzarry7-crypto/Fast`  
 **Target branch:** `main` (implementation target only; this document is included in draft PR #213 for review)
 
@@ -190,4 +190,39 @@ The user approved:
 - Learning from curated historical BTC and XAUUSD data, including winning and losing examples.
 - Reliability, isolation, failure handling, monitoring, and paper-only safety rules.
 
-**This document records the design only. It does not authorize implementation, production deployment, or live trading.**
+**Implementation authorization update (2026-10-31):** The user subsequently instructed the team to build the remaining ZARRY implementation. This authorizes staged code implementation and testing only. It does not authorize enabling the Fast integration flag, changing production Railway settings, promoting a model, enabling live trading, or merging/deploying without the required verification gates.
+
+## 13. Implementation checkpoint (2026-10-31)
+
+### Implemented in the staged service work
+
+- Independent Railway ZARRY service, quantized model loading, persistent model cache, root/health/readiness endpoints, and authenticated inference route.
+- Fast web API mounts an explicit `/api/zarry/explain` sidecar behind the existing web-session authentication. It is disabled unless `ZARRY_ENABLED=true`.
+- Fast proxy validates the returned schema, preserves Kitty's exact decision and symbol, checks cited fields and numeric claims against supplied context, and fails closed on upstream errors or unsafe output.
+- Both service and Fast proxy require timezone-aware ISO-8601 context timestamps and reject stale context (24-hour default) or timestamps more than 60 seconds in the future.
+- Service responses expose request ID, API version, and per-request latency headers.
+- Authenticated operational metrics expose request/error counts, process CPU time, peak resident memory, and free disk space.
+- Fast proxy applies a per-user rate limit (20 requests/minute by default), allows plain HTTP only for Railway private-network hostnames, and retries one transient connection failure. Model timeouts are not retried.
+- Contract tests cover decision preservation, NO TRADE preservation, authentication, invalid/ungrounded output rejection, freshness, metadata, metrics authorization, rate limiting, and transient connection retry.
+
+### Verification checkpoint
+
+- ZARRY inference contract workflow passed at commit `c4dc529fcb88e0ba86ee7cfe86af7ce7a9fbd40b` (run `41190761814`).
+- The implementation is staged in draft PR #222, stacked on draft PR #221. Neither PR is merged.
+- The standalone Railway service had previously reached healthy status, but the new timestamp/metrics changes have not yet been deployed to Railway.
+- The authenticated live-model smoke test has not yet been run.
+- Fast-to-ZARRY private-network DNS/reachability has not yet been verified.
+- Live model latency, memory, disk behavior, and representative-load performance have not yet been measured.
+- Kitty's deterministic signal and order paths have not been changed. The new endpoint is an explicit explanation sidecar, not an automatic model decision path.
+- Paper-mode end-to-end acceptance and failure-isolation testing remain outstanding.
+
+### Remaining acceptance gates
+
+1. Merge the deployment-preparation PR only after its review; then rebase/retarget the implementation PR and pass CI against the merged base.
+2. Deploy the tested service changes to the separate ZARRY Railway service, without changing Kitty's service or Vercel.
+3. Verify private-network connectivity and execute the authenticated smoke test from a trusted environment; never expose the API key in logs or chat.
+4. Benchmark actual model latency, peak memory, CPU, disk, and error rates; set realistic timeouts and capacity limits.
+5. Exercise Fast's optional explanation endpoint with synthetic BUY, SELL, WAIT, and NO TRADE assessments; prove that malformed output, stale context, timeout, and service outage never alter Kitty's deterministic decision or interrupt its safety checks.
+6. Keep `ZARRY_ENABLED=false` until explicit acceptance. Live trading remains disabled regardless of model results.
+
+This checkpoint does not claim profitability, production acceptance, or live-trading readiness.
