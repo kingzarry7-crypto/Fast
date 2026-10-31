@@ -1,9 +1,12 @@
 """Authenticated FastAPI routes for the general-assistant gateway."""
 import inspect
+import logging
 import time
 from fastapi import APIRouter, HTTPException, Request
 from .identity import AuthenticatedPrincipal
 from .policy import general_gateway_enabled, image_generation_enabled
+logger = logging.getLogger(__name__)
+
 from .schemas import (
     AssistantRequest, AssistantResponse, ImageRequest, ImageResponse,
     MemoryPreferenceRequest,
@@ -113,7 +116,11 @@ def create_general_router(
             return result
         except HTTPException:
             raise
-        except Exception:
+        except Exception as exc:
+            # Keep the client response generic; log only the exception class so
+            # operators can distinguish SDK/network failures without exposing
+            # credentials, request headers, or provider error messages.
+            logger.error("R2 public storage verification failed (%s)", type(exc).__name__)
             raise HTTPException(status_code=502, detail="R2 public storage verification failed")
 
     @router.post("/chat", response_model=AssistantResponse)
