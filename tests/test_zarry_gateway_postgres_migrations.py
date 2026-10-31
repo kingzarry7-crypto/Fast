@@ -41,6 +41,18 @@ try:
 
     guarded_env = os.environ.copy()
     guarded_env["ZARRY_MIGRATION_DATABASE_URL"] = dsn
+
+    # The default status/dry-run must be genuinely read-only: it must list
+    # pending migrations without creating the ledger table.
+    status_before = subprocess.run(
+        [sys.executable, str(runner)],
+        cwd=ROOT, env=guarded_env, text=True, capture_output=True, check=True,
+    )
+    assert "Pending:" in status_before.stdout
+    with conn.cursor() as cur:
+        cur.execute("SELECT to_regclass('public.zarry_schema_migrations')")
+        assert cur.fetchone()[0] is None, "read-only status created the migration ledger"
+
     guarded_env["ZARRY_ALLOW_MIGRATIONS"] = "1"
     first = subprocess.run(
         [sys.executable, str(runner), "--apply"],
@@ -52,6 +64,12 @@ try:
         cwd=ROOT, env=guarded_env, text=True, capture_output=True, check=True,
     )
     assert "none; schema is current" in second.stdout
+
+    status_after = subprocess.run(
+        [sys.executable, str(runner)],
+        cwd=ROOT, env=guarded_env, text=True, capture_output=True, check=True,
+    )
+    assert "none; schema is current" in status_after.stdout
 
     with conn.cursor() as cur:
         user_id = uuid.uuid4()
