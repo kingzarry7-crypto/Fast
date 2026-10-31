@@ -6,7 +6,7 @@ on:
       - "zarry-service/**"
       - ".github/workflows/zarry-service-contract.yml"
   push:
-    branches: ["main"]
+    branches: ["main", "feat/zarry-inference-service-prototype"]
     paths:
       - "zarry-service/**"
       - ".github/workflows/zarry-service-contract.yml"
