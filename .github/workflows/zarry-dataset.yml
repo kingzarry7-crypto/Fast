@@ -8,6 +8,8 @@ on:
       - "zarry_kitty_adapter.py"
       - "tests/test_zarry_dataset.py"
       - "tests/test_zarry_kitty_adapter.py"
+      - "zarry_baseline.py"
+      - "tests/test_zarry_baseline.py"
       - ".github/workflows/zarry-dataset.yml"
   pull_request:
     branches: ["main", "feat/zarry-dataset-task1"]
@@ -30,8 +32,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Compile dataset modules and tests
-        run: python -m compileall -q zarry_dataset.py zarry_kitty_adapter.py tests/test_zarry_dataset.py tests/test_zarry_kitty_adapter.py
+        run: python -m compileall -q zarry_dataset.py zarry_kitty_adapter.py zarry_baseline.py tests/test_zarry_dataset.py tests/test_zarry_kitty_adapter.py tests/test_zarry_baseline.py
       - name: Run ZARRY dataset contract tests
         run: |
           python -m unittest discover -s tests -p "test_zarry_dataset.py" -v
           python -m unittest discover -s tests -p "test_zarry_kitty_adapter.py" -v
+          python -m unittest discover -s tests -p "test_zarry_baseline.py" -v
