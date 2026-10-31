@@ -57,10 +57,13 @@ class HuggingFaceImageProvider:
         if estimate is None:
             raise RuntimeError("Provider cost estimate is unavailable; request was not sent")
 
+        # Construct the local client before reserving; this performs no provider
+        # request and avoids stranded budget if local setup fails.
+        client = self.client_factory(api_key=self.api_key)
+
         # Reserve before any billable provider call. Unknown outcomes retain the
         # reservation; only a verified actual cost can release it via settlement.
         self.ledger.reserve(request_id, estimate)
-        client = self.client_factory(api_key=self.api_key)
         generated = client.text_to_image(prompt=prompt.strip(), model=self.model)
         actual = self.actual_cost_resolver(generated, self.model, size)
         if actual is None:
