@@ -11,6 +11,8 @@ on:
       - "zarry_baseline.py"
       - "tests/test_zarry_baseline.py"
       - "research-data/scripts/zarry_xau_diagnose.py"
+      - "zarry_execution.py"
+      - "tests/test_zarry_execution.py"
       - ".github/workflows/zarry-dataset.yml"
   pull_request:
     branches: ["main", "feat/zarry-dataset-task1", "feat/zarry-task2-benchmark-protocol"]
@@ -19,6 +21,8 @@ on:
       - "zarry_kitty_adapter.py"
       - "tests/test_zarry_dataset.py"
       - "tests/test_zarry_kitty_adapter.py"
+      - "zarry_execution.py"
+      - "tests/test_zarry_execution.py"
       - "research-data/scripts/zarry_xau_diagnose.py"
       - ".github/workflows/zarry-dataset.yml"
 
@@ -40,3 +44,4 @@ jobs:
           python -m unittest discover -s tests -p "test_zarry_dataset.py" -v
           python -m unittest discover -s tests -p "test_zarry_kitty_adapter.py" -v
           python -m unittest discover -s tests -p "test_zarry_baseline.py" -v
+          python -m unittest discover -s tests -p "test_zarry_execution.py" -v
