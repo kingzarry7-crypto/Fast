@@ -72,12 +72,16 @@ def create_general_router(require_web_user, gateway, enabled_check=general_gatew
         handler = getattr(gateway, "image", None)
         if not callable(handler):
             raise HTTPException(status_code=503, detail="Image generation is unavailable")
-        result = handler(principal=principal, payload=payload)
-        if inspect.isawaitable(result):
-            result = await result
         try:
+            result = handler(principal=principal, payload=payload)
+            if inspect.isawaitable(result):
+                result = await result
             return ImageResponse.model_validate(result)
+        except HTTPException:
+            raise
         except Exception:
-            raise HTTPException(status_code=502, detail="Invalid assistant response")
+            # Provider errors and malformed responses must not leak internal
+            # details or become unstructured server errors.
+            raise HTTPException(status_code=502, detail="ZARRY image request failed")
 
     return router
