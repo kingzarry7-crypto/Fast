@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import time
 import threading
 from collections import defaultdict, deque
@@ -151,7 +152,8 @@ def create_router(
             if not host.endswith(".railway.internal"):
                 raise HTTPException(status_code=503, detail="unencrypted ZARRY URLs are allowed only on Railway private networking")
 
-        request_id = request.headers.get("X-Request-ID", "")[:128] or str(uuid4())
+        candidate_id = request.headers.get("X-Request-ID", "")[:128]
+        request_id = candidate_id if re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", candidate_id) else str(uuid4())
         upstream = None
         for attempt in range(2):
             try:
