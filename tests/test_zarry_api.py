@@ -108,6 +108,23 @@ class ZarryProxyTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.upstream.assert_not_called()
 
+    def test_proxy_enforces_per_user_rate_limit(self):
+        os.environ["ZARRY_MAX_REQUESTS_PER_MINUTE"] = "2"
+        self.valid_upstream()
+        self.assertEqual(self.client.post("/api/zarry/explain", json=self.payload).status_code, 200)
+        self.assertEqual(self.client.post("/api/zarry/explain", json=self.payload).status_code, 200)
+        limited = self.client.post("/api/zarry/explain", json=self.payload)
+        self.assertEqual(limited.status_code, 429)
+        self.assertEqual(limited.headers["Retry-After"], "60")
+        self.assertEqual(self.upstream.call_count, 2)
+
+    def test_proxy_rejects_plain_http_outside_railway_private_network(self):
+        os.environ["ZARRY_SERVICE_URL"] = "http://untrusted.example"
+        self.valid_upstream()
+        response = self.client.post("/api/zarry/explain", json=self.payload)
+        self.assertEqual(response.status_code, 503)
+        self.upstream.assert_not_called()
+
     def test_proxy_rejects_unconfigured_service_credentials(self):
         os.environ.pop("ZARRY_API_KEY", None)
         response = self.client.post("/api/zarry/explain", json=self.payload)
