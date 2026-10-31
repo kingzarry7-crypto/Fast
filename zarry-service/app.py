@@ -1,4 +1,4 @@
-"""Isolated, explanation-only ZARRY inference API prototype.
+""""Isolated, explanation-only ZARRY inference API prototype.
 
 Kitty remains the sole authority for trading decisions. This service has no
 market-data, broker, order, or tool-execution integration.
@@ -125,6 +125,21 @@ def create_app(model_loader=_load_model) -> FastAPI:
         supplied = authorization.removeprefix("Bearer ").strip() if authorization else ""
         if not hmac.compare_digest(supplied, expected):
             raise HTTPException(status_code=401, detail="unauthorized")
+
+    @app.get("/")
+    async def index():
+        return {
+            "service": "ZARRY",
+            "status": "alive",
+            "description": "Explanation-only model service. Kitty remains the decision authority.",
+            "endpoints": {
+                "health": "/health",
+                "readiness": "/ready",
+                "explain": "POST /v1/explain (Bearer API key required)",
+                "api_docs": "/docs",
+            },
+            "mode": "explanation_only",
+        }
 
     @app.get("/health")
     async def health():
