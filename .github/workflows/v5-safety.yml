@@ -51,7 +51,7 @@ jobs:
       - name: Install backend test dependencies
         run: python -m pip install "openai==1.54.4" "fastapi==0.142.4" "requests==2.33.0" "httpx"
       - name: Test ZARRY gateway contracts, identity, and auth boundary
-        run: python -m unittest tests.test_zarry_gateway_contracts tests.test_zarry_gateway_identity tests.test_zarry_gateway_router -v
+        run: python -m unittest discover -s tests -p "test_zarry_gateway_*.py" -v
       - name: Test Kitty blocks unvalidated directional signals
         run: python -m unittest discover -s tests -p "test_kitty_signal_safety.py" -v
       - name: Test Kitty alert normalization and Gold research safety
