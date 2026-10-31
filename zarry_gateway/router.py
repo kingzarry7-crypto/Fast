@@ -162,26 +162,9 @@ def create_general_router(
                 )
 
         try:
+            # The table is provisioned by the explicit, checksum-tracked
+            # migration runner; runtime requests never need schema privileges.
             with get_db_cursor() as cur:
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS zarry_image_smoke_test_lock (
-                        lock_key TEXT PRIMARY KEY,
-                        claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        status TEXT NOT NULL DEFAULT 'claimed',
-                        request_id TEXT,
-                        provider TEXT,
-                        image_url TEXT,
-                        error_type TEXT,
-                        completed_at TIMESTAMPTZ
-                    )
-                """)
-                # Upgrade installations that created the original minimal lock table.
-                cur.execute("ALTER TABLE zarry_image_smoke_test_lock ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'claimed'")
-                cur.execute("ALTER TABLE zarry_image_smoke_test_lock ADD COLUMN IF NOT EXISTS request_id TEXT")
-                cur.execute("ALTER TABLE zarry_image_smoke_test_lock ADD COLUMN IF NOT EXISTS provider TEXT")
-                cur.execute("ALTER TABLE zarry_image_smoke_test_lock ADD COLUMN IF NOT EXISTS image_url TEXT")
-                cur.execute("ALTER TABLE zarry_image_smoke_test_lock ADD COLUMN IF NOT EXISTS error_type TEXT")
-                cur.execute("ALTER TABLE zarry_image_smoke_test_lock ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ")
                 cur.execute("""
                     INSERT INTO zarry_image_smoke_test_lock (lock_key, status, request_id)
                     VALUES ('replicate-one-shot-v1', 'claimed', %s)
