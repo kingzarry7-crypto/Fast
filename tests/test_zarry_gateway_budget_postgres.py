@@ -9,12 +9,12 @@ import uuid
 import pathlib
 import sys
 
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
 import psycopg2
 
 from zarry_gateway.budget import BudgetDenied, PostgresMonthlyBudgetLedger
-
-ROOT = pathlib.Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 
 DSN = os.environ["ZARRY_TEST_DATABASE_URL"]
 
