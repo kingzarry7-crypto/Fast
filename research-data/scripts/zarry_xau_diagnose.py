@@ -105,7 +105,7 @@ def main() -> None:
 
     n = len(x)
     output = {
-        "run_id": "zarry-task2-xau-diagnosis-run-001",
+        "run_id": "zarry-task2-xau-calibrated-walkforward-run-001",
         "research_only": True,
         "dataset_sha256": digest,
         "sample_count": n,
