@@ -132,7 +132,18 @@ def create_app(model_loader=_load_model) -> FastAPI:
         yield
         app.state.model = None
 
-    app = FastAPI(title="ZARRY Inference Service", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="ZARRY Inference Service", version="1.0.0", lifespan=lifespan)
+
+    @app.middleware("http")
+    async def request_metadata(request: Request, call_next):
+        import time
+        request_id = request.headers.get("X-Request-ID", "")[:128] or str(uuid4())
+        started = time.perf_counter()
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        response.headers["X-ZARRY-Latency-Ms"] = str(round((time.perf_counter() - started) * 1000, 2))
+        response.headers["X-ZARRY-API-Version"] = "1.0.0"
+        return response
 
     async def authenticate(
         request: Request,
