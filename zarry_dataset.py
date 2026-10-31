@@ -87,10 +87,14 @@ def build_feature_dataset(
             if key in RESERVED_FEATURE_FIELDS or value in (None, ""):
                 continue
             try:
-                features[str(key)] = _finite_number(value, str(key))
-            except ValueError:
-                # Non-feature metadata is not silently converted into a feature.
+                numeric = float(value)
+            except (TypeError, ValueError):
+                # Text metadata is not a feature. Numeric values, including NaN
+                # and infinity, must pass the finite-number check below.
                 continue
+            if not math.isfinite(numeric):
+                raise ValueError(f"{key} must be finite")
+            features[str(key)] = numeric
         record = {
             "asset": expected_asset,
             "timeframe": timeframe,
@@ -118,7 +122,11 @@ def chronological_split(
     validation_fraction: float = 0.15,
     purge_rows: int = 6,
 ) -> dict[str, Any]:
-    """Chronological split with a row embargo on both partition boundaries."""
+    """Chronological split with a row embargo on both partition boundaries.
+
+    The current default contract is hourly samples with a six-hour label horizon;
+    callers using another cadence/horizon must choose a matching purge_rows value.
+    """
     if purge_rows < 0:
         raise ValueError("purge_rows cannot be negative")
     if not 0 < train_fraction < 1 or not 0 < validation_fraction < 1:
@@ -141,11 +149,12 @@ def chronological_split(
         "test": ordered[test_start:],
         "purged_rows": (validation_start - train_end) + (test_start - validation_end),
         "split_method": "chronological_with_purged_boundaries",
+        "purge_rows_per_boundary": purge_rows,
     }
 
 
 def validate_paper_trade_rows(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    """Accept only closed, realized paper trades; never infer outcomes from signals."""
+    """Accept only closed, explicitly identified paper trades with provenance."""
     output: list[dict[str, Any]] = []
     seen: set[str] = set()
     for source_row in rows:
@@ -159,8 +168,13 @@ def validate_paper_trade_rows(rows: Iterable[Mapping[str, Any]]) -> list[dict[st
         asset = normalize_asset(str(row.get("asset", row.get("symbol", ""))))
         closed_at = _timestamp(row.get("closed_at", row.get("exit_time")))
         net_return = _finite_number(row.get("realized_net_return"), "realized_net_return")
-        if row.get("is_paper") is False or str(row.get("mode", "paper")).lower() == "live":
-            raise ValueError("live trades are not accepted in the paper outcome dataset")
+        mode = str(row.get("mode", "")).strip().lower()
+        explicitly_paper = row.get("is_paper") is True or mode == "paper"
+        if not explicitly_paper or row.get("is_paper") is False or mode not in {"", "paper"}:
+            raise ValueError("paper trade status must be explicitly verified")
+        provenance = str(row.get("provenance", "")).strip()
+        if not provenance:
+            raise ValueError("paper trade provenance is required")
         output.append({
             "trade_id": trade_id,
             "asset": asset,
@@ -168,7 +182,7 @@ def validate_paper_trade_rows(rows: Iterable[Mapping[str, Any]]) -> list[dict[st
             "realized_net_return": net_return,
             "outcome": "WIN" if net_return > 0 else "LOSS" if net_return < 0 else "BREAKEVEN",
             "outcome_type": "realized_paper_trade",
-            "provenance": str(row.get("provenance", "paper_ledger")),
+            "provenance": provenance,
         })
     return sorted(output, key=lambda item: item["closed_at"])
 
