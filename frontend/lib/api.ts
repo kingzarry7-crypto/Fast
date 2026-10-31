@@ -589,6 +589,21 @@ export async function adminUnbanUser(userId: string, signal?: AbortSignal) {
   return request<{ status?: string }>("/api/admin/users/unban", { method: "POST", body: { user_id: userId }, signal });
 }
 
+export type AdminImageStorageTest = {
+  status: "ok";
+  upload: "ok";
+  public_retrieval: "ok";
+  cleanup: "ok";
+  public_host?: string;
+};
+
+export async function adminImageStorageTest(signal?: AbortSignal) {
+  return request<AdminImageStorageTest>("/api/assistant/admin/image-storage-test", {
+    method: "POST",
+    signal,
+  });
+}
+
 export async function adminEmailBroadcast(
   payload: { subject: string; message: string; audience?: string; html?: string },
   signal?: AbortSignal
@@ -939,7 +954,7 @@ export const api = {
   getBaseUrl, getMe, getCurrentUser, login, register, verifyEmail, resendVerification, forgotPassword, resetPassword, logout,
   listConversations, createConversation, getConversation, getConversationMessages, chat, sendChatMessage, streamChatMessage, decideGoogleApproval, generateChatSuggestions, healthCheck,
   getRealtimeStatus, startRealtimeCall, saveRealtimeTranscript, getPlatformStatus, getChatBehaviorPreferences, saveChatBehaviorPreferences, createMemoryLinkCode, createCheckoutSession, getBillingConfig,
-  getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, adminEmailBroadcast, ttsSpeak, synthesizeSpeech,
+  getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, adminImageStorageTest, adminEmailBroadcast, ttsSpeak, synthesizeSpeech,
   getMarkets, getMarketDetail, getSignals, getNews,
   getKittyMultiPaperStatus, getKittyMultiPaperSettings, saveKittyMultiPaperSettings, runKittyMultiPaperCycle,
   getAgentStatus, runAgentGoal, generateMorningBrief, getLatestMorningBrief, listAgentJobs, approveAgentJob,
