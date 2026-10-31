@@ -126,6 +126,12 @@ class ZarryProxyTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.upstream.assert_not_called()
 
+    def test_proxy_fails_closed_after_connection_retries_are_exhausted(self):
+        self.upstream.side_effect = requests.ConnectionError("service offline")
+        response = self.client.post("/api/zarry/explain", json=self.payload)
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(self.upstream.call_count, 2)
+
     def test_proxy_rejects_stale_market_context(self):
         payload = dict(self.payload)
         payload["timestamp"] = "2020-01-01T00:00:00Z"
