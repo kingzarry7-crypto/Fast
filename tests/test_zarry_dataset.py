@@ -53,7 +53,8 @@ class ZarryDatasetTests(unittest.TestCase):
         self.assertEqual(split["purged_rows"], 8)
 
     def test_paper_outcomes_require_closed_trade_and_net_return(self):
-        valid = [{"asset": "BTCUSD", "status": "closed",
+        valid = [{"asset": "BTCUSD", "status": "closed", "mode": "paper",
+                  "provenance": "paper-ledger://run-1",
                   "realized_net_return": "-0.002", "trade_id": "t1",
                   "closed_at": "2026-01-01T06:00:00Z"}]
         normalized = validate_paper_trade_rows(valid)
@@ -66,6 +67,27 @@ class ZarryDatasetTests(unittest.TestCase):
                "data_source": "test"}
         with self.assertRaises(ValueError):
             build_feature_dataset("BTCUSD", [row, dict(row)], "artifact://dup.csv")
+
+    def test_non_finite_numeric_features_are_rejected(self):
+        for value in ("NaN", "inf", "-inf"):
+            with self.subTest(value=value):
+                row = {"timestamp": "2026-01-01T00:00:00Z", "target": "2",
+                       "data_source": "test", "close": value}
+                with self.assertRaises(ValueError):
+                    build_feature_dataset("BTCUSD", [row], "artifact://btc.csv")
+
+    def test_paper_outcomes_require_explicit_mode_and_provenance(self):
+        base = {"asset": "BTCUSD", "status": "closed", "trade_id": "t1",
+                "closed_at": "2026-01-01T06:00:00Z",
+                "realized_net_return": "0.01"}
+        with self.assertRaisesRegex(ValueError, "explicitly verified"):
+            validate_paper_trade_rows([{**base, "provenance": "ledger://1"}])
+        with self.assertRaisesRegex(ValueError, "provenance"):
+            validate_paper_trade_rows([{**base, "mode": "paper"}])
+        accepted = validate_paper_trade_rows([
+            {**base, "mode": "paper", "provenance": "ledger://1"}
+        ])
+        self.assertEqual(accepted[0]["provenance"], "ledger://1")
 
 
 if __name__ == "__main__":
