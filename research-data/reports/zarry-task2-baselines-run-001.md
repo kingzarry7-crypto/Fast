@@ -18,6 +18,8 @@
 - Seven rows purged before each raw split boundary.
 - Costs: BTCUSD 0.10% round trip; XAUUSD 0.05%; stress = 1.5× base cost.
 - Trade timing: decision at t, entry next open, exit at close of t+7. A signal at the previous exit candle is permitted because its entry is after the prior exit.
+- Reconciled simulator: finite precomputed `forward_return_6h` values remain valid even when t+7 falls beyond the local evaluation slice; t+7 controls overlap eligibility only. Missing/non-finite outcomes are skipped. All strategy families now use the shared `zarry_execution.py` implementation.
+- The trading tables below supersede the earlier values in this report, which incorrectly dropped finite outcomes at evaluation-slice tails.
 - Outcomes are forward-price proxies, not realized paper trades or broker fills.
 
 ## Final-test trading summary
@@ -26,12 +28,12 @@
 |---|---|---:|---:|---:|---:|---:|---:|---:|
 | BTCUSD | majority | 0 | — | 0.00% | — | 0.00% | 0.00% | 0.00% |
 | BTCUSD | always_wait | 0 | — | 0.00% | — | 0.00% | 0.00% | 0.00% |
-| BTCUSD | momentum | 88 | 42.05% | -0.24% | 0.466 | -19.43% | -22.91% | 19.56% |
-| BTCUSD | trend_confirmation | 71 | 36.62% | -0.31% | 0.399 | -20.12% | -22.92% | 20.94% |
+| BTCUSD | momentum | 89 | 41.57% | -0.24% | 0.461 | -19.77% | -23.27% | 19.77% |
+| BTCUSD | trend_confirmation | 72 | 36.11% | -0.31% | 0.398 | -20.15% | -22.99% | 20.94% |
 | XAUUSD | majority | 0 | — | 0.00% | — | 0.00% | 0.00% | 0.00% |
 | XAUUSD | always_wait | 0 | — | 0.00% | — | 0.00% | 0.00% | 0.00% |
-| XAUUSD | momentum | 74 | 51.35% | 0.05% | 1.271 | 3.33% | 1.43% | 3.52% |
-| XAUUSD | trend_confirmation | 63 | 42.86% | -0.08% | 0.670 | -5.00% | -6.48% | 7.82% |
+| XAUUSD | momentum | 75 | 52.00% | 0.05% | 1.284 | 3.50% | 1.58% | 3.52% |
+| XAUUSD | trend_confirmation | 64 | 43.75% | -0.08% | 0.681 | -4.84% | -6.35% | 7.82% |
 
 ## Classification snapshot — final test
 
@@ -52,19 +54,19 @@ The archived Task 1 fold indices were reused. These baselines have fixed rules; 
 
 | Asset | Baseline | Fold 1 | Fold 2 | Fold 3 | Base-positive folds | Stress-positive folds |
 |---|---|---:|---:|---:|---:|---:|
-| BTCUSD | majority | -17.23% / -20.05% | 0.74% / -2.68% | 0.00% / 0.00% | 1/3 | 0/3 |
+| BTCUSD | majority | -18.58% / -21.39% | 0.22% / -3.23% | 0.00% / 0.00% | 1/3 | 0/3 |
 | BTCUSD | always_wait | 0.00% / 0.00% | 0.00% / 0.00% | 0.00% / 0.00% | 0/3 | 0/3 |
-| BTCUSD | momentum | 2.23% / -0.44% | -0.62% / -3.42% | 0.61% / -2.27% | 2/3 | 0/3 |
-| BTCUSD | trend_confirmation | 0.20% / -1.94% | -9.70% / -11.93% | 1.55% / -1.01% | 2/3 | 0/3 |
+| BTCUSD | momentum | 3.43% / 0.68% | -0.30% / -3.15% | -1.79% / -4.65% | 1/3 | 1/3 |
+| BTCUSD | trend_confirmation | 0.83% / -1.36% | -9.41% / -11.69% | 0.59% / -1.99% | 2/3 | 0/3 |
 | XAUUSD | majority | 0.00% / 0.00% | 0.00% / 0.00% | 0.00% / 0.00% | 0/3 | 0/3 |
 | XAUUSD | always_wait | 0.00% / 0.00% | 0.00% / 0.00% | 0.00% / 0.00% | 0/3 | 0/3 |
-| XAUUSD | momentum | 2.09% / 0.84% | 3.52% / 2.26% | 0.57% / -0.68% | 3/3 | 2/3 |
-| XAUUSD | trend_confirmation | 0.81% / -0.24% | -4.68% / -5.60% | -2.45% / -3.45% | 1/3 | 0/3 |
+| XAUUSD | momentum | 1.87% / 0.60% | 3.53% / 2.24% | 0.74% / -0.54% | 3/3 | 2/3 |
+| XAUUSD | trend_confirmation | 1.31% / 0.23% | -4.47% / -5.42% | -2.69% / -3.71% | 1/3 | 1/3 |
 
 ## Interpretation
 
-- **BTCUSD:** momentum and trend-confirmation lose materially on the untouched final test (-19.43% and -20.12% after base costs). Both also fail stress-cost and drawdown robustness. No directional baseline is acceptable.
-- **XAUUSD:** momentum is positive on the final test (+3.33% base; +1.43% at 1.5× costs; PF 1.271; max drawdown 3.52%) and profitable in all three folds at base cost. However, it is negative in one fold under 1.5× costs and one fold exceeds the 5% drawdown ceiling. It therefore fails the frozen robustness/promotion gates.
+- **BTCUSD:** momentum and trend-confirmation lose materially on the untouched final test (-19.77% and -20.15% after base costs). Both also fail stress-cost and drawdown robustness. No directional baseline is acceptable.
+- **XAUUSD:** momentum is positive on the final test (+3.50% base; +1.58% at 1.5× costs; PF 1.284; max drawdown 3.52%) and profitable in all three folds at base cost. However, it is negative in one fold under 1.5× costs and one fold exceeds the 5% drawdown ceiling. It therefore fails the frozen robustness/promotion gates.
 - **Trend confirmation** is negative on both final tests and does not pass fold robustness.
 - **Majority** predicts NO TRADE on the full train partitions, matching Always-WAIT. In some expanding folds its training majority differs, so it can trade; that is expected from the train-only rule.
 - No baseline is eligible for promotion. These are benchmarks, not proof of future profitability.
