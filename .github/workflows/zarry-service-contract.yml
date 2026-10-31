@@ -38,6 +38,6 @@ jobs:
       - name: Run service contract tests
         run: python -m unittest discover -s zarry-service/tests -p "test_*.py" -v
       - name: Run gateway text contract tests
-        run: python -m unittest tests.test_zarry_gateway_text -v
+        run: python -m unittest discover -s tests -p "test_zarry_gateway_text.py" -v
       - name: Compile Fast API integration
         run: python -m py_compile api.py
