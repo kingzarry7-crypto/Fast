@@ -71,6 +71,22 @@ class GatewayRouterTests(unittest.TestCase):
         response=TestClient(app).post("/api/assistant/admin/image-storage-test")
         self.assertEqual(response.status_code,503)
 
+    def test_admin_image_storage_test_logs_safe_failure_context(self):
+        import logging
+        class BrokenStorage:
+            def verify_public_round_trip(self):
+                raise RuntimeError("secret endpoint credentials must not be logged")
+        gateway=FakeGateway()
+        gateway.image_storage=BrokenStorage()
+        app=FastAPI()
+        app.include_router(create_general_router(lambda request: {"id":"u"}, gateway, admin_check=lambda request: ({"id":"admin-1"}, "admin")))
+        with self.assertLogs("zarry_gateway.router", level="ERROR") as captured:
+            response=TestClient(app, raise_server_exceptions=False).post("/api/assistant/admin/image-storage-test")
+        self.assertEqual(response.status_code,502)
+        self.assertIn("RuntimeError", "\n".join(captured.output))
+        self.assertNotIn("secret endpoint credentials", "\n".join(captured.output))
+        self.assertNotIn("secret endpoint credentials", response.text)
+
     def test_chat_requires_authenticated_web_session(self):
         self.authenticated=False; self.assertEqual(self.client.post("/api/assistant/chat",json={"message":"hi"}).status_code,401)
     def test_chat_returns_contract(self):
