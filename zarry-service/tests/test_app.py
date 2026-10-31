@@ -87,6 +87,18 @@ class ZarryServiceTests(unittest.TestCase):
         self.assertIn("X-ZARRY-Latency-Ms", response.headers)
         self.assertEqual(response.headers["X-ZARRY-API-Version"], "1.0.0")
 
+    def test_metrics_endpoint_requires_authentication(self):
+        self.assertEqual(self.client.get("/metrics").status_code, 401)
+
+    def test_authenticated_metrics_report_operational_values(self):
+        response = self.client.get("/metrics", headers={"Authorization": "Bearer test-secret"})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["api_version"], "1.0.0")
+        self.assertIn("process_max_rss_mb", body)
+        self.assertIn("disk_free_mb", body)
+        self.assertIn("requests_total", body)
+
     def test_requires_bearer_secret(self):
         self.assertEqual(self.client.post("/v1/explain", json=self.payload()).status_code, 401)
 
