@@ -190,10 +190,19 @@
     "both_checkpoints_production_ready_false": true,
     "both_checkpoints_automatic_order_execution_disabled": true
   },
-  "retention_warning": "GitHub Actions artifacts are temporary: dataset artifacts expire 2026-11-30 and selected checkpoint artifacts expire 2026-11-07. This manifest records provenance and hashes but does not archive the artifact bytes permanently. Preserve them in an approved durable artifact store before expiry.",
+  "retention_warning": "The original GitHub Actions artifacts remain subject to their listed expiry dates, but the complete downloaded artifact ZIP bundle has been copied to the ChatGPT persistent file Library at archive.library_path. The archive bundle SHA-256 is recorded above. The GitHub manifest records provenance; preserve an additional independent backup if long-term disaster recovery is required.",
   "safety": {
     "live_trading_enabled": false,
     "production_signal_promotion_authorized": false,
     "model_training_or_deployment_changed_by_this_manifest": false
+  },
+  "archive": {
+    "storage": "ChatGPT persistent file Library",
+    "library_path": "/ZARRY/Task1/ZARRY-Task1-verified-artifacts-run-106.zip",
+    "bundle_filename": "ZARRY-Task1-verified-artifacts-run-106.zip",
+    "size_bytes": 2308288,
+    "sha256": "5ad9ecf64982460c6c1b4a7501acd6e5586cfddc7eab003a88e6e43bca0a09c2",
+    "archived_at_utc": "2026-10-31T06:02:12Z",
+    "upload_verified_by_library_listing": true
   }
 }
