@@ -45,12 +45,14 @@ def simulate_non_overlapping_trades(
             overlap_skips += 1
             continue
         exit_index = index + outcome_horizon_rows
-        if exit_index >= len(forward_returns):
+        try:
+            value = float(raw_return)
+        except (TypeError, ValueError):
             incomplete_skips += 1
             continue
-        value = float(raw_return)
         if not math.isfinite(value):
-            raise ValueError("forward returns must be finite for every eligible trade")
+            incomplete_skips += 1
+            continue
         net_returns.append(direction * value - cost)
         trade_indices.append({"entry_index": index, "exit_index": exit_index})
         # t+7 is the exit candle and is itself the next eligible decision candle.
