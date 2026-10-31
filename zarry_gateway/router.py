@@ -192,7 +192,7 @@ def create_general_router(
                 raise RuntimeError("Generated image URL did not match the configured public storage host")
             response = requests.get(image_url, timeout=20)
             response.raise_for_status()
-            if not response.content.startswith(b"\\x89PNG\\r\\n\\x1a\\n"):
+            if not response.content.startswith(bytes([0x89]) + b"PNG\r\n\x1a\n"):
                 raise RuntimeError("Generated object was not a PNG")
 
             provider_name = str(result.get("provider", "replicate-z-image-turbo"))
