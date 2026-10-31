@@ -27,15 +27,15 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: "05b8be0cf83dad3095aabcb5edf2079c"
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - name: Require Cloudflare API token
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
             echo "::error::Missing GitHub Actions secret CLOUDFLARE_API_TOKEN. Add a Cloudflare API token with permission to deploy Workers, then rerun this workflow."
             exit 1
           fi
-
-      - name: Check out repository
-        uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
