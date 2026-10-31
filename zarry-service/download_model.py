@@ -23,13 +23,17 @@ def main() -> None:
     repo_id = os.getenv("ZARRY_MODEL_REPO", DEFAULT_REPO).strip()
     pattern = os.getenv("ZARRY_MODEL_FILE_PATTERN", DEFAULT_PATTERN).strip()
     cache_dir = os.getenv("HF_HOME")
+    revision = os.getenv("ZARRY_MODEL_REVISION", "").strip()
     snapshot = snapshot_download(
         repo_id=repo_id,
         allow_patterns=[pattern],
         cache_dir=cache_dir or None,
+        revision=revision or None,
     )
     model_path = resolve_model_file(snapshot, pattern)
     print(f"ZARRY_MODEL_REPO={repo_id}")
+    if revision:
+        print(f"ZARRY_MODEL_REVISION={revision}")
     print(f"ZARRY_MODEL_PATH={model_path}")
 
 

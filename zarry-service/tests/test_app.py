@@ -50,6 +50,15 @@ class ZarryServiceTests(unittest.TestCase):
             "task": "explain",
         }
 
+    def test_root_status_page(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["service"], "ZARRY")
+        self.assertEqual(body["status"], "alive")
+        self.assertEqual(body["mode"], "explanation_only")
+        self.assertIn("/ready", body["endpoints"]["readiness"])
+
     def test_health_and_readiness(self):
         self.assertEqual(self.client.get("/health").status_code, 200)
         self.assertEqual(self.client.get("/ready").status_code, 200)
