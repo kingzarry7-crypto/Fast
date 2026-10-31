@@ -21,10 +21,18 @@ def main() -> int:
         return 2
 
     timeout = (5, 30)
+    root = requests.get(base_url + "/", timeout=timeout)
+    root.raise_for_status()
+    root_data = root.json()
+    if root_data.get("service") != "ZARRY" or root_data.get("mode") != "explanation_only":
+        raise RuntimeError("ZARRY smoke test failed: root status contract is invalid")
+
     health = requests.get(base_url + "/health", timeout=timeout)
     health.raise_for_status()
     ready = requests.get(base_url + "/ready", timeout=timeout)
     ready.raise_for_status()
+    if ready.json().get("model_loaded") is not True:
+        raise RuntimeError("ZARRY smoke test failed: readiness did not confirm model loaded")
 
     payload = {
         "symbol": "BTCUSD",
@@ -33,6 +41,10 @@ def main() -> int:
         "kitty_assessment": {"decision": "WAIT", "reason_codes": ["deployment_smoke_test"]},
         "task": "explain",
     }
+    rejected = requests.post(base_url + "/v1/explain", json=payload, timeout=timeout)
+    if rejected.status_code != 401:
+        raise RuntimeError("ZARRY smoke test failed: unauthenticated request was not rejected")
+
     response = requests.post(
         base_url + "/v1/explain",
         json=payload,
@@ -47,7 +59,7 @@ def main() -> int:
         raise RuntimeError("ZARRY smoke test failed: authority marker missing")
     if result.get("mode") != "explanation_only":
         raise RuntimeError("ZARRY smoke test failed: explanation-only marker missing")
-    print("ZARRY deployment smoke test passed: health, readiness, auth, and WAIT preservation")
+    print("ZARRY deployment smoke test passed: root, health, readiness, auth rejection, and WAIT preservation")
     return 0
 
 
