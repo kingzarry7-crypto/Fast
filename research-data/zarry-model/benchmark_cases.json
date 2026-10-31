@@ -1,0 +1,192 @@
+[
+  {
+    "id": "btc-wait-conflict",
+    "symbol": "BTCUSD",
+    "timestamp": "2026-10-30T12:00:00Z",
+    "context": {
+      "trend_4h": "bullish",
+      "direction_1h": "bearish",
+      "setup_15m": "mixed",
+      "entry_5m": "not_confirmed",
+      "last_price": 68000,
+      "data_fresh": true
+    },
+    "kitty": {
+      "decision": "WAIT",
+      "reason_codes": []
+    },
+    "expected_fields": [
+      "trend_4h",
+      "direction_1h",
+      "setup_15m",
+      "entry_5m",
+      "data_fresh"
+    ]
+  },
+  {
+    "id": "xau-buy-confirmed",
+    "symbol": "XAUUSD",
+    "timestamp": "2026-10-30T13:00:00Z",
+    "context": {
+      "trend_4h": "bullish",
+      "direction_1h": "bullish",
+      "setup_15m": "pullback_held",
+      "entry_5m": "bullish_reclaim",
+      "entry": 3975.5,
+      "stop_loss": 3968,
+      "take_profit_1": 3990,
+      "data_fresh": true
+    },
+    "kitty": {
+      "decision": "BUY",
+      "reason_codes": []
+    },
+    "expected_fields": [
+      "trend_4h",
+      "direction_1h",
+      "setup_15m",
+      "entry_5m",
+      "entry",
+      "stop_loss",
+      "take_profit_1"
+    ]
+  },
+  {
+    "id": "btc-stale",
+    "symbol": "BTCUSD",
+    "timestamp": "2026-10-29T00:00:00Z",
+    "context": {
+      "trend_4h": "bullish",
+      "direction_1h": "bullish",
+      "setup_15m": "breakout",
+      "entry_5m": "bullish",
+      "last_price": 67500,
+      "data_fresh": false,
+      "stale_minutes": 180
+    },
+    "kitty": {
+      "decision": "WAIT",
+      "reason_codes": []
+    },
+    "expected_fields": [
+      "data_fresh",
+      "stale_minutes"
+    ]
+  },
+  {
+    "id": "xau-overextended",
+    "symbol": "XAUUSD",
+    "timestamp": "2026-10-30T14:00:00Z",
+    "context": {
+      "trend_4h": "bullish",
+      "direction_1h": "bullish",
+      "setup_15m": "extended",
+      "entry_5m": "late",
+      "rsi_15m": 78.4,
+      "distance_from_ema_pct": 1.9,
+      "data_fresh": true
+    },
+    "kitty": {
+      "decision": "WAIT",
+      "reason_codes": []
+    },
+    "expected_fields": [
+      "setup_15m",
+      "entry_5m",
+      "rsi_15m",
+      "distance_from_ema_pct"
+    ]
+  },
+  {
+    "id": "btc-sell-confirmed",
+    "symbol": "BTCUSD",
+    "timestamp": "2026-10-30T15:00:00Z",
+    "context": {
+      "trend_4h": "bearish",
+      "direction_1h": "bearish",
+      "setup_15m": "lower_high_rejected",
+      "entry_5m": "bearish_breakdown",
+      "entry": 67200,
+      "stop_loss": 67600,
+      "take_profit_1": 66400,
+      "data_fresh": true
+    },
+    "kitty": {
+      "decision": "SELL",
+      "reason_codes": []
+    },
+    "expected_fields": [
+      "trend_4h",
+      "direction_1h",
+      "setup_15m",
+      "entry_5m",
+      "entry",
+      "stop_loss",
+      "take_profit_1"
+    ]
+  },
+  {
+    "id": "xau-timeframe-conflict",
+    "symbol": "XAUUSD",
+    "timestamp": "2026-10-30T16:00:00Z",
+    "context": {
+      "trend_4h": "bearish",
+      "direction_1h": "bullish",
+      "setup_15m": "bullish_reversal_attempt",
+      "entry_5m": "unconfirmed",
+      "data_fresh": true
+    },
+    "kitty": {
+      "decision": "WAIT",
+      "reason_codes": []
+    },
+    "expected_fields": [
+      "trend_4h",
+      "direction_1h",
+      "setup_15m",
+      "entry_5m"
+    ]
+  },
+  {
+    "id": "btc-risk-missing",
+    "symbol": "BTCUSD",
+    "timestamp": "2026-10-30T17:00:00Z",
+    "context": {
+      "trend_4h": "bullish",
+      "direction_1h": "bullish",
+      "setup_15m": "pullback",
+      "entry_5m": "bullish",
+      "data_fresh": true
+    },
+    "kitty": {
+      "decision": "WAIT",
+      "reason_codes": []
+    },
+    "expected_fields": [
+      "data_fresh",
+      "trend_4h",
+      "direction_1h"
+    ]
+  },
+  {
+    "id": "xau-stale",
+    "symbol": "XAUUSD",
+    "timestamp": "2026-10-30T18:00:00Z",
+    "context": {
+      "trend_4h": "bearish",
+      "direction_1h": "bearish",
+      "setup_15m": "breakdown",
+      "entry_5m": "bearish",
+      "data_fresh": false,
+      "stale_minutes": 95
+    },
+    "kitty": {
+      "decision": "WAIT",
+      "reason_codes": []
+    },
+    "expected_fields": [
+      "data_fresh",
+      "stale_minutes"
+    ]
+  }
+]
