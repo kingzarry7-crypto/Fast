@@ -8,6 +8,7 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import re
 import resource
 import shutil
 import time
@@ -63,6 +64,8 @@ class ExplainRequest(StrictModel):
                 raise ValueError("invalid context key")
             if item is not None and not isinstance(item, (str, int, float, bool)):
                 raise ValueError("context values must be scalar")
+            if isinstance(item, str) and len(item) > 1000:
+                raise ValueError("context strings are limited to 1000 characters")
             if isinstance(item, float) and (item != item or abs(item) == float("inf")):
                 raise ValueError("context numbers must be finite")
         return value
@@ -141,7 +144,8 @@ def create_app(model_loader=_load_model) -> FastAPI:
     @app.middleware("http")
     async def request_metadata(request: Request, call_next):
         import time
-        request_id = request.headers.get("X-Request-ID", "")[:128] or str(uuid4())
+        candidate_id = request.headers.get("X-Request-ID", "")[:128]
+        request_id = candidate_id if re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", candidate_id) else str(uuid4())
         started = time.perf_counter()
         response = await call_next(request)
         request.app.state.request_metrics["requests"] += 1
