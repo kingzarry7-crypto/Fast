@@ -11,6 +11,7 @@ on:
   pull_request:
     paths:
       - "train_kitty_v3_retrained.py"
+      - "zarry_execution.py"
       - "tests/test_train_kitty_v3_retrained.py"
       - ".github/workflows/kitty-v3-training-experiments.yml"
 
