@@ -5,6 +5,7 @@ import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/hooks/useAuth";
 import { api, ApiError, type AdminStats, type AdminImageStorageTest } from "@/lib/api";
+import ZarryImageSmokeTest from "@/components/admin/ZarryImageSmokeTest";
 
 function Stat({
   label,
@@ -277,6 +278,8 @@ export default function AdminPage() {
               <p className="mt-4 text-xs font-mono-tech text-amber-200" role="alert">{r2Error}</p>
             )}
           </section>
+
+            <ZarryImageSmokeTest />
 
             <section>
               <p className="font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/40 mb-3">

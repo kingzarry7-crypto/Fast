@@ -55,6 +55,29 @@ Never put credentials in frontend variables or source control. The adapter is
 constructed only when every required variable exists. Invalid image-storage
 configuration must not disable the separate ZARRY text gateway.
 
+## One-time admin smoke-test database migration
+
+Before deploying the admin smoke-test endpoint, apply the repository's
+checksum-tracked PostgreSQL migrations explicitly. The new
+`003_image_smoke_lock.sql` migration provisions the globally unique,
+one-use claim and audit row. The application request does not create or alter
+tables and therefore does not need schema-owner privileges.
+
+Use a migration-capable PostgreSQL connection in the deployment environment:
+
+```bash
+export ZARRY_MIGRATION_DATABASE_URL='postgresql://...'
+export ZARRY_ALLOW_MIGRATIONS=1
+python scripts/apply_zarry_migrations.py --apply
+```
+
+The runner uses an advisory transaction lock, checks migration checksums, and
+is idempotent. Run it as an explicit release/operations step; do not add it to
+application startup. The Fast API runtime database role needs ordinary
+SELECT/INSERT/UPDATE access to `zarry_image_smoke_test_lock` after the
+migration is applied. Keep migration credentials out of frontend variables
+and source control.
+
 ## Activation
 
 `ZARRY_IMAGE_ENABLED` defaults to false. Keep it false until the Replicate

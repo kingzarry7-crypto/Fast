@@ -123,6 +123,100 @@ def create_general_router(
             logger.error("R2 public storage verification failed (%s)", type(exc).__name__)
             raise HTTPException(status_code=502, detail="R2 public storage verification failed")
 
+    @router.post("/admin/image-generation-smoke-test")
+    async def admin_image_generation_smoke_test(request: Request):
+        # Admin authorization always happens before the persistent one-use claim.
+        if admin_check is None:
+            raise HTTPException(status_code=503, detail="Image smoke test is unavailable")
+        try:
+            admin = admin_check(request)
+            if inspect.isawaitable(admin):
+                await admin
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=403, detail="Admin access denied")
+
+        from database import get_db_cursor
+        from uuid import uuid4
+        from urllib.parse import urlsplit
+        import requests
+
+        request_uuid = uuid4()
+        request_id = str(request_uuid)
+        claimed = False
+
+        def record_outcome(status, provider_name=None, image_url=None, error_type=None):
+            # The lock row is the durable audit record; never store credentials or prompts.
+            with get_db_cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE zarry_image_smoke_test_lock
+                    SET status = %s, request_id = %s, provider = %s,
+                        image_url = %s, error_type = %s,
+                        completed_at = CASE WHEN %s IN ('succeeded', 'failed')
+                                            THEN NOW() ELSE completed_at END
+                    WHERE lock_key = 'replicate-one-shot-v1'
+                    """,
+                    (status, request_id, provider_name, image_url, error_type, status),
+                )
+
+        try:
+            # The table is provisioned by the explicit, checksum-tracked
+            # migration runner; runtime requests never need schema privileges.
+            with get_db_cursor() as cur:
+                cur.execute("""
+                    INSERT INTO zarry_image_smoke_test_lock (lock_key, status, request_id)
+                    VALUES ('replicate-one-shot-v1', 'claimed', %s)
+                    ON CONFLICT (lock_key) DO NOTHING
+                    RETURNING lock_key
+                """, (request_id,))
+                claimed = cur.fetchone() is not None
+            if not claimed:
+                raise HTTPException(status_code=409, detail="The one-time image test has already been used")
+
+            provider = getattr(gateway, "image_provider", None)
+            storage = getattr(gateway, "image_storage", None) or getattr(provider, "storage", None)
+            if provider is None or storage is None:
+                raise RuntimeError("Image generation and storage are not configured")
+
+            record_outcome("running")
+            result = provider.generate(
+                "A simple photorealistic studio photograph of a single ripe orange on a clean neutral background.",
+                request_id=request_uuid, width=1024, height=1024,
+            )
+            image_url = result.get("image_url") if isinstance(result, dict) else None
+            parsed = urlsplit(str(image_url or ""))
+            expected_host = str(getattr(storage, "public_host", "") or "").lower()
+            if parsed.scheme != "https" or not parsed.hostname or parsed.hostname.lower() != expected_host:
+                raise RuntimeError("Generated image URL did not match the configured public storage host")
+            response = requests.get(image_url, timeout=20)
+            response.raise_for_status()
+            if not response.content.startswith(bytes([0x89]) + b"PNG\r\n\x1a\n"):
+                raise RuntimeError("Generated object was not a PNG")
+
+            provider_name = str(result.get("provider", "replicate-z-image-turbo"))
+            record_outcome("succeeded", provider_name=provider_name, image_url=image_url)
+            return {
+                "status": "ok",
+                "request_id": request_id,
+                "provider": provider_name,
+                "image_url": image_url,
+                "public_retrieval": "verified",
+                "public_generation_enabled": False,
+                "budget_reservation_usd": "0.01",
+            }
+        except HTTPException:
+            raise
+        except Exception as exc:
+            if claimed:
+                try:
+                    record_outcome("failed", error_type=type(exc).__name__)
+                except Exception as audit_exc:
+                    logger.error("One-shot image audit update failed (%s)", type(audit_exc).__name__)
+            logger.error("One-shot image generation smoke test failed (%s)", type(exc).__name__)
+            raise HTTPException(status_code=502, detail="One-time image generation test failed; lock remains consumed")
+
     @router.post("/chat", response_model=AssistantResponse)
     async def chat(payload: AssistantRequest, request: Request):
         if not enabled_check():
