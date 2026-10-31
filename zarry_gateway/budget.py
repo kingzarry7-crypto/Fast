@@ -106,12 +106,10 @@ class PostgresMonthlyBudgetLedger:
         return estimate
 
     def settle(self, request_id: UUID, actual_cost_usd) -> int:
-        actual = _to_micro_usd(actual_cost_usd) if actual_cost_usd is not None else 0
-        if actual_cost_usd is not None and actual_cost_usd == 0:
-            actual = 0
+        actual = 0 if actual_cost_usd is None or Decimal(str(actual_cost_usd)) == 0 else _to_micro_usd(actual_cost_usd)
         with self.cursor_factory() as cur:
             cur.execute(
-                "SELECT billing_month, reserved_micro_usd, status FROM "
+                "SELECT billing_month, reserved_micro_usd, status, settled_micro_usd FROM "
                 "zarry_hf_budget_reservations WHERE request_id=%s FOR UPDATE",
                 (str(request_id),),
             )
