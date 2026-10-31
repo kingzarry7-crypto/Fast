@@ -9,3 +9,18 @@ The service starts through `start.sh`, which downloads or reuses the model in th
 After the corrected Docker build succeeds and the service is healthy, generate a private/internal service URL or a protected public URL as appropriate, then run `python smoke_test.py` from a trusted environment with `ZARRY_SERVICE_URL` and `ZARRY_API_KEY`. The smoke test checks health, readiness, authentication and exact preservation of a synthetic `WAIT` assessment; it does not place orders.
 
 Keep `ZARRY_ENABLED=false` in Fast until deployment, real-model smoke testing, latency/memory review and explicit approval are complete. ZARRY is explanation-only: Kitty remains the deterministic trading authority, and ZARRY cannot place orders or change Kitty's decision.
+
+## Inference contract hardening
+
+The service validates ISO-8601 timestamps with an explicit timezone. By default, market context older than 24 hours is rejected and timestamps more than 60 seconds in the future are rejected. Set `ZARRY_MAX_CONTEXT_AGE_SECONDS=0` only for controlled historical evaluation; do not use that override for live market context.
+
+Responses include `X-Request-ID`, `X-ZARRY-Latency-Ms`, and `X-ZARRY-API-Version` headers. The readiness response reports the configured model repository and API version. Fast's proxy forwards a request ID and retries one transient connection failure only; it does not retry model timeouts.
+
+Fast already mounts `/api/zarry/explain` behind the existing web-session authentication. It remains disabled unless `ZARRY_ENABLED=true`. The endpoint is an explicit explanation request, not an automatic part of Kitty's signal generation or order path. Keep the flag false until the deployed authenticated smoke test, Fast-to-ZARRY private-network check, and acceptance review are complete.
+
+Run contract tests with:
+
+```bash
+python -m unittest discover -s zarry-service/tests -p "test_*.py" -v
+python -m unittest discover -s tests -p "test_zarry_api.py" -v
+```
