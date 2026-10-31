@@ -98,6 +98,17 @@ class ZarryProxyTests(unittest.TestCase):
         self.assertEqual(response.status_code, 504)
         self.upstream.assert_called_once()
 
+    def test_proxy_sanitizes_untrusted_request_id_before_forwarding(self):
+        self.valid_upstream()
+        response = self.client.post(
+            "/api/zarry/explain",
+            json=self.payload,
+            headers={"X-Request-ID": "bad request id"},
+        )
+        self.assertEqual(response.status_code, 200)
+        forwarded = self.upstream.call_args.kwargs["headers"]["X-Request-ID"]
+        self.assertRegex(forwarded, r"^[0-9a-f-]{36}$")
+
     def test_proxy_retries_one_transient_connection_failure(self):
         self.valid_upstream()
         self.upstream.side_effect = [requests.ConnectionError("temporary"), self.upstream.return_value]
