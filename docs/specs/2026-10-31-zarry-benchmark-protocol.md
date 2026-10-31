@@ -104,7 +104,7 @@ A run that cannot reproduce its source hashes, partition sizes, model artifact, 
 
 The Task 1 reports contain earlier diagnostics. They predate this frozen protocol and are retained only as context; they are not a confirmatory Task 2 benchmark.
 
-- BTCUSD selected candidate: 39.51% final-test accuracy, macro-F1 0.363, zero paper trades. The prior three-fold report recorded zero candidate trades; momentum was profitable in two folds and trend confirmation in two folds.
+- BTCUSD selected candidate: 39.51% final-test accuracy, macro-F1 0.363, zero paper trades. The prior three-fold report recorded zero candidate trades; momentum was profitable in one fold and trend confirmation in two folds.
 - XAUUSD selected candidate: 50.81% final-test accuracy, macro-F1 0.484, 26 paper trades, +0.346% at the base assumed cost and −0.304% at 1.5x cost. Its prior three-fold diagnostics recorded zero candidate trades; momentum was profitable in all three folds, while trend confirmation was profitable in one fold.
 - These earlier results do not meet the evidence bar above. Neither checkpoint is promoted.
 
