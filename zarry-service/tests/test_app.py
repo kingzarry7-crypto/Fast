@@ -259,6 +259,21 @@ class ZarryServiceTests(unittest.TestCase):
         dockerfile = Path(__file__).resolve().parents[1] / "Dockerfile"
         self.assertIn("COPY app.py contract.py", dockerfile.read_text())
 
+    def test_model_schema_requires_every_expected_field(self):
+        payload = self.payload()
+        expected = ["trend_4h", "entry_5m", "last_price"]
+        payload["expected_fields"] = expected
+        response = self.client.post(
+            "/v1/explain",
+            json=payload,
+            headers={"Authorization": "Bearer test-secret"},
+        )
+        self.assertEqual(response.status_code, 502)
+        cited = self.model.last_response_format["schema"]["properties"]["cited_fields"]
+        self.assertEqual(cited["items"]["enum"], expected)
+        self.assertEqual(cited["minItems"], len(expected))
+        self.assertEqual(cited["maxItems"], len(expected))
+
 
 if __name__ == "__main__":
     unittest.main()
