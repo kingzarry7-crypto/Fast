@@ -28,7 +28,7 @@ class FakeModel:
             "symbol": user["symbol"],
             "decision": "BUY" if self.changed_decision else user["kitty_assessment"]["decision"],
             "summary": (
-                "Explanation-only: this unsupported numeric estimate claims the supplied context establishes a confidence level above fifty percent."
+                "Explanation-only: this unsupported numeric estimate claims the supplied context establishes a confidence level above 50 percent."
                 if self.ungrounded_text_number
                 else "explanation-only"
                 if self.generic_summary
