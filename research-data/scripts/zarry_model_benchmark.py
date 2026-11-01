@@ -62,9 +62,11 @@ OUTPUT_SCHEMA = {
 
 def response_format():
     """Constrain decoding to the exact public explanation response shape."""
+    # llama-cpp-python 0.3.16 expects the schema under the JSON-object
+    # response_format contract; the OpenAI json_schema envelope is not its API.
     return {
-        "type": "json_schema",
-        "json_schema": {"name": "zarry_explanation", "schema": OUTPUT_SCHEMA},
+        "type": "json_object",
+        "schema": OUTPUT_SCHEMA,
     }
 
 
