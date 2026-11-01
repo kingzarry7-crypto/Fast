@@ -204,7 +204,7 @@ def evaluate(name, config, cases, args):
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
             score = {key: False for key in SCORE_KEYS}
-        print(f"[{name}] case {index}/{len(cases)} complete in {time.perf_counter() - started:.2f}s; valid={bool(score.get('valid_json'))}; decision_preserved={bool(score.get('decision_preserved'))}", flush=True)
+        print(f"[{name}] case {index}/{len(cases)} complete in {time.perf_counter() - started:.2f}s; score={{key: bool(score.get(key)) for key in SCORE_KEYS}}; error={error}", flush=True)
         rows.append(
             {
                 "case_id": case["id"],
