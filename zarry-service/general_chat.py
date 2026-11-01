@@ -49,11 +49,11 @@ GENERAL_SYSTEM_PROMPT = (
 def _chat_max_tokens() -> int:
     """Bound general-chat generation so a bad setting cannot exhaust CPU resources."""
     try:
-        value = int(os.getenv("ZARRY_CHAT_MAX_TOKENS", "512"))
+        value = int(os.getenv("ZARRY_CHAT_MAX_TOKENS", "128"))
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=503, detail="general chat token configuration is invalid") from exc
-    if value < 16 or value > 2048:
-        raise HTTPException(status_code=503, detail="general chat token limit must be between 16 and 2048")
+    if value < 16 or value > 512:
+        raise HTTPException(status_code=503, detail="general chat token limit must be between 16 and 512")
     return value
 
 
