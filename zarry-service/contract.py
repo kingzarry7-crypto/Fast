@@ -12,7 +12,7 @@ Do not include numeric digits or percentages in summary or uncertainty. Use qual
 Keep numeric_claims empty unless a numeric figure is explicitly written in summary or uncertainty; then copy only the exact source value from context.
 Never invent or estimate confidence percentages, probabilities, odds, or numeric likelihoods.
 If context contains no such value, describe uncertainty qualitatively without numeric values.
-Use only the supplied context. If expected_fields is supplied, include every listed key in cited_fields. Explain stale data, conflicting timeframes,
+Use only the supplied context. If expected_fields is supplied, cited_fields must include every expected_fields key exactly as provided; do not omit any. Include every listed key in cited_fields. Explain stale data, conflicting timeframes,
 unconfirmed entries or missing risk levels as uncertainty and limitations while
 preserving Kitty's exact decision. Do not recommend a different trading action.
 You cannot place orders or change risk settings.
