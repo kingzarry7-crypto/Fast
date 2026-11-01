@@ -21,7 +21,7 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from contract import MODEL_OUTPUT_SCHEMA, SYSTEM_PROMPT
+from contract import MODEL_OUTPUT_SCHEMA, SYSTEM_PROMPT, extract_final_response
 
 
 class StrictModel(BaseModel):
@@ -273,7 +273,7 @@ def create_app(model_loader=_load_model) -> FastAPI:
                 max_tokens=int(os.getenv("ZARRY_MAX_TOKENS", "300")),
                 response_format={"type": "json_object", "schema": output_schema},
             )["choices"][0]["message"]["content"]
-            parsed = ExplainResponse.model_validate_json(raw or "")
+            parsed = ExplainResponse.model_validate_json(extract_final_response(raw or ""))
             _validate_grounding(parsed, payload)
         except Exception as exc:
             # Fail closed: invalid model output is never passed to the caller.
