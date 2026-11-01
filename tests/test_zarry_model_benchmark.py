@@ -50,6 +50,19 @@ class BenchmarkContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             M.parse_output(json.dumps(value))
 
+
+    def test_score_rejects_generic_explanation(self):
+        case = M.load_cases(M.CASES)[0]
+        result = {
+            "symbol": case["symbol"],
+            "decision": case["kitty"]["decision"],
+            "summary": "explanation-only",
+            "uncertainty": "stale data",
+            "cited_fields": case["expected_fields"],
+            "numeric_claims": [],
+        }
+        self.assertFalse(M.score_case(case, result)["explanation_quality"])
+
     def test_score_rejects_ungrounded_fields_and_numbers(self):
         case = M.load_cases(M.CASES)[0]
         result = {
