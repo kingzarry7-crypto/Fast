@@ -47,7 +47,7 @@ Do not put numeric values in numeric_claims that are not present in context.
 The decision and symbol must exactly match kitty_assessment and the top-level input.
 Return JSON only, with no markdown fences or commentary."""
 REQUIRED = {"symbol", "decision", "summary", "uncertainty", "cited_fields", "numeric_claims"}
-NUMERIC_TEXT_RE = re.compile(r"(?<![A-Za-z0-9_])[-+]?(?:\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d+)?%?(?![A-Za-z0-9_-])")
+NUMERIC_TEXT_RE = re.compile(r"(?<![A-Za-z0-9_])[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?(?![A-Za-z0-9_-])")
 
 
 def extract_numeric_text_claims(*texts):
