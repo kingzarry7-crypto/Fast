@@ -24,9 +24,12 @@ class BenchmarkContractTests(unittest.TestCase):
 
     def test_smollm3_is_not_a_benchmark_candidate_and_workflow_defaults_to_qwen(self):
         self.assertEqual(set(M.MODELS), {"qwen3-0.6b", "qwen3-1.7b"})
-        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/zarry-model-benchmark.yml").read_text()
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / ".github/workflows/zarry-model-benchmark.yml").read_text()
+        readme = (root / "research-data/zarry-model/README.md").read_text()
         self.assertIn('default: "qwen3-1.7b"', workflow)
         self.assertNotIn("smollm3-3b", workflow)
+        self.assertNotIn("SmolLM3", readme)
 
     def test_parse_accepts_exact_schema(self):
         value = {
