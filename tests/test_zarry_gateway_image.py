@@ -1,7 +1,7 @@
 import unittest
 from uuid import uuid4
 
-from zarry_gateway.image import HuggingFaceImageProvider
+from zarry_gateway.image import HF_ZIMAGE_MODEL, HuggingFaceImageProvider
 
 
 class FakeLedger:
@@ -36,7 +36,7 @@ class ImageProviderTests(unittest.TestCase):
     def test_reserves_before_dispatch_then_settles_and_stores(self):
         ledger, client, storage = FakeLedger(), FakeClient(), FakeStorage()
         provider = HuggingFaceImageProvider(
-            api_key="hf_secret", model="test/model", ledger=ledger,
+            api_key="hf_secret", model=HF_ZIMAGE_MODEL, provider="fal-ai", ledger=ledger,
             cost_estimator=lambda model, size: "0.01",
             actual_cost_resolver=lambda image, model, size: "0.008",
             client_factory=lambda **kwargs: client, storage=storage,
@@ -54,7 +54,7 @@ class ImageProviderTests(unittest.TestCase):
     def test_unknown_cost_fails_before_provider_dispatch(self):
         ledger, client = FakeLedger(), FakeClient()
         provider = HuggingFaceImageProvider(
-            api_key="hf_secret", model="test/model", ledger=ledger,
+            api_key="hf_secret", model=HF_ZIMAGE_MODEL, provider="fal-ai", ledger=ledger,
             cost_estimator=lambda model, size: None,
             actual_cost_resolver=lambda image, model, size: "0.01",
             client_factory=lambda **kwargs: client, storage=FakeStorage(),
@@ -67,7 +67,7 @@ class ImageProviderTests(unittest.TestCase):
     def test_missing_actual_cost_keeps_reservation_and_does_not_store(self):
         ledger, client, storage = FakeLedger(), FakeClient(), FakeStorage()
         provider = HuggingFaceImageProvider(
-            api_key="hf_secret", model="test/model", ledger=ledger,
+            api_key="hf_secret", model=HF_ZIMAGE_MODEL, provider="fal-ai", ledger=ledger,
             cost_estimator=lambda model, size: "0.01",
             actual_cost_resolver=lambda image, model, size: None,
             client_factory=lambda **kwargs: client, storage=storage,
@@ -83,7 +83,7 @@ class ImageProviderTests(unittest.TestCase):
             def text_to_image(self, **kwargs):
                 raise TimeoutError("provider outcome is unknown")
         provider = HuggingFaceImageProvider(
-            api_key="hf_secret", model="test/model", ledger=ledger,
+            api_key="hf_secret", model=HF_ZIMAGE_MODEL, provider="fal-ai", ledger=ledger,
             cost_estimator=lambda model, size: "0.01",
             actual_cost_resolver=lambda image, model, size: "0.01",
             client_factory=lambda **kwargs: BrokenClient(), storage=FakeStorage(),
