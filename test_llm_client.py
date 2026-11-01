@@ -116,6 +116,24 @@ class ConfiguredProviderTests(unittest.TestCase):
         local_post.assert_not_called()
         self.assertEqual(client.chat.completions.create.call_args.kwargs["model"], "gpt-5.4-nano")
 
+    def test_private_qwen_service_is_primary_for_general_chat(self):
+        provider = MagicMock()
+        provider.generate.return_value = "Hello from Qwen ZARRY"
+        with patch.dict(os.environ, {
+            "AI_PROVIDER": "AUTO",
+            "ZARRY_PRIVATE_SERVICE_URL": "http://zarry.railway.internal:8080",
+            "ZARRY_SERVICE_URL": "",
+            "ZARRY_API_URL": "",
+        }, clear=True), patch("llm_client.SelfHostedZarryProvider", return_value=provider):
+            result = ask([
+                {"role": "system", "content": "Be helpful."},
+                {"role": "user", "content": "hello"},
+            ])
+
+        self.assertEqual(result, "Hello from Qwen ZARRY")
+        provider.generate.assert_called_once()
+        self.assertEqual(provider.generate.call_args.kwargs["message"], "hello")
+
     def test_zarry_generate_api_is_primary_for_coding_prompts(self):
         response = MagicMock()
         response.__enter__.return_value.read.return_value = json.dumps({
