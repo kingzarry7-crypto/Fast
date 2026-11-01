@@ -103,7 +103,7 @@ class ZarryValidationRetryTests(unittest.TestCase):
         self.assertEqual(result["explanation_source"], "deterministic_fallback")
         self.assertEqual(result["numeric_claims"], [])
         self.assertIn("deterministic fallback", result["summary"].lower())
-        self.assertNotRegex(result["summary"] + result["uncertainty"], r"\\d")
+        self.assertNotRegex(result["summary"] + result["uncertainty"], r"\d")
 
     def test_retries_malformed_and_ungrounded_responses_without_relaxing_contract(self):
         with patch.dict(os.environ, {
