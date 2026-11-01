@@ -32,6 +32,9 @@ class FakeCursor:
             return list(self.recorded.items())
         return []
 
+    def close(self):
+        pass
+
 
 class FakeConnection:
     def __init__(self, cursor):
