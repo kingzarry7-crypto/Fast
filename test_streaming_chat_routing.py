@@ -57,6 +57,28 @@ class StreamingProviderPreferenceTests(unittest.TestCase):
 
         self.assertEqual(providers[0], "zarry")
 
+    def test_private_qwen_uses_groq_before_invalid_legacy_huggingface_fallback(self):
+        with patch.dict(os.environ, {
+            "AI_PROVIDER": "AUTO",
+            "ZARRY_PRIVATE_SERVICE_URL": "http://zarry.railway.internal:8080",
+            "ZARRY_SERVICE_URL": "",
+            "ZARRY_API_URL": "",
+        }, clear=True), \
+             patch.object(streaming_chat.ai_engine, "HF_TOKEN", "hf-test"), \
+             patch.object(streaming_chat.ai_engine, "CLOUDFLARE_AI_TOKEN", "cf-test"), \
+             patch.object(streaming_chat.ai_engine, "OPENAI_API_KEY", "openai-test"), \
+             patch.object(streaming_chat.ai_engine, "GEMINI_API_KEY", "gemini-test"), \
+             patch.object(streaming_chat, "_GROQ_KEY", "groq-test"), \
+             patch.object(streaming_chat, "_OPENROUTER_KEY", "router-test"), \
+             patch.object(streaming_chat, "_CHUTES_KEY", "chutes-test"), \
+             patch.object(streaming_chat, "_stream_zarry", return_value=iter(["qwen"])), \
+             patch.object(streaming_chat, "_stream_openai_compatible", return_value=iter(["fallback"])), \
+             patch.object(streaming_chat, "_stream_cloudflare", return_value=iter(["cloudflare"])):
+            providers = [name for name, _stream in _provider_streams([])]
+
+        self.assertEqual(providers[:2], ["zarry", "groq"])
+        self.assertEqual(providers[-1], "huggingface")
+
     def test_private_qwen_stream_calls_v1_chat_even_when_legacy_url_exists(self):
         messages = [
             {"role": "system", "content": "Keep answers grounded."},
@@ -80,7 +102,7 @@ class StreamingProviderPreferenceTests(unittest.TestCase):
         )
         self.assertEqual(
             provider_class.return_value.generate.call_args.kwargs["timeout"],
-            (5.0, 10.0),
+            (2.0, 6.0),
         )
 
     def test_ai_engine_uses_private_qwen_for_normal_chat(self):
@@ -110,7 +132,7 @@ class StreamingProviderPreferenceTests(unittest.TestCase):
             providers = [name for name, _stream in _provider_streams([])]
         self.assertEqual(providers[0], "gemini")
 
-    def test_auto_streaming_order_starts_with_cloudflare_when_zarry_and_hf_unset(self):
+    def test_auto_streaming_order_prefers_groq_before_other_fallbacks(self):
         with patch.dict(os.environ, {"AI_PROVIDER": "AUTO", "ZARRY_API_URL": ""}, clear=False), \
              patch.object(streaming_chat.ai_engine, "HF_TOKEN", ""), \
              patch.object(streaming_chat.ai_engine, "CLOUDFLARE_AI_TOKEN", "cf-test"), \
@@ -122,7 +144,7 @@ class StreamingProviderPreferenceTests(unittest.TestCase):
              patch.object(streaming_chat, "_stream_cloudflare", return_value=iter(["chunk"])):
             providers = [name for name, _stream in _provider_streams([])]
 
-        self.assertEqual(providers[0], "cloudflare")
+        self.assertEqual(providers[0], "groq")
 
 
 class StreamingIntentRoutingTests(unittest.TestCase):
@@ -292,19 +314,19 @@ if __name__ == "__main__":
 
 
 class StreamingTimeoutBudgetTests(unittest.TestCase):
-    def test_stream_timeout_defaults_to_a_bounded_12_second_read(self):
+    def test_stream_timeout_defaults_to_a_bounded_8_second_read(self):
         with patch.dict(os.environ, {}, clear=True):
-            self.assertEqual(streaming_chat._bounded_stream_timeout(), 12)
+            self.assertEqual(streaming_chat._bounded_stream_timeout(), 8)
 
     def test_stream_timeout_rejects_invalid_and_clamps_extreme_values(self):
         with patch.dict(os.environ, {"AI_STREAM_TIMEOUT": "not-a-number"}, clear=True):
-            self.assertEqual(streaming_chat._bounded_stream_timeout(), 12)
-        with patch.dict(os.environ, {"AI_STREAM_TIMEOUT": "999"}, clear=True):
-            self.assertEqual(streaming_chat._bounded_stream_timeout(), 15)
-        with patch.dict(os.environ, {"AI_STREAM_TIMEOUT": "1"}, clear=True):
             self.assertEqual(streaming_chat._bounded_stream_timeout(), 8)
+        with patch.dict(os.environ, {"AI_STREAM_TIMEOUT": "999"}, clear=True):
+            self.assertEqual(streaming_chat._bounded_stream_timeout(), 10)
+        with patch.dict(os.environ, {"AI_STREAM_TIMEOUT": "1"}, clear=True):
+            self.assertEqual(streaming_chat._bounded_stream_timeout(), 5)
 
-    def test_private_qwen_wait_defaults_to_ten_seconds(self):
+    def test_private_qwen_wait_defaults_to_six_seconds(self):
         messages = [{"role": "user", "content": "Hello"}]
         with patch.dict(os.environ, {
             "ZARRY_PRIVATE_SERVICE_URL": "http://zarry.railway.internal:8080",
@@ -317,5 +339,5 @@ class StreamingTimeoutBudgetTests(unittest.TestCase):
             list(streaming_chat._stream_zarry(messages))
         self.assertEqual(
             provider_class.return_value.generate.call_args.kwargs["timeout"],
-            (5.0, 10.0),
+            (2.0, 6.0),
         )

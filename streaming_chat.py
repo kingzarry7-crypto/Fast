@@ -27,14 +27,14 @@ import ai_engine
 logger = logging.getLogger("kz_streaming_chat")
 
 def _bounded_stream_timeout() -> int:
-    """Bound each configured fallback stream so the total chat wait stays finite."""
+    """Keep a configured external fallback responsive and bounded."""
     try:
-        value = float(os.getenv("AI_STREAM_TIMEOUT", "12"))
+        value = float(os.getenv("AI_STREAM_TIMEOUT", "8"))
     except (TypeError, ValueError):
-        value = 12.0
+        value = 8.0
     if not math.isfinite(value):
-        value = 12.0
-    return int(max(8.0, min(value, 15.0)))
+        value = 8.0
+    return int(max(5.0, min(value, 10.0)))
 
 
 _TIMEOUT = _bounded_stream_timeout()
@@ -93,7 +93,7 @@ def _stream_openai_compatible(
         "model": model,
         "messages": messages,
         "temperature": 0.85,
-        token_parameter: 2000,
+        token_parameter: 512,
         "stream": True,
     }
     headers = {
@@ -106,7 +106,7 @@ def _stream_openai_compatible(
         url,
         headers=headers,
         json=payload,
-        timeout=(10, _TIMEOUT),
+        timeout=(4, _TIMEOUT),
         stream=True,
     ) as response:
         if response.status_code >= 400:
@@ -144,7 +144,7 @@ def _automatic_provider_stream(messages: list):
     response = client.chat.completions.create(
         model=model,
         messages=messages,
-        max_tokens=2000,
+        max_tokens=512,
         stream=True,
     )
     for chunk in response:
@@ -166,8 +166,8 @@ def _stream_cloudflare(messages: list):
         url,
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
         json={"model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast", "messages": messages,
-              "temperature": 0.7, "max_tokens": 1200},
-        timeout=(10, _TIMEOUT),
+              "temperature": 0.7, "max_tokens": 512},
+        timeout=(4, _TIMEOUT),
     )
     if response.status_code >= 400:
         raise RuntimeError(f"cloudflare_http_{response.status_code}: {response.text[:300]}")
@@ -225,19 +225,20 @@ def _stream_zarry(messages: list):
             "",
         )
         provider = SelfHostedZarryProvider()
-        # Keep the private Qwen attempt bounded so a slow CPU inference does
-        # not consume the whole browser wait. The existing provider loop can
-        # then try one configured fallback while preserving Qwen as primary.
+        # Keep private Qwen first, but release a stalled CPU inference quickly
+        # so a healthy configured streaming provider can answer this request.
         try:
-            read_timeout = float(os.getenv("ZARRY_STREAM_READ_TIMEOUT_SECONDS", "10"))
+            read_timeout = float(os.getenv("ZARRY_STREAM_READ_TIMEOUT_SECONDS", "6"))
         except (TypeError, ValueError):
-            read_timeout = 10.0
-        read_timeout = max(10.0, min(read_timeout, 15.0))
+            read_timeout = 6.0
+        if not math.isfinite(read_timeout):
+            read_timeout = 6.0
+        read_timeout = max(4.0, min(read_timeout, 8.0))
         answer = provider.generate(
             message=latest_user_message,
             request_id=uuid4(),
             messages=messages,
-            timeout=(5.0, read_timeout),
+            timeout=(2.0, read_timeout),
         )
         yield answer
         return
@@ -257,7 +258,7 @@ def _stream_zarry(messages: list):
     token = os.getenv("ZARRY_API_KEY", "").strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    response = requests.post(endpoint, json=payload, headers=headers, timeout=(8, min(_TIMEOUT, 25)))
+    response = requests.post(endpoint, json=payload, headers=headers, timeout=(4, min(_TIMEOUT, 10)))
     if response.status_code >= 400:
         raise RuntimeError(f"zarry_http_{response.status_code}")
     data = response.json()
@@ -288,7 +289,9 @@ def _provider_streams(messages: list):
     if preferred == "hf":
         preferred = "huggingface"
 
-    default_order = ["zarry", "huggingface", "cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"]
+    # Production logs showed the legacy HF model ID returning HTTP 400;
+    # keep it last so it cannot consume the one allowed fallback attempt.
+    default_order = ["zarry", "groq", "openrouter", "gemini", "openai", "cloudflare", "chutes", "huggingface"]
     has_private_zarry = bool(
         os.getenv("ZARRY_PRIVATE_SERVICE_URL", "").strip()
         or os.getenv("ZARRY_SERVICE_URL", "").strip()
@@ -298,8 +301,8 @@ def _provider_streams(messages: list):
     if not ai_engine.HF_TOKEN:
         default_order = [p for p in default_order if p != "huggingface"]
 
-    # Match ai_engine's AUTO ordering and include Gemini when configured.
-    # Provider-specific adapters are yielded only when their credentials exist.
+    # Prefer low-latency existing providers after private Qwen. Only configured
+    # adapters are yielded; explicit AI_PROVIDER preferences still take priority.
     order = default_order
     if preferred not in {"", "auto"} and preferred in default_order:
         order = [preferred] + [p for p in default_order if p != preferred]
