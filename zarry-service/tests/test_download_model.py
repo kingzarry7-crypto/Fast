@@ -40,9 +40,8 @@ class DownloadModelTests(unittest.TestCase):
 
     def test_removes_only_obsolete_smollm3_cache_when_switching_models(self):
         with tempfile.TemporaryDirectory() as tmp:
-            hub = Path(tmp) / "hub"
-            old = hub / "models--unsloth--SmolLM3-3B-GGUF"
-            keep = hub / "models--unsloth--Qwen3-1.7B-GGUF"
+            old = Path(tmp) / "models--unsloth--SmolLM3-3B-GGUF"
+            keep = Path(tmp) / "models--unsloth--Qwen3-1.7B-GGUF"
             old.mkdir(parents=True)
             keep.mkdir(parents=True)
             (old / "old.gguf").write_text("old")
@@ -53,6 +52,13 @@ class DownloadModelTests(unittest.TestCase):
             self.assertTrue(removed)
             self.assertFalse(old.exists())
             self.assertTrue((keep / "qwen.gguf").exists())
+
+    def test_removes_legacy_nested_hub_cache_too(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old = Path(tmp) / "hub" / "models--unsloth--SmolLM3-3B-GGUF"
+            old.mkdir(parents=True)
+            self.assertTrue(clear_obsolete_model_cache(tmp, DEFAULT_REPO))
+            self.assertFalse(old.exists())
 
     def test_does_not_remove_cache_when_smollm3_is_selected(self):
         with tempfile.TemporaryDirectory() as tmp:
