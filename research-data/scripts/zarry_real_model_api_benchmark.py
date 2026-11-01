@@ -12,7 +12,6 @@ import time
 ROOT = Path(__file__).resolve().parents[2]
 CASES = ROOT / "research-data/zarry-model/benchmark_cases.json"
 sys.path.insert(0, str(ROOT / "zarry-service"))
-from app import create_app  # noqa: E402
 
 
 def score_api_response(case, result):
@@ -24,7 +23,6 @@ def score_api_response(case, result):
     text = summary + uncertainty
     summary_body = summary.lower().replace("explanation-only", "").strip()
     return {
-        "http_contract": True,
         "decision_preserved": result.get("decision") == case["kitty"]["decision"],
         "symbol_preserved": result.get("symbol") == case["symbol"],
         "citations_exact": cited == expected,
@@ -71,9 +69,8 @@ def main():
     model_path = args.model_path.strip()
     if not model_path:
         from huggingface_hub import snapshot_download
-        from pathlib import Path as PathType
         snapshot = snapshot_download(repo_id=args.model_repo, allow_patterns=["*Q4_K_M.gguf"])
-        candidates = sorted(PathType(snapshot).glob("*Q4_K_M.gguf"))
+        candidates = sorted(Path(snapshot).glob("*Q4_K_M.gguf"))
         if len(candidates) != 1:
             raise RuntimeError(f"Expected exactly one Q4_K_M model file, found {len(candidates)}")
         model_path = str(candidates[0])
@@ -84,6 +81,7 @@ def main():
     os.environ["ZARRY_CONTEXT_SIZE"] = str(args.context_size)
     os.environ["ZARRY_MAX_TOKENS"] = str(args.max_tokens)
 
+    from app import create_app
     from fastapi.testclient import TestClient
     from llama_cpp import Llama
 
