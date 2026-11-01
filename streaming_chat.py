@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+import time
 from typing import Any, Callable, Dict, Generator, Optional
 
 import requests
@@ -355,6 +356,7 @@ def _build_stream_generator(
     conversation_id: str,
     memory_factory: Callable[[str, Optional[str]], Any],
 ) -> Generator[str, None, None]:
+    request_started_at = time.monotonic()
     memory = memory_factory(user_id, conversation_id)
     engine = ai_engine.AIEngine(memory=memory)
     yield _sse({"type": "activity", "stage": "thinking", "label": "Thinking through your request", "done": False})
@@ -595,11 +597,26 @@ def _build_stream_generator(
     attempted_providers = 0
     for provider_name, stream in _provider_streams(messages):
         attempted_providers += 1
+        provider_started_at = time.monotonic()
+        first_delta_ms = None
+        logger.info(
+            "ZARRY_STREAM_PROVIDER_START provider=%s attempt=%s elapsed_ms=%s",
+            provider_name,
+            attempted_providers,
+            int((provider_started_at - request_started_at) * 1000),
+        )
         try:
             started_provider = provider_name
             yield _sse({"type": "activity", "stage": "responding", "label": "Writing response", "done": False})
             yield _sse({"type": "start", "provider": provider_name})
             for delta in stream:
+                if first_delta_ms is None:
+                    first_delta_ms = int((time.monotonic() - request_started_at) * 1000)
+                    logger.info(
+                        "ZARRY_STREAM_FIRST_DELTA provider=%s first_delta_ms=%s",
+                        provider_name,
+                        first_delta_ms,
+                    )
                 full_text += delta
                 yield _sse({"type": "delta", "text": delta})
             if full_text.strip():
@@ -608,6 +625,15 @@ def _build_stream_generator(
                     cleaned += research_footer
                 if cleaned:
                     engine._save_memory(user_id, message, cleaned)
+                logger.info(
+                    "ZARRY_STREAM_PROVIDER_COMPLETE provider=%s attempt=%s first_delta_ms=%s provider_elapsed_ms=%s total_elapsed_ms=%s response_chars=%s",
+                    provider_name,
+                    attempted_providers,
+                    first_delta_ms,
+                    int((time.monotonic() - provider_started_at) * 1000),
+                    int((time.monotonic() - request_started_at) * 1000),
+                    len(cleaned),
+                )
                 yield _sse({
                     "type": "done",
                     "conversation_id": conversation_id,
@@ -623,9 +649,12 @@ def _build_stream_generator(
             # failures can be diagnosed from Railway without exposing API tokens.
             safe_error = ai_engine._redact_secrets(str(exc))[:350]
             logger.warning(
-                "Streaming provider failed | provider=%s error_type=%s detail=%s",
+                "Streaming provider failed | provider=%s error_type=%s provider_elapsed_ms=%s total_elapsed_ms=%s first_delta_ms=%s detail=%s",
                 provider_name,
                 type(exc).__name__,
+                int((time.monotonic() - provider_started_at) * 1000),
+                int((time.monotonic() - request_started_at) * 1000),
+                first_delta_ms,
                 safe_error,
             )
             # Never append a second provider's full response after partial
@@ -649,6 +678,13 @@ def _build_stream_generator(
                 break
             continue
 
+    logger.warning(
+        "ZARRY_STREAM_EXHAUSTED attempts=%s provider=%s total_elapsed_ms=%s last_error=%s",
+        attempted_providers,
+        started_provider,
+        int((time.monotonic() - request_started_at) * 1000),
+        last_error,
+    )
     # The configured streaming-provider loop already tried the primary and at
     # most one configured fallback. Do not call AIEngine.ask here: AUTO routing
     # would re-issue the same slow private Qwen request and duplicate the wait.
