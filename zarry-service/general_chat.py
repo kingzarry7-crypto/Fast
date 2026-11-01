@@ -77,12 +77,16 @@ def create_general_chat_router():
         messages = [{"role": "system", "content": GENERAL_SYSTEM_PROMPT}]
         messages.extend(message.model_dump() for message in payload.messages)
         max_tokens = _chat_max_tokens()
+        model_lock = getattr(request.app.state, "model_lock", None)
+        if model_lock is None:
+            raise HTTPException(status_code=503, detail="model inference lock is not initialized")
         try:
-            result = model.create_chat_completion(
-                messages=messages,
-                temperature=0.4,
-                max_tokens=max_tokens,
-            )
+            with model_lock:
+                result = model.create_chat_completion(
+                    messages=messages,
+                    temperature=0.4,
+                    max_tokens=max_tokens,
+                )
             answer = result["choices"][0]["message"]["content"]
             if not isinstance(answer, str) or not answer.strip():
                 raise ValueError("empty model response")
