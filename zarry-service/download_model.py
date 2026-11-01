@@ -9,6 +9,7 @@ from pathlib import Path
 DEFAULT_REPO = "unsloth/Qwen3-1.7B-GGUF"
 DEFAULT_PATTERN = "Qwen3-1.7B-Q4_K_M.gguf"
 DEFAULT_REVISION = "b2d17796e6fd93c353a0415a3abd8b7f801701de"
+DEFAULT_MODEL_SIZE_BYTES = 1107409120
 OBSOLETE_REPO = "unsloth/SmolLM3-3B-GGUF"
 
 
@@ -60,8 +61,9 @@ def clear_incomplete_model_downloads(
     repo_id: str,
     revision: str,
     pattern: str,
+    expected_size_bytes: int | None = None,
 ) -> int:
-    """Remove an incomplete repository cache unless the exact pinned snapshot exists."""
+    """Remove an incomplete repository cache unless the pinned snapshot has its full size."""
     if not cache_dir:
         return 0
     repo_cache_name = "models--" + repo_id.replace("/", "--")
@@ -71,7 +73,14 @@ def clear_incomplete_model_downloads(
         if not root.exists():
             continue
         pinned_snapshot = root / "snapshots" / revision
-        if any(path.is_file() for path in pinned_snapshot.glob(pattern)):
+        complete = False
+        for path in pinned_snapshot.glob(pattern):
+            if not path.is_file():
+                continue
+            if expected_size_bytes is None or path.stat().st_size == expected_size_bytes:
+                complete = True
+                break
+        if complete:
             continue
         # A failed Xet reconstruction can leave sizeable non-.incomplete blobs.
         # If the pinned snapshot is absent, this repository cache is not reusable.
@@ -102,7 +111,11 @@ def main() -> None:
     if clear_obsolete_model_cache(cache_dir, repo_id):
         print(f"Removed obsolete model cache for {OBSOLETE_REPO}")
     removed_partial_caches = clear_incomplete_model_downloads(
-        cache_dir, repo_id, revision, pattern
+        cache_dir,
+        repo_id,
+        revision,
+        pattern,
+        DEFAULT_MODEL_SIZE_BYTES if repo_id == DEFAULT_REPO else None,
     )
     if removed_partial_caches:
         print(
