@@ -192,6 +192,7 @@ def evaluate(name, config, cases, args):
         messages = build_messages(case)
         started = time.perf_counter()
         error = None
+        raw_output = ""
         try:
             response = llm.create_chat_completion(
                 messages=messages,
@@ -199,12 +200,15 @@ def evaluate(name, config, cases, args):
                 max_tokens=args.max_tokens,
                 response_format=response_format(),
             )
-            parsed = parse_output(response["choices"][0]["message"]["content"] or "")
+            raw_output = response["choices"][0]["message"]["content"] or ""
+            parsed = parse_output(raw_output)
             score = score_case(case, parsed)
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
+            if raw_output:
+                print(f"[{name}] invalid output preview: {raw_output[:800]!r}", flush=True)
             score = {key: False for key in SCORE_KEYS}
-        print(f"[{name}] case {index}/{len(cases)} complete in {time.perf_counter() - started:.2f}s; score={{key: bool(score.get(key)) for key in SCORE_KEYS}}; error={error}", flush=True)
+        print(f"[{name}] case {index}/{len(cases)} complete in {time.perf_counter() - started:.2f}s; score={ {key: bool(score.get(key)) for key in SCORE_KEYS} }; error={error}", flush=True)
         rows.append(
             {
                 "case_id": case["id"],
