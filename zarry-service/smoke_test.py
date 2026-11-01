@@ -1,4 +1,4 @@
-"""Run a deployment smoke test against a live ZARRY service.
+"""Run an authenticated deployment smoke test against a live ZARRY service.
 
 Usage:
   ZARRY_SERVICE_URL=https://... ZARRY_API_KEY=... python smoke_test.py
@@ -10,18 +10,26 @@ from __future__ import annotations
 import os
 import sys
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 import requests
+
+
+def is_allowed_base_url(base_url: str) -> bool:
+    parsed = urlparse(base_url)
+    if parsed.scheme == "https" and parsed.hostname:
+        return True
+    return parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
 
 
 def main() -> int:
     base_url = os.getenv("ZARRY_SERVICE_URL", "").strip().rstrip("/")
     api_key = os.getenv("ZARRY_API_KEY", "").strip()
-    if not base_url.startswith("https://") or not api_key:
-        print("Set HTTPS ZARRY_SERVICE_URL and ZARRY_API_KEY", file=sys.stderr)
+    if not is_allowed_base_url(base_url) or not api_key:
+        print("Set HTTPS ZARRY_SERVICE_URL (or HTTP loopback only) and ZARRY_API_KEY", file=sys.stderr)
         return 2
 
-    timeout = (5, 30)
+    timeout = (5, 45)
     root = requests.get(base_url + "/", timeout=timeout)
     root.raise_for_status()
     root_data = root.json()
@@ -38,7 +46,12 @@ def main() -> int:
     payload = {
         "symbol": "BTCUSD",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "context": {"rsi_14": 50.0, "timeframe": "1h", "status": "synthetic smoke test"},
+        "context": {
+            "trend": "mixed",
+            "timeframe": "short-term",
+            "status": "synthetic deployment smoke test",
+        },
+        "expected_fields": ["trend", "timeframe", "status"],
         "kitty_assessment": {"decision": "WAIT", "reason_codes": ["deployment_smoke_test"]},
         "task": "explain",
     }
@@ -60,7 +73,13 @@ def main() -> int:
         raise RuntimeError("ZARRY smoke test failed: authority marker missing")
     if result.get("mode") != "explanation_only":
         raise RuntimeError("ZARRY smoke test failed: explanation-only marker missing")
-    print("ZARRY deployment smoke test passed: root, health, readiness, auth rejection, and WAIT preservation")
+    if result.get("explanation_source") != "model":
+        raise RuntimeError("ZARRY smoke test failed: Qwen did not generate the explanation")
+    if result.get("cited_fields") != payload["expected_fields"]:
+        raise RuntimeError("ZARRY smoke test failed: expected citations were not preserved")
+    if result.get("numeric_claims") != []:
+        raise RuntimeError("ZARRY smoke test failed: numeric claims were returned")
+    print("ZARRY authenticated Qwen smoke test passed: health, readiness, auth rejection, Kitty WAIT, citations, explanation-only")
     return 0
 
 
