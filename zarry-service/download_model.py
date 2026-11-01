@@ -55,19 +55,28 @@ def clear_obsolete_model_cache(cache_dir: str | Path | None, repo_id: str) -> bo
     return removed
 
 
-def clear_incomplete_model_downloads(cache_dir: str | Path | None, repo_id: str) -> int:
-    """Delete only interrupted partial files for the selected model; keep completed blobs."""
+def clear_incomplete_model_downloads(
+    cache_dir: str | Path | None,
+    repo_id: str,
+    revision: str,
+    pattern: str,
+) -> int:
+    """Remove an incomplete repository cache unless the exact pinned snapshot exists."""
     if not cache_dir:
         return 0
     repo_cache_name = "models--" + repo_id.replace("/", "--")
     roots = (Path(cache_dir) / repo_cache_name, Path(cache_dir) / "hub" / repo_cache_name)
     removed = 0
     for root in roots:
-        blobs = root / "blobs"
-        if blobs.exists():
-            for partial in blobs.glob("*.incomplete"):
-                partial.unlink()
-                removed += 1
+        if not root.exists():
+            continue
+        pinned_snapshot = root / "snapshots" / revision
+        if any(path.is_file() for path in pinned_snapshot.glob(pattern)):
+            continue
+        # A failed Xet reconstruction can leave sizeable non-.incomplete blobs.
+        # If the pinned snapshot is absent, this repository cache is not reusable.
+        shutil.rmtree(root)
+        removed += 1
     return removed
 
 
@@ -92,9 +101,15 @@ def main() -> None:
     print(f"ZARRY_CACHE_BEFORE={cache_diagnostics(cache_dir)}", file=sys.stderr, flush=True)
     if clear_obsolete_model_cache(cache_dir, repo_id):
         print(f"Removed obsolete model cache for {OBSOLETE_REPO}")
-    removed_partials = clear_incomplete_model_downloads(cache_dir, repo_id)
-    if removed_partials:
-        print(f"Removed {removed_partials} interrupted partial Qwen download file(s)", file=sys.stderr, flush=True)
+    removed_partial_caches = clear_incomplete_model_downloads(
+        cache_dir, repo_id, revision, pattern
+    )
+    if removed_partial_caches:
+        print(
+            f"Removed {removed_partial_caches} incomplete {repo_id} cache directory(ies)",
+            file=sys.stderr,
+            flush=True,
+        )
     print(f"ZARRY_CACHE_AFTER={cache_diagnostics(cache_dir)}", file=sys.stderr, flush=True)
 
     snapshot = snapshot_download(
