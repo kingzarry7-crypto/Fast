@@ -197,6 +197,7 @@ class ZarryServiceTests(unittest.TestCase):
         self.assertIn("Never turn a context warning into a new WAIT decision.", SYSTEM_PROMPT)
         self.assertNotIn("as reasons to WAIT", SYSTEM_PROMPT)
         self.assertIn("Never invent or estimate confidence percentages", SYSTEM_PROMPT)
+        self.assertIn('exact literal phrase "explanation-only"', SYSTEM_PROMPT)
 
     def test_preserves_kitty_no_trade_decision(self):
         payload = self.payload()
