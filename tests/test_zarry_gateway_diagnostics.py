@@ -5,6 +5,12 @@ from zarry_gateway.diagnostics import main, run_general_gateway_smoke
 
 
 class GeneralGatewayStartupSmokeTests(unittest.TestCase):
+    def test_fast_start_script_runs_smoke_after_health_check_in_background(self):
+        from pathlib import Path
+        script = (Path(__file__).resolve().parents[1] / "start.sh").read_text()
+        self.assertIn("python -m zarry_gateway.diagnostics &", script)
+        self.assertLess(script.index("wait_for_api"), script.index("python -m zarry_gateway.diagnostics &"))
+
     def test_module_entrypoint_constructs_provider_and_runs_smoke(self):
         provider = Mock()
         provider.base_url = "http://zarry.railway.internal:8080"
