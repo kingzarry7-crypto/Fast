@@ -1,10 +1,20 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from zarry_gateway.diagnostics import run_general_gateway_smoke
+from zarry_gateway.diagnostics import main, run_general_gateway_smoke
 
 
 class GeneralGatewayStartupSmokeTests(unittest.TestCase):
+    def test_module_entrypoint_constructs_provider_and_runs_smoke(self):
+        provider = Mock()
+        provider.base_url = "http://zarry.railway.internal:8080"
+        provider.api_key = "test-secret"
+        provider.generate.return_value = "ZARRY_CONNECTION_OK"
+        with patch("zarry_gateway.providers.SelfHostedZarryProvider", return_value=provider):
+            result = main()
+        self.assertEqual(result, "passed")
+        provider.generate.assert_called_once()
+
     def test_diagnostic_logger_emits_info_level_status(self):
         import logging
         logger = logging.getLogger("zarry_gateway.diagnostics")
