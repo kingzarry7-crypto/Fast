@@ -30,7 +30,7 @@ class FakeModel:
             "summary": (
                 "Explanation-only: this unsupported numeric estimate claims the supplied context establishes a confidence level above 50 percent."
                 if self.ungrounded_text_number
-                else "explanation-only"
+                else "Explanation-only: genericgeneric genericgeneric genericgeneric genericgeneric genericgeneric genericgeneric genericgeneric."
                 if self.generic_summary
                 else "Explanation-only: this explanation uses the supplied context and preserves Kitty's assessment while noting the conflicting timeframe evidence."
             ),
