@@ -5,6 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from download_model import (
+    DEFAULT_MODEL_SIZE_BYTES,
     DEFAULT_PATTERN,
     DEFAULT_REPO,
     DEFAULT_REVISION,
@@ -20,6 +21,7 @@ class DownloadModelTests(unittest.TestCase):
     def test_default_model_is_pinned_qwen3_17b_q4(self):
         self.assertEqual(DEFAULT_REPO, "unsloth/Qwen3-1.7B-GGUF")
         self.assertEqual(DEFAULT_PATTERN, "Qwen3-1.7B-Q4_K_M.gguf")
+        self.assertEqual(DEFAULT_MODEL_SIZE_BYTES, 1107409120)
         self.assertEqual(
             DEFAULT_REVISION,
             "b2d17796e6fd93c353a0415a3abd8b7f801701de",
@@ -84,15 +86,30 @@ class DownloadModelTests(unittest.TestCase):
             snapshot = root / "snapshots" / DEFAULT_REVISION
             snapshot.mkdir(parents=True)
             model = snapshot / DEFAULT_PATTERN
-            model.touch()
+            model.write_bytes(b"1234567")
             (root / "blobs").mkdir()
             self.assertEqual(
                 clear_incomplete_model_downloads(
-                    tmp, DEFAULT_REPO, DEFAULT_REVISION, DEFAULT_PATTERN
+                    tmp, DEFAULT_REPO, DEFAULT_REVISION, DEFAULT_PATTERN, 7
                 ),
                 0,
             )
             self.assertTrue(model.exists())
+
+    def test_removes_short_pinned_snapshot_blob(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "models--unsloth--Qwen3-1.7B-GGUF"
+            snapshot = root / "snapshots" / DEFAULT_REVISION
+            snapshot.mkdir(parents=True)
+            model = snapshot / DEFAULT_PATTERN
+            model.write_bytes(b"short")
+            self.assertEqual(
+                clear_incomplete_model_downloads(
+                    tmp, DEFAULT_REPO, DEFAULT_REVISION, DEFAULT_PATTERN, 7
+                ),
+                1,
+            )
+            self.assertFalse(root.exists())
 
     def test_removes_only_obsolete_smollm3_cache_when_switching_models(self):
         with tempfile.TemporaryDirectory() as tmp:
