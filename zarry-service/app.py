@@ -300,6 +300,7 @@ def _load_model(model_path: str, threads: int, context_size: int):
         n_threads=threads,
         n_gpu_layers=0,
         verbose=False,
+        chat_template_kwargs={"enable_thinking": False},
     )
 
 
