@@ -12,12 +12,13 @@ from app import SYSTEM_PROMPT, create_app, extract_final_response
 
 
 class FakeModel:
-    def __init__(self, changed_decision=False, bad_number=False, ungrounded_text_number=False, generic_summary=False, thinking_prefix=False):
+    def __init__(self, changed_decision=False, bad_number=False, ungrounded_text_number=False, generic_summary=False, thinking_prefix=False, malformed_summary=False):
         self.changed_decision = changed_decision
         self.bad_number = bad_number
         self.ungrounded_text_number = ungrounded_text_number
         self.generic_summary = generic_summary
         self.thinking_prefix = thinking_prefix
+        self.malformed_summary = malformed_summary
         self.last_response_format = None
 
     def create_chat_completion(self, **kwargs):
@@ -32,6 +33,8 @@ class FakeModel:
             "summary": (
                 "Explanation-only: this unsupported numeric estimate claims the supplied context establishes a confidence level above 50 percent."
                 if self.ungrounded_text_number
+                else "Explanation-only: uncertainty: 'data_fresh, conflicting timeframes, stale data, unconfirmed entries', cited_fields: ["
+                if self.malformed_summary
                 else "Explanation-only: genericgeneric genericgeneric genericgeneric genericgeneric genericgeneric genericgeneric genericgeneric."
                 if self.generic_summary
                 else "Explanation-only: this explanation uses the supplied context and preserves Kitty's assessment while noting the conflicting timeframe evidence."
@@ -240,6 +243,28 @@ class ZarryServiceTests(unittest.TestCase):
             response = client.post(
                 "/v1/explain",
                 json=self.payload(),
+                headers={"Authorization": "Bearer test-secret"},
+            )
+        self.assertEqual(response.status_code, 502)
+
+    def test_rejects_malformed_structural_fragment_in_summary(self):
+        client = TestClient(
+            create_app(model_loader=lambda *args: FakeModel(malformed_summary=True))
+        )
+        with client:
+            response = client.post(
+                "/v1/explain", json=self.payload(),
+                headers={"Authorization": "Bearer test-secret"},
+            )
+        self.assertEqual(response.status_code, 502)
+
+    def test_rejects_repetitive_summary(self):
+        client = TestClient(
+            create_app(model_loader=lambda *args: FakeModel(generic_summary=True))
+        )
+        with client:
+            response = client.post(
+                "/v1/explain", json=self.payload(),
                 headers={"Authorization": "Bearer test-secret"},
             )
         self.assertEqual(response.status_code, 502)
