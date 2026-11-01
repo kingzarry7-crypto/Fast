@@ -8,6 +8,7 @@ from download_model import (
     DEFAULT_PATTERN,
     DEFAULT_REPO,
     DEFAULT_REVISION,
+    cache_diagnostics,
     clear_incomplete_model_downloads,
     clear_obsolete_model_cache,
     resolve_cache_dir,
@@ -39,6 +40,14 @@ class DownloadModelTests(unittest.TestCase):
             (Path(directory) / "copy-Qwen3-1.7B-Q4_K_M.gguf").touch()
             with self.assertRaises(RuntimeError):
                 resolve_model_file(directory, "*Q4_K_M.gguf")
+
+    def test_cache_diagnostics_report_free_space_and_model_cache_presence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "models--unsloth--SmolLM3-3B-GGUF").mkdir()
+            diagnostics = cache_diagnostics(tmp)
+            self.assertGreaterEqual(diagnostics["free_bytes"], 0)
+            self.assertTrue(diagnostics["smol_cache_present"])
+            self.assertFalse(diagnostics["qwen_cache_present"])
 
     def test_resolves_cache_from_railway_volume_when_hf_home_is_missing(self):
         self.assertEqual(
