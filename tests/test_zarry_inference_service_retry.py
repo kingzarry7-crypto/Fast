@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "zarry-service"))
-from app import create_app
+from app import _extract_numeric_text_claims, create_app
 
 
 class RetryModel:
@@ -38,6 +38,9 @@ class RetryModel:
 
 
 class ZarryValidationRetryTests(unittest.TestCase):
+    def test_numeric_grounding_detects_hyphenated_numeric_phrases(self):
+        self.assertEqual(_extract_numeric_text_claims("15-minute window and 1-hour direction"), {15.0, 1.0})
+
     def test_retries_once_after_ungrounded_numeric_text_without_relaxing_contract(self):
         with patch.dict(os.environ, {
             "ZARRY_API_KEY": "retry-test-secret",
