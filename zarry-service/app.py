@@ -395,6 +395,7 @@ def create_app(model_loader=_load_model) -> FastAPI:
                 "health": "/health",
                 "readiness": "/ready",
                 "explain": "POST /v1/explain (Bearer API key required)",
+                "chat": "POST /v1/chat (Bearer API key required)",
                 "api_docs": "/docs",
             },
             "mode": "explanation_only",
