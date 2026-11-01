@@ -109,6 +109,13 @@ class BenchmarkContractTests(unittest.TestCase):
         self.assertEqual(M.SYSTEM, M.SYSTEM_PROMPT)
         self.assertEqual(M.OUTPUT_SCHEMA["properties"]["decision"]["enum"], ["BUY", "SELL", "WAIT", "NO TRADE"])
 
+    def test_response_format_requires_every_expected_field(self):
+        expected = ["trend_4h", "entry_5m", "last_price"]
+        schema = M.response_format(expected)["schema"]["properties"]["cited_fields"]
+        self.assertEqual(schema["items"]["enum"], expected)
+        self.assertEqual(schema["minItems"], len(expected))
+        self.assertEqual(schema["maxItems"], len(expected))
+
     def test_response_format_uses_strict_required_schema(self):
         response_format = M.response_format()
         self.assertEqual(response_format["type"], "json_object")
