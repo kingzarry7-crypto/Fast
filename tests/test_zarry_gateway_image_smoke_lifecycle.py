@@ -12,14 +12,20 @@ class FakeCursor:
     def __init__(self, state):
         self.state = state
         self.last_sql = ""
+        self.inserted_key = None
 
     def execute(self, sql, params=None):
         self.last_sql = sql
         if "INSERT INTO zarry_image_smoke_test_lock" in sql:
-            if self.state["claimed"]:
+            self.inserted_key = (
+                "replicate-one-shot-v2"
+                if "replicate-one-shot-v2" in sql
+                else "replicate-one-shot-v1"
+            )
+            if self.inserted_key in self.state["claimed_keys"]:
                 self.state["insert_won"] = False
             else:
-                self.state["claimed"] = True
+                self.state["claimed_keys"].add(self.inserted_key)
                 self.state["insert_won"] = True
                 self.state["request_id"] = params[0]
 
@@ -29,7 +35,7 @@ class FakeCursor:
     def fetchone(self):
         if "INSERT INTO zarry_image_smoke_test_lock" in self.last_sql and self.state.get("insert_won"):
             self.state["insert_won"] = False
-            return {"lock_key": "replicate-one-shot-v1"}
+            return {"lock_key": self.inserted_key}
         return None
 
 
@@ -53,7 +59,7 @@ class FakeImageProvider:
 
 class SmokeLifecycleTests(unittest.TestCase):
     def setUp(self):
-        self.state = {"claimed": False, "outcomes": []}
+        self.state = {"claimed_keys": set(), "outcomes": []}
         self.provider = FakeImageProvider()
         self.gateway = type("Gateway", (), {})()
         self.gateway.image_provider = self.provider
@@ -95,8 +101,26 @@ class SmokeLifecycleTests(unittest.TestCase):
         self.assertEqual(self.state["outcomes"][-1][3], "https://images.example.test/smoke.png")
         self.assertEqual(str(self.provider.calls[0][1]["request_id"]), body["request_id"])
 
+    def test_new_version_can_run_without_reopening_the_consumed_v1_lock(self):
+        self.state["claimed_keys"].add("replicate-one-shot-v1")
+        import requests
+        class PublicResponse:
+            content = bytes([0x89]) + b"PNG\r\n\x1a\nimage-bytes"
+            def raise_for_status(self):
+                return None
+
+        with patch("database.get_db_cursor", self.cursor_context), patch.object(
+            requests, "get", return_value=PublicResponse()
+        ):
+            response = self.client.post("/api/assistant/admin/image-generation-smoke-test")
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIn("replicate-one-shot-v2", self.state["claimed_keys"])
+        self.assertIn("replicate-one-shot-v1", self.state["claimed_keys"])
+        self.assertEqual(len(self.provider.calls), 1)
+
     def test_already_claimed_lock_rejects_before_provider_call(self):
-        self.state["claimed"] = True
+        self.state["claimed_keys"].add("replicate-one-shot-v2")
         with patch("database.get_db_cursor", self.cursor_context):
             response = self.client.post("/api/assistant/admin/image-generation-smoke-test")
 

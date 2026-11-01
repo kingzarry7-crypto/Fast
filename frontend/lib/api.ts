@@ -589,6 +589,21 @@ export async function adminUnbanUser(userId: string, signal?: AbortSignal) {
   return request<{ status?: string }>("/api/admin/users/unban", { method: "POST", body: { user_id: userId }, signal });
 }
 
+export type ZarryMigrationStatus = {
+  status: "ok";
+  migrations: Array<{
+    name: string;
+    status: "applied" | "pending" | "checksum_mismatch" | "migration_file_missing";
+  }>;
+};
+
+export async function getZarryMigrationStatus(signal?: AbortSignal) {
+  return request<ZarryMigrationStatus>("/api/assistant/admin/migration-status", {
+    method: "GET",
+    signal,
+  });
+}
+
 export type AdminImageStorageTest = {
   status: "ok";
   upload: "ok";
@@ -959,7 +974,7 @@ export const api = {
   getBaseUrl, getMe, getCurrentUser, login, register, verifyEmail, resendVerification, forgotPassword, resetPassword, logout,
   listConversations, createConversation, getConversation, getConversationMessages, chat, sendChatMessage, streamChatMessage, decideGoogleApproval, generateChatSuggestions, healthCheck,
   getRealtimeStatus, startRealtimeCall, saveRealtimeTranscript, getPlatformStatus, getChatBehaviorPreferences, saveChatBehaviorPreferences, createMemoryLinkCode, createCheckoutSession, getBillingConfig,
-  getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, adminImageStorageTest, adminImageGenerationSmokeTest, adminEmailBroadcast, ttsSpeak, synthesizeSpeech,
+  getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, getZarryMigrationStatus, adminImageStorageTest, adminImageGenerationSmokeTest, adminEmailBroadcast, ttsSpeak, synthesizeSpeech,
   getMarkets, getMarketDetail, getSignals, getNews,
   getKittyMultiPaperStatus, getKittyMultiPaperSettings, saveKittyMultiPaperSettings, runKittyMultiPaperCycle,
   getAgentStatus, runAgentGoal, generateMorningBrief, getLatestMorningBrief, listAgentJobs, approveAgentJob,

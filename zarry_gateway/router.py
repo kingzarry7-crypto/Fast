@@ -159,7 +159,7 @@ def create_general_router(
                         failure_stage = %s, http_status_code = %s,
                         completed_at = CASE WHEN %s IN ('succeeded', 'failed')
                                             THEN NOW() ELSE completed_at END
-                    WHERE lock_key = 'replicate-one-shot-v1'
+                    WHERE lock_key = 'replicate-one-shot-v2'
                     """,
                     (status, request_id, provider_name, image_url, error_type,
                      failure_stage_value, http_status_code, status),
@@ -171,7 +171,7 @@ def create_general_router(
             with get_db_cursor() as cur:
                 cur.execute("""
                     INSERT INTO zarry_image_smoke_test_lock (lock_key, status, request_id)
-                    VALUES ('replicate-one-shot-v1', 'claimed', %s)
+                    VALUES ('replicate-one-shot-v2', 'claimed', %s)
                     ON CONFLICT (lock_key) DO NOTHING
                     RETURNING lock_key
                 """, (request_id,))
@@ -240,6 +240,28 @@ def create_general_router(
                     logger.error("One-shot image audit update failed (%s)", type(audit_exc).__name__)
             logger.error("One-shot image generation smoke test failed (%s)", type(exc).__name__)
             raise HTTPException(status_code=502, detail="One-time image generation test failed; lock remains consumed")
+
+    @router.get("/admin/migration-status")
+    async def admin_migration_status(request: Request):
+        # The existing application admin gate is mandatory; this diagnostic
+        # does not accept ordinary authenticated users.
+        if admin_check is None:
+            raise HTTPException(status_code=503, detail="Migration status is unavailable")
+        try:
+            admin = admin_check(request)
+            if inspect.isawaitable(admin):
+                await admin
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=403, detail="Admin access denied")
+
+        try:
+            from .migration_status import get_migration_status
+            return get_migration_status()
+        except Exception as exc:
+            logger.error("ZARRY migration status check failed (%s)", type(exc).__name__)
+            raise HTTPException(status_code=503, detail="ZARRY migration status is unavailable")
 
     @router.post("/chat", response_model=AssistantResponse)
     async def chat(payload: AssistantRequest, request: Request):
