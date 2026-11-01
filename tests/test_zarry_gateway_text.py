@@ -25,6 +25,21 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(kwargs["json"]["messages"][0]["role"], "user")
         self.assertEqual(kwargs["headers"]["Authorization"], "Bearer secret")
 
+    def test_allows_railway_private_http_and_uses_cpu_safe_timeout(self):
+        request_id = uuid4()
+        response = Mock()
+        response.json.return_value = {"request_id": str(request_id), "response": "Hello"}
+        response.raise_for_status.return_value = None
+        session = Mock()
+        session.post.return_value = response
+        provider = SelfHostedZarryProvider(
+            "http://zarry.railway.internal:8080", "secret", session=session
+        )
+        self.assertEqual(provider.generate(message="Hi", request_id=request_id), "Hello")
+        kwargs = session.post.call_args.kwargs
+        self.assertEqual(kwargs["timeout"], (5.0, 180.0))
+        self.assertEqual(session.post.call_args.args[0], "http://zarry.railway.internal:8080/v1/chat")
+
     def test_refuses_http_or_missing_credentials(self):
         provider = SelfHostedZarryProvider("http://zarry.example", "secret")
         with self.assertRaises(RuntimeError):
