@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+from types import SimpleNamespace
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -8,7 +9,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from app import SYSTEM_PROMPT, create_app, extract_final_response
+from app import SYSTEM_PROMPT, _load_model, create_app, extract_final_response
 
 
 class FakeModel:
@@ -196,13 +197,11 @@ class ZarryServiceTests(unittest.TestCase):
         self.assertEqual(response.json()["authority"], "KITTY_DETERMINISTIC_ENGINE")
         self.assertEqual(response.json()["mode"], "explanation_only")
 
-    def test_model_generation_disables_qwen_thinking(self):
-        response = self.client.post(
-            "/v1/explain", json=self.payload(),
-            headers={"Authorization": "Bearer test-secret"},
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(self.model.last_chat_template_kwargs, {"enable_thinking": False})
+    def test_model_load_config_disables_qwen_thinking(self):
+        with patch.dict(sys.modules, {"llama_cpp": SimpleNamespace(Llama=lambda **kwargs: kwargs)}):
+            config = _load_model("/fake/model.gguf", 2, 4096)
+        self.assertEqual(config["chat_template_kwargs"], {"enable_thinking": False})
+        self.assertEqual(config["n_gpu_layers"], 0)
 
     def test_model_receives_strict_schema_in_llama_cpp_response_format(self):
         response = self.client.post(
