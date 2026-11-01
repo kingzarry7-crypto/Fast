@@ -146,6 +146,13 @@ PY
 
 wait_for_api
 
+# Run one authenticated Fast-to-ZARRY connection check after the API is healthy.
+# It runs in the background so slow CPU inference cannot delay bot startup or health checks.
+echo "🔎 Starting non-blocking ZARRY general-gateway connection smoke..."
+python -m zarry_gateway.diagnostics &
+ZARRY_GATEWAY_SMOKE_PID=$!
+echo "   → ZARRY gateway smoke PID: ${ZARRY_GATEWAY_SMOKE_PID}"
+
 # ------------------------------------------------------------------
 # 2) Telegram + Discord bot
 # ------------------------------------------------------------------
