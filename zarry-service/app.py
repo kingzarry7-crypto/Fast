@@ -94,6 +94,8 @@ Kitty's deterministic assessment is authoritative. Copy the exact symbol and dec
 from kitty_assessment. Never reinterpret, upgrade, downgrade, or change BUY/SELL/WAIT/NO TRADE.
 Never turn a context warning into a new WAIT decision.
 Never invent prices, indicators, candles, fills, account facts or outcomes.
+Every numeric value in summary or uncertainty must also be listed in numeric_claims.
+Do not put any number in numeric_claims unless it is copied exactly from context.
 Use only the supplied context. Explain stale data, conflicting timeframes,
 unconfirmed entries or missing risk levels as uncertainty and limitations while
 preserving Kitty's exact decision. Do not recommend a different trading action.
@@ -102,6 +104,17 @@ Return one JSON object with exactly: symbol, decision, summary, uncertainty,
 cited_fields, numeric_claims. symbol and decision must exactly match Kitty.
 cited_fields must be supplied context keys. numeric_claims must be numbers
 copied exactly from supplied context. Include the phrase explanation-only."""
+
+NUMERIC_TEXT_RE = re.compile(r"(?<![A-Za-z0-9_])[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?(?![A-Za-z0-9_-])")
+
+
+def _extract_numeric_text_claims(*texts: str) -> set[float]:
+    claims: set[float] = set()
+    for text in texts:
+        for token in NUMERIC_TEXT_RE.findall(text or ""):
+            claims.add(float(token.replace(",", "").rstrip("%")))
+    return claims
+
 
 MODEL_OUTPUT_SCHEMA = {
     "type": "object",
@@ -145,8 +158,12 @@ def _validate_grounding(output: ExplainResponse, request: ExplainRequest) -> Non
         for value in request.context.values()
         if isinstance(value, (int, float)) and not isinstance(value, bool)
     }
-    if any(float(value) not in available_numbers for value in output.numeric_claims):
+    declared_numbers = {float(value) for value in output.numeric_claims}
+    if not declared_numbers.issubset(available_numbers):
         raise ValueError("model produced an ungrounded numeric claim")
+    text_numbers = _extract_numeric_text_claims(output.summary, output.uncertainty)
+    if not text_numbers.issubset(declared_numbers):
+        raise ValueError("model used an undeclared numeric claim in its explanation")
 
 
 def create_app(model_loader=_load_model) -> FastAPI:
