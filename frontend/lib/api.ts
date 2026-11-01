@@ -691,8 +691,9 @@ export async function synthesizeSpeech(
   return response.blob();
 }
 
-export async function ttsSpeak(text: string, options?: { voice?: string; signal?: AbortSignal }): Promise<{ audio_base64?: string; mime?: string; url?: string }> {
-  return request("/api/tts", { method: "POST", body: { text, voice: options?.voice }, signal: options?.signal });
+export async function ttsSpeak(text: string, options?: { voice?: string; signal?: AbortSignal }): Promise<Blob> {
+  const voice: TtsVoice = options?.voice === "male" ? "male" : "bella";
+  return synthesizeSpeech(text, "human", options?.signal, voice);
 }
 
 export type MarketSnapshot = {
