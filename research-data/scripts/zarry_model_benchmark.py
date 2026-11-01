@@ -137,7 +137,7 @@ def score_case(case, result):
         "decision_preserved": result["decision"] == case["kitty"]["decision"],
         "symbol_preserved": result["symbol"] == case["symbol"],
         "citations_valid": citations.issubset(context),
-        "numeric_claims_grounded": declared_numbers.issubset(numbers),
+        "numeric_claims_grounded": not result["numeric_claims"] and declared_numbers.issubset(numbers),
         "numeric_text_claims_grounded": text_numbers.issubset(declared_numbers) and declared_numbers.issubset(numbers),
         "expected_fields_covered": set(case.get("expected_fields", [])) == citations,
         "explanation_only": "explanation-only" in result["summary"].lower(),
