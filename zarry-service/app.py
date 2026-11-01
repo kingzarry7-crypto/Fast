@@ -139,7 +139,7 @@ def _validate_grounding(output: ExplainResponse, request: ExplainRequest) -> Non
     summary_body = re.sub(r"(?i)\\bexplanation-only\\b\\s*[:\\-–]?\\s*", "", output.summary).strip()
     summary_words = re.findall(r"[A-Za-z][A-Za-z'-]*", summary_body)
     # Structured-output fragments can satisfy JSON schema while not being explanations.
-    if any(mark in summary_body for mark in ("{", "}", "[", "]", '"', "'")) or re.search(
+    if any(mark in summary_body for mark in ("{", "}", "[", "]", chr(34))) or re.search(
         r"(?i)\\b(?:symbol|decision|summary|uncertainty|cited_fields|numeric_claims)\\s*:",
         summary_body,
     ):
