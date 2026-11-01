@@ -291,7 +291,7 @@ def _provider_streams(messages: list):
 
     # Production logs showed the legacy HF model ID returning HTTP 400;
     # keep it last so it cannot consume the one allowed fallback attempt.
-    default_order = ["zarry", "groq", "openrouter", "gemini", "openai", "cloudflare", "chutes", "huggingface"]
+    default_order = ["zarry", "openai", "groq", "openrouter", "gemini", "cloudflare", "chutes", "huggingface"]
     has_private_zarry = bool(
         os.getenv("ZARRY_PRIVATE_SERVICE_URL", "").strip()
         or os.getenv("ZARRY_SERVICE_URL", "").strip()
