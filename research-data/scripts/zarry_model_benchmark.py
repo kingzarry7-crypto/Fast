@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import re
 import statistics
 import time
 from pathlib import Path
@@ -41,10 +42,20 @@ The summary MUST contain the exact literal phrase "explanation-only".
 cited_fields MUST include every expected_fields key (every key listed in the expected_fields array), and may include other context keys.
 Every cited_fields item MUST be an exact key from context.
 numeric_claims may contain only numeric values copied exactly from context; use [] when none are
-needed. Do not put numeric values in numeric_claims that are not present in context.
+needed. Every numeric value written in summary or uncertainty MUST also appear in numeric_claims.
+Do not put numeric values in numeric_claims that are not present in context.
 The decision and symbol must exactly match kitty_assessment and the top-level input.
 Return JSON only, with no markdown fences or commentary."""
 REQUIRED = {"symbol", "decision", "summary", "uncertainty", "cited_fields", "numeric_claims"}
+NUMERIC_TEXT_RE = re.compile(r"(?<![A-Za-z0-9_])[-+]?(?:\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d+)?%?(?![A-Za-z0-9_-])")
+
+
+def extract_numeric_text_claims(*texts):
+    claims = set()
+    for text in texts:
+        for token in NUMERIC_TEXT_RE.findall(text or ""):
+            claims.add(float(token.replace(",", "").rstrip("%")))
+    return claims
 OUTPUT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -90,6 +101,7 @@ SCORE_KEYS = (
     "symbol_preserved",
     "citations_valid",
     "numeric_claims_grounded",
+    "numeric_text_claims_grounded",
     "expected_fields_covered",
     "explanation_only",
 )
@@ -133,12 +145,15 @@ def score_case(case, result):
     context = case["context"]
     numbers = {float(value) for value in context.values() if isinstance(value, (int, float)) and not isinstance(value, bool)}
     citations = set(result["cited_fields"])
+    declared_numbers = {float(value) for value in result["numeric_claims"]}
+    text_numbers = extract_numeric_text_claims(result["summary"], result["uncertainty"])
     return {
         "valid_json": True,
         "decision_preserved": result["decision"] == case["kitty"]["decision"],
         "symbol_preserved": result["symbol"] == case["symbol"],
         "citations_valid": citations.issubset(context),
-        "numeric_claims_grounded": all(float(value) in numbers for value in result["numeric_claims"]),
+        "numeric_claims_grounded": declared_numbers.issubset(numbers),
+        "numeric_text_claims_grounded": text_numbers.issubset(declared_numbers) and declared_numbers.issubset(numbers),
         "expected_fields_covered": set(case.get("expected_fields", [])).issubset(citations),
         "explanation_only": "explanation-only" in result["summary"].lower(),
         "summary": result["summary"],
