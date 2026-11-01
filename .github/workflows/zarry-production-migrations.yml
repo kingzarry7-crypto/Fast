@@ -1,0 +1,70 @@
+name: ZARRY guarded production migration dispatch
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Read-only status, or explicitly apply all checksum-verified pending ZARRY migrations"
+        required: true
+        type: choice
+        options:
+          - status
+          - apply
+        default: status
+      confirmation:
+        description: "For apply only, enter exactly APPLY_PENDING_ZARRY_MIGRATIONS"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zarry-production-migrations
+  cancel-in-progress: false
+
+jobs:
+  migration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ZARRY_MIGRATION_DATABASE_URL: ${{ secrets.ZARRY_MIGRATION_DATABASE_URL }}
+    steps:
+      - name: Require database secret
+        shell: bash
+        run: |
+          if [[ -z "${ZARRY_MIGRATION_DATABASE_URL}" ]]; then
+            echo "::error::Repository secret ZARRY_MIGRATION_DATABASE_URL is not configured."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install migration runner dependency
+        run: python -m pip install "psycopg2-binary==2.9.10"
+
+      - name: Validate explicit apply confirmation
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          if [[ "$CONFIRMATION" != "APPLY_PENDING_ZARRY_MIGRATIONS" ]]; then
+            echo "::error::Apply refused. Exact confirmation phrase is required."
+            exit 1
+          fi
+
+      - name: Read migration status (read-only)
+        run: python scripts/apply_zarry_migrations.py
+
+      - name: Apply pending migrations (explicitly requested only)
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          ZARRY_ALLOW_MIGRATIONS: "1"
+        run: python scripts/apply_zarry_migrations.py --apply
