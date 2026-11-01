@@ -212,10 +212,19 @@ def _stream_zarry(messages: list):
             "",
         )
         provider = SelfHostedZarryProvider()
+        # Keep the private Qwen attempt bounded so a slow CPU inference does
+        # not consume the whole browser wait. The existing provider loop can
+        # then try one configured fallback while preserving Qwen as primary.
+        try:
+            read_timeout = float(os.getenv("ZARRY_STREAM_READ_TIMEOUT_SECONDS", "18"))
+        except (TypeError, ValueError):
+            read_timeout = 18.0
+        read_timeout = max(10.0, min(read_timeout, 30.0))
         answer = provider.generate(
             message=latest_user_message,
             request_id=uuid4(),
             messages=messages,
+            timeout=(5.0, read_timeout),
         )
         yield answer
         return
