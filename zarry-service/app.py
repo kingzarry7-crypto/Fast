@@ -6,7 +6,6 @@ market-data, broker, order, or tool-execution integration.
 from __future__ import annotations
 
 import hmac
-from copy import deepcopy
 import json
 import logging
 import os
@@ -22,9 +21,43 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from contract import MODEL_OUTPUT_SCHEMA, SYSTEM_PROMPT, extract_final_response
+from contract import extract_final_response
 
 logger = logging.getLogger("zarry.service")
+
+
+SERVICE_EXPLANATION_PROMPT = """You are ZARRY, an explanation-only assistant.
+Kitty's deterministic assessment is authoritative. Explain it; never make or change a trading decision.
+Never change Kitty's symbol or BUY/SELL/WAIT/NO TRADE decision. Never recommend a different action.
+Use only the supplied context. Never invent prices, indicators, candles, fills, account facts, outcomes, probabilities, or confidence.
+Do not include numeric digits, prices, percentages, probabilities, or numeric time labels in your prose. Use qualitative wording such as "shorter-term" instead of "15-minute".
+Return exactly two labeled lines and no JSON, markdown fences, or extra sections:
+SUMMARY: explanation-only followed by a concrete explanation of at least eight words grounded in the context.
+UNCERTAINTY: at least four words describing specific limitations or unresolved evidence.
+Do not put numeric claims in either line. Do not place orders or change risk settings."""
+
+
+def _parse_model_explanation(raw: str) -> tuple[str, str]:
+    """Extract only summary and uncertainty; the server owns all authority fields."""
+    text = extract_final_response(raw or "").strip()
+    text = re.sub(r"(?is)^\s*```(?:json|text)?\s*|\s*```\s*$", "", text).strip()
+
+    # Accept valid structured output from compatible models, but never trust its
+    # symbol, decision, citations, or numeric_claims; those are set server-side.
+    try:
+        value = json.loads(text)
+        if isinstance(value, dict) and isinstance(value.get("summary"), str) and isinstance(value.get("uncertainty"), str):
+            return value["summary"].strip(), value["uncertainty"].strip()
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    match = re.search(
+        r"(?is)^\s*SUMMARY\s*:\s*(.*?)\s*\n\s*UNCERTAINTY\s*:\s*(.*?)\s*$",
+        text,
+    )
+    if not match:
+        raise ValueError("model response must contain SUMMARY and UNCERTAINTY labels")
+    return match.group(1).strip(), match.group(2).strip()
 
 
 class StrictModel(BaseModel):
@@ -260,21 +293,14 @@ def create_app(model_loader=_load_model) -> FastAPI:
             "kitty_assessment": payload.kitty_assessment.model_dump(),
             "task": "Explain Kitty's assessment without changing it.",
         }
-        output_schema = deepcopy(MODEL_OUTPUT_SCHEMA)
-        if payload.expected_fields:
-            cited_fields_schema = output_schema["properties"]["cited_fields"]
-            cited_fields_schema["items"] = {"type": "string", "enum": payload.expected_fields}
-            cited_fields_schema["minItems"] = len(payload.expected_fields)
-            cited_fields_schema["maxItems"] = len(payload.expected_fields)
-
         base_messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": SERVICE_EXPLANATION_PROMPT},
             {"role": "user", "content": "/no_think\n" + json.dumps(message, sort_keys=True)},
         ]
         last_error = None
         parsed = None
-        # Small local models sometimes violate a semantic rule despite constrained
-        # decoding. Permit one bounded correction attempt, without relaxing any gate.
+        # Keep retries bounded and every semantic safety gate strict. The model
+        # supplies prose only; authority fields are built from the request.
         for attempt in range(3):
             messages = list(base_messages)
             if attempt:
@@ -283,10 +309,10 @@ def create_app(model_loader=_load_model) -> FastAPI:
                     "content": (
                         "Your previous response failed server validation: "
                         + str(last_error)
-                        + ". Return a corrected JSON object matching the exact schema. "
-                        "Do not include digits, prices, percentages, probabilities, numeric claims, or numeric time labels "
-                        "such as 15-minute or 1-hour in summary or uncertainty. Use qualitative wording instead. "
-                        "Include every expected_fields key in cited_fields and preserve Kitty's exact symbol and decision."
+                        + ". Return exactly two plain-text lines: SUMMARY: ... and UNCERTAINTY: ... . "
+                        "Do not return JSON or markdown. Do not use any numeric digits, numeric time labels, "
+                        "prices, percentages, probabilities, or numeric claims. Use qualitative wording. "
+                        "Preserve Kitty's exact decision and explain only the supplied context."
                     ),
                 })
             try:
@@ -294,9 +320,16 @@ def create_app(model_loader=_load_model) -> FastAPI:
                     messages=messages,
                     temperature=0,
                     max_tokens=int(os.getenv("ZARRY_MAX_TOKENS", "300")),
-                    response_format={"type": "json_object", "schema": output_schema},
                 )["choices"][0]["message"]["content"]
-                parsed = ExplainResponse.model_validate_json(extract_final_response(raw or ""))
+                summary, uncertainty = _parse_model_explanation(raw or "")
+                parsed = ExplainResponse(
+                    symbol=payload.symbol,
+                    decision=payload.kitty_assessment.decision,
+                    summary=summary,
+                    uncertainty=uncertainty,
+                    cited_fields=list(payload.expected_fields),
+                    numeric_claims=[],
+                )
                 _validate_grounding(parsed, payload)
                 break
             except Exception as exc:
@@ -309,7 +342,7 @@ def create_app(model_loader=_load_model) -> FastAPI:
                 )
 
         if parsed is None:
-            # Fail closed: invalid model output is never passed to the caller.
+            # Fail closed: invalid model prose is never passed to the caller.
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="model returned invalid or ungrounded explanation",
