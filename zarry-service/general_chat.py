@@ -76,11 +76,12 @@ def create_general_chat_router():
             raise HTTPException(status_code=503, detail="model is not loaded")
         messages = [{"role": "system", "content": GENERAL_SYSTEM_PROMPT}]
         messages.extend(message.model_dump() for message in payload.messages)
+        max_tokens = _chat_max_tokens()
         try:
             result = model.create_chat_completion(
                 messages=messages,
                 temperature=0.4,
-                max_tokens=_chat_max_tokens(),
+                max_tokens=max_tokens,
             )
             answer = result["choices"][0]["message"]["content"]
             if not isinstance(answer, str) or not answer.strip():
