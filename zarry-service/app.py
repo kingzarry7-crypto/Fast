@@ -18,7 +18,7 @@ from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class StrictModel(BaseModel):
@@ -41,6 +41,7 @@ class ExplainRequest(StrictModel):
     symbol: Literal["BTCUSD", "XAUUSD"]
     timestamp: str = Field(min_length=10, max_length=40)
     context: dict[str, Any]
+    expected_fields: list[str] = Field(default_factory=list, max_length=80)
     kitty_assessment: KittyAssessment
     task: Literal["explain"] = "explain"
 
@@ -60,6 +61,19 @@ class ExplainRequest(StrictModel):
         if age < -60:
             raise ValueError("market context timestamp is in the future")
         return value
+
+    @field_validator("expected_fields")
+    @classmethod
+    def validate_expected_fields(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)) or any(not key or len(key) > 80 for key in value):
+            raise ValueError("expected fields must be unique, non-empty context keys")
+        return value
+
+    @model_validator(mode="after")
+    def expected_fields_must_exist_in_context(self):
+        if not set(self.expected_fields).issubset(self.context):
+            raise ValueError("expected fields must be present in context")
+        return self
 
     @field_validator("context")
     @classmethod
@@ -98,7 +112,7 @@ Every numeric value in summary or uncertainty must also be listed in numeric_cla
 Do not put any number in numeric_claims unless it is copied exactly from context.
 Never invent or estimate confidence percentages, probabilities, odds, or numeric likelihoods.
 If context contains no such value, describe uncertainty qualitatively without numeric values.
-Use only the supplied context. Explain stale data, conflicting timeframes,
+Use only the supplied context. If expected_fields is supplied, include every listed key in cited_fields. Explain stale data, conflicting timeframes,
 unconfirmed entries or missing risk levels as uncertainty and limitations while
 preserving Kitty's exact decision. Do not recommend a different trading action.
 You cannot place orders or change risk settings.
@@ -155,6 +169,8 @@ def _validate_grounding(output: ExplainResponse, request: ExplainRequest) -> Non
         raise ValueError("model response is not marked explanation-only")
     if not set(output.cited_fields).issubset(request.context):
         raise ValueError("model cited fields absent from supplied context")
+    if not set(request.expected_fields).issubset(output.cited_fields):
+        raise ValueError("model omitted an expected context field")
     available_numbers = {
         float(value)
         for value in request.context.values()
@@ -261,6 +277,7 @@ def create_app(model_loader=_load_model) -> FastAPI:
             "symbol": payload.symbol,
             "timestamp": payload.timestamp,
             "context": payload.context,
+            "expected_fields": payload.expected_fields,
             "kitty_assessment": payload.kitty_assessment.model_dump(),
             "task": "Explain Kitty's assessment without changing it.",
         }
