@@ -79,6 +79,20 @@ class StreamingProviderPreferenceTests(unittest.TestCase):
             messages,
         )
 
+    def test_ai_engine_uses_private_qwen_for_normal_chat(self):
+        engine = streaming_chat.ai_engine.AIEngine()
+        with patch.dict(os.environ, {
+            "AI_PROVIDER": "AUTO",
+            "ZARRY_PRIVATE_SERVICE_URL": "http://zarry.railway.internal:8080",
+            "ZARRY_SERVICE_URL": "",
+            "ZARRY_API_URL": "",
+        }, clear=True), patch.object(engine, "_zarry_private", return_value="Qwen answer") as qwen:
+            self.assertEqual(engine._get_provider_order()[0], "zarry")
+            result = engine._call_providers_once("Hello", [], None, "", casual=True)
+
+        self.assertEqual(result, "Qwen answer")
+        qwen.assert_called_once_with("Hello", [], "", True)
+
     def test_gemini_is_available_in_streaming_provider_order(self):
         with patch.dict(os.environ, {"AI_PROVIDER": "GEMINI", "ZARRY_API_URL": ""}, clear=False), \
              patch.object(streaming_chat.ai_engine, "HF_TOKEN", ""), \
