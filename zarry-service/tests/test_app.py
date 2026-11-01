@@ -252,5 +252,10 @@ class ZarryServiceTests(unittest.TestCase):
         self.assertEqual(response.status_code, 502)
 
 
+    def test_dockerfile_copies_the_shared_model_contract(self):
+        dockerfile = Path(__file__).resolve().parents[1] / "Dockerfile"
+        self.assertIn("COPY app.py contract.py", dockerfile.read_text())
+
+
 if __name__ == "__main__":
     unittest.main()
