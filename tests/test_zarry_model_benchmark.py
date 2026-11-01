@@ -22,6 +22,12 @@ class BenchmarkContractTests(unittest.TestCase):
         self.assertEqual(M.MODELS["qwen3-1.7b"]["repo_id"], "unsloth/Qwen3-1.7B-GGUF")
         self.assertEqual(M.MODELS["qwen3-1.7b"]["pattern"], "Qwen3-1.7B-Q4_K_M.gguf")
 
+    def test_smollm3_is_not_a_benchmark_candidate_and_workflow_defaults_to_qwen(self):
+        self.assertEqual(set(M.MODELS), {"qwen3-0.6b", "qwen3-1.7b"})
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/zarry-model-benchmark.yml").read_text()
+        self.assertIn('default: "qwen3-1.7b"', workflow)
+        self.assertNotIn("smollm3-3b", workflow)
+
     def test_parse_accepts_exact_schema(self):
         value = {
             "symbol": "BTCUSD",
@@ -85,7 +91,7 @@ class BenchmarkContractTests(unittest.TestCase):
                 "error": "FileNotFoundError: missing Q4_K_M file",
             },
             {
-                "model": "smollm3-3b",
+                "model": "qwen3-1.7b",
                 "case_count": 8,
                 "decision_preserved_rate": 0.75,
                 "valid_json_rate": 0.875,
