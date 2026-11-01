@@ -212,7 +212,7 @@ def create_general_router(
                 "image_url": image_url,
                 "public_retrieval": "verified",
                 "public_generation_enabled": False,
-                "budget_reservation_usd": "0.01",
+                "budget_reservation_usd": str(result.get("budget_reserved_usd", "unknown")),
             }
         except HTTPException:
             raise
