@@ -97,8 +97,13 @@ class BenchmarkContractTests(unittest.TestCase):
         user_payload = json.loads(messages[1]["content"])
         self.assertEqual(user_payload["expected_fields"], case["expected_fields"])
         self.assertEqual(user_payload["kitty_assessment"]["decision"], case["kitty"]["decision"])
-        self.assertIn("every expected_fields key", messages[0]["content"].lower())
+        self.assertIn("if expected_fields is supplied", messages[0]["content"].lower())
+        self.assertIn("include every listed key in cited_fields", messages[0]["content"].lower())
         self.assertIn("Never invent or estimate confidence percentages", messages[0]["content"])
+
+    def test_benchmark_uses_the_exact_service_prompt_and_output_schema(self):
+        self.assertEqual(M.SYSTEM, M.SYSTEM_PROMPT)
+        self.assertEqual(M.OUTPUT_SCHEMA["properties"]["decision"]["enum"], ["BUY", "SELL", "WAIT", "NO TRADE"])
 
     def test_response_format_uses_strict_required_schema(self):
         response_format = M.response_format()
