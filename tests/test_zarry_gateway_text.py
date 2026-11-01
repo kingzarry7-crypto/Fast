@@ -50,7 +50,7 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(kwargs["json"]["messages"][0]["role"], "user")
         self.assertEqual(kwargs["headers"]["Authorization"], "Bearer secret")
 
-    def test_internal_system_context_is_folded_into_first_user_message(self):
+    def test_internal_system_context_is_folded_into_latest_user_message(self):
         request_id = uuid4()
         response = Mock()
         response.json.return_value = {"request_id": str(request_id), "response": "Hello"}
