@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 from pathlib import Path
 
 DEFAULT_REPO = "unsloth/Qwen3-1.7B-GGUF"
@@ -21,6 +22,20 @@ def resolve_cache_dir(environ: dict[str, str] | None = None) -> Path:
     if volume_mount:
         return Path(volume_mount) / "hf-cache"
     return Path.home() / ".cache" / "huggingface" / "hub"
+
+
+def cache_diagnostics(cache_dir: str | Path) -> dict[str, int | bool]:
+    """Return non-secret disk/cache diagnostics for deployment logs."""
+    root = Path(cache_dir)
+    usage = shutil.disk_usage(root)
+    smol = root / "models--unsloth--SmolLM3-3B-GGUF"
+    qwen = root / "models--unsloth--Qwen3-1.7B-GGUF"
+    nested_smol = root / "hub" / "models--unsloth--SmolLM3-3B-GGUF"
+    return {
+        "free_bytes": usage.free,
+        "smol_cache_present": smol.exists() or nested_smol.exists(),
+        "qwen_cache_present": qwen.exists() or (root / "hub" / qwen.name).exists(),
+    }
 
 
 def clear_obsolete_model_cache(cache_dir: str | Path | None, repo_id: str) -> bool:
@@ -73,12 +88,14 @@ def main() -> None:
     cache_dir = resolve_cache_dir()
     revision = os.getenv("ZARRY_MODEL_REVISION", DEFAULT_REVISION).strip() or DEFAULT_REVISION
 
-    print(f"ZARRY_CACHE_DIR={cache_dir}")
+    print(f"ZARRY_CACHE_DIR={cache_dir}", file=sys.stderr, flush=True)
+    print(f"ZARRY_CACHE_BEFORE={cache_diagnostics(cache_dir)}", file=sys.stderr, flush=True)
     if clear_obsolete_model_cache(cache_dir, repo_id):
         print(f"Removed obsolete model cache for {OBSOLETE_REPO}")
     removed_partials = clear_incomplete_model_downloads(cache_dir, repo_id)
     if removed_partials:
-        print(f"Removed {removed_partials} interrupted partial Qwen download file(s)")
+        print(f"Removed {removed_partials} interrupted partial Qwen download file(s)", file=sys.stderr, flush=True)
+    print(f"ZARRY_CACHE_AFTER={cache_diagnostics(cache_dir)}", file=sys.stderr, flush=True)
 
     snapshot = snapshot_download(
         repo_id=repo_id,
