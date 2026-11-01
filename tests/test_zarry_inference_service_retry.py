@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "zarry-service"))
-from app import _extract_numeric_text_claims, _parse_model_explanation, _sanitize_context_for_model, create_app
+from app import SERVICE_EXPLANATION_PROMPT, _extract_numeric_text_claims, _parse_model_explanation, _sanitize_context_for_model, create_app
 
 
 class RetryModel:
@@ -56,6 +56,9 @@ class AlwaysBadModel:
 class ZarryValidationRetryTests(unittest.TestCase):
     def test_numeric_grounding_detects_hyphenated_numeric_phrases(self):
         self.assertEqual(_extract_numeric_text_claims("15-minute window and 1-hour direction"), {15.0, 1.0})
+
+    def test_model_prompt_contains_no_numeric_examples(self):
+        self.assertFalse(any(char.isdigit() for char in SERVICE_EXPLANATION_PROMPT))
 
     def test_numeric_context_is_removed_before_model_generation(self):
         sanitized = _sanitize_context_for_model({
