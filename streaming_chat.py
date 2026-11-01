@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 import time
@@ -25,7 +26,18 @@ import ai_engine
 
 logger = logging.getLogger("kz_streaming_chat")
 
-_TIMEOUT = max(8, min(int(os.getenv("AI_STREAM_TIMEOUT", "30")), 30))
+def _bounded_stream_timeout() -> int:
+    """Bound each configured fallback stream so the total chat wait stays finite."""
+    try:
+        value = float(os.getenv("AI_STREAM_TIMEOUT", "12"))
+    except (TypeError, ValueError):
+        value = 12.0
+    if not math.isfinite(value):
+        value = 12.0
+    return int(max(8.0, min(value, 15.0)))
+
+
+_TIMEOUT = _bounded_stream_timeout()
 _OPENROUTER_URL = ai_engine.OPENROUTER_URL
 _OPENROUTER_KEY = ai_engine.OPENROUTER_API_KEY
 _OPENROUTER_MODEL = ai_engine.OPENROUTER_MODEL
@@ -217,10 +229,10 @@ def _stream_zarry(messages: list):
         # not consume the whole browser wait. The existing provider loop can
         # then try one configured fallback while preserving Qwen as primary.
         try:
-            read_timeout = float(os.getenv("ZARRY_STREAM_READ_TIMEOUT_SECONDS", "18"))
+            read_timeout = float(os.getenv("ZARRY_STREAM_READ_TIMEOUT_SECONDS", "10"))
         except (TypeError, ValueError):
-            read_timeout = 18.0
-        read_timeout = max(10.0, min(read_timeout, 30.0))
+            read_timeout = 10.0
+        read_timeout = max(10.0, min(read_timeout, 15.0))
         answer = provider.generate(
             message=latest_user_message,
             request_id=uuid4(),
