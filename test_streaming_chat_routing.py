@@ -341,3 +341,28 @@ class StreamingTimeoutBudgetTests(unittest.TestCase):
             provider_class.return_value.generate.call_args.kwargs["timeout"],
             (2.0, 6.0),
         )
+
+
+class StreamingThinkSanitizationTests(unittest.TestCase):
+    def test_think_blocks_are_never_emitted_even_when_tags_cross_chunks(self):
+        sanitizer = streaming_chat._ThinkTagFilter()
+        visible = [
+            sanitizer.feed("Hello <thi"),
+            sanitizer.feed("nk>private reasoning</th"),
+            sanitizer.feed("ink> world"),
+            sanitizer.finish(),
+        ]
+        self.assertEqual("".join(visible), "Hello  world")
+        self.assertNotIn("private reasoning", "".join(visible))
+
+    def test_unterminated_think_block_is_discarded_at_end_of_stream(self):
+        sanitizer = streaming_chat._ThinkTagFilter()
+        visible = sanitizer.feed("Visible answer<think>unfinished private reasoning")
+        visible += sanitizer.finish()
+        self.assertEqual(visible, "Visible answer")
+        self.assertNotIn("unfinished private reasoning", visible)
+
+    def test_incomplete_tag_prefix_is_flushed_as_ordinary_text(self):
+        sanitizer = streaming_chat._ThinkTagFilter()
+        visible = sanitizer.feed("Hello <th") + sanitizer.finish()
+        self.assertEqual(visible, "Hello <th")
