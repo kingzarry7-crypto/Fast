@@ -892,6 +892,7 @@ try:
     )
 
     def _schedule_zarry_general_gateway_smoke():
+        logger.info("ZARRY_GENERAL_GATEWAY_SMOKE scheduled")
         # Run outside FastAPI startup so a slow CPU model cannot delay health checks.
         # This calls the provider directly and never writes to a user's conversation memory.
         provider = getattr(_zarry_general_service, "text_provider", None)
