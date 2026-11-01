@@ -2,20 +2,32 @@ name: ZARRY Dataset Contract Tests
 
 on:
   push:
-    branches: ["feat/zarry-task2-benchmark-protocol"]
+    branches: ["feat/zarry-task2-benchmark-protocol", "feat/zarry-task2-baseline-runner"]
     paths:
       - "zarry_dataset.py"
       - "zarry_kitty_adapter.py"
       - "tests/test_zarry_dataset.py"
       - "tests/test_zarry_kitty_adapter.py"
+      - "zarry_baseline.py"
+      - "tests/test_zarry_baseline.py"
+      - "research-data/scripts/zarry_xau_diagnose.py"
+      - "zarry_execution.py"
+      - "tests/test_zarry_execution.py"
+      - "zarry_calibration.py"
+      - "tests/test_zarry_calibration.py"
       - ".github/workflows/zarry-dataset.yml"
   pull_request:
-    branches: ["main", "feat/zarry-dataset-task1"]
+    branches: ["main", "feat/zarry-dataset-task1", "feat/zarry-task2-benchmark-protocol"]
     paths:
       - "zarry_dataset.py"
       - "zarry_kitty_adapter.py"
       - "tests/test_zarry_dataset.py"
       - "tests/test_zarry_kitty_adapter.py"
+      - "zarry_execution.py"
+      - "tests/test_zarry_execution.py"
+      - "zarry_calibration.py"
+      - "tests/test_zarry_calibration.py"
+      - "research-data/scripts/zarry_xau_diagnose.py"
       - ".github/workflows/zarry-dataset.yml"
 
 permissions:
@@ -29,9 +41,14 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      - name: Install calibration test dependency
+        run: python -m pip install "numpy>=1.26,<3"
       - name: Compile dataset modules and tests
-        run: python -m compileall -q zarry_dataset.py zarry_kitty_adapter.py tests/test_zarry_dataset.py tests/test_zarry_kitty_adapter.py
+        run: python -m compileall -q zarry_dataset.py zarry_kitty_adapter.py zarry_baseline.py zarry_execution.py zarry_calibration.py tests/test_zarry_dataset.py tests/test_zarry_kitty_adapter.py tests/test_zarry_baseline.py tests/test_zarry_execution.py tests/test_zarry_calibration.py research-data/scripts/zarry_xau_diagnose.py
       - name: Run ZARRY dataset contract tests
         run: |
           python -m unittest discover -s tests -p "test_zarry_dataset.py" -v
           python -m unittest discover -s tests -p "test_zarry_kitty_adapter.py" -v
+          python -m unittest discover -s tests -p "test_zarry_baseline.py" -v
+          python -m unittest discover -s tests -p "test_zarry_execution.py" -v
+          python -m unittest discover -s tests -p "test_zarry_calibration.py" -v
