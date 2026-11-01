@@ -29,7 +29,7 @@ def main() -> int:
         print("Set HTTPS ZARRY_SERVICE_URL (or HTTP loopback only) and ZARRY_API_KEY", file=sys.stderr)
         return 2
 
-    timeout = (5, 45)
+    timeout = (5, 180)
     root = requests.get(base_url + "/", timeout=timeout)
     root.raise_for_status()
     root_data = root.json()
