@@ -341,3 +341,63 @@ class StreamingTimeoutBudgetTests(unittest.TestCase):
             provider_class.return_value.generate.call_args.kwargs["timeout"],
             (2.0, 6.0),
         )
+
+
+class StreamingThinkSanitizationTests(unittest.TestCase):
+    def test_think_blocks_are_never_emitted_even_when_tags_cross_chunks(self):
+        sanitizer = streaming_chat._ThinkTagFilter()
+        visible = [
+            sanitizer.feed("Hello <thi"),
+            sanitizer.feed("nk>private reasoning</th"),
+            sanitizer.feed("ink> world"),
+            sanitizer.finish(),
+        ]
+        self.assertEqual("".join(visible), "Hello  world")
+        self.assertNotIn("private reasoning", "".join(visible))
+
+    def test_unterminated_think_block_is_discarded_at_end_of_stream(self):
+        sanitizer = streaming_chat._ThinkTagFilter()
+        visible = sanitizer.feed("Visible answer<think>unfinished private reasoning")
+        visible += sanitizer.finish()
+        self.assertEqual(visible, "Visible answer")
+        self.assertNotIn("unfinished private reasoning", visible)
+
+    def test_incomplete_tag_prefix_is_flushed_as_ordinary_text(self):
+        sanitizer = streaming_chat._ThinkTagFilter()
+        visible = sanitizer.feed("Hello <th") + sanitizer.finish()
+        self.assertEqual(visible, "Hello <th")
+
+    def test_stream_generator_never_emits_think_content_in_sse_deltas(self):
+        engine = Mock()
+        engine._load_memory_history.return_value = []
+        engine._load_persistent_context.return_value = ""
+        engine._build_openai_messages.return_value = [{"role": "user", "content": "Hi"}]
+        cleaner = streaming_chat.ai_engine.clean_ai_response
+
+        with (
+            patch("streaming_chat.ai_engine.AIEngine", return_value=engine),
+            patch("streaming_chat.ai_engine._detect_media_intent", return_value=None),
+            patch("coding_request.handle_coding_request", return_value=None),
+            patch("account_agent.handle_web_request", return_value=None),
+            patch("agent_router.route_agent_request", return_value=None),
+            patch("web_research_engine.should_research", return_value=False),
+            patch("tavily_search.should_trigger_tavily", return_value=False),
+            patch("streaming_chat.ai_engine.clean_ai_response", side_effect=cleaner),
+            patch("streaming_chat._provider_streams", return_value=[(
+                "zarry",
+                iter(["Hello <thi", "nk>private reasoning</th", "ink> world"]),
+            )]),
+        ):
+            events = _events(streaming_chat._build_stream_generator(
+                user_id="user-1",
+                message="Hi",
+                conversation_id="conversation-1",
+                memory_factory=lambda *_: _Memory(),
+            ))
+
+        deltas = "".join(
+            event.get("text", "") for event in events if event.get("type") == "delta"
+        )
+        self.assertEqual(deltas, "Hello  world")
+        self.assertNotIn("private reasoning", deltas)
+        self.assertTrue(any(event.get("type") == "done" for event in events))

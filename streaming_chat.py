@@ -26,6 +26,73 @@ import ai_engine
 
 logger = logging.getLogger("kz_streaming_chat")
 
+class _ThinkTagFilter:
+    """Remove model reasoning blocks before any streamed text reaches a client.
+
+    The filter is incremental and handles tags split across provider chunks.
+    An unterminated <think> block is discarded by finish().
+    """
+
+    _OPEN = "<think>"
+    _CLOSE = "</think>"
+
+    def __init__(self):
+        self._pending = ""
+        self._inside_think = False
+
+    @staticmethod
+    def _suffix_prefix_length(value: str, marker: str) -> int:
+        lowered = value.lower()
+        marker = marker.lower()
+        for size in range(min(len(lowered), len(marker) - 1), 0, -1):
+            if lowered.endswith(marker[:size]):
+                return size
+        return 0
+
+    def feed(self, chunk: str) -> str:
+        self._pending += str(chunk or "")
+        visible = []
+
+        while self._pending:
+            lowered = self._pending.lower()
+            if self._inside_think:
+                close_at = lowered.find(self._CLOSE)
+                if close_at >= 0:
+                    self._pending = self._pending[close_at + len(self._CLOSE):]
+                    self._inside_think = False
+                    continue
+                keep = self._suffix_prefix_length(self._pending, self._CLOSE)
+                self._pending = self._pending[-keep:] if keep else ""
+                break
+
+            open_at = lowered.find(self._OPEN)
+            if open_at >= 0:
+                visible.append(self._pending[:open_at])
+                self._pending = self._pending[open_at + len(self._OPEN):]
+                self._inside_think = True
+                continue
+
+            keep = self._suffix_prefix_length(self._pending, self._OPEN)
+            if keep:
+                visible.append(self._pending[:-keep])
+                self._pending = self._pending[-keep:]
+            else:
+                visible.append(self._pending)
+                self._pending = ""
+            break
+
+        return "".join(visible)
+
+    def finish(self) -> str:
+        if self._inside_think:
+            self._pending = ""
+            return ""
+        remaining = self._pending
+        self._pending = ""
+        return remaining
+
+
+
 def _bounded_stream_timeout() -> int:
     """Keep a configured external fallback responsive and bounded."""
     try:
@@ -386,7 +453,7 @@ def _build_stream_generator(
         media_intent = None
     if media_intent is not None:
         try:
-            reply = str(engine._route_media_request(user_id, message, media_intent, None) or "").strip()
+            reply = ai_engine.clean_ai_response(str(engine._route_media_request(user_id, message, media_intent, None) or "")).strip()
         except Exception as exc:
             logger.exception("Streaming media task failed safely: %s", type(exc).__name__)
             reply = "I recognized this as a media task, but the media pipeline failed. No successful output was created; please retry or check the media provider configuration."
@@ -421,7 +488,7 @@ def _build_stream_generator(
             "project": None,
         }
     if coding_result is not None:
-        reply = str(coding_result.get("reply") or "").strip()
+        reply = ai_engine.clean_ai_response(str(coding_result.get("reply") or "")).strip()
         engine._save_memory(user_id, message, reply)
         yield _sse({"type": "activity", "stage": "coding", "label": "Generating project files", "done": True})
         yield _sse({"type": "start", "provider": "coding_agent"})
@@ -450,7 +517,7 @@ def _build_stream_generator(
         connector_result = None
 
     if connector_result is not None:
-        reply = str(connector_result.get("reply") or "").strip()
+        reply = ai_engine.clean_ai_response(str(connector_result.get("reply") or "")).strip()
         if reply:
             engine._save_memory(user_id, message, reply)
             yield _sse({"type": "activity", "stage": "responding", "label": "Preparing connected-account response", "done": False})
@@ -490,7 +557,7 @@ def _build_stream_generator(
         except Exception:
             pass
     if agent_result is not None and str(agent_result.get("reply") or "").strip():
-        reply = str(agent_result["reply"])[:8000]
+        reply = ai_engine.clean_ai_response(str(agent_result["reply"]))[:8000]
         engine._save_memory(user_id, message, reply)
         yield _sse({"type": "activity", "stage": "specialist", "label": "Using the relevant specialist agent", "done": True})
         yield _sse({"type": "start", "provider": str(agent_result.get("provider") or "specialist_agent")})
@@ -606,6 +673,7 @@ def _build_stream_generator(
     )
 
     full_text = ""
+    visible_text = ""
     last_error = None
     started_provider = None
 
@@ -614,6 +682,7 @@ def _build_stream_generator(
         attempted_providers += 1
         provider_started_at = time.monotonic()
         first_delta_ms = None
+        think_filter = _ThinkTagFilter()
         logger.info(
             "ZARRY_STREAM_PROVIDER_START provider=%s attempt=%s elapsed_ms=%s",
             provider_name,
@@ -633,7 +702,16 @@ def _build_stream_generator(
                         first_delta_ms,
                     )
                 full_text += delta
-                yield _sse({"type": "delta", "text": delta})
+                safe_delta = think_filter.feed(delta)
+                if safe_delta:
+                    visible_text += safe_delta
+                    yield _sse({"type": "delta", "text": safe_delta})
+
+            final_visible = think_filter.finish()
+            if final_visible:
+                visible_text += final_visible
+                yield _sse({"type": "delta", "text": final_visible})
+
             if full_text.strip():
                 cleaned = ai_engine.clean_ai_response(full_text).strip()
                 if cleaned and research_footer and "**Sources:**" not in cleaned:
@@ -649,12 +727,17 @@ def _build_stream_generator(
                     int((time.monotonic() - request_started_at) * 1000),
                     len(cleaned),
                 )
-                yield _sse({
-                    "type": "done",
-                    "conversation_id": conversation_id,
-                    "text": cleaned,
-                })
-                return
+                if cleaned:
+                    yield _sse({
+                        "type": "done",
+                        "conversation_id": conversation_id,
+                        "text": cleaned,
+                    })
+                    return
+                last_error = "empty_visible_completion"
+                if attempted_providers >= 2:
+                    break
+                continue
             last_error = "empty_stream"
             if attempted_providers >= 2:
                 break
@@ -672,12 +755,9 @@ def _build_stream_generator(
                 first_delta_ms,
                 safe_error,
             )
-            # Never append a second provider's full response after partial
-            # output: that would duplicate text in the UI. The frontend can
-            # keep the partial response rather than silently corrupting it.
-            if full_text.strip():
-                # Once any token has reached the browser, never switch providers:
-                # doing so would concatenate a second answer onto partial output.
+            # Never append a second provider's full response after visible
+            # output: doing so would concatenate a second answer onto partial text.
+            if visible_text.strip():
                 yield _sse({
                     "type": "error",
                     "message": "The response was interrupted before it finished. Your partial answer is still visible; please retry.",
