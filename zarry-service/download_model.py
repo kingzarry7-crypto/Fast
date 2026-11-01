@@ -11,6 +11,18 @@ DEFAULT_REVISION = "b2d17796e6fd93c353a0415a3abd8b7f801701de"
 OBSOLETE_REPO = "unsloth/SmolLM3-3B-GGUF"
 
 
+def resolve_cache_dir(environ: dict[str, str] | None = None) -> Path:
+    """Resolve the actual Hugging Face cache root, including Railway volume defaults."""
+    env = os.environ if environ is None else environ
+    explicit = env.get("HF_HOME") or env.get("HF_HUB_CACHE")
+    if explicit:
+        return Path(explicit)
+    volume_mount = env.get("RAILWAY_VOLUME_MOUNT_PATH")
+    if volume_mount:
+        return Path(volume_mount) / "hf-cache"
+    return Path.home() / ".cache" / "huggingface" / "hub"
+
+
 def clear_obsolete_model_cache(cache_dir: str | Path | None, repo_id: str) -> bool:
     """Remove only the previous SmolLM3 repository cache after selecting another model."""
     if not cache_dir or repo_id == OBSOLETE_REPO:
@@ -28,6 +40,22 @@ def clear_obsolete_model_cache(cache_dir: str | Path | None, repo_id: str) -> bo
     return removed
 
 
+def clear_incomplete_model_downloads(cache_dir: str | Path | None, repo_id: str) -> int:
+    """Delete only interrupted partial files for the selected model; keep completed blobs."""
+    if not cache_dir:
+        return 0
+    repo_cache_name = "models--" + repo_id.replace("/", "--")
+    roots = (Path(cache_dir) / repo_cache_name, Path(cache_dir) / "hub" / repo_cache_name)
+    removed = 0
+    for root in roots:
+        blobs = root / "blobs"
+        if blobs.exists():
+            for partial in blobs.glob("*.incomplete"):
+                partial.unlink()
+                removed += 1
+    return removed
+
+
 def resolve_model_file(snapshot_dir: str | Path, pattern: str = DEFAULT_PATTERN) -> Path:
     matches = sorted(Path(snapshot_dir).glob(pattern))
     if len(matches) != 1:
@@ -42,11 +70,15 @@ def main() -> None:
 
     repo_id = os.getenv("ZARRY_MODEL_REPO", DEFAULT_REPO).strip()
     pattern = os.getenv("ZARRY_MODEL_FILE_PATTERN", DEFAULT_PATTERN).strip()
-    cache_dir = os.getenv("HF_HOME") or None
+    cache_dir = resolve_cache_dir()
     revision = os.getenv("ZARRY_MODEL_REVISION", DEFAULT_REVISION).strip() or DEFAULT_REVISION
 
+    print(f"ZARRY_CACHE_DIR={cache_dir}")
     if clear_obsolete_model_cache(cache_dir, repo_id):
         print(f"Removed obsolete model cache for {OBSOLETE_REPO}")
+    removed_partials = clear_incomplete_model_downloads(cache_dir, repo_id)
+    if removed_partials:
+        print(f"Removed {removed_partials} interrupted partial Qwen download file(s)")
 
     snapshot = snapshot_download(
         repo_id=repo_id,
