@@ -103,6 +103,21 @@ cited_fields, numeric_claims. symbol and decision must exactly match Kitty.
 cited_fields must be supplied context keys. numeric_claims must be numbers
 copied exactly from supplied context. Include the phrase explanation-only."""
 
+MODEL_OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "symbol": {"type": "string", "enum": ["BTCUSD", "XAUUSD"]},
+        "decision": {"type": "string", "enum": ["BUY", "SELL", "WAIT", "NO TRADE"]},
+        "summary": {"type": "string", "minLength": 1, "maxLength": 3000},
+        "uncertainty": {"type": "string", "maxLength": 1500},
+        "cited_fields": {"type": "array", "items": {"type": "string"}, "maxItems": 80},
+        "numeric_claims": {"type": "array", "items": {"type": "number"}, "maxItems": 80},
+    },
+    "required": ["symbol", "decision", "summary", "uncertainty", "cited_fields", "numeric_claims"],
+    "additionalProperties": False,
+}
+
+
 
 def _load_model(model_path: str, threads: int, context_size: int):
     from llama_cpp import Llama
@@ -238,7 +253,7 @@ def create_app(model_loader=_load_model) -> FastAPI:
                 ],
                 temperature=0,
                 max_tokens=int(os.getenv("ZARRY_MAX_TOKENS", "300")),
-                response_format={"type": "json_object"},
+                response_format={"type": "json_object", "schema": MODEL_OUTPUT_SCHEMA},
             )["choices"][0]["message"]["content"]
             parsed = ExplainResponse.model_validate_json(raw or "")
             _validate_grounding(parsed, payload)
