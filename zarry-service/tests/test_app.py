@@ -12,9 +12,10 @@ from app import SYSTEM_PROMPT, create_app
 
 
 class FakeModel:
-    def __init__(self, changed_decision=False, bad_number=False):
+    def __init__(self, changed_decision=False, bad_number=False, ungrounded_text_number=False):
         self.changed_decision = changed_decision
         self.bad_number = bad_number
+        self.ungrounded_text_number = ungrounded_text_number
         self.last_response_format = None
 
     def create_chat_completion(self, **kwargs):
@@ -25,7 +26,11 @@ class FakeModel:
         result = {
             "symbol": user["symbol"],
             "decision": "BUY" if self.changed_decision else user["kitty_assessment"]["decision"],
-            "summary": "Explanation-only: the supplied timeframes are mixed.",
+            "summary": (
+                "Explanation-only: this is more than 50% certain."
+                if self.ungrounded_text_number
+                else "Explanation-only: the supplied timeframes are mixed."
+            ),
             "uncertainty": "The entry is not confirmed.",
             "cited_fields": ["trend_4h", "entry_5m"],
             "numeric_claims": [999999 if self.bad_number else 68000],
@@ -205,6 +210,18 @@ class ZarryServiceTests(unittest.TestCase):
 
     def test_rejects_invalid_model_decision(self):
         client = TestClient(create_app(model_loader=lambda *args: FakeModel(changed_decision=True)))
+        with client:
+            response = client.post(
+                "/v1/explain",
+                json=self.payload(),
+                headers={"Authorization": "Bearer test-secret"},
+            )
+        self.assertEqual(response.status_code, 502)
+
+    def test_rejects_ungrounded_numeric_claim_in_explanation_text(self):
+        client = TestClient(
+            create_app(model_loader=lambda *args: FakeModel(ungrounded_text_number=True))
+        )
         with client:
             response = client.post(
                 "/v1/explain",
