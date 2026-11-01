@@ -19,15 +19,17 @@ You cannot place orders or change risk settings.
 Return one JSON object with exactly: symbol, decision, summary, uncertainty,
 cited_fields, numeric_claims. symbol and decision must exactly match Kitty.
 cited_fields must be supplied context keys. numeric_claims must be numbers
-copied exactly from supplied context. The summary MUST contain the exact literal phrase "explanation-only"."""
+copied exactly from supplied context. The summary MUST contain the exact literal phrase "explanation-only".
+Write a concrete explanation of at least eight words after the required tag, in one or two sentences, and explain the supplied Kitty decision using actual context. Never use explanation-only as the entire summary.
+Uncertainty must contain at least four words; identify specific limitations or state that no material uncertainty is present."""
 
 MODEL_OUTPUT_SCHEMA = {
     "type": "object",
     "properties": {
         "symbol": {"type": "string", "enum": ["BTCUSD", "XAUUSD"]},
         "decision": {"type": "string", "enum": ["BUY", "SELL", "WAIT", "NO TRADE"]},
-        "summary": {"type": "string", "minLength": 1, "maxLength": 3000},
-        "uncertainty": {"type": "string", "maxLength": 1500},
+        "summary": {"type": "string", "minLength": 60, "maxLength": 3000},
+        "uncertainty": {"type": "string", "minLength": 20, "maxLength": 1500},
         "cited_fields": {"type": "array", "items": {"type": "string"}, "maxItems": 80},
         "numeric_claims": {"type": "array", "items": {"type": "number"}, "maxItems": 80},
     },
