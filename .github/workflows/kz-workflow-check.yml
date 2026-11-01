@@ -5,6 +5,7 @@ on:
     paths:
       - "account_agent.py"
       - "tests/test_legacy_railway_env_names.py"
+      - "tests/test_zarry_gateway_text.py"
       - "tests/test_sandbox_runner_app.py"
       - "account_notifications.py"
       - "gmail_intelligence.py"
@@ -58,6 +59,7 @@ on:
       - "tests/test_free_news_fallback.py"
       - "tests/test_legacy_railway_env_names.py"
       - "tests/test_sandbox_runner_app.py"
+      - "tests/test_zarry_gateway_text.py"
       - "news.py"
       - "config.py"
       - "test_provider_config.py"
@@ -131,9 +133,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Compile workflow modules
-        run: python -m py_compile config.py test_provider_config.py news.py tests/test_free_news_fallback.py tests/test_legacy_railway_env_names.py tests/test_sandbox_runner_app.py engineering_executor.py coding_request.py isolated_code_runner.py sandbox_runner/app.py ai_engine.py email_draft_safety.py google_connector.py account_agent.py test_email_draft_safety.py workflow_models.py workflow_store.py workflow_engine.py workflow_api.py workflow_scheduler.py reliability_guardian.py learning_loop.py revenue_engine.py channel_work.py work_intent.py api.py streaming_chat.py agent_router.py system_inventory.py test_agent_router.py test_streaming_chat_routing.py browser_operator.py browser_api.py connector_api.py job_outreach_agent.py test_browser_operator.py test_job_outreach_agent.py test_workflow_engine.py bot.py discord_bot.py web_research_engine.py test_web_research_engine.py
+        run: python -m py_compile config.py test_provider_config.py news.py tests/test_free_news_fallback.py tests/test_legacy_railway_env_names.py tests/test_sandbox_runner_app.py engineering_executor.py coding_request.py isolated_code_runner.py sandbox_runner/app.py zarry_gateway/providers.py zarry_gateway/service.py tests/test_zarry_gateway_text.py ai_engine.py email_draft_safety.py google_connector.py account_agent.py test_email_draft_safety.py workflow_models.py workflow_store.py workflow_engine.py workflow_api.py workflow_scheduler.py reliability_guardian.py learning_loop.py revenue_engine.py channel_work.py work_intent.py api.py streaming_chat.py agent_router.py system_inventory.py test_agent_router.py test_streaming_chat_routing.py browser_operator.py browser_api.py connector_api.py job_outreach_agent.py test_browser_operator.py test_job_outreach_agent.py test_workflow_engine.py bot.py discord_bot.py web_research_engine.py test_web_research_engine.py
       - name: Run workflow tests with coverage
         run: |
-          python -m pip install --disable-pip-version-check coverage requests fastapi
-          coverage run -m unittest test_provider_config.py tests/test_free_news_fallback.py tests/test_legacy_railway_env_names.py tests/test_sandbox_runner_app.py test_coding_request.py tests/test_engineering_executor.py tests/test_isolated_code_runner.py test_email_draft_safety.py test_workflow_engine.py test_agent_router.py test_work_intent.py test_delivery_agent.py test_business_dashboard.py test_workflow_scheduler.py test_learning_loop.py test_reliability_guardian.py test_browser_operator.py test_job_outreach_agent.py test_web_research_engine.py test_streaming_chat_context.py test_streaming_chat_routing.py
+          python -m pip install --disable-pip-version-check coverage requests fastapi pydantic
+          coverage run -m unittest test_provider_config.py tests/test_free_news_fallback.py tests/test_legacy_railway_env_names.py tests/test_sandbox_runner_app.py test_coding_request.py tests/test_engineering_executor.py tests/test_isolated_code_runner.py test_email_draft_safety.py test_workflow_engine.py test_agent_router.py test_work_intent.py test_delivery_agent.py test_business_dashboard.py test_workflow_scheduler.py test_learning_loop.py test_reliability_guardian.py test_browser_operator.py test_job_outreach_agent.py test_web_research_engine.py test_streaming_chat_context.py test_streaming_chat_routing.py tests.test_zarry_gateway_text
           coverage report -m
