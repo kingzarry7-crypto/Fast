@@ -117,6 +117,8 @@ class BenchmarkContractTests(unittest.TestCase):
         self.assertIn('exact literal phrase "explanation-only"', messages[0]["content"])
         self.assertIn("Do not include numeric digits or percentages in summary or uncertainty.", messages[0]["content"])
         self.assertIn("cited_fields must include every expected_fields key exactly as provided; do not omit any.", messages[0]["content"])
+        self.assertIn("Write a concrete explanation of at least eight words", messages[0]["content"])
+        self.assertIn("Uncertainty must contain at least four words", messages[0]["content"])
 
     def test_benchmark_uses_the_exact_service_prompt_and_output_schema(self):
         self.assertEqual(M.SYSTEM, M.SYSTEM_PROMPT)
@@ -135,6 +137,8 @@ class BenchmarkContractTests(unittest.TestCase):
         schema = response_format["schema"]
         self.assertEqual(set(schema["required"]), M.REQUIRED)
         self.assertFalse(schema["additionalProperties"])
+        self.assertEqual(schema["properties"]["summary"]["minLength"], 60)
+        self.assertEqual(schema["properties"]["uncertainty"]["minLength"], 20)
 
     def test_summary_reports_real_metric_and_model_errors(self):
         reports = [
