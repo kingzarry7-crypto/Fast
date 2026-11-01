@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "zarry-service"))
-from app import _extract_numeric_text_claims, _parse_model_explanation, create_app
+from app import _extract_numeric_text_claims, _parse_model_explanation, _sanitize_context_for_model, create_app
 
 
 class RetryModel:
@@ -27,8 +27,8 @@ class RetryModel:
             else "Explanation-only: Kitty's decision is preserved because the supplied timeframes conflict and entry confirmation remains unresolved."
         )
         result = {
-            "symbol": request["symbol"],
-            "decision": request["kitty_assessment"]["decision"],
+            "symbol": "XAUUSD",
+            "decision": "SELL",
             "summary": summary,
             "uncertainty": "The supplied context leaves entry confirmation unresolved.",
             "cited_fields": request["expected_fields"],
@@ -43,9 +43,8 @@ class AlwaysBadModel:
 
     def create_chat_completion(self, **kwargs):
         self.calls += 1
-        request = json.loads(kwargs["messages"][1]["content"].removeprefix("/no_think\\n"))
         result = {
-            "symbol": request["symbol"],
+            "symbol": "XAUUSD",
             "decision": "BUY",
             "summary": "Explanation-only: the supplied setup is more than 50% certain in the 15m timeframe.",
             "uncertainty": "The context may be incomplete.",
@@ -58,6 +57,25 @@ class AlwaysBadModel:
 class ZarryValidationRetryTests(unittest.TestCase):
     def test_numeric_grounding_detects_hyphenated_numeric_phrases(self):
         self.assertEqual(_extract_numeric_text_claims("15-minute window and 1-hour direction"), {15.0, 1.0})
+
+    def test_numeric_context_is_removed_before_model_generation(self):
+        sanitized = _sanitize_context_for_model({
+            "trend_4h": "bullish",
+            "direction_1h": "bearish",
+            "setup_15m": "mixed",
+            "entry_5m": "not_confirmed",
+            "close": 67234.5,
+            "stop_loss": 67000,
+            "take_profit_1": 68000,
+            "data_fresh": True,
+        })
+        serialized = json.dumps(sanitized, sort_keys=True)
+        self.assertFalse(any(char.isdigit() for char in serialized))
+        self.assertEqual(sanitized["higher_timeframe_trend"], "bullish")
+        self.assertEqual(sanitized["shorter_timeframe_direction"], "bearish")
+        self.assertEqual(sanitized["entry"], "not_confirmed")
+        self.assertTrue(sanitized["stop_loss_available"])
+        self.assertTrue(sanitized["take_profit_available"])
 
     def test_parses_labeled_prose_after_short_preamble(self):
         summary, uncertainty = _parse_model_explanation(
