@@ -73,7 +73,7 @@ class ZarryValidationRetryTests(unittest.TestCase):
         self.assertEqual(result["mode"], "explanation_only")
         self.assertEqual(result["cited_fields"], payload["expected_fields"])
         self.assertEqual(result["numeric_claims"], [])
-        self.assertNotRegex(result["summary"] + result["uncertainty"], r"\\d")
+        self.assertNotRegex(result["summary"] + result["uncertainty"], r"\d")
 
 
 if __name__ == "__main__":
