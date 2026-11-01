@@ -401,6 +401,7 @@ export async function streamChatMessage(
   let reply = "";
   let conversationId: string | undefined;
   let streamError = "";
+  let providerError = "";
   let doneReceived = false;
   let approval: { id: string; provider: "google"; operation: string; target?: string } | undefined;
   let agent: { id?: string; status?: string; activity?: string } | undefined;
@@ -439,6 +440,9 @@ export async function streamChatMessage(
         if (typeof event.approval_id === "string" && event.approval_id && event.provider === "google") {
           approval = { id: event.approval_id, provider: "google", operation: typeof event.operation === "string" ? event.operation : "send_gmail", target: typeof event.target === "string" ? event.target : undefined };
         }
+      } else if (event.type === "provider_error") {
+        // Keep this as diagnostic context: a later fallback provider may still succeed.
+        providerError = typeof event.message === "string" ? event.message : "The selected AI provider failed";
       } else if (event.type === "error") {
         streamError = typeof event.message === "string" ? event.message : "Streaming failed";
       }
@@ -468,7 +472,7 @@ export async function streamChatMessage(
       status: 502,
       message: reply.trim()
         ? "The connection ended before the response was complete."
-        : "AI streaming ended before a response was received.",
+        : providerError || "AI streaming ended before a response was received.",
     });
   }
   if (!reply.trim()) throw new ApiError({ status: 502, message: "AI streaming returned no response" });
