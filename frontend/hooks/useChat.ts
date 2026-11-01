@@ -273,8 +273,39 @@ export function useChat(
               .catch(() => {});
             return streamed;
           } catch (streamErr) {
-            if (streamErr instanceof DOMException && streamErr.name === "AbortError") return;
-            setMessages((prev) => prev.filter((item) => item.id !== aiId));
+            if (streamErr instanceof DOMException && streamErr.name === "AbortError") {
+              setMessages((prev) =>
+                prev.map((item) =>
+                  item.id === aiId ? { ...item, status: "AI CORE • STOPPED" } : item
+                )
+              );
+              return;
+            }
+
+            let message = "ZARRY could not complete this response. Please try again.";
+            if (streamErr instanceof ApiError && streamErr.status === 401) {
+              message = "Session expired. Please sign in again.";
+            } else if (streamErr instanceof ApiError && streamErr.status === 403) {
+              message = streamErr.detail || "Access denied.";
+            } else if (streamErr instanceof ApiError && streamErr.status > 0 && streamErr.status < 500) {
+              message = streamErr.message;
+            } else if (streamErr instanceof Error && /timeout|network|fetch/i.test(streamErr.message)) {
+              message = "ZARRY is taking too long to respond or the connection was interrupted. Please try again.";
+            }
+
+            setError(message);
+            setMessages((prev) =>
+              prev.map((item) =>
+                item.id === aiId
+                  ? {
+                      ...item,
+                      text: item.text?.trim() ? item.text + "\n\n" + message : message,
+                      status: "AI CORE • RESPONSE FAILED",
+                    }
+                  : item
+              )
+            );
+            return;
           }
         }
 

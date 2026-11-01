@@ -1,0 +1,9 @@
+Plan: docs/plans/2026-11-01-zarry-chat-response-reliability.md
+
+Task 1: complete — bounded configurable private Qwen timeout. Red tests observed first (3 assertion failures against the old fixed 180-second timeout); green confirmed in ZARRY inference service contract run 402 (12 gateway text tests passed).
+Task 2: complete — capped streaming to the primary plus at most one configured fallback; no AIEngine re-call of the same Qwen request; partial output now ends with a safe error instead of being marked complete or concatenated. Red tests observed first (2 behavioral assertion failures); green confirmed in KZ Workflow Engine Check run 1328 (152 tests passed, 1 skipped).
+Task 3: implementation and CI verification complete — the frontend retains the failed assistant placeholder, distinguishes cancellation, does not silently send a second non-streaming request after a stream failure, and rejects SSE streams that close without a done event. Typecheck, lint, Next.js production build, and Cloudflare OpenNext build all passed in KZ Workflow Engine Check run 1328 and Fast V5 Safety Checks run 1877.
+Task 3 production browser verification: outstanding — this session has no access to the user's authenticated browser session, so the signed-in message `how` has not been sent through the live website. Do not claim end-to-end success.
+Task 4: pending — draft PR #279 remains unmerged and no Railway deployment was triggered. Complete the signed-in browser smoke test and obtain explicit approval before merge/deployment.
+Other checks: Fast Security Checks run 1593 passed; ZARRY inference service contract run 402 passed; ZARRY PostgreSQL migration and budget contracts run 105 passed.
+Constraints confirmed by branch diff: no Vercel files or configuration changed; Kitty decision authority and live-trading safeguards untouched; no SmolLM3 routing or new provider credentials.

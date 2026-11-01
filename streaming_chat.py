@@ -583,7 +583,9 @@ def _build_stream_generator(
     last_error = None
     started_provider = None
 
+    attempted_providers = 0
     for provider_name, stream in _provider_streams(messages):
+        attempted_providers += 1
         try:
             started_provider = provider_name
             yield _sse({"type": "activity", "stage": "responding", "label": "Writing response", "done": False})
@@ -604,6 +606,8 @@ def _build_stream_generator(
                 })
                 return
             last_error = "empty_stream"
+            if attempted_providers >= 2:
+                break
         except Exception as exc:
             last_error = f"{provider_name}:{type(exc).__name__}"
             # Log the real, sanitized provider error so HTTP status/auth/route
@@ -619,52 +623,29 @@ def _build_stream_generator(
             # output: that would duplicate text in the UI. The frontend can
             # keep the partial response rather than silently corrupting it.
             if full_text.strip():
-                cleaned = ai_engine.clean_ai_response(full_text).strip()
-                if cleaned and research_footer and "**Sources:**" not in cleaned:
-                    cleaned += research_footer
-                if cleaned:
-                    engine._save_memory(user_id, message, cleaned)
+                # Once any token has reached the browser, never switch providers:
+                # doing so would concatenate a second answer onto partial output.
                 yield _sse({
-                    "type": "done",
-                    "conversation_id": conversation_id,
-                    "text": cleaned,
+                    "type": "error",
+                    "message": "The response was interrupted before it finished. Your partial answer is still visible; please retry.",
                     "partial": True,
+                    "provider": provider_name,
                 })
                 return
             yield _sse({
                 "type": "provider_error",
                 "provider": provider_name,
             })
+            if attempted_providers >= 2:
+                break
             continue
 
-    # Streaming endpoints are not supported by every provider and can fail
-    # independently of normal chat. Make one final attempt through AIEngine's
-    # standard non-streaming provider router before reporting an error.
-    try:
-        logger.warning("Streaming providers exhausted; trying AIEngine fallback")
-        fallback_text = str(engine.ask(user_id, message) or "").strip()
-        if fallback_text:
-            cleaned = ai_engine.clean_ai_response(fallback_text).strip()
-            if cleaned:
-                engine._save_memory(user_id, message, cleaned)
-                yield _sse({"type": "start", "provider": "ai_engine_fallback"})
-                yield _sse({"type": "delta", "text": cleaned})
-                yield _sse({
-                    "type": "done",
-                    "conversation_id": conversation_id,
-                    "text": cleaned,
-                    "fallback": True,
-                    "provider": "ai_engine_fallback",
-                })
-                return
-    except Exception as exc:
-        safe_error = ai_engine._redact_secrets(str(exc))[:350]
-        logger.exception("AIEngine final fallback failed: %s", safe_error)
-
+    # The configured streaming-provider loop already tried the primary and at
+    # most one configured fallback. Do not call AIEngine.ask here: AUTO routing
+    # would re-issue the same slow private Qwen request and duplicate the wait.
     yield _sse({
         "type": "error",
         "message": "AI providers are temporarily unavailable. Please try again shortly.",
-        "fallback": True,
         "provider": started_provider,
         "detail": last_error,
     })

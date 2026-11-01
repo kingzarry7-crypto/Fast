@@ -181,6 +181,75 @@ class StreamingIntentRoutingTests(unittest.TestCase):
         self.assertEqual(done[-1].get("status"), "unavailable")
         self.assertIn("No price or signal was invented", done[-1].get("text", ""))
 
+    def test_exhausted_stream_providers_do_not_retry_qwen_through_ai_engine(self):
+        engine = Mock()
+        engine._load_memory_history.return_value = []
+        engine._load_persistent_context.return_value = ""
+        engine._build_openai_messages.return_value = [{"role": "user", "content": "how"}]
+
+        def fail():
+            raise TimeoutError("upstream timed out")
+            yield "unreachable"
+
+        with patch("streaming_chat.ai_engine.AIEngine", return_value=engine), \
+             patch("streaming_chat.ai_engine._detect_media_intent", return_value=None), \
+             patch("coding_request.handle_coding_request", return_value=None), \
+             patch("account_agent.handle_web_request", return_value=None), \
+             patch("agent_router.route_agent_request", return_value=None), \
+             patch("web_research_engine.should_research", return_value=False), \
+             patch("tavily_search.should_trigger_tavily", return_value=False), \
+             patch("streaming_chat._provider_streams", return_value=[("zarry", fail())]):
+            events = _events(_build_stream_generator(
+                user_id="user-1",
+                message="how",
+                conversation_id="conversation-1",
+                memory_factory=lambda *_: _Memory(),
+            ))
+
+        self.assertFalse(any(event.get("type") == "done" for event in events))
+        self.assertTrue(any(event.get("type") == "error" for event in events))
+        engine.ask.assert_not_called()
+
+    def test_partial_stream_failure_is_terminal_and_does_not_try_second_provider(self):
+        engine = Mock()
+        engine._load_memory_history.return_value = []
+        engine._load_persistent_context.return_value = ""
+        engine._build_openai_messages.return_value = [{"role": "user", "content": "how"}]
+        second_provider_started = []
+
+        def partial_then_fail():
+            yield "partial answer"
+            raise TimeoutError("connection lost")
+
+        def second_provider():
+            second_provider_started.append(True)
+            yield "duplicate answer"
+
+        with patch("streaming_chat.ai_engine.AIEngine", return_value=engine), \
+             patch("streaming_chat.ai_engine._detect_media_intent", return_value=None), \
+             patch("coding_request.handle_coding_request", return_value=None), \
+             patch("account_agent.handle_web_request", return_value=None), \
+             patch("agent_router.route_agent_request", return_value=None), \
+             patch("web_research_engine.should_research", return_value=False), \
+             patch("tavily_search.should_trigger_tavily", return_value=False), \
+             patch("streaming_chat._provider_streams", return_value=[
+                 ("zarry", partial_then_fail()),
+                 ("openai", second_provider()),
+             ]):
+            events = _events(_build_stream_generator(
+                user_id="user-1",
+                message="how",
+                conversation_id="conversation-1",
+                memory_factory=lambda *_: _Memory(),
+            ))
+
+        deltas = [event.get("text") for event in events if event.get("type") == "delta"]
+        self.assertEqual(deltas, ["partial answer"])
+        self.assertTrue(any(event.get("type") == "error" for event in events))
+        self.assertFalse(any(event.get("type") == "done" for event in events))
+        self.assertEqual(second_provider_started, [])
+        engine.ask.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

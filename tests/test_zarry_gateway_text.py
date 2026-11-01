@@ -73,6 +73,40 @@ class ProviderTests(unittest.TestCase):
         self.assertIn("Use the user's saved context.", sent[0]["content"])
         self.assertTrue(sent[0]["content"].endswith("Hello"))
 
+    def test_default_private_chat_timeout_is_bounded(self):
+        with patch.dict("os.environ", {}, clear=True):
+            provider = SelfHostedZarryProvider(
+                "http://zarry.railway.internal:8080", "secret", session=Mock()
+            )
+        self.assertEqual(provider.timeout, (5.0, 45.0))
+
+    def test_private_chat_timeout_settings_are_clamped(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "ZARRY_CHAT_CONNECT_TIMEOUT_SECONDS": "0.1",
+                "ZARRY_CHAT_READ_TIMEOUT_SECONDS": "999",
+            },
+            clear=True,
+        ):
+            provider = SelfHostedZarryProvider(
+                "http://zarry.railway.internal:8080", "secret", session=Mock()
+            )
+        self.assertEqual(provider.timeout, (1.0, 90.0))
+
+    def test_explicit_timeout_override_is_preserved(self):
+        request_id = uuid4()
+        response = Mock()
+        response.json.return_value = {"request_id": str(request_id), "response": "Hello"}
+        response.raise_for_status.return_value = None
+        session = Mock()
+        session.post.return_value = response
+        provider = SelfHostedZarryProvider(
+            "http://zarry.railway.internal:8080", "secret", session=session
+        )
+        provider.generate(message="Hi", request_id=request_id, timeout=(2.0, 12.0))
+        self.assertEqual(session.post.call_args.kwargs["timeout"], (2.0, 12.0))
+
     def test_allows_railway_private_http_and_uses_cpu_safe_timeout(self):
         request_id = uuid4()
         response = Mock()
@@ -85,7 +119,7 @@ class ProviderTests(unittest.TestCase):
         )
         self.assertEqual(provider.generate(message="Hi", request_id=request_id), "Hello")
         kwargs = session.post.call_args.kwargs
-        self.assertEqual(kwargs["timeout"], (5.0, 180.0))
+        self.assertEqual(kwargs["timeout"], (5.0, 45.0))
         self.assertEqual(session.post.call_args.args[0], "http://zarry.railway.internal:8080/v1/chat")
 
     def test_refuses_http_or_missing_credentials(self):

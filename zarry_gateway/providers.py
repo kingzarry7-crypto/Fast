@@ -1,6 +1,7 @@
 """Server-side adapters for the isolated ZARRY general-chat service."""
 from __future__ import annotations
 
+import math
 import os
 from typing import Protocol
 from urllib.parse import urlsplit
@@ -50,13 +51,36 @@ def _normalise_chat_messages(messages, fallback_message: str) -> list[dict[str, 
     return turns
 
 
+def _bounded_timeout_setting(name: str, default: float, minimum: float, maximum: float) -> float:
+    """Read a finite timeout value and clamp it to the supported operational range."""
+    raw = os.getenv(name, "").strip()
+    try:
+        value = float(raw) if raw else default
+    except (TypeError, ValueError):
+        value = default
+    if not math.isfinite(value):
+        value = default
+    return min(max(value, minimum), maximum)
+
+
+def _default_chat_timeout() -> tuple[float, float]:
+    """Keep Qwen chat bounded while allowing a small configurable CPU inference window."""
+    connect = _bounded_timeout_setting(
+        "ZARRY_CHAT_CONNECT_TIMEOUT_SECONDS", 5.0, 1.0, 10.0
+    )
+    read = _bounded_timeout_setting(
+        "ZARRY_CHAT_READ_TIMEOUT_SECONDS", 45.0, 10.0, 90.0
+    )
+    return connect, read
+
+
 class SelfHostedZarryProvider:
     """Calls the dedicated general-chat contract, never the trading explain route."""
 
     name = "self-hosted-zarry"
 
     def __init__(self, base_url: str | None = None, api_key: str | None = None,
-                 timeout: tuple[float, float] = (5.0, 180.0), session=None):
+                 timeout: tuple[float, float] | None = None, session=None):
         if base_url is not None:
             selected_base_url = base_url
         else:
@@ -73,7 +97,7 @@ class SelfHostedZarryProvider:
                 selected_base_url = configured_service_url
         self.base_url = selected_base_url.strip().rstrip("/")
         self.api_key = api_key if api_key is not None else os.getenv("ZARRY_API_KEY", "")
-        self.timeout = timeout
+        self.timeout = timeout if timeout is not None else _default_chat_timeout()
         self.session = session or requests
 
     def generate(self, *, message: str, request_id: UUID, messages=None, timeout=None) -> str:
