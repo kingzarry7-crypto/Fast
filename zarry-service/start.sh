@@ -3,6 +3,11 @@ set -eu
 
 # Railway model cache volume is mounted at /models.
 export HF_HOME="${HF_HOME:-/models/hf-cache}"
+# Pin production inference to the approved Qwen3 1.7B artifact. This overrides
+# any stale Railway variables left over from the retired SmolLM3 experiment.
+export ZARRY_MODEL_REPO="unsloth/Qwen3-1.7B-GGUF"
+export ZARRY_MODEL_FILE_PATTERN="Qwen3-1.7B-Q4_K_M.gguf"
+export ZARRY_MODEL_REVISION="b2d17796e6fd93c353a0415a3abd8b7f801701de"
 mkdir -p "$HF_HOME"
 
 echo "ZARRY: resolving model artifact into persistent cache"
