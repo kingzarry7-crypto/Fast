@@ -136,11 +136,19 @@ def _validate_grounding(output: ExplainResponse, request: ExplainRequest) -> Non
         raise ValueError("model changed Kitty's decision")
     if "explanation-only" not in output.summary.lower():
         raise ValueError("model response is not marked explanation-only")
-    summary_body = re.sub(r"(?i)\bexplanation-only\b\s*[:\-–]?\s*", "", output.summary).strip()
-    if len(summary_body.split()) < 8:
-        raise ValueError("model explanation is too generic")
-    if len(output.uncertainty.split()) < 4:
-        raise ValueError("model uncertainty is too generic")
+    summary_body = re.sub(r"(?i)\\bexplanation-only\\b\\s*[:\\-–]?\\s*", "", output.summary).strip()
+    summary_words = re.findall(r"[A-Za-z][A-Za-z'-]*", summary_body)
+    # Structured-output fragments can satisfy JSON schema while not being explanations.
+    if any(mark in summary_body for mark in ("{", "}", "[", "]", '"', "'")) or re.search(
+        r"(?i)\\b(?:symbol|decision|summary|uncertainty|cited_fields|numeric_claims)\\s*:",
+        summary_body,
+    ):
+        raise ValueError("model explanation contains a malformed structured-output fragment")
+    if len(summary_words) < 8 or len(set(word.lower() for word in summary_words)) / len(summary_words) < 0.55:
+        raise ValueError("model explanation is too generic or repetitive")
+    uncertainty_words = re.findall(r"[A-Za-z][A-Za-z'-]*", output.uncertainty)
+    if len(uncertainty_words) < 4 or len(set(word.lower() for word in uncertainty_words)) / len(uncertainty_words) < 0.45:
+        raise ValueError("model uncertainty is too generic or repetitive")
     if not set(output.cited_fields).issubset(request.context):
         raise ValueError("model cited fields absent from supplied context")
     if request.expected_fields and set(request.expected_fields) != set(output.cited_fields):
