@@ -26,7 +26,7 @@ def _fal_zimage_cost_for_dimensions(width: int, height: int) -> str:
     billable_megapixels = (Decimal(pixels) / Decimal(1_000_000)).to_integral_value(
         rounding=ROUND_CEILING
     )
-    return str(billable_megapixels * HF_ZIMAGE_PRICE_PER_MEGAPIXEL_USD)
+    return format((billable_megapixels * HF_ZIMAGE_PRICE_PER_MEGAPIXEL_USD).normalize(), "f")
 
 
 def fal_zimage_turbo_cost_usd(model: str, size: str) -> str:
@@ -167,11 +167,18 @@ class HuggingFaceFirstImageProvider:
         )
 
     def generate(self, prompt: str, *, request_id, width: int, height: int) -> dict:
+        hf_token_present = bool(
+            getattr(self.huggingface_provider, "api_key", "").strip()
+        ) if self.huggingface_provider is not None else False
         primary_ready = (
             self.huggingface_provider is not None
             and callable(getattr(self.huggingface_provider, "is_configured", None))
             and self.huggingface_provider.is_configured()
         )
+        if hf_token_present and not primary_ready:
+            # A configured HF credential with an incomplete/unknown price or
+            # storage contract must block the whole request, not silently switch.
+            raise RuntimeError("Hugging Face image billing or storage contract is incomplete")
         if primary_ready:
             # Deliberately do not catch errors here: once dispatched, the HF
             # request may have been billed even if the client sees a timeout.
