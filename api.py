@@ -846,6 +846,8 @@ try:
     from zarry_gateway.router import create_general_router
     from zarry_gateway.service import AssistantService
     from zarry_gateway.memory import PostgresConversationMemory
+    from zarry_gateway.diagnostics import run_general_gateway_smoke
+    from threading import Thread
     _zarry_image_provider = None
     _image_env_required = (
         "REPLICATE_API_TOKEN", "ZARRY_REPLICATE_MODEL_VERSION",
@@ -888,6 +890,19 @@ try:
             admin_check=_require_zarry_admin,
         )
     )
+
+    def _schedule_zarry_general_gateway_smoke():
+        # Run outside FastAPI startup so a slow CPU model cannot delay health checks.
+        # This calls the provider directly and never writes to a user's conversation memory.
+        provider = getattr(_zarry_general_service, "text_provider", None)
+        Thread(
+            target=run_general_gateway_smoke,
+            args=(provider,),
+            name="zarry-private-gateway-smoke",
+            daemon=True,
+        ).start()
+
+    app.add_event_handler("startup", _schedule_zarry_general_gateway_smoke)
 except Exception as _zarry_general_import_error:
     logger.warning("ZARRY general gateway unavailable: %s", type(_zarry_general_import_error).__name__)
 
