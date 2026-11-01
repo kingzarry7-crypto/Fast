@@ -106,5 +106,54 @@ class GatewayRouterTests(unittest.TestCase):
         response=TestClient(app, raise_server_exceptions=False).post("/api/assistant/image",json={"prompt":"a red kite"})
         self.assertEqual(response.status_code,502)
         self.assertEqual(response.json()["detail"],"ZARRY image request failed")
+    def test_image_route_returns_only_strict_authenticated_image_contract(self):
+        class ImageGateway(FakeGateway):
+            def __init__(self):
+                self.received = None
+            def image(self, principal, payload):
+                self.received = (principal, payload)
+                return {
+                    "request_id": payload.request_id,
+                    "image_url": "https://images.example/generated.png",
+                    "provider": "huggingface-fal-z-image-turbo",
+                    "fallback_used": False,
+                    "budget_reserved_usd": "0.01",
+                }
+        gateway = ImageGateway()
+        app = FastAPI()
+        app.include_router(create_general_router(
+            lambda request: {"id": "user-456"},
+            gateway,
+            enabled_check=lambda: True,
+            image_enabled_check=lambda: True,
+        ))
+        response = TestClient(app).post(
+            "/api/assistant/image",
+            json={"prompt": "a lighthouse", "size": "1024x768"},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["provider"], "huggingface-fal-z-image-turbo")
+        self.assertEqual(body["image_url"], "https://images.example/generated.png")
+        self.assertFalse(body["fallback_used"])
+        self.assertNotIn("budget_reserved_usd", body)
+        self.assertEqual(gateway.received[0].platform_user_id, "user-456")
+        self.assertEqual(gateway.received[1].size, "1024x768")
+
+    def test_image_route_requires_authenticated_web_session_when_enabled(self):
+        app = FastAPI()
+        def require_user(request):
+            raise HTTPException(status_code=401, detail="Authentication required")
+        app.include_router(create_general_router(
+            require_user,
+            FakeGateway(),
+            enabled_check=lambda: True,
+            image_enabled_check=lambda: True,
+        ))
+        response = TestClient(app).post(
+            "/api/assistant/image", json={"prompt": "a lighthouse"}
+        )
+        self.assertEqual(response.status_code, 401)
+
     def test_oversized_request_rejected(self): self.assertEqual(self.client.post("/api/assistant/chat",json={"message":"x"*8001}).status_code,422)
 if __name__ == "__main__": unittest.main()
