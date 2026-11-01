@@ -133,7 +133,7 @@ class BenchmarkContractTests(unittest.TestCase):
         self.assertIn("include every listed key in cited_fields", messages[0]["content"].lower())
         self.assertIn("Never invent or estimate confidence percentages", messages[0]["content"])
         self.assertIn('exact literal phrase "explanation-only"', messages[0]["content"])
-        self.assertIn("Do not include numeric digits or percentages in summary or uncertainty.", messages[0]["content"])
+        self.assertIn("Timeframe labels such as 4h, 15m, and 5m are allowed only when copied exactly from supplied context", messages[0]["content"])
         self.assertIn("cited_fields must include every expected_fields key exactly as provided; do not omit any.", messages[0]["content"])
         self.assertIn("Write a concrete explanation of at least eight words", messages[0]["content"])
         self.assertIn("Uncertainty must contain at least four words", messages[0]["content"])
