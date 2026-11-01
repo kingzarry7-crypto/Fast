@@ -8,7 +8,7 @@ export default function ZarryImageSmokeTest() {
   const [error, setError] = useState("");
   async function run() {
     if (busy || result) return;
-    if (!window.confirm("This consumes the one-time image test and may reserve up to $0.01. Continue?")) return;
+    if (!window.confirm("This consumes the one-time image smoke test and may reserve up to $0.01. Continue?")) return;
     setBusy(true);
     setError("");
     try { setResult(await api.adminImageGenerationSmokeTest()); }
