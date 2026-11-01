@@ -86,6 +86,14 @@ class ZarryProxyTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.json()["decision"], decision)
 
+    def test_proxy_rejects_ungrounded_numeric_claim_in_explanation_text(self):
+        self.valid_upstream()
+        self.upstream.return_value.json.return_value["summary"] = (
+            "This is explanation-only; confidence is above 50%."
+        )
+        response = self.client.post("/api/zarry/explain", json=self.payload)
+        self.assertEqual(response.status_code, 502)
+
     def test_proxy_fails_closed_when_model_changes_kitty_decision(self):
         self.valid_upstream(decision="BUY")
         response = self.client.post("/api/zarry/explain", json=self.payload)
