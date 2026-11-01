@@ -903,7 +903,7 @@ try:
             daemon=True,
         ).start()
 
-    app.add_event_handler("startup", _schedule_zarry_general_gateway_smoke)
+    app.router.add_event_handler("startup", _schedule_zarry_general_gateway_smoke)
 except Exception as _zarry_general_import_error:
     # Keep the exception message (which may contain configuration data) out of logs,
     # but include source frames so AttributeError/compatibility failures are actionable.

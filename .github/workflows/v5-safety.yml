@@ -54,6 +54,8 @@ jobs:
         run: python -m unittest discover -s tests -p "test_zarry_gateway_*.py" -v
       - name: Test web settings platform identity UUID guard
         run: python -m unittest discover -s tests -p "test_web_settings_platform_identity.py" -v
+      - name: Test ZARRY FastAPI startup hook registration
+        run: python -m unittest discover -s tests -p "test_zarry_fastapi_startup_registration.py" -v
       - name: Test Kitty blocks unvalidated directional signals
         run: python -m unittest discover -s tests -p "test_kitty_signal_safety.py" -v
       - name: Test Kitty alert normalization and Gold research safety
