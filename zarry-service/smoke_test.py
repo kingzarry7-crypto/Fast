@@ -88,7 +88,30 @@ def main() -> int:
         raise RuntimeError("ZARRY smoke test failed: expected citations were not preserved")
     if result.get("numeric_claims") != []:
         raise RuntimeError("ZARRY smoke test failed: numeric claims were returned")
-    print("ZARRY authenticated Qwen smoke test passed: health, readiness, auth rejection, Kitty WAIT, citations, explanation-only")
+    chat_payload = {
+        "request_id": "startup-chat-smoke-0001",
+        "messages": [{"role": "user", "content": "Reply with one short sentence confirming you are ready."}],
+    }
+    chat_rejected = requests.post(base_url + "/v1/chat", json=chat_payload, timeout=timeout)
+    if chat_rejected.status_code != 401:
+        raise RuntimeError("ZARRY smoke test failed: unauthenticated general chat was not rejected")
+
+    chat_response = requests.post(
+        base_url + "/v1/chat",
+        json=chat_payload,
+        headers={"Authorization": "Bearer " + api_key},
+        timeout=timeout,
+    )
+    chat_response.raise_for_status()
+    chat_result = chat_response.json()
+    if chat_result.get("request_id") != chat_payload["request_id"]:
+        raise RuntimeError("ZARRY smoke test failed: general chat request ID was not preserved")
+    if not isinstance(chat_result.get("response"), str) or not chat_result["response"].strip():
+        raise RuntimeError("ZARRY smoke test failed: general chat returned an empty response")
+    if not isinstance(chat_result.get("model"), str) or not chat_result["model"].strip():
+        raise RuntimeError("ZARRY smoke test failed: general chat model identity is missing")
+
+    print("ZARRY authenticated Qwen smoke test passed: health, readiness, explain, general chat, auth rejection, Kitty WAIT, citations, explanation-only")
     return 0
 
 

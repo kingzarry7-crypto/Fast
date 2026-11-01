@@ -46,12 +46,24 @@ GENERAL_SYSTEM_PROMPT = (
 )
 
 
+def _chat_max_tokens() -> int:
+    """Bound general-chat generation so a bad setting cannot exhaust CPU resources."""
+    try:
+        value = int(os.getenv("ZARRY_CHAT_MAX_TOKENS", "512"))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail="general chat token configuration is invalid") from exc
+    if value < 16 or value > 2048:
+        raise HTTPException(status_code=503, detail="general chat token limit must be between 16 and 2048")
+    return value
+
+
 def create_general_chat_router():
     router = APIRouter(prefix="/v1", tags=["ZARRY general chat"])
 
     async def authenticate(authorization: str | None = Header(default=None)):
         expected = os.getenv("ZARRY_API_KEY", "")
-        supplied = authorization.removeprefix("Bearer ").strip() if authorization else ""
+        parts = authorization.split() if authorization else []
+        supplied = parts[1] if len(parts) == 2 and parts[0].lower() == "bearer" else ""
         if not expected:
             raise HTTPException(status_code=503, detail="service authentication is not configured")
         if not hmac.compare_digest(supplied, expected):
@@ -64,11 +76,12 @@ def create_general_chat_router():
             raise HTTPException(status_code=503, detail="model is not loaded")
         messages = [{"role": "system", "content": GENERAL_SYSTEM_PROMPT}]
         messages.extend(message.model_dump() for message in payload.messages)
+        max_tokens = _chat_max_tokens()
         try:
             result = model.create_chat_completion(
                 messages=messages,
                 temperature=0.4,
-                max_tokens=int(os.getenv("ZARRY_CHAT_MAX_TOKENS", "800")),
+                max_tokens=max_tokens,
             )
             answer = result["choices"][0]["message"]["content"]
             if not isinstance(answer, str) or not answer.strip():

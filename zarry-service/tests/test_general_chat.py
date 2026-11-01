@@ -13,6 +13,7 @@ from app import create_app
 class FakeModel:
     def create_chat_completion(self, **kwargs):
         self.messages = kwargs["messages"]
+        self.kwargs = kwargs
         return {"choices": [{"message": {"content": "Hello from ZARRY."}}]}
 
 
@@ -33,6 +34,39 @@ class GeneralChatTests(unittest.TestCase):
 
     def test_general_chat_requires_authentication(self):
         self.assertEqual(self.client.post("/v1/chat", json=self.payload()).status_code, 401)
+
+    def test_general_chat_accepts_case_insensitive_bearer_scheme(self):
+        response = self.client.post(
+            "/v1/chat",
+            json=self.payload(),
+            headers={"Authorization": "bEaReR test-secret"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_root_advertises_general_chat_endpoint(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("POST /v1/chat (Bearer API key required)", response.json()["endpoints"]["chat"])
+
+    def test_general_chat_rejects_invalid_token_limit_as_service_configuration_error(self):
+        with patch.dict(os.environ, {"ZARRY_CHAT_MAX_TOKENS": "8"}):
+            response = self.client.post(
+                "/v1/chat",
+                json=self.payload(),
+                headers={"Authorization": "Bearer test-secret"},
+            )
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["detail"], "general chat token limit must be between 16 and 2048")
+
+    def test_general_chat_uses_configured_bounded_token_limit(self):
+        with patch.dict(os.environ, {"ZARRY_CHAT_MAX_TOKENS": "128"}):
+            response = self.client.post(
+                "/v1/chat",
+                json=self.payload(),
+                headers={"Authorization": "Bearer test-secret"},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.model.kwargs["max_tokens"], 128)
 
     def test_general_chat_is_separate_and_works(self):
         response = self.client.post("/v1/chat", json=self.payload(), headers={"Authorization": "Bearer test-secret"})

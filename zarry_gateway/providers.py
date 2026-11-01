@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 from typing import Protocol
+from urllib.parse import urlsplit
 from uuid import UUID
 
 import requests
@@ -20,14 +21,22 @@ class SelfHostedZarryProvider:
     name = "self-hosted-zarry"
 
     def __init__(self, base_url: str | None = None, api_key: str | None = None,
-                 timeout: tuple[float, float] = (5.0, 90.0), session=None):
+                 timeout: tuple[float, float] = (5.0, 180.0), session=None):
         self.base_url = (base_url if base_url is not None else os.getenv("ZARRY_SERVICE_URL", "")).strip().rstrip("/")
         self.api_key = api_key if api_key is not None else os.getenv("ZARRY_API_KEY", "")
         self.timeout = timeout
         self.session = session or requests
 
     def generate(self, *, message: str, request_id: UUID, messages=None, timeout=None) -> str:
-        if not self.base_url.startswith("https://") or not self.api_key:
+        parsed_url = urlsplit(self.base_url)
+        host = (parsed_url.hostname or "").lower()
+        secure_public_url = parsed_url.scheme == "https" and bool(host)
+        railway_private_url = (
+            parsed_url.scheme == "http"
+            and host.endswith(".railway.internal")
+            and bool(host)
+        )
+        if not (secure_public_url or railway_private_url) or parsed_url.username or parsed_url.password or not self.api_key:
             raise RuntimeError("ZARRY text provider is not configured")
         bounded_messages = messages or [{"role": "user", "content": message}]
         if not isinstance(bounded_messages, list) or not 1 <= len(bounded_messages) <= 20:
