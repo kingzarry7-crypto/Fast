@@ -267,7 +267,7 @@ def create_app(model_loader=_load_model) -> FastAPI:
             raw = model.create_chat_completion(
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": json.dumps(message, sort_keys=True)},
+                    {"role": "user", "content": "/no_think\\n" + json.dumps(message, sort_keys=True)},
                 ],
                 temperature=0,
                 max_tokens=int(os.getenv("ZARRY_MAX_TOKENS", "300")),
