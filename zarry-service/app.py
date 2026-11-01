@@ -387,7 +387,7 @@ def create_app(model_loader=_load_model) -> FastAPI:
         parsed = None
         # Keep retries bounded and every semantic safety gate strict. The model
         # supplies prose only; authority fields are built from the request.
-        for attempt in range(3):
+        for attempt in range(2):
             messages = list(base_messages)
             if attempt:
                 messages.append({
@@ -426,7 +426,7 @@ def create_app(model_loader=_load_model) -> FastAPI:
                 last_error = exc
                 parsed = None
                 logger.warning(
-                    "ZARRY explanation validation failed (attempt %s/3): %s",
+                    "ZARRY explanation validation failed (attempt %s/2): %s",
                     attempt + 1,
                     type(exc).__name__ + ": " + str(exc),
                 )
@@ -435,7 +435,7 @@ def create_app(model_loader=_load_model) -> FastAPI:
             # Preserve service availability without disguising a model failure:
             # this response is explicitly labeled as a deterministic fallback.
             logger.warning(
-                "ZARRY using deterministic explanation fallback after three invalid model attempts: %s",
+                "ZARRY using deterministic explanation fallback after two invalid model attempts: %s",
                 type(last_error).__name__ + ": " + str(last_error),
             )
             try:
