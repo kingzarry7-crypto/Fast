@@ -36,7 +36,7 @@ class FakeModel:
             ),
             "uncertainty": "The supplied entry confirmation remains unresolved by the available context.",
             "cited_fields": ["trend_4h", "entry_5m"],
-            "numeric_claims": [999999 if self.bad_number else 68000],
+            "numeric_claims": [999999] if self.bad_number else [],
         }
         return {"choices": [{"message": {"content": json.dumps(result)}}]}
 
@@ -197,6 +197,7 @@ class ZarryServiceTests(unittest.TestCase):
         self.assertIn("NO TRADE", schema["properties"]["decision"]["enum"])
         self.assertEqual(schema["properties"]["summary"]["minLength"], 60)
         self.assertEqual(schema["properties"]["uncertainty"]["minLength"], 20)
+        self.assertEqual(schema["properties"]["numeric_claims"]["maxItems"], 0)
 
     def test_system_prompt_never_turns_context_warnings_into_wait(self):
         self.assertIn("Never turn a context warning into a new WAIT decision.", SYSTEM_PROMPT)
@@ -207,6 +208,7 @@ class ZarryServiceTests(unittest.TestCase):
         self.assertIn("cited_fields must include every expected_fields key exactly as provided; do not omit any.", SYSTEM_PROMPT)
         self.assertIn("Write a concrete explanation of at least eight words", SYSTEM_PROMPT)
         self.assertIn("Uncertainty must contain at least four words", SYSTEM_PROMPT)
+        self.assertIn("numeric_claims must be an empty array", SYSTEM_PROMPT)
 
     def test_preserves_kitty_no_trade_decision(self):
         payload = self.payload()
