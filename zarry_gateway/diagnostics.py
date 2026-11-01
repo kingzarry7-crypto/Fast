@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import time
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 logger = logging.getLogger(__name__)
@@ -14,6 +15,13 @@ def run_general_gateway_smoke(provider) -> str:
         logger.info("ZARRY_GENERAL_GATEWAY_SMOKE status=skipped reason=provider_not_configured")
         return "skipped"
 
+    parsed_url = urlsplit(provider.base_url)
+    host = (parsed_url.hostname or "").lower()
+    transport = (
+        "railway_private"
+        if parsed_url.scheme == "http" and host.endswith(".railway.internal")
+        else "https"
+    )
     started = time.monotonic()
     try:
         answer = provider.generate(
@@ -25,8 +33,9 @@ def run_general_gateway_smoke(provider) -> str:
             raise RuntimeError("ZARRY provider returned an empty startup response")
         latency_ms = max(0, round((time.monotonic() - started) * 1000))
         logger.info(
-            "ZARRY_GENERAL_GATEWAY_SMOKE status=passed provider=%s latency_ms=%d",
+            "ZARRY_GENERAL_GATEWAY_SMOKE status=passed provider=%s transport=%s latency_ms=%d",
             getattr(provider, "name", "unknown"),
+            transport,
             latency_ms,
         )
         return "passed"
