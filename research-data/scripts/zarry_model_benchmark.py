@@ -129,7 +129,7 @@ def score_case(case, result):
     citations = set(result["cited_fields"])
     declared_numbers = {float(value) for value in result["numeric_claims"]}
     text_numbers = extract_numeric_text_claims(result["summary"], result["uncertainty"])
-    summary_body = re.sub(r"(?i)\\bexplanation-only\\b", "", result["summary"]).strip()
+    summary_body = re.sub(r"(?i)\bexplanation-only\b", "", result["summary"]).strip()
     summary_words = summary_body.split()
     uncertainty_words = result["uncertainty"].split()
     return {
