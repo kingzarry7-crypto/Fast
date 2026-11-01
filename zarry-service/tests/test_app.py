@@ -20,10 +20,12 @@ class FakeModel:
         self.thinking_prefix = thinking_prefix
         self.malformed_summary = malformed_summary
         self.last_response_format = None
+        self.last_chat_template_kwargs = None
 
     def create_chat_completion(self, **kwargs):
         import json
         self.last_response_format = kwargs.get("response_format")
+        self.last_chat_template_kwargs = kwargs.get("chat_template_kwargs")
 
         self.last_messages = kwargs["messages"]
         user = json.loads(kwargs["messages"][1]["content"].removeprefix("/no_think\n"))
@@ -193,6 +195,14 @@ class ZarryServiceTests(unittest.TestCase):
         self.assertEqual(response.json()["decision"], "WAIT")
         self.assertEqual(response.json()["authority"], "KITTY_DETERMINISTIC_ENGINE")
         self.assertEqual(response.json()["mode"], "explanation_only")
+
+    def test_model_generation_disables_qwen_thinking(self):
+        response = self.client.post(
+            "/v1/explain", json=self.payload(),
+            headers={"Authorization": "Bearer test-secret"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.model.last_chat_template_kwargs, {"enable_thinking": False})
 
     def test_model_receives_strict_schema_in_llama_cpp_response_format(self):
         response = self.client.post(
