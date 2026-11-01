@@ -19,14 +19,16 @@ class GeneralGatewayStartupSmokeTests(unittest.TestCase):
         provider.base_url = "http://zarry.railway.internal:8080"
         provider.api_key = "test-secret"
         provider.generate.return_value = "ZARRY_CONNECTION_OK"
-        with self.assertLogs("zarry_gateway.diagnostics", level="INFO") as logs:
-            result = run_general_gateway_smoke(provider)
+        with patch("zarry_gateway.diagnostics.general_gateway_enabled", return_value=True):
+            with self.assertLogs("zarry_gateway.diagnostics", level="INFO") as logs:
+                result = run_general_gateway_smoke(provider)
         self.assertEqual(result, "passed")
         kwargs = provider.generate.call_args.kwargs
         self.assertEqual(kwargs["message"], "Reply with exactly: ZARRY_CONNECTION_OK.")
         self.assertEqual(kwargs["timeout"], (5.0, 180.0))
         self.assertIn("ZARRY_GENERAL_GATEWAY_SMOKE status=passed", " ".join(logs.output))
         self.assertIn("transport=railway_private", " ".join(logs.output))
+        self.assertIn("public_chat_enabled=True", " ".join(logs.output))
 
     def test_failure_logs_only_exception_type(self):
         provider = Mock()
