@@ -36,7 +36,7 @@ class DownloadModelTests(unittest.TestCase):
             (Path(directory) / "Qwen3-1.7B-Q4_K_M.gguf").touch()
             (Path(directory) / "copy-Qwen3-1.7B-Q4_K_M.gguf").touch()
             with self.assertRaises(RuntimeError):
-                resolve_model_file(directory)
+                resolve_model_file(directory, "*Q4_K_M.gguf")
 
     def test_removes_only_obsolete_smollm3_cache_when_switching_models(self):
         with tempfile.TemporaryDirectory() as tmp:
