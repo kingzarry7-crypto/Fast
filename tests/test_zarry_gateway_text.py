@@ -1,6 +1,6 @@
 import unittest
 from uuid import uuid4
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from zarry_gateway.identity import AuthenticatedPrincipal
 from zarry_gateway.providers import SelfHostedZarryProvider
@@ -9,6 +9,31 @@ from zarry_gateway.service import AssistantService
 
 
 class ProviderTests(unittest.TestCase):
+    def test_defaults_known_railway_public_zarry_url_to_private_service_endpoint(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "ZARRY_SERVICE_URL": "https://zarry-production.up.railway.app",
+                "ZARRY_API_KEY": "secret",
+            },
+            clear=True,
+        ):
+            provider = SelfHostedZarryProvider()
+        self.assertEqual(provider.base_url, "http://zarry.railway.internal:8080")
+
+    def test_explicit_private_service_url_overrides_public_url(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "ZARRY_SERVICE_URL": "https://zarry-production.up.railway.app",
+                "ZARRY_PRIVATE_SERVICE_URL": "http://zarry.railway.internal:8080",
+                "ZARRY_API_KEY": "secret",
+            },
+            clear=True,
+        ):
+            provider = SelfHostedZarryProvider()
+        self.assertEqual(provider.base_url, "http://zarry.railway.internal:8080")
+
     def test_calls_dedicated_chat_endpoint_and_checks_request_id(self):
         request_id = uuid4()
         response = Mock()
