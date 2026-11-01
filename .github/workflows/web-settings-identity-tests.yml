@@ -1,0 +1,25 @@
+name: Web settings identity regression
+
+on:
+  pull_request:
+    paths:
+      - "web_settings_patch.py"
+      - "tests/test_web_settings_platform_identity.py"
+      - ".github/workflows/web-settings-identity-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  web-settings-identity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install focused test dependencies
+        run: python -m pip install --disable-pip-version-check fastapi pytest
+      - name: Run web settings identity regression tests
+        run: python -m pytest -q tests/test_web_settings_platform_identity.py
