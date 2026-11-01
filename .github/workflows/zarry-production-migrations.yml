@@ -25,6 +25,8 @@ concurrency:
 
 jobs:
   migration:
+    # Do not permit a manual dispatch against a feature branch or tag.
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
@@ -40,7 +42,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: main
 
       - uses: actions/setup-python@v5
         with:
