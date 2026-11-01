@@ -8,15 +8,16 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from app import SYSTEM_PROMPT, create_app
+from app import SYSTEM_PROMPT, create_app, extract_final_response
 
 
 class FakeModel:
-    def __init__(self, changed_decision=False, bad_number=False, ungrounded_text_number=False, generic_summary=False):
+    def __init__(self, changed_decision=False, bad_number=False, ungrounded_text_number=False, generic_summary=False, thinking_prefix=False):
         self.changed_decision = changed_decision
         self.bad_number = bad_number
         self.ungrounded_text_number = ungrounded_text_number
         self.generic_summary = generic_summary
+        self.thinking_prefix = thinking_prefix
         self.last_response_format = None
 
     def create_chat_completion(self, **kwargs):
@@ -39,7 +40,10 @@ class FakeModel:
             "cited_fields": ["trend_4h", "entry_5m"],
             "numeric_claims": [999999] if self.bad_number else [],
         }
-        return {"choices": [{"message": {"content": json.dumps(result)}}]}
+        content = json.dumps(result)
+        if self.thinking_prefix:
+            content = "<think>internal reasoning is not for the caller</think>\\n" + content
+        return {"choices": [{"message": {"content": content}}]}
 
 
 class ZarryServiceTests(unittest.TestCase):
@@ -272,6 +276,23 @@ class ZarryServiceTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 502)
 
+
+
+
+    def test_service_discards_qwen_reasoning_and_keeps_final_json(self):
+        client = TestClient(create_app(model_loader=lambda *args: FakeModel(thinking_prefix=True)))
+        with client:
+            response = client.post(
+                "/v1/explain",
+                json=self.payload(),
+                headers={"Authorization": "Bearer test-secret"},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["decision"], "WAIT")
+
+    def test_rejects_unterminated_thinking_block(self):
+        with self.assertRaises(ValueError):
+            extract_final_response("<think>unfinished reasoning")
 
 
     def test_rejects_generic_explanation(self):
