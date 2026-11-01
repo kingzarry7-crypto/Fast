@@ -87,8 +87,8 @@ class BenchmarkContractTests(unittest.TestCase):
 
     def test_response_format_uses_strict_required_schema(self):
         response_format = M.response_format()
-        self.assertEqual(response_format["type"], "json_schema")
-        schema = response_format["json_schema"]["schema"]
+        self.assertEqual(response_format["type"], "json_object")
+        schema = response_format["schema"]
         self.assertEqual(set(schema["required"]), M.REQUIRED)
         self.assertFalse(schema["additionalProperties"])
 
