@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py download_model.py start.sh smoke_test.py ./
+COPY app.py contract.py general_chat.py download_model.py start.sh smoke_test.py ./
 RUN chmod +x start.sh
 EXPOSE 8000
 CMD ["./start.sh"]

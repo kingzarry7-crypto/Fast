@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-# Railway volume should be mounted at /models.
+# Railway model cache volume is mounted at /models.
 export HF_HOME="${HF_HOME:-/models/hf-cache}"
 mkdir -p "$HF_HOME"
 
@@ -16,4 +16,35 @@ fi
 export ZARRY_MODEL_PATH
 
 : "${ZARRY_API_KEY:?ZARRY_API_KEY must be configured}"
-exec uvicorn app:app --host 0.0.0.0 --port "${PORT:-8000}"
+APP_PORT="${PORT:-8000}"
+
+# Start the API locally, then prove the real model and authentication contract
+# before leaving the process running for Railway's health checks.
+uvicorn app:app --host 0.0.0.0 --port "$APP_PORT" &
+SERVER_PID=$!
+cleanup() {
+  kill "$SERVER_PID" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+python - "$APP_PORT" <<'PY'
+import sys
+import time
+import requests
+
+base = f"http://127.0.0.1:{sys.argv[1]}"
+deadline = time.monotonic() + 240
+while time.monotonic() < deadline:
+    try:
+        response = requests.get(base + "/ready", timeout=3)
+        if response.status_code == 200 and response.json().get("model_loaded") is True:
+            break
+    except requests.RequestException:
+        pass
+    time.sleep(2)
+else:
+    raise SystemExit("ZARRY startup smoke failed: model did not become ready")
+PY
+
+ZARRY_SERVICE_URL="http://127.0.0.1:$APP_PORT" python smoke_test.py
+wait "$SERVER_PID"
