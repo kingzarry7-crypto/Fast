@@ -49,7 +49,7 @@ configured. Replicate is selected only when Hugging Face is unavailable before
 dispatch; an ambiguous Hugging Face failure is never retried through
 Replicate, preventing duplicate paid generations.
 
-`ZARRY_IMAGE_ENABLED` remains false by default. R2 storage diagnostics are
+`ZARRY_IMAGE_ENABLED` remains false by default, and the independent `ZARRY_IMAGE_LIVE_SMOKE_APPROVED` gate must also be explicitly true after a successful live smoke test. Both gates are required to enable public generation. R2 storage diagnostics are
 initialized independently of provider credentials, so the storage test can
 pass before either inference provider is configured.
 
