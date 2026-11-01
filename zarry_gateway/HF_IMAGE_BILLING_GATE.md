@@ -86,7 +86,7 @@ is configured. If both providers are configured, HF is primary.
 
 ## Activation gate
 
-`ZARRY_IMAGE_ENABLED` remains false by default. Keep it false until:
+`ZARRY_IMAGE_ENABLED` remains false by default. A second independent gate, `ZARRY_IMAGE_LIVE_SMOKE_APPROVED`, also defaults to false and must remain unset/false until the live smoke test has passed and an operator explicitly approves activation. Both gates must be true before public image generation can run. Keep `ZARRY_IMAGE_ENABLED` false until:
 
 1. The HF model/provider access is confirmed for the configured token.
 2. The admin R2 public round-trip diagnostic passes.
