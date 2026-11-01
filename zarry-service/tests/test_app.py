@@ -145,7 +145,7 @@ class ZarryServiceTests(unittest.TestCase):
         self.assertEqual(response.json()["explanation_source"], "deterministic_fallback")
         self.assertEqual(response.json()["decision"], "WAIT")
 
-    def test_missing_expected_context_field_fails_closed(self):
+    def test_rejects_missing_expected_context_field_before_model_call(self):
         payload = self.payload()
         payload["expected_fields"] = ["missing_field"]
         response = self.post_explain(payload)
