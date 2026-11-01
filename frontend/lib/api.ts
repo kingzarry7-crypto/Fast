@@ -401,6 +401,7 @@ export async function streamChatMessage(
   let reply = "";
   let conversationId: string | undefined;
   let streamError = "";
+  let doneReceived = false;
   let approval: { id: string; provider: "google"; operation: string; target?: string } | undefined;
   let agent: { id?: string; status?: string; activity?: string } | undefined;
 
@@ -432,6 +433,7 @@ export async function streamChatMessage(
         reply += event.text;
         options.onDelta(event.text);
       } else if (event.type === "done") {
+        doneReceived = true;
         if (typeof event.conversation_id === "string") conversationId = event.conversation_id;
         if (typeof event.text === "string" && event.text) reply = event.text;
         if (typeof event.approval_id === "string" && event.approval_id && event.provider === "google") {
@@ -461,6 +463,14 @@ export async function streamChatMessage(
   }
 
   if (streamError) throw new ApiError({ status: 502, message: streamError });
+  if (!doneReceived) {
+    throw new ApiError({
+      status: 502,
+      message: reply.trim()
+        ? "The connection ended before the response was complete."
+        : "AI streaming ended before a response was received.",
+    });
+  }
   if (!reply.trim()) throw new ApiError({ status: 502, message: "AI streaming returned no response" });
   return { reply, conversation_id: conversationId, approval, agent };
 }
