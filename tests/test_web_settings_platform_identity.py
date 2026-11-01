@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import web_settings_patch
 
@@ -28,9 +28,7 @@ class WebSettingsPlatformIdentityTests(unittest.TestCase):
         cursor_factory.assert_not_called()
 
     def test_read_allows_valid_web_uuid(self):
-        cursor = Mock()
-        cursor.__enter__ = Mock(return_value=cursor)
-        cursor.__exit__ = Mock(return_value=False)
+        cursor = MagicMock()
         cursor.fetchone.return_value = None
         cursor_factory = Mock(return_value=cursor)
         result = web_settings_patch._read_settings(
