@@ -28,14 +28,60 @@ MODELS = {
         "pattern": "*Q4_K_M.gguf",
     },
 }
-SYSTEM = """You are ZARRY, an explanation-only model. Kitty's deterministic decision is authoritative.
-Never change BUY/SELL/WAIT. Never invent prices, indicators, candles, fills or outcomes.
-Use only supplied context. Explain stale data, conflicting timeframes, unconfirmed entries
-or missing risk levels as reasons to WAIT. You cannot place orders or change risk settings.
-Return only JSON with exactly: symbol, decision, summary, uncertainty, cited_fields, numeric_claims.
-symbol and decision must exactly match input. cited_fields are supplied context keys.
-numeric_claims are numbers copied exactly from supplied context. State 'explanation-only' in summary."""
+SYSTEM = """You are ZARRY, an explanation-only model. Kitty's deterministic assessment is authoritative.
+Your task is ONLY to explain the supplied assessment. You MUST copy the exact symbol and decision
+from kitty_assessment. Never reinterpret, upgrade, downgrade, or replace BUY/SELL/WAIT.
+Never invent prices, indicators, candles, fills, outcomes, risk levels, or facts. Use only context.
+Explain stale data, conflicting timeframes, unconfirmed entries, overextension, or missing risk
+levels when present. You cannot place orders or change risk settings.
+
+Output exactly these six JSON keys and no others:
+symbol, decision, summary, uncertainty, cited_fields, numeric_claims.
+The summary MUST contain the exact literal phrase "explanation-only".
+cited_fields MUST include EVERY key listed in expected_fields, and may include other context keys.
+Every cited_fields item MUST be an exact key from context.
+numeric_claims may contain only numeric values copied exactly from context; use [] when none are
+needed. Do not put numeric values in numeric_claims that are not present in context.
+The decision and symbol must exactly match kitty_assessment and the top-level input.
+Return JSON only, with no markdown fences or commentary."""
 REQUIRED = {"symbol", "decision", "summary", "uncertainty", "cited_fields", "numeric_claims"}
+OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "symbol": {"type": "string", "enum": ["BTCUSD", "XAUUSD"]},
+        "decision": {"type": "string", "enum": ["BUY", "SELL", "WAIT"]},
+        "summary": {"type": "string"},
+        "uncertainty": {"type": "string"},
+        "cited_fields": {"type": "array", "items": {"type": "string"}},
+        "numeric_claims": {"type": "array", "items": {"type": "number"}},
+    },
+    "required": sorted(REQUIRED),
+    "additionalProperties": False,
+}
+
+
+def response_format():
+    """Constrain decoding to the exact public explanation response shape."""
+    return {
+        "type": "json_schema",
+        "json_schema": {"name": "zarry_explanation", "schema": OUTPUT_SCHEMA},
+    }
+
+
+def build_messages(case):
+    """Pass all scoring requirements to the model instead of hiding them in the evaluator."""
+    message = {
+        "symbol": case["symbol"],
+        "timestamp": case["timestamp"],
+        "context": case["context"],
+        "expected_fields": case.get("expected_fields", []),
+        "kitty_assessment": case["kitty"],
+        "task": "Explain Kitty's assessment without changing it.",
+    }
+    return [
+        {"role": "system", "content": SYSTEM},
+        {"role": "user", "content": json.dumps(message, sort_keys=True)},
+    ]
 SCORE_KEYS = (
     "valid_json",
     "decision_preserved",
@@ -140,24 +186,15 @@ def evaluate(name, config, cases, args):
     )
     rows = []
     for case in cases:
-        message = {
-            "symbol": case["symbol"],
-            "timestamp": case["timestamp"],
-            "context": case["context"],
-            "kitty_assessment": case["kitty"],
-            "task": "Explain Kitty's assessment without changing it.",
-        }
+        messages = build_messages(case)
         started = time.perf_counter()
         error = None
         try:
             response = llm.create_chat_completion(
-                messages=[
-                    {"role": "system", "content": SYSTEM},
-                    {"role": "user", "content": json.dumps(message, sort_keys=True)},
-                ],
+                messages=messages,
                 temperature=0,
                 max_tokens=args.max_tokens,
-                response_format={"type": "json_object"},
+                response_format=response_format(),
             )
             parsed = parse_output(response["choices"][0]["message"]["content"] or "")
             score = score_case(case, parsed)
