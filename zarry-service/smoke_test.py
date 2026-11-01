@@ -1,4 +1,4 @@
-"Run a deployment smoke test against a live ZARRY service.
+"""Run a deployment smoke test against a live ZARRY service.
 
 Usage:
   ZARRY_SERVICE_URL=https://... ZARRY_API_KEY=... python smoke_test.py
