@@ -289,3 +289,33 @@ class StreamingIntentRoutingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StreamingTimeoutBudgetTests(unittest.TestCase):
+    def test_stream_timeout_defaults_to_a_bounded_12_second_read(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(streaming_chat._bounded_stream_timeout(), 12)
+
+    def test_stream_timeout_rejects_invalid_and_clamps_extreme_values(self):
+        with patch.dict(os.environ, {"AI_STREAM_TIMEOUT": "not-a-number"}, clear=True):
+            self.assertEqual(streaming_chat._bounded_stream_timeout(), 12)
+        with patch.dict(os.environ, {"AI_STREAM_TIMEOUT": "999"}, clear=True):
+            self.assertEqual(streaming_chat._bounded_stream_timeout(), 15)
+        with patch.dict(os.environ, {"AI_STREAM_TIMEOUT": "1"}, clear=True):
+            self.assertEqual(streaming_chat._bounded_stream_timeout(), 8)
+
+    def test_private_qwen_wait_defaults_to_ten_seconds(self):
+        messages = [{"role": "user", "content": "Hello"}]
+        with patch.dict(os.environ, {
+            "ZARRY_PRIVATE_SERVICE_URL": "http://zarry.railway.internal:8080",
+            "ZARRY_SERVICE_URL": "",
+            "ZARRY_API_URL": "",
+        }, clear=True), patch(
+            "zarry_gateway.providers.SelfHostedZarryProvider"
+        ) as provider_class:
+            provider_class.return_value.generate.return_value = "Qwen response"
+            list(streaming_chat._stream_zarry(messages))
+        self.assertEqual(
+            provider_class.return_value.generate.call_args.kwargs["timeout"],
+            (5.0, 10.0),
+        )
