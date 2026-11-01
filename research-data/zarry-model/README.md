@@ -4,11 +4,11 @@ Research-only comparison of open-weight GGUF models that explain an already-comp
 
 | Candidate | Hugging Face repository | Base license |
 |---|---|---|
-| Qwen3 0.6B | https://huggingface.co/Qwen/Qwen3-0.6B-GGUF | Apache-2.0 |
-| Qwen3 1.7B | https://huggingface.co/Qwen/Qwen3-1.7B-GGUF | Apache-2.0 |
+| Qwen3 0.6B | https://huggingface.co/unsloth/Qwen3-0.6B-GGUF | Apache-2.0 |
+| Qwen3 1.7B | https://huggingface.co/unsloth/Qwen3-1.7B-GGUF | Apache-2.0 |
 | SmolLM3 3B | https://huggingface.co/unsloth/SmolLM3-3B-GGUF | Apache-2.0 (base model) |
 
-The runner downloads a Q4_K_M GGUF file at runtime. Recheck model repository contents and license metadata before redistributing weights.
+The Qwen candidates use the published Q4_K_M files from Unsloth. The upstream Qwen organization GGUF repositories did not contain the requested Q4_K_M files, which caused the first CPU run to fail before inference. The runner now pins exact filenames, emits the underlying per-model errors, and prints the complete report to job logs so results survive ephemeral job containers.
 
 The frozen eight-case synthetic suite covers BTCUSD/XAUUSD, BUY/SELL/WAIT, timeframe conflicts, stale data, overextension and missing risk context. It is a contract test, not a historical profitability dataset.
 
