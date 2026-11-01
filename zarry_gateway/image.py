@@ -1,10 +1,11 @@
 """Budget-gated Hugging Face text-to-image adapter.
 
-This adapter is deliberately not wired into the live router until a verified
-provider cost resolver and durable image-storage adapter are supplied.
+This adapter uses a fixed HF-routed Fal Z-Image-Turbo price contract and durable
+image storage, with a conservative reservation before provider dispatch.
 """
 from __future__ import annotations
 
+from decimal import Decimal, ROUND_CEILING
 import os
 from uuid import UUID
 
