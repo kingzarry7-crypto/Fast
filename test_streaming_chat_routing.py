@@ -339,5 +339,5 @@ class StreamingTimeoutBudgetTests(unittest.TestCase):
             list(streaming_chat._stream_zarry(messages))
         self.assertEqual(
             provider_class.return_value.generate.call_args.kwargs["timeout"],
-            (5.0, 10.0),
+            (2.0, 6.0),
         )
