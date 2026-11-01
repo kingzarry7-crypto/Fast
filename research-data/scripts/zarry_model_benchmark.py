@@ -5,11 +5,17 @@ import json
 import os
 import re
 import statistics
+import sys
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES = ROOT / "research-data/zarry-model/benchmark_cases.json"
+sys.path.insert(0, str(ROOT / "zarry-service"))
+from contract import MODEL_OUTPUT_SCHEMA, SYSTEM_PROMPT
+
+SYSTEM = SYSTEM_PROMPT
+OUTPUT_SCHEMA = MODEL_OUTPUT_SCHEMA
 MODELS = {
     # The upstream Qwen organization repositories only expose Q8_0 for these
     # sizes. Unsloth publishes the requested Q4_K_M GGUF artifacts.
@@ -29,25 +35,6 @@ MODELS = {
         "pattern": "*Q4_K_M.gguf",
     },
 }
-SYSTEM = """You are ZARRY, an explanation-only model. Kitty's deterministic assessment is authoritative.
-Your task is ONLY to explain the supplied assessment. You MUST copy the exact symbol and decision
-from kitty_assessment. Never reinterpret, upgrade, downgrade, or replace BUY/SELL/WAIT.
-Never invent prices, indicators, candles, fills, outcomes, risk levels, or facts. Use only context.
-Explain stale data, conflicting timeframes, unconfirmed entries, overextension, or missing risk
-levels when present. You cannot place orders or change risk settings.
-
-Output exactly these six JSON keys and no others:
-symbol, decision, summary, uncertainty, cited_fields, numeric_claims.
-The summary MUST contain the exact literal phrase "explanation-only".
-cited_fields MUST include every expected_fields key (every key listed in the expected_fields array), and may include other context keys.
-Every cited_fields item MUST be an exact key from context.
-numeric_claims may contain only numeric values copied exactly from context; use [] when none are
-needed. Every numeric value written in summary or uncertainty MUST also appear in numeric_claims.
-Do not put numeric values in numeric_claims that are not present in context.
-Never invent or estimate confidence percentages, probabilities, odds, or numeric likelihoods.
-If context contains no such value, describe uncertainty qualitatively without numeric values.
-The decision and symbol must exactly match kitty_assessment and the top-level input.
-Return JSON only, with no markdown fences or commentary."""
 REQUIRED = {"symbol", "decision", "summary", "uncertainty", "cited_fields", "numeric_claims"}
 NUMERIC_TEXT_RE = re.compile(r"(?<![A-Za-z0-9_])[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?(?![A-Za-z0-9_-])")
 
@@ -58,21 +45,6 @@ def extract_numeric_text_claims(*texts):
         for token in NUMERIC_TEXT_RE.findall(text or ""):
             claims.add(float(token.replace(",", "").rstrip("%")))
     return claims
-OUTPUT_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "symbol": {"type": "string", "enum": ["BTCUSD", "XAUUSD"]},
-        "decision": {"type": "string", "enum": ["BUY", "SELL", "WAIT"]},
-        "summary": {"type": "string"},
-        "uncertainty": {"type": "string"},
-        "cited_fields": {"type": "array", "items": {"type": "string"}},
-        "numeric_claims": {"type": "array", "items": {"type": "number"}},
-    },
-    "required": sorted(REQUIRED),
-    "additionalProperties": False,
-}
-
-
 def response_format():
     """Constrain decoding to the exact public explanation response shape."""
     # llama-cpp-python 0.3.16 expects the schema under the JSON-object
@@ -117,7 +89,7 @@ def load_cases(path):
     if any(not value for value in ids) or len(ids) != len(set(ids)):
         raise ValueError("Case IDs must be unique")
     for case in cases:
-        if case.get("symbol") not in {"BTCUSD", "XAUUSD"} or case.get("kitty", {}).get("decision") not in {"BUY", "SELL", "WAIT"}:
+        if case.get("symbol") not in {"BTCUSD", "XAUUSD"} or case.get("kitty", {}).get("decision") not in {"BUY", "SELL", "WAIT", "NO TRADE"}:
             raise ValueError("Invalid case contract")
     return cases
 
@@ -130,7 +102,7 @@ def parse_output(raw):
     value = json.loads(text[start : end + 1])
     if not isinstance(value, dict) or set(value) != REQUIRED:
         raise ValueError("Wrong response keys")
-    if value["decision"] not in {"BUY", "SELL", "WAIT"}:
+    if value["decision"] not in {"BUY", "SELL", "WAIT", "NO TRADE"}:
         raise ValueError("Invalid decision")
     if not all(isinstance(value[key], str) for key in ("symbol", "summary", "uncertainty")):
         raise ValueError("Invalid text fields")
