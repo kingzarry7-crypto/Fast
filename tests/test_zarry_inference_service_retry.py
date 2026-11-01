@@ -24,7 +24,7 @@ class RetryModel:
         summary = (
             "Explanation-only: the supplied evidence is more than 50% certain."
             if self.calls == 1
-            else "Explanation-only: Kitty's decision follows the mixed setup in a 15-minute timeframe."
+            else "Explanation-only: Kitty's decision follows the mixed setup in a 15m timeframe."
             if self.calls == 2
             else "Explanation-only: Kitty's decision is preserved because the supplied timeframes conflict and entry confirmation remains unresolved."
         )
@@ -43,7 +43,7 @@ class ZarryValidationRetryTests(unittest.TestCase):
     def test_numeric_grounding_detects_hyphenated_numeric_phrases(self):
         self.assertEqual(_extract_numeric_text_claims("15-minute window and 1-hour direction"), {15.0, 1.0})
 
-    def test_retries_once_after_ungrounded_numeric_text_without_relaxing_contract(self):
+    def test_retries_malformed_and_ungrounded_responses_without_relaxing_contract(self):
         with patch.dict(os.environ, {
             "ZARRY_API_KEY": "retry-test-secret",
             "ZARRY_MODEL_PATH": "/fake/model.gguf",
