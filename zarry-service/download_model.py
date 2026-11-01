@@ -1,11 +1,25 @@
-"""Download the selected ZARRY GGUF model into a persistent local directory."""
+"""Download the pinned ZARRY GGUF model into persistent local storage."""
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
-DEFAULT_REPO = "unsloth/SmolLM3-3B-GGUF"
-DEFAULT_PATTERN = "*Q4_K_M.gguf"
+DEFAULT_REPO = "unsloth/Qwen3-1.7B-GGUF"
+DEFAULT_PATTERN = "Qwen3-1.7B-Q4_K_M.gguf"
+DEFAULT_REVISION = "b2d17796e6fd93c353a0415a3abd8b7f801701de"
+OBSOLETE_REPO = "unsloth/SmolLM3-3B-GGUF"
+
+
+def clear_obsolete_model_cache(cache_dir: str | Path | None, repo_id: str) -> bool:
+    """Remove only the previous SmolLM3 repository cache after selecting another model."""
+    if not cache_dir or repo_id == OBSOLETE_REPO:
+        return False
+    obsolete = Path(cache_dir) / "hub" / "models--unsloth--SmolLM3-3B-GGUF"
+    if not obsolete.exists():
+        return False
+    shutil.rmtree(obsolete)
+    return True
 
 
 def resolve_model_file(snapshot_dir: str | Path, pattern: str = DEFAULT_PATTERN) -> Path:
@@ -22,18 +36,21 @@ def main() -> None:
 
     repo_id = os.getenv("ZARRY_MODEL_REPO", DEFAULT_REPO).strip()
     pattern = os.getenv("ZARRY_MODEL_FILE_PATTERN", DEFAULT_PATTERN).strip()
-    cache_dir = os.getenv("HF_HOME")
-    revision = os.getenv("ZARRY_MODEL_REVISION", "").strip()
+    cache_dir = os.getenv("HF_HOME") or None
+    revision = os.getenv("ZARRY_MODEL_REVISION", DEFAULT_REVISION).strip() or DEFAULT_REVISION
+
+    if clear_obsolete_model_cache(cache_dir, repo_id):
+        print(f"Removed obsolete model cache for {OBSOLETE_REPO}")
+
     snapshot = snapshot_download(
         repo_id=repo_id,
         allow_patterns=[pattern],
-        cache_dir=cache_dir or None,
-        revision=revision or None,
+        cache_dir=cache_dir,
+        revision=revision,
     )
     model_path = resolve_model_file(snapshot, pattern)
     print(f"ZARRY_MODEL_REPO={repo_id}")
-    if revision:
-        print(f"ZARRY_MODEL_REVISION={revision}")
+    print(f"ZARRY_MODEL_REVISION={revision}")
     print(f"ZARRY_MODEL_PATH={model_path}")
 
 

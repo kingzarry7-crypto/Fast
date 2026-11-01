@@ -1,5 +1,6 @@
 import os
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
 import requests
@@ -33,7 +34,7 @@ class ZarryProxyTests(unittest.TestCase):
         self.client = TestClient(app)
         self.payload = {
             "symbol": "BTCUSD",
-            "timestamp": "2026-10-31T09:00:00Z",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "context": {"close": 67000.0, "rsi_14": 54.2, "timeframe": "1h"},
             "kitty_assessment": {"decision": "NO TRADE", "reason_codes": ["edge_not_validated"]},
         }
