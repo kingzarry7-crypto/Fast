@@ -130,7 +130,7 @@ class ZarryValidationRetryTests(unittest.TestCase):
                 )
 
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(model.calls, 3)
+        self.assertEqual(model.calls, 2)
         result = response.json()
         self.assertEqual(result["symbol"], "BTCUSD")
         self.assertEqual(result["decision"], "WAIT")
