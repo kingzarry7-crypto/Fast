@@ -52,7 +52,7 @@ def _parse_model_explanation(raw: str) -> tuple[str, str]:
         pass
 
     match = re.search(
-        r"(?is)^\s*SUMMARY\s*:\s*(.*?)\s*\n\s*UNCERTAINTY\s*:\s*(.*?)\s*$",
+        r"(?is)\\bSUMMARY\\s*:\\s*(.*?)\\s*\\n\\s*UNCERTAINTY\\s*:\\s*(.*?)\\s*$",
         text,
     )
     if not match:
