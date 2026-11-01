@@ -9,8 +9,58 @@ import os
 from uuid import UUID
 
 
+HF_ZIMAGE_MODEL = "Tongyi-MAI/Z-Image-Turbo"
+HF_ZIMAGE_PROVIDER = "fal-ai"
+HF_ZIMAGE_PRICE_PER_MEGAPIXEL_USD = Decimal("0.005")
+HF_ZIMAGE_MAX_PIXELS = 2_000_000
+
+
+def _fal_zimage_cost_for_dimensions(width: int, height: int) -> str:
+    if (isinstance(width, bool) or isinstance(height, bool)
+            or not isinstance(width, int) or not isinstance(height, int)
+            or width <= 0 or height <= 0):
+        raise ValueError("Image dimensions must be positive integers")
+    pixels = width * height
+    if pixels > HF_ZIMAGE_MAX_PIXELS:
+        raise ValueError("Image exceeds the supported 2-megapixel limit")
+    billable_megapixels = (Decimal(pixels) / Decimal(1_000_000)).to_integral_value(
+        rounding=ROUND_CEILING
+    )
+    return str(billable_megapixels * HF_ZIMAGE_PRICE_PER_MEGAPIXEL_USD)
+
+
+def fal_zimage_turbo_cost_usd(model: str, size: str) -> str:
+    """Conservative published Fal tariff for HF-routed Z-Image Turbo."""
+    if model != HF_ZIMAGE_MODEL:
+        raise ValueError("No verified price contract exists for this Hugging Face model")
+    try:
+        width_text, height_text = size.split("x", 1)
+        width, height = int(width_text), int(height_text)
+    except (AttributeError, TypeError, ValueError):
+        raise ValueError("Image size must be WIDTHxHEIGHT")
+    return _fal_zimage_cost_for_dimensions(width, height)
+
+
+def fal_zimage_turbo_settlement_usd(image, model: str, size: str) -> str | None:
+    """Settle the published per-megapixel tariff from the returned image dimensions.
+
+    Hugging Face does not return a guaranteed per-request billing amount to
+    inference clients. This is therefore a conservative tariff settlement,
+    not a claim that it is the provider's invoice-level actual cost.
+    """
+    if model != HF_ZIMAGE_MODEL:
+        return None
+    dimensions = getattr(image, "size", None)
+    if not isinstance(dimensions, tuple) or len(dimensions) != 2:
+        return None
+    try:
+        return _fal_zimage_cost_for_dimensions(dimensions[0], dimensions[1])
+    except (TypeError, ValueError):
+        return None
+
+
 class HuggingFaceImageProvider:
-    """Generate through HF Inference Providers with fail-closed cost controls."""
+    """Generate through pinned HF-routed Fal Z-Image Turbo with budget gating."""
 
     name = "huggingface-inference-providers"
 
@@ -24,6 +74,7 @@ class HuggingFaceImageProvider:
         actual_cost_resolver,
         storage,
         client_factory=None,
+        provider: str = HF_ZIMAGE_PROVIDER,
     ):
         self.api_key = (api_key if api_key is not None else os.getenv("HF_TOKEN", "")).strip()
         self.model = (model if model is not None else os.getenv("ZARRY_IMAGE_MODEL", "")).strip()
@@ -31,6 +82,7 @@ class HuggingFaceImageProvider:
         self.cost_estimator = cost_estimator
         self.actual_cost_resolver = actual_cost_resolver
         self.storage = storage
+        self.provider = provider
         self.client_factory = client_factory or self._default_client_factory
 
     @staticmethod
@@ -40,6 +92,16 @@ class HuggingFaceImageProvider:
         except ImportError as exc:
             raise RuntimeError("huggingface_hub is not installed") from exc
         return InferenceClient(api_key=api_key)
+
+    def is_configured(self) -> bool:
+        return bool(
+            self.api_key and self.model == HF_ZIMAGE_MODEL
+            and self.provider == HF_ZIMAGE_PROVIDER
+            and callable(self.cost_estimator)
+            and callable(self.actual_cost_resolver)
+            and self.storage is not None
+            and callable(getattr(self.storage, "save", None))
+        )
 
     def generate(self, prompt: str, *, request_id: UUID, size: str) -> dict:
         if not self.api_key or not self.model:
@@ -64,7 +126,12 @@ class HuggingFaceImageProvider:
         # Reserve before any billable provider call. Unknown outcomes retain the
         # reservation; only a verified actual cost can release it via settlement.
         self.ledger.reserve(request_id, estimate)
-        generated = client.text_to_image(prompt=prompt.strip(), model=self.model)
+        width_text, height_text = size.split("x", 1)
+        width, height = int(width_text), int(height_text)
+        generated = client.text_to_image(
+            prompt=prompt.strip(), model=self.model, provider=self.provider,
+            width=width, height=height,
+        )
         actual = self.actual_cost_resolver(generated, self.model, size)
         if actual is None:
             raise RuntimeError("Verified actual provider cost is unavailable; reservation retained")
@@ -78,4 +145,46 @@ class HuggingFaceImageProvider:
             "image_url": image_url,
             "provider": self.name,
             "fallback_used": False,
+            "budget_reserved_usd": str(estimate),
         }
+
+
+
+class HuggingFaceFirstImageProvider:
+    """Use HF as primary; use Replicate only when HF is unavailable pre-dispatch.
+
+    Any exception after the HF request starts is treated as an ambiguous
+    provider outcome. It is propagated without a Replicate retry to prevent
+    duplicate billable generations.
+    """
+
+    def __init__(self, huggingface_provider, replicate_fallback=None):
+        self.huggingface_provider = huggingface_provider
+        self.replicate_fallback = replicate_fallback
+        self.storage = (
+            getattr(huggingface_provider, "storage", None)
+            or getattr(replicate_fallback, "storage", None)
+        )
+
+    def generate(self, prompt: str, *, request_id, width: int, height: int) -> dict:
+        primary_ready = (
+            self.huggingface_provider is not None
+            and callable(getattr(self.huggingface_provider, "is_configured", None))
+            and self.huggingface_provider.is_configured()
+        )
+        if primary_ready:
+            # Deliberately do not catch errors here: once dispatched, the HF
+            # request may have been billed even if the client sees a timeout.
+            return self.huggingface_provider.generate(
+                prompt, request_id=request_id, size=f"{width}x{height}"
+            )
+        if self.replicate_fallback is None:
+            raise RuntimeError("Hugging Face is not configured and no fallback provider is available")
+        result = self.replicate_fallback.generate(
+            prompt, request_id=request_id, width=width, height=height
+        )
+        if not isinstance(result, dict):
+            raise RuntimeError("Replicate fallback returned an invalid image result")
+        result = dict(result)
+        result["fallback_used"] = True
+        return result
