@@ -269,7 +269,7 @@ def create_app(model_loader=_load_model) -> FastAPI:
 
         base_messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": "/no_think\\n" + json.dumps(message, sort_keys=True)},
+            {"role": "user", "content": "/no_think\n" + json.dumps(message, sort_keys=True)},
         ]
         last_error = None
         parsed = None
