@@ -14,7 +14,7 @@ logger.setLevel(logging.INFO)
 def run_general_gateway_smoke(provider) -> str:
     """Exercise the configured provider without touching user memory or logging secrets."""
     if not getattr(provider, "base_url", "") or not getattr(provider, "api_key", ""):
-        logger.info("ZARRY_GENERAL_GATEWAY_SMOKE status=skipped reason=provider_not_configured")
+        logger.warning("ZARRY_GENERAL_GATEWAY_SMOKE status=skipped reason=provider_not_configured")
         return "skipped"
 
     public_chat_enabled = general_gateway_enabled()
@@ -35,7 +35,7 @@ def run_general_gateway_smoke(provider) -> str:
         if not isinstance(answer, str) or not answer.strip():
             raise RuntimeError("ZARRY provider returned an empty startup response")
         latency_ms = max(0, round((time.monotonic() - started) * 1000))
-        logger.info(
+        logger.warning(
             "ZARRY_GENERAL_GATEWAY_SMOKE status=passed provider=%s transport=%s public_chat_enabled=%s latency_ms=%d",
             getattr(provider, "name", "unknown"),
             transport,

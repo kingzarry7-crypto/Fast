@@ -14,7 +14,9 @@ class GeneralGatewayStartupSmokeTests(unittest.TestCase):
         provider = Mock()
         provider.base_url = ""
         provider.api_key = ""
-        result = run_general_gateway_smoke(provider)
+        with self.assertLogs("zarry_gateway.diagnostics", level="WARNING") as logs:
+            result = run_general_gateway_smoke(provider)
+        self.assertIn("status=skipped", " ".join(logs.output))
         self.assertEqual(result, "skipped")
         provider.generate.assert_not_called()
 
