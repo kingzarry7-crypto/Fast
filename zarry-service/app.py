@@ -6,6 +6,7 @@ market-data, broker, order, or tool-execution integration.
 from __future__ import annotations
 
 import hmac
+from copy import deepcopy
 import json
 import os
 import re
@@ -137,8 +138,8 @@ def _validate_grounding(output: ExplainResponse, request: ExplainRequest) -> Non
         raise ValueError("model response is not marked explanation-only")
     if not set(output.cited_fields).issubset(request.context):
         raise ValueError("model cited fields absent from supplied context")
-    if not set(request.expected_fields).issubset(output.cited_fields):
-        raise ValueError("model omitted an expected context field")
+    if request.expected_fields and set(request.expected_fields) != set(output.cited_fields):
+        raise ValueError("model cited_fields must exactly match expected_fields")
     available_numbers = {
         float(value)
         for value in request.context.values()
@@ -250,6 +251,12 @@ def create_app(model_loader=_load_model) -> FastAPI:
             "task": "Explain Kitty's assessment without changing it.",
         }
         try:
+            output_schema = deepcopy(MODEL_OUTPUT_SCHEMA)
+            if payload.expected_fields:
+                cited_fields_schema = output_schema["properties"]["cited_fields"]
+                cited_fields_schema["items"] = {"type": "string", "enum": payload.expected_fields}
+                cited_fields_schema["minItems"] = len(payload.expected_fields)
+                cited_fields_schema["maxItems"] = len(payload.expected_fields)
             raw = model.create_chat_completion(
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
@@ -257,7 +264,7 @@ def create_app(model_loader=_load_model) -> FastAPI:
                 ],
                 temperature=0,
                 max_tokens=int(os.getenv("ZARRY_MAX_TOKENS", "300")),
-                response_format={"type": "json_object", "schema": MODEL_OUTPUT_SCHEMA},
+                response_format={"type": "json_object", "schema": output_schema},
             )["choices"][0]["message"]["content"]
             parsed = ExplainResponse.model_validate_json(raw or "")
             _validate_grounding(parsed, payload)
