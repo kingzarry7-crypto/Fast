@@ -46,7 +46,7 @@ jobs:
             --output research-data/reports/zarry-task2-btc-calibrated-walkforward-run-001.json \
             --round-trip-cost 0.001
       - name: Upload BTCUSD walk-forward report
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: zarry-btc-calibrated-walkforward-run-001
           path: research-data/reports/zarry-task2-btc-calibrated-walkforward-run-001.json
