@@ -1,48 +1,26 @@
-# ZARRY inference service
+## Railway deployment status
 
-ZARRY uses **SmolLM3 3B GGUF** as its provisional explanation model:
-- Hugging Face repo: `unsloth/SmolLM3-3B-GGUF`
-- Quantization: Q4_K_M
-- Base-model license: Apache-2.0
-- Selection: best usable structured-output candidate among the retrieved benchmark results (75% valid JSON, 75% Kitty-decision preservation; 88.08 seconds mean CPU latency).
+A separate Railway service named `ZARRY` has been provisioned in the `Fast` project, isolated from the existing Fast/Kitty service. Its root directory is `/zarry-service`, Dockerfile is `Dockerfile`, persistent volume is mounted at `/models`, and its readiness check is `/ready`. The volume is 3 GB in the `sfo` region.
 
-**Important limitation:** this candidate did not pass the benchmark's 100% safety/format gates and is slow on CPU. It is selected to move implementation forward, not certified for production. The API rejects malformed output, changed decisions, unsupported citations and ungrounded numeric claims with HTTP 502. Kitty remains the only authority for BUY/SELL/WAIT. Do not use ZARRY to make or execute trades.
+Railway variables are configured outside source control: `HF_HOME=/models/hf-cache`, `ZARRY_THREADS=2`, `ZARRY_CONTEXT_SIZE=4096`, `ZARRY_MAX_TOKENS=300`, `ZARRY_MODEL_REPO=unsloth/SmolLM3-3B-GGUF`, `ZARRY_MODEL_FILE_PATTERN=*Q4_K_M.gguf`, and an immutable `ZARRY_MODEL_REVISION`. `ZARRY_API_KEY` is stored as a Railway secret and must never be committed.
 
-## Download model
+The service starts through `start.sh`, which downloads or reuses the model in the persistent cache and starts Uvicorn on Railway's `PORT`. `/ready` remains unhealthy until the model is loaded; `/health` is liveness. No GPU is configured. Measure peak memory and latency before selecting production capacity.
 
-Use a persistent model directory/volume. The downloader fetches only the Q4_K_M GGUF file and refuses to continue unless exactly one matching file is found.
+After the corrected Docker build succeeds and the service is healthy, generate a private/internal service URL or a protected public URL as appropriate, then run `python smoke_test.py` from a trusted environment with `ZARRY_SERVICE_URL` and `ZARRY_API_KEY`. The smoke test checks health, readiness, authentication and exact preservation of a synthetic `WAIT` assessment; it does not place orders.
 
-```bash
-cd zarry-service
-pip install -r requirements.txt
-mkdir -p /models
-HF_HOME=/models/hf-cache python download_model.py
-```
+Keep `ZARRY_ENABLED=false` in Fast until deployment, real-model smoke testing, latency/memory review and explicit approval are complete. ZARRY is explanation-only: Kitty remains the deterministic trading authority, and ZARRY cannot place orders or change Kitty's decision.
 
-Copy the printed `ZARRY_MODEL_PATH` into the service environment. Keep the model cache on persistent storage so it is not downloaded on every restart.
+## Inference contract hardening
 
-## Runtime configuration
+The service validates ISO-8601 timestamps with an explicit timezone. By default, market context older than 24 hours is rejected and timestamps more than 60 seconds in the future are rejected. Set `ZARRY_MAX_CONTEXT_AGE_SECONDS=0` only for controlled historical evaluation; do not use that override for live market context.
 
-- `ZARRY_MODEL_PATH`: local GGUF path (required for inference).
-- `ZARRY_API_KEY`: required bearer token; inference fails closed if missing.
-- `ZARRY_THREADS`: CPU threads (default 2).
-- `ZARRY_CONTEXT_SIZE`: context size (default 4096).
-- `ZARRY_MAX_TOKENS`: response cap (default 300).
+Responses include `X-Request-ID`, `X-ZARRY-Latency-Ms`, and `X-ZARRY-API-Version` headers. The authenticated `/metrics` endpoint reports request/error counts, process CPU time, peak resident memory, and free disk space. The readiness response reports the configured model repository and API version. Fast's proxy forwards a request ID and retries one transient connection failure only; it does not retry model timeouts.
 
-## Local run
+Fast already mounts `/api/zarry/explain` behind the existing web-session authentication. It remains disabled unless `ZARRY_ENABLED=true`. The upstream URL is read from `ZARRY_SERVICE_URL` (preferred) or the existing Fast deployment variable `ZARRY_API_URL`; the shared `ZARRY_API_KEY` must be configured as a Railway secret on Fast and ZARRY. The endpoint is an explicit, authenticated explanation request with schema bounds, freshness validation, rate limiting, and fail-closed response checks. It is not an automatic part of Kitty's signal generation or order path. Keep the flag false until the deployed authenticated smoke test, Fast-to-ZARRY private-network check, and acceptance review are complete.
+
+Run contract tests with:
 
 ```bash
-export ZARRY_MODEL_PATH=/models/hf-cache/models--unsloth--SmolLM3-3B-GGUF/snapshots/<revision>/<model-file>.gguf
-export ZARRY_API_KEY='set-a-long-random-secret'
-uvicorn app:app --host 0.0.0.0 --port 8000
+python -m unittest discover -s zarry-service/tests -p "test_*.py" -v
+python -m unittest discover -s tests -p "test_zarry_api.py" -v
 ```
-
-`GET /health` is liveness. `GET /ready` reports whether a model loaded.
-`POST /v1/explain` requires `Authorization: Bearer <ZARRY_API_KEY>`.
-
-The API validates the response schema, symbol, decision preservation, context
-citations and numeric grounding. Invalid model output returns an error and is
-not passed to Fast. No broker, order, market-data, or tool-execution access is
-provided.
-
-This remains a prototype. It is not deployed or connected to Fast/Kitty yet.

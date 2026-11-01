@@ -841,6 +841,14 @@ def _require_current_user(request: Request) -> Any:
         raise HTTPException(status_code=401, detail="Authentication required")
     return user_row
 
+# ZARRY is an optional explanation-only sidecar. It is deliberately mounted
+# behind a disabled-by-default runtime flag and the existing web-session auth.
+try:
+    from zarry_api import create_router as _create_zarry_router
+    app.include_router(_create_zarry_router(_require_current_user))
+except Exception as _zarry_api_import_error:
+    logger.warning("ZARRY explanation proxy unavailable: %s", type(_zarry_api_import_error).__name__)
+
 # ============================================================
 # CONVERSATIONS
 # ============================================================
