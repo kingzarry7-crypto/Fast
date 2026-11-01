@@ -6,6 +6,7 @@ import base64
 import logging
 import math
 import time
+from uuid import uuid4
 from typing import Optional, Tuple, List, Dict, Any
 import requests
 
@@ -1972,8 +1973,12 @@ class AIEngine:
         if preferred in {"hf", "zarry", "huggingface", "cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"}:
             preferred = "huggingface" if preferred == "hf" else preferred
             return [preferred] + [p for p in providers if p != preferred]
-        # Prefer the user's own Zarry endpoint when configured, then fail over.
-        if clean_env_str(os.getenv("ZARRY_API_URL")):
+        # Prefer the private Railway Qwen service for normal chat when configured.
+        if (
+            clean_env_str(os.getenv("ZARRY_PRIVATE_SERVICE_URL"))
+            or clean_env_str(os.getenv("ZARRY_SERVICE_URL"))
+            or clean_env_str(os.getenv("ZARRY_API_URL"))
+        ):
             return providers
         return providers[1:] if HF_TOKEN else providers[2:]
 
@@ -2263,8 +2268,18 @@ class AIEngine:
         for provider in finite_providers:
             try:
                 resp = None
-                if provider == "zarry" and clean_env_str(os.getenv("ZARRY_API_URL")) and not image:
-                    logger.info("AI provider attempt: local-zarry | endpoint configured")
+                if (
+                    provider == "zarry"
+                    and not image
+                    and (
+                        clean_env_str(os.getenv("ZARRY_PRIVATE_SERVICE_URL"))
+                        or clean_env_str(os.getenv("ZARRY_SERVICE_URL"))
+                    )
+                ):
+                    logger.info("AI provider attempt: private-qwen-zarry | Railway service configured")
+                    resp = self._zarry_private(prompt_text, history, persistent_ctx, casual)
+                elif provider == "zarry" and clean_env_str(os.getenv("ZARRY_API_URL")) and not image:
+                    logger.info("AI provider attempt: local-zarry | legacy endpoint configured")
                     resp = self._zarry_local(prompt_text, history, persistent_ctx, casual)
                 elif provider == "huggingface" and HF_TOKEN and not image:
                     logger.info("AI provider attempt: huggingface | model=%s", HF_MODEL_ID)
@@ -2961,6 +2976,26 @@ class AIEngine:
 
     def _openai(self, prompt: str, history: List[dict], image: Optional[Tuple[str, bytes]], persistent_ctx: str = "", casual: bool = False) -> Optional[str]:
         return self._openrouter(prompt, history, image, persistent_ctx, casual)
+
+    def _zarry_private(self, prompt: str, history: List[dict], persistent_ctx: str = "", casual: bool = False) -> Optional[str]:
+        """Call the authenticated private Railway Qwen service for ordinary text chat."""
+        try:
+            from zarry_gateway.providers import SelfHostedZarryProvider
+
+            messages = self._build_openai_messages(
+                prompt, history, None, persistent_ctx, casual=casual
+            )
+            return SelfHostedZarryProvider().generate(
+                message=prompt,
+                request_id=uuid4(),
+                messages=messages,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Private Qwen ZARRY request failed (%s); falling back",
+                type(exc).__name__,
+            )
+            return None
 
     def _zarry_local(self, prompt: str, history: List[dict], persistent_ctx: str = "", casual: bool = False) -> Optional[str]:
         """Call the configured self-hosted Zarry text-generation endpoint.
