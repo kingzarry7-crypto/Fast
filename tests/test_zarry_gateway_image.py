@@ -95,6 +95,8 @@ class HuggingFaceFirstImageProviderTests(unittest.TestCase):
         from zarry_gateway.image import fal_zimage_turbo_cost_usd
         self.assertEqual(fal_zimage_turbo_cost_usd("Tongyi-MAI/Z-Image-Turbo", "1024x768"), "0.005")
         self.assertEqual(fal_zimage_turbo_cost_usd("Tongyi-MAI/Z-Image-Turbo", "1024x1024"), "0.01")
+        from zarry_gateway.image import fal_zimage_turbo_reservation_usd
+        self.assertEqual(fal_zimage_turbo_reservation_usd("Tongyi-MAI/Z-Image-Turbo", "1024x768"), "0.01")
 
     def test_huggingface_primary_is_used_when_configured(self):
         from zarry_gateway.image import HuggingFaceFirstImageProvider
