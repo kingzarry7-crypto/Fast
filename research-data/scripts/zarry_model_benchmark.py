@@ -204,6 +204,7 @@ def evaluate(name, config, cases, args):
                 temperature=0,
                 max_tokens=args.max_tokens,
                 response_format=response_format(case.get("expected_fields", [])),
+                chat_template_kwargs={"enable_thinking": False},
             )
             raw_output = response["choices"][0]["message"]["content"] or ""
             parsed = parse_output(raw_output)
