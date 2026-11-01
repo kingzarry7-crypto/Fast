@@ -64,6 +64,8 @@ jobs:
         run: python -m unittest discover -s tests -p "test_kitty_alerts.py" -v
       - name: Test Coding Agent routing and provider configuration
         run: python -m unittest test_coding_request test_llm_client test_fal_media_adapter test_alpaca_bars_window test_twelvedata_calendar_routing test_calendar_live_health_status -v
+      - name: Test ZARRY streaming provider routing and latency budgets
+        run: python -m unittest test_streaming_chat_routing -v
       - name: Test Zarry streaming project context
         run: python -m unittest test_streaming_chat_context -v
       - name: Test Kitty demo trading persistence and safety
