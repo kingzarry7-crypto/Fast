@@ -13,6 +13,7 @@ HF_ZIMAGE_MODEL = "Tongyi-MAI/Z-Image-Turbo"
 HF_ZIMAGE_PROVIDER = "fal-ai"
 HF_ZIMAGE_PRICE_PER_MEGAPIXEL_USD = Decimal("0.005")
 HF_ZIMAGE_MAX_PIXELS = 2_000_000
+HF_ZIMAGE_MAX_RESERVATION_USD = "0.01"
 
 
 def _fal_zimage_cost_for_dimensions(width: int, height: int) -> str:
@@ -41,6 +42,13 @@ def fal_zimage_turbo_cost_usd(model: str, size: str) -> str:
     return _fal_zimage_cost_for_dimensions(width, height)
 
 
+def fal_zimage_turbo_reservation_usd(model: str, size: str) -> str:
+    """Reserve the maximum tariff for every supported output before dispatch."""
+    # Validate the model and requested dimensions before reserving.
+    fal_zimage_turbo_cost_usd(model, size)
+    return HF_ZIMAGE_MAX_RESERVATION_USD
+
+
 def fal_zimage_turbo_settlement_usd(image, model: str, size: str) -> str | None:
     """Settle the published per-megapixel tariff from the returned image dimensions.
 
@@ -62,7 +70,7 @@ def fal_zimage_turbo_settlement_usd(image, model: str, size: str) -> str | None:
 class HuggingFaceImageProvider:
     """Generate through pinned HF-routed Fal Z-Image Turbo with budget gating."""
 
-    name = "huggingface-inference-providers"
+    name = "huggingface-fal-z-image-turbo"
 
     def __init__(
         self,
@@ -111,7 +119,7 @@ class HuggingFaceImageProvider:
         if size not in {"1024x1024", "1024x768", "768x1024"}:
             raise ValueError("Unsupported image size")
         if not callable(self.cost_estimator) or not callable(self.actual_cost_resolver):
-            raise RuntimeError("Verified provider pricing and actual-cost reporting are required")
+            raise RuntimeError("Verified provider pricing and tariff settlement are required")
         if self.storage is None or not callable(getattr(self.storage, "save", None)):
             raise RuntimeError("Durable image storage is not configured")
 
@@ -124,7 +132,7 @@ class HuggingFaceImageProvider:
         client = self.client_factory(api_key=self.api_key)
 
         # Reserve before any billable provider call. Unknown outcomes retain the
-        # reservation; only a verified actual cost can release it via settlement.
+        # reservation; only the published output tariff can settle it.
         self.ledger.reserve(request_id, estimate)
         width_text, height_text = size.split("x", 1)
         width, height = int(width_text), int(height_text)
@@ -134,7 +142,7 @@ class HuggingFaceImageProvider:
         )
         actual = self.actual_cost_resolver(generated, self.model, size)
         if actual is None:
-            raise RuntimeError("Verified actual provider cost is unavailable; reservation retained")
+            raise RuntimeError("Verified output dimensions are unavailable; reservation retained")
         self.ledger.settle(request_id, actual)
 
         image_url = self.storage.save(generated, request_id)
