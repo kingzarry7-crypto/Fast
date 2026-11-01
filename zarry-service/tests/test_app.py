@@ -24,7 +24,7 @@ class FakeModel:
         self.last_response_format = kwargs.get("response_format")
 
         self.last_messages = kwargs["messages"]
-        user = json.loads(kwargs["messages"][1]["content"].removeprefix("/no_think\\n"))
+        user = json.loads(kwargs["messages"][1]["content"].removeprefix("/no_think\n"))
         result = {
             "symbol": user["symbol"],
             "decision": "BUY" if self.changed_decision else user["kitty_assessment"]["decision"],
@@ -174,7 +174,7 @@ class ZarryServiceTests(unittest.TestCase):
             headers={"Authorization": "Bearer test-secret"},
         )
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(self.model.last_messages[1]["content"].startswith("/no_think\\n"))
+        self.assertTrue(self.model.last_messages[1]["content"].startswith("/no_think\n"))
 
     def test_preserves_kitty_decision_and_returns_explanation(self):
         response = self.client.post(
