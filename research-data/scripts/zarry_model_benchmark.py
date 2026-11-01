@@ -139,7 +139,7 @@ def score_case(case, result):
         "citations_valid": citations.issubset(context),
         "numeric_claims_grounded": declared_numbers.issubset(numbers),
         "numeric_text_claims_grounded": text_numbers.issubset(declared_numbers) and declared_numbers.issubset(numbers),
-        "expected_fields_covered": set(case.get("expected_fields", [])).issubset(citations),
+        "expected_fields_covered": set(case.get("expected_fields", [])) == citations,
         "explanation_only": "explanation-only" in result["summary"].lower(),
         "explanation_quality": len(result["summary"]) >= 60 and len(summary_words) >= 8 and len(result["uncertainty"]) >= 20 and len(uncertainty_words) >= 4,
         "summary": result["summary"],
