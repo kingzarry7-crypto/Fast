@@ -103,7 +103,8 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
                             round_trip_cost: float = 0.001, min_confidence: float = 0.50,
                             min_margin: float = 0.10, label_threshold: float | None = None,
                             min_edge_cost_multiple: float = 1.25,
-                            use_edge_proxy: bool = False) -> dict:
+                            use_edge_proxy: bool = False,
+                            temperature: float = 1.0) -> dict:
     """One-pass holdout simulation matching inference confidence/margin filters."""
     if len(x) != len(forward_returns):
         raise ValueError("Test features and forward returns must have equal lengths")
@@ -117,9 +118,12 @@ def evaluate_paper_returns(model: nn.Module, x: np.ndarray, forward_returns: np.
         raise ValueError("label_threshold must be a positive finite return fraction")
     if not np.isfinite(min_edge_cost_multiple) or min_edge_cost_multiple < 1.0:
         raise ValueError("min_edge_cost_multiple must be finite and at least 1.0")
+    if not np.isfinite(temperature) or temperature <= 0:
+        raise ValueError("temperature must be positive and finite")
     model.eval()
     with torch.inference_mode():
-        probs = torch.softmax(model(torch.from_numpy(x)), dim=1).cpu().numpy()
+        logits = model(torch.from_numpy(x))
+        probs = torch.softmax(logits / float(temperature), dim=1).cpu().numpy()
     trades = []
     next_entry_index = 0
     skipped_overlapping_signals = 0
