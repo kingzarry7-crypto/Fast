@@ -115,6 +115,8 @@ class HuggingFaceImageProvider:
     def generate(self, prompt: str, *, request_id: UUID, size: str) -> dict:
         if not self.api_key or not self.model:
             raise RuntimeError("Hugging Face image inference is not configured")
+        if self.model != HF_ZIMAGE_MODEL or self.provider != HF_ZIMAGE_PROVIDER:
+            raise RuntimeError("Hugging Face image generation requires the pinned model/provider")
         if not isinstance(prompt, str) or not prompt.strip():
             raise ValueError("Image prompt is required")
         if size not in {"1024x1024", "1024x768", "768x1024"}:
