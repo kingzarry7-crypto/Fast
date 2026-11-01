@@ -217,7 +217,7 @@ class ZarryServiceTests(unittest.TestCase):
         self.assertNotIn("as reasons to WAIT", SYSTEM_PROMPT)
         self.assertIn("Never invent or estimate confidence percentages", SYSTEM_PROMPT)
         self.assertIn('exact literal phrase "explanation-only"', SYSTEM_PROMPT)
-        self.assertIn("Do not include numeric digits or percentages in summary or uncertainty.", SYSTEM_PROMPT)
+        self.assertIn("Timeframe labels such as 4h, 15m, and 5m are allowed only when copied exactly from supplied context", SYSTEM_PROMPT)
         self.assertIn("cited_fields must include every expected_fields key exactly as provided; do not omit any.", SYSTEM_PROMPT)
         self.assertIn("Write a concrete explanation of at least eight words", SYSTEM_PROMPT)
         self.assertIn("Uncertainty must contain at least four words", SYSTEM_PROMPT)
