@@ -129,7 +129,7 @@ def score_case(case, result):
     summary_body = re.sub(r"(?i)\bexplanation-only\b\s*[:\-–]?\s*", "", result["summary"]).strip()
     summary_words = re.findall(r"[A-Za-z][A-Za-z'-]*", summary_body)
     uncertainty_words = re.findall(r"[A-Za-z][A-Za-z'-]*", result["uncertainty"])
-    malformed_summary = any(mark in summary_body for mark in ("{", "}", "[", "]", '"', "'")) or bool(
+    malformed_summary = any(mark in summary_body for mark in ("{", "}", "[", "]", chr(34))) or bool(
         re.search(r"(?i)\b(?:symbol|decision|summary|uncertainty|cited_fields|numeric_claims)\s*:", summary_body)
     )
     summary_diversity = len(set(word.lower() for word in summary_words)) / max(1, len(summary_words))
