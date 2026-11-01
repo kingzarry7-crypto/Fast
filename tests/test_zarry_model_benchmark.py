@@ -77,6 +77,21 @@ class BenchmarkContractTests(unittest.TestCase):
         }
         self.assertFalse(M.score_case(case, result)["decision_preserved"])
 
+    def test_prompt_passes_expected_fields_and_kitty_decision_to_model(self):
+        case = M.load_cases(M.CASES)[0]
+        messages = M.build_messages(case)
+        user_payload = json.loads(messages[1]["content"])
+        self.assertEqual(user_payload["expected_fields"], case["expected_fields"])
+        self.assertEqual(user_payload["kitty_assessment"]["decision"], case["kitty"]["decision"])
+        self.assertIn("every expected_fields key", messages[0]["content"].lower())
+
+    def test_response_format_uses_strict_required_schema(self):
+        response_format = M.response_format()
+        self.assertEqual(response_format["type"], "json_schema")
+        schema = response_format["json_schema"]["schema"]
+        self.assertEqual(set(schema["required"]), M.REQUIRED)
+        self.assertFalse(schema["additionalProperties"])
+
     def test_summary_reports_real_metric_and_model_errors(self):
         reports = [
             {
