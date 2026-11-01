@@ -1,97 +1,98 @@
-# ZARRY image-generation billing decision
+# ZARRY image-generation provider and billing policy
 
-## Decision
+## Provider order
 
-ZARRY uses the direct Replicate API for `prunaai/z-image-turbo`, not Hugging
-Face-routed billing. This avoids relying on delayed Hugging Face aggregate usage
-records for request settlement. The Hugging Face token is not used for this
-provider path.
+ZARRY uses Hugging Face Inference Providers first for Tongyi-MAI's
+**Z-Image-Turbo** model, explicitly routed to Fal AI:
 
-Official model pricing page:
-https://replicate.com/prunaai/z-image-turbo
+- Hugging Face model: `Tongyi-MAI/Z-Image-Turbo`
+- Inference provider: `fal-ai`
+- Published tariff: **$0.005 per megapixel**, rounded up to the next whole
+  megapixel.
+- The app currently permits only its existing 1024x1024, 1024x768, and
+  768x1024 sizes. The maximum charge under this contract is $0.01 per image.
 
-The published resolution tiers are:
+Official pricing and model references:
 
-| Output pixels | Published price |
-| ---: | ---: |
-| Up to 500,000 | $0.0025 |
-| Up to 1,000,000 | $0.005 |
-| Up to 2,000,000 | $0.01 |
+- https://fal.ai/models/fal-ai/z-image/turbo
+- https://huggingface.co/docs/inference-providers/pricing
+- https://huggingface.co/docs/inference-providers/guides/first-api-call
 
-The model page identifies this as PrunaAI's optimized Z-Image-Turbo model,
-based on Tongyi-MAI's Z-Image-Turbo. It is not interchangeable with the
-unoptimized base model identifier.
+Replicate's pinned PrunaAI Z-Image-Turbo API is the secondary provider. It is
+used only when Hugging Face is not configured before dispatch. Its current
+published resolution schedule is reserved conservatively at $0.01 before
+dispatch.
 
-## Budget behavior
+## Billing contract and the $2 monthly cap
 
-- The adapter rejects outputs above 2 megapixels.
-- It reserves the maximum currently published tier ($0.01) before submitting
-  a prediction. This is conservative across all supported resolutions.
-- Once Replicate reports `succeeded`, it settles the reservation using the
-  published tier for the requested output dimensions.
-- Failed, timed-out, or ambiguous predictions retain their reservation. They
-  are not automatically retried or released because the provider may have
-  accepted the request before the client observed the failure.
-- The existing PostgreSQL USD 2/month ledger remains the application-side cap.
-  It is not an account-wide Replicate spending limit.
-- Price schedules can change. Before production activation, re-check the
-  provider's published price and update the price contract/tests if it changes.
+Hugging Face's consumer inference response does not provide ZARRY with a
+guaranteed per-request invoice amount. Therefore ZARRY does not describe a
+computed estimate as provider-reported actual billing.
 
-## Required server configuration
+For Hugging Face, ZARRY reserves the maximum supported tariff (**$0.01**) before
+dispatch. After a successful response, it settles against the published
+$0.005-per-megapixel tariff using the returned image dimensions, rounding up
+to the next whole megapixel as a conservative upper bound. This is a
+conservative tariff settlement, not an invoice-level actual-cost report. If
+the image dimensions cannot be read, the reservation is retained and the
+image is not stored or returned.
 
-Set these on the **Fast API service** that hosts `api.py`, not only on the
-separate ZARRY model-inference service:
+For Replicate, ZARRY reserves the maximum published tier ($0.01) before
+dispatch and settles the published tier after a successful prediction.
 
-- `REPLICATE_API_TOKEN`: direct Replicate API token.
-- `ZARRY_REPLICATE_MODEL_VERSION`: an immutable version ID copied from the
-  selected Replicate model's API/version page.
+Both providers use the same atomic PostgreSQL monthly budget ledger. The
+application-side limit remains **USD $2.00 per UTC calendar month**. It is not
+an account-wide spending limit at Hugging Face or Replicate. Reservations are
+never automatically released after a timeout, unknown provider outcome,
+settlement failure, or storage failure.
+
+## Fallback and duplicate-charge protection
+
+- Hugging Face is primary whenever its token, fixed model/provider contract,
+  cost functions, and durable R2 storage are configured.
+- Replicate is selected only when Hugging Face is unavailable before dispatch,
+  such as when `HF_TOKEN` is absent.
+- If an HF request has started and then fails, times out, or returns an
+  ambiguous result, ZARRY does **not** retry through Replicate. The HF
+  reservation remains in place because the request may have been accepted and
+  billed.
+- There is no Hugging Face automatic-provider selection. The route pins
+  `provider="fal-ai"` so the cost contract cannot silently change to another
+  provider.
+- Unknown pricing, unsupported model IDs, unsupported sizes, or missing
+  durable storage fail closed before a billable request.
+
+## Server-only configuration
+
+Set these variables on the Railway **Fast API service** that hosts `api.py`:
+
+Required for all image generation:
 - `R2_ENDPOINT_URL`
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
 - `R2_BUCKET`
 - `R2_PUBLIC_BASE_URL`
 
-Never put credentials in frontend variables or source control. The adapter is
-constructed only when every required variable exists. Invalid image-storage
-configuration must not disable the separate ZARRY text gateway.
+Primary Hugging Face provider:
+- `HF_TOKEN` with Inference Providers permission and access to the model.
 
-## One-time admin smoke-test database migration
+Secondary Replicate provider:
+- `REPLICATE_API_TOKEN`
+- `ZARRY_REPLICATE_MODEL_VERSION` (immutable 64-character version ID).
 
-Before deploying the admin smoke-test endpoint, apply the repository's
-checksum-tracked PostgreSQL migrations explicitly. The new
-`003_image_smoke_lock.sql` migration provisions the globally unique,
-one-use claim and audit row. The application request does not create or alter
-tables and therefore does not need schema-owner privileges.
+Never put credentials in frontend variables or source control. The image
+provider is constructed only when R2 is configured and at least one provider
+is configured. If both providers are configured, HF is primary.
 
-Use a migration-capable PostgreSQL connection in the deployment environment:
+## Activation gate
 
-```bash
-export ZARRY_MIGRATION_DATABASE_URL='postgresql://...'
-export ZARRY_ALLOW_MIGRATIONS=1
-python scripts/apply_zarry_migrations.py --apply
-```
+`ZARRY_IMAGE_ENABLED` remains false by default. A second independent gate, `ZARRY_IMAGE_LIVE_SMOKE_APPROVED`, also defaults to false and must remain unset/false until the live smoke test has passed and an operator explicitly approves activation. Both gates must be true before public image generation can run. Keep `ZARRY_IMAGE_ENABLED` false until:
 
-The runner uses an advisory transaction lock, checks migration checksums, and
-is idempotent. Run it as an explicit release/operations step; do not add it to
-application startup. The Fast API runtime database role needs ordinary
-SELECT/INSERT/UPDATE access to `zarry_image_smoke_test_lock` after the
-migration is applied. Keep migration credentials out of frontend variables
-and source control.
+1. The HF model/provider access is confirmed for the configured token.
+2. The admin R2 public round-trip diagnostic passes.
+3. The one-time, admin-only image smoke test confirms generation, budget
+   reservation, durable upload, and public retrieval.
+4. The $2 monthly ledger and reservation/settlement migrations are present.
 
-## Activation
-
-`ZARRY_IMAGE_ENABLED` defaults to false. Keep it false until the Replicate
-token and immutable model version are configured on the Fast API service,
-the R2 upload path is verified, and a user-approved low-cost live smoke test
-confirms the provider and billing behavior. CI tests use fakes and never send
-paid provider requests.
-
-## Safety limits
-
-- No automatic provider fallback.
-- No Hugging Face token is sent to Replicate.
-- No unpinned model version or automatic model alias.
-- No output URL is downloaded unless it uses HTTPS on a Replicate delivery
-  hostname.
-- The route remains unavailable when the feature flag is off or provider
-  configuration is incomplete.
+CI tests use fakes and never send paid provider requests. Do not enable
+production image generation merely because CI passes.

@@ -96,7 +96,7 @@ def create_general_router(
 
     @router.post("/admin/image-storage-test")
     async def admin_image_storage_test(request: Request):
-        # This test is admin-only and does not invoke Replicate or image generation.
+        # This admin-only diagnostic verifies R2 storage without invoking any image provider.
         if admin_check is None:
             raise HTTPException(status_code=503, detail="Image storage test is unavailable")
         try:
@@ -212,7 +212,7 @@ def create_general_router(
                 "image_url": image_url,
                 "public_retrieval": "verified",
                 "public_generation_enabled": False,
-                "budget_reservation_usd": "0.01",
+                "budget_reservation_usd": str(result.get("budget_reserved_usd", "unknown")),
             }
         except HTTPException:
             raise

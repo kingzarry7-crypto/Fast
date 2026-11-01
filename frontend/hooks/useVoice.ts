@@ -164,15 +164,23 @@ export function useVoice() {
         };
         audio.onerror = () => {
           setSpeaking(false);
+          if (objectUrlRef.current === url) {
+            URL.revokeObjectURL(url);
+            objectUrlRef.current = null;
+          }
+          audioRef.current = null;
           setError("ElevenLabs playback failed. Check the ElevenLabs API key and voice configuration, then try again.");
         };
         await audio.play();
       } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") {
-          setSpeaking(false);
-          return;
+        setSpeaking(false);
+        if (objectUrlRef.current) {
+          URL.revokeObjectURL(objectUrlRef.current);
+          objectUrlRef.current = null;
         }
-        setError(err instanceof Error ? `ElevenLabs voice failed: ${err.message}` : "ElevenLabs voice failed. Check the API key and voice configuration.");
+        audioRef.current = null;
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setError(err instanceof Error ? "ElevenLabs voice failed: " + err.message : "ElevenLabs voice failed. Check the API key and voice configuration.");
       }
     },
     [stop]
@@ -186,17 +194,14 @@ export function useVoice() {
       stop();
 
       const mode = overrideStyle || styleRef.current;
-      abortRef.current = new AbortController();
+      const controller = new AbortController();
+      abortRef.current = controller;
 
       try {
         setSpeaking(true);
         setProvider("elevenlabs");
-        const blob = await api.synthesizeSpeech(
-          clean,
-          mode,
-          abortRef.current.signal,
-          "bella"
-        );
+        const blob = await api.synthesizeSpeech(clean, mode, controller.signal, "bella");
+        if (controller.signal.aborted) return;
         const url = URL.createObjectURL(blob);
         objectUrlRef.current = url;
         const audio = new Audio(url);
@@ -210,15 +215,23 @@ export function useVoice() {
         };
         audio.onerror = () => {
           setSpeaking(false);
+          if (objectUrlRef.current === url) {
+            URL.revokeObjectURL(url);
+            objectUrlRef.current = null;
+          }
+          audioRef.current = null;
           setError("ElevenLabs playback failed. Check the ElevenLabs API key and voice configuration, then try again.");
         };
         await audio.play();
       } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") {
-          setSpeaking(false);
-          return;
+        setSpeaking(false);
+        if (objectUrlRef.current) {
+          URL.revokeObjectURL(objectUrlRef.current);
+          objectUrlRef.current = null;
         }
-        setError(err instanceof Error ? `ElevenLabs voice failed: ${err.message}` : "ElevenLabs voice failed. Check the API key and voice configuration.");
+        audioRef.current = null;
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setError(err instanceof Error ? "ElevenLabs voice failed: " + err.message : "ElevenLabs voice failed. Check the API key and voice configuration.");
       }
     },
     [stop]
@@ -249,9 +262,13 @@ export function useVoice() {
       recorder.onerror = () => {
         setError("The microphone recording failed. Check microphone permission and try again.");
         setListening(false);
+        mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+        if (mediaRecorderRef.current === recorder) mediaRecorderRef.current = null;
       };
       recorder.onstop = async () => {
-        const blob = new Blob(mediaChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        const chunkType = mediaChunksRef.current.find((chunk) => chunk.type)?.type;
+        const blob = new Blob(mediaChunksRef.current, { type: chunkType || recorder.mimeType || "audio/webm" });
         mediaChunksRef.current = [];
         mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
         mediaStreamRef.current = null;

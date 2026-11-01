@@ -849,26 +849,58 @@ try:
     from zarry_gateway.diagnostics import run_general_gateway_smoke
     from threading import Thread
     _zarry_image_provider = None
-    _image_env_required = (
-        "REPLICATE_API_TOKEN", "ZARRY_REPLICATE_MODEL_VERSION",
+    _image_storage_env_required = (
         "R2_ENDPOINT_URL", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY",
         "R2_BUCKET", "R2_PUBLIC_BASE_URL",
     )
-    if all(os.getenv(name, "").strip() for name in _image_env_required):
+    if all(os.getenv(name, "").strip() for name in _image_storage_env_required):
         try:
             from zarry_gateway.budget import PostgresMonthlyBudgetLedger
             from zarry_gateway.image_storage import CloudflareR2ImageStorage
+            from zarry_gateway.image import (
+                HF_ZIMAGE_MODEL,
+                HuggingFaceFirstImageProvider,
+                HuggingFaceImageProvider,
+                fal_zimage_turbo_reservation_usd,
+                fal_zimage_turbo_settlement_usd,
+            )
             from zarry_gateway.replicate_image import ReplicateZImageTurboProvider
+
             _image_storage = CloudflareR2ImageStorage(
                 bucket=os.environ["R2_BUCKET"],
                 public_base_url=os.environ["R2_PUBLIC_BASE_URL"],
             )
-            _zarry_image_provider = ReplicateZImageTurboProvider(
-                api_token=os.environ["REPLICATE_API_TOKEN"],
-                model_version=os.environ["ZARRY_REPLICATE_MODEL_VERSION"],
-                ledger=PostgresMonthlyBudgetLedger(),
-                storage=_image_storage,
-            )
+            _image_ledger = PostgresMonthlyBudgetLedger()
+
+            _huggingface_image_provider = None
+            if os.getenv("HF_TOKEN", "").strip():
+                _huggingface_image_provider = HuggingFaceImageProvider(
+                    api_key=os.environ["HF_TOKEN"],
+                    model=HF_ZIMAGE_MODEL,
+                    provider="fal-ai",
+                    ledger=_image_ledger,
+                    cost_estimator=fal_zimage_turbo_reservation_usd,
+                    actual_cost_resolver=fal_zimage_turbo_settlement_usd,
+                    storage=_image_storage,
+                )
+
+            _replicate_image_fallback = None
+            if (
+                os.getenv("REPLICATE_API_TOKEN", "").strip()
+                and os.getenv("ZARRY_REPLICATE_MODEL_VERSION", "").strip()
+            ):
+                _replicate_image_fallback = ReplicateZImageTurboProvider(
+                    api_token=os.environ["REPLICATE_API_TOKEN"],
+                    model_version=os.environ["ZARRY_REPLICATE_MODEL_VERSION"],
+                    ledger=_image_ledger,
+                    storage=_image_storage,
+                )
+
+            if _huggingface_image_provider or _replicate_image_fallback:
+                _zarry_image_provider = HuggingFaceFirstImageProvider(
+                    _huggingface_image_provider,
+                    _replicate_image_fallback,
+                )
         except Exception as _zarry_image_config_error:
             logger.warning(
                 "ZARRY image provider configuration unavailable: %s",

@@ -173,6 +173,7 @@ class ReplicateZImageTurboProvider:
                 "image_url": image_url,
                 "provider": self.name,
                 "fallback_used": False,
+                "budget_reserved_usd": str(MAX_PRICE_USD),
             }
         except Exception:
             # Do not release on ambiguous errors: the provider may have accepted

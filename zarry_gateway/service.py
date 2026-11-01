@@ -38,12 +38,18 @@ class AssistantService:
         if self.image_provider is None:
             raise RuntimeError("Image generation is unavailable")
         width, height = (int(value) for value in payload.size.split("x", 1))
-        return self.image_provider.generate(
+        result = self.image_provider.generate(
             payload.prompt,
             request_id=payload.request_id,
             width=width,
             height=height,
         )
+        if not isinstance(result, dict):
+            raise RuntimeError("Image provider returned an invalid result")
+        # Provider diagnostics such as budget_reserved_usd are for the
+        # admin-only smoke test, not part of the strict public image contract.
+        public_fields = ("request_id", "image_url", "provider", "fallback_used")
+        return {key: result[key] for key in public_fields if key in result}
 
     def chat(self, *, principal: AuthenticatedPrincipal, payload: AssistantRequest) -> dict:
         if not isinstance(principal, AuthenticatedPrincipal):

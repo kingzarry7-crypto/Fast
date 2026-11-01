@@ -35,11 +35,26 @@ Run it with an authenticated administrator session on the Fast API service. A su
 
 ## Image-generation gate
 
-The image route uses direct Replicate Z-Image-Turbo and requires these additional server-only variables on the same Railway service:
+The image route uses Hugging Face Inference Providers first with
+`Tongyi-MAI/Z-Image-Turbo` explicitly routed through `fal-ai`. It requires
+`HF_TOKEN` with Inference Providers permission and access to the model.
+Replicate is the secondary provider and requires:
 
 - `REPLICATE_API_TOKEN`
 - `ZARRY_REPLICATE_MODEL_VERSION` (immutable 64-character version ID, not a mutable alias)
 
-`ZARRY_IMAGE_ENABLED` remains false by default. R2 storage diagnostics are initialized independently of Replicate, so the storage test can pass before Replicate is configured. The image provider is constructed only when both Replicate variables and all R2 variables are present.
+The provider chain is initialized only when all R2 variables are present and
+at least one image provider is configured. Hugging Face is primary when
+configured. Replicate is selected only when Hugging Face is unavailable before
+dispatch; an ambiguous Hugging Face failure is never retried through
+Replicate, preventing duplicate paid generations.
 
-Do not enable image generation until the admin storage diagnostic passes and a separately approved, low-cost Replicate generation has been uploaded and retrieved through the public hostname.
+`ZARRY_IMAGE_ENABLED` remains false by default, and the independent `ZARRY_IMAGE_LIVE_SMOKE_APPROVED` gate must also be explicitly true after a successful live smoke test. Both gates are required to enable public generation. R2 storage diagnostics are
+initialized independently of provider credentials, so the storage test can
+pass before either inference provider is configured.
+
+Do not enable image generation until the admin storage diagnostic passes and
+the one-time admin smoke test verifies provider generation, the budget
+reservation, durable upload, and public retrieval. See
+`HF_IMAGE_BILLING_GATE.md` for the published pricing contract and $2 monthly
+cap.
