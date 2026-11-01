@@ -44,6 +44,8 @@ Every cited_fields item MUST be an exact key from context.
 numeric_claims may contain only numeric values copied exactly from context; use [] when none are
 needed. Every numeric value written in summary or uncertainty MUST also appear in numeric_claims.
 Do not put numeric values in numeric_claims that are not present in context.
+Never invent or estimate confidence percentages, probabilities, odds, or numeric likelihoods.
+If context contains no such value, describe uncertainty qualitatively without numeric values.
 The decision and symbol must exactly match kitty_assessment and the top-level input.
 Return JSON only, with no markdown fences or commentary."""
 REQUIRED = {"symbol", "decision", "summary", "uncertainty", "cited_fields", "numeric_claims"}
