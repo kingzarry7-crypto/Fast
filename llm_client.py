@@ -125,7 +125,6 @@ def _zarry_completion(messages: list[dict[str, Any]], max_tokens: int, timeout: 
             message=latest_user_message,
             request_id=uuid4(),
             messages=messages,
-            timeout=(5.0, max(30.0, float(timeout))),
         )
 
     endpoint = os.getenv("ZARRY_API_URL", "").strip()
