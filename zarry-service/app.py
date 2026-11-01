@@ -136,7 +136,7 @@ def _validate_grounding(output: ExplainResponse, request: ExplainRequest) -> Non
         raise ValueError("model changed Kitty's decision")
     if "explanation-only" not in output.summary.lower():
         raise ValueError("model response is not marked explanation-only")
-    summary_body = re.sub(r"(?i)\\bexplanation-only\\b", "", output.summary).strip()
+    summary_body = re.sub(r"(?i)\bexplanation-only\b", "", output.summary).strip()
     if len(summary_body.split()) < 8:
         raise ValueError("model explanation is too generic")
     if len(output.uncertainty.split()) < 4:
