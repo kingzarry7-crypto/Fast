@@ -1,0 +1,29 @@
+name: ZARRY Dataset Contract Tests
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "zarry_dataset.py"
+      - "zarry_kitty_adapter.py"
+      - "tests/test_zarry_dataset.py"
+      - "tests/test_zarry_kitty_adapter.py"
+      - ".github/workflows/zarry-dataset.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  dataset-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Compile dataset modules and tests
+        run: python -m compileall -q zarry_dataset.py zarry_kitty_adapter.py tests/test_zarry_dataset.py tests/test_zarry_kitty_adapter.py
+      - name: Run ZARRY dataset contract tests
+        run: |
+          python -m unittest discover -s tests -p "test_zarry_dataset.py" -v
+          python -m unittest discover -s tests -p "test_zarry_kitty_adapter.py" -v
