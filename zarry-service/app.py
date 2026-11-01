@@ -27,27 +27,23 @@ logger = logging.getLogger("zarry.service")
 
 
 SERVICE_EXPLANATION_PROMPT = """You are ZARRY, an explanation-only assistant.
-Kitty's deterministic assessment is authoritative. Explain it; never make or change a trading decision.
+Kitty's deterministic assessment is authoritative. Explain the supplied assessment; never make or change a trading decision.
 Never change Kitty's symbol or BUY/SELL/WAIT/NO TRADE decision. Never recommend a different action.
 Use only the supplied context. Never invent prices, indicators, candles, fills, account facts, outcomes, probabilities, or confidence.
-Do not include numeric digits, prices, percentages, probabilities, or numeric time labels in your prose. Use qualitative wording such as "shorter-term" instead of "15-minute".
-Return exactly two labeled lines and no JSON, markdown fences, or extra sections:
-SUMMARY: explanation-only followed by a concrete explanation of at least eight words grounded in the context.
-UNCERTAINTY: at least four words describing specific limitations or unresolved evidence.
-Do not put numeric claims in either line. Do not place orders or change risk settings."""
+Write one short, natural-language paragraph explaining why the supplied Kitty decision is preserved, grounded in the context.
+Do not include numeric digits, prices, percentages, probabilities, or numeric time labels. Use qualitative wording such as "shorter-term" instead of "15-minute".
+Do not return JSON, labels, markdown fences, or reasoning. Do not place orders or change risk settings."""
 
 
 def _parse_model_explanation(raw: str) -> tuple[str, str]:
-    """Extract only summary and uncertainty; the server owns all authority fields."""
+    """Extract model prose without trusting model-generated authority fields."""
     text = extract_final_response(raw or "").strip()
     text = re.sub(r"(?is)^\s*```(?:json|text)?\s*|\s*```\s*$", "", text).strip()
 
-    # Accept valid structured output from compatible models, but never trust its
-    # symbol, decision, citations, or numeric_claims; those are set server-side.
     try:
         value = json.loads(text)
-        if isinstance(value, dict) and isinstance(value.get("summary"), str) and isinstance(value.get("uncertainty"), str):
-            return value["summary"].strip(), value["uncertainty"].strip()
+        if isinstance(value, dict) and isinstance(value.get("summary"), str):
+            return value["summary"].strip(), value.get("uncertainty", "").strip() if isinstance(value.get("uncertainty", ""), str) else ""
     except (json.JSONDecodeError, TypeError):
         pass
 
@@ -55,9 +51,40 @@ def _parse_model_explanation(raw: str) -> tuple[str, str]:
         r"(?is)\bSUMMARY\s*:\s*(.*?)\s*\n\s*UNCERTAINTY\s*:\s*(.*?)\s*$",
         text,
     )
-    if not match:
-        raise ValueError("model response must contain SUMMARY and UNCERTAINTY labels")
-    return match.group(1).strip(), match.group(2).strip()
+    if match:
+        return match.group(1).strip(), match.group(2).strip()
+
+    # Some small models emit a malformed JSON wrapper but a recoverable summary
+    # string. Recover only that string; all content is still validated below.
+    summary_match = re.search(r'"summary"\s*:\s*("(?:\\.|[^"\\])*")', text, re.IGNORECASE)
+    if summary_match:
+        try:
+            return json.loads(summary_match.group(1)).strip(), ""
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
+    # Otherwise treat the final response as prose. It must still pass strict
+    # length, numeric, and explanation-only checks before it can be returned.
+    if text and not text.lstrip().startswith(("{", "[")):
+        return text, ""
+    raise ValueError("model response did not contain usable explanation prose")
+
+
+def _deterministic_uncertainty(request: "ExplainRequest") -> str:
+    """Describe only limitations that can be inferred directly from supplied context."""
+    context = request.context
+    if context.get("data_fresh") is False or "stale_minutes" in context:
+        return "Data freshness is uncertain and the supplied context may be stale."
+    values = {str(value).lower() for value in context.values() if isinstance(value, (str, bool))}
+    if any(token in values for token in {"not_confirmed", "unconfirmed", "late", "not confirmed"}):
+        return "Entry confirmation remains unresolved in the supplied context."
+    trend = str(context.get("trend_4h", "")).lower()
+    direction = str(context.get("direction_1h", "")).lower()
+    if trend and direction and trend != direction:
+        return "The supplied timeframes conflict, so alignment remains uncertain."
+    if "stop_loss" not in context or not any(key.startswith("take_profit") for key in context):
+        return "Risk levels are not fully represented in the supplied context."
+    return "The explanation is limited to supplied context and cannot verify future outcomes."
 
 
 class StrictModel(BaseModel):
@@ -323,7 +350,10 @@ def create_app(model_loader=_load_model) -> FastAPI:
                     temperature=0,
                     max_tokens=int(os.getenv("ZARRY_MAX_TOKENS", "300")),
                 )["choices"][0]["message"]["content"]
-                summary, uncertainty = _parse_model_explanation(raw or "")
+                summary, _model_uncertainty = _parse_model_explanation(raw or "")
+                if "explanation-only" not in summary.lower():
+                    summary = "Explanation-only: " + summary
+                uncertainty = _deterministic_uncertainty(payload)
                 parsed = ExplainResponse(
                     symbol=payload.symbol,
                     decision=payload.kitty_assessment.decision,
