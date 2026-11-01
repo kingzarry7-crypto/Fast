@@ -102,6 +102,7 @@ class BenchmarkContractTests(unittest.TestCase):
         self.assertIn("include every listed key in cited_fields", messages[0]["content"].lower())
         self.assertIn("Never invent or estimate confidence percentages", messages[0]["content"])
         self.assertIn('exact literal phrase "explanation-only"', messages[0]["content"])
+        self.assertIn("Do not include numeric digits or percentages in summary or uncertainty.", messages[0]["content"])
 
     def test_benchmark_uses_the_exact_service_prompt_and_output_schema(self):
         self.assertEqual(M.SYSTEM, M.SYSTEM_PROMPT)
