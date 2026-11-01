@@ -241,6 +241,28 @@ def create_general_router(
             logger.error("One-shot image generation smoke test failed (%s)", type(exc).__name__)
             raise HTTPException(status_code=502, detail="One-time image generation test failed; lock remains consumed")
 
+    @router.get("/admin/migration-status")
+    async def admin_migration_status(request: Request):
+        # The existing application admin gate is mandatory; this diagnostic
+        # does not accept ordinary authenticated users.
+        if admin_check is None:
+            raise HTTPException(status_code=503, detail="Migration status is unavailable")
+        try:
+            admin = admin_check(request)
+            if inspect.isawaitable(admin):
+                await admin
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=403, detail="Admin access denied")
+
+        try:
+            from .migration_status import get_migration_status
+            return get_migration_status()
+        except Exception as exc:
+            logger.error("ZARRY migration status check failed (%s)", type(exc).__name__)
+            raise HTTPException(status_code=503, detail="ZARRY migration status is unavailable")
+
     @router.post("/chat", response_model=AssistantResponse)
     async def chat(payload: AssistantRequest, request: Request):
         if not enabled_check():

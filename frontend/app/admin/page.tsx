@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAuth } from "@/hooks/useAuth";
-import { api, ApiError, type AdminStats, type AdminImageStorageTest } from "@/lib/api";
+import { api, ApiError, type AdminStats, type AdminImageStorageTest, type ZarryMigrationStatus } from "@/lib/api";
 import ZarryImageSmokeTest from "@/components/admin/ZarryImageSmokeTest";
 
 function Stat({
@@ -49,6 +49,26 @@ export default function AdminPage() {
   const [r2Testing, setR2Testing] = useState(false);
   const [r2Result, setR2Result] = useState<AdminImageStorageTest | null>(null);
   const [r2Error, setR2Error] = useState<string | null>(null);
+  const [migrationStatus, setMigrationStatus] = useState<ZarryMigrationStatus | null>(null);
+  const [migrationLoading, setMigrationLoading] = useState(false);
+  const [migrationError, setMigrationError] = useState<string | null>(null);
+
+  const loadMigrationStatus = async () => {
+    if (migrationLoading) return;
+    setMigrationLoading(true);
+    setMigrationError(null);
+    try {
+      setMigrationStatus(await api.getZarryMigrationStatus());
+    } catch (err) {
+      setMigrationError(
+        err instanceof ApiError
+          ? `${err.status}: ${err.detail || err.message}`
+          : "Migration status check failed."
+      );
+    } finally {
+      setMigrationLoading(false);
+    }
+  };
 
   const loadMeAndStats = async () => {
     setLoading(true);
@@ -74,6 +94,7 @@ export default function AdminPage() {
       }
       const data = await api.getAdminStats();
       setStats(data);
+      await loadMigrationStatus();
     } catch (e) {
       setError(
         e instanceof ApiError
@@ -102,6 +123,7 @@ export default function AdminPage() {
       setPassword("");
       const data = await api.getAdminStats();
       setStats(data);
+      await loadMigrationStatus();
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -252,6 +274,46 @@ export default function AdminPage() {
 
         {!loading && isAdmin && !requiresPassword && stats && (
           <div className="space-y-8">
+          <section className="kz-panel p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+              <p className="font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/50">
+                ZARRY · DATABASE MIGRATIONS
+              </p>
+              <button
+                type="button"
+                onClick={loadMigrationStatus}
+                disabled={migrationLoading}
+                className="font-mono-tech text-[10px] tracking-widest text-cyan-300 border border-cyan-500/30 px-3 py-1.5 rounded-md hover:bg-cyan-500/10 disabled:opacity-40"
+              >
+                {migrationLoading ? "CHECKING…" : "CHECK MIGRATIONS"}
+              </button>
+            </div>
+            <p className="text-xs text-cyan-100/60 mb-4">
+              Read-only check of the production migration ledger and file checksums. This does not apply or change migrations.
+            </p>
+            {migrationStatus && (
+              <div className="space-y-2 text-xs font-mono-tech" role="status">
+                {migrationStatus.migrations.map((migration) => (
+                  <div key={migration.name} className="flex flex-wrap items-center justify-between gap-2 border-b border-cyan-500/10 py-2">
+                    <span className="text-cyan-100/80">{migration.name}</span>
+                    <span className={
+                      migration.status === "applied"
+                        ? "text-emerald-300"
+                        : migration.status === "pending"
+                          ? "text-amber-200"
+                          : "text-red-300"
+                    }>
+                      {migration.status.replaceAll("_", " ").toUpperCase()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {migrationError && (
+              <p className="mt-3 text-xs font-mono-tech text-amber-200" role="alert">{migrationError}</p>
+            )}
+          </section>
+
           <section className="kz-panel p-6">
             <p className="font-mono-tech text-[10px] tracking-[0.3em] text-cyan-400/50 mb-2">
               ZARRY · R2 PUBLIC STORAGE
