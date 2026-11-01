@@ -1,8 +1,16 @@
 name: ZARRY Dataset Contract Tests
 
 on:
+  push:
+    branches: ["feat/zarry-task2-benchmark-protocol"]
+    paths:
+      - "zarry_dataset.py"
+      - "zarry_kitty_adapter.py"
+      - "tests/test_zarry_dataset.py"
+      - "tests/test_zarry_kitty_adapter.py"
+      - ".github/workflows/zarry-dataset.yml"
   pull_request:
-    branches: ["main"]
+    branches: ["main", "feat/zarry-dataset-task1"]
     paths:
       - "zarry_dataset.py"
       - "zarry_kitty_adapter.py"
