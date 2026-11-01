@@ -1,6 +1,10 @@
 import os
 import sys
+import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -17,6 +21,31 @@ class FakeModel:
         return {"choices": [{"message": {"content": "Hello from ZARRY."}}]}
 
 
+class ConcurrentFakeModel:
+    def __init__(self):
+        self.guard = Lock()
+        self.active = 0
+        self.max_active = 0
+
+    def create_chat_completion(self, **kwargs):
+        with self.guard:
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+        try:
+            time.sleep(0.08)
+            if "general-purpose AI assistant" in kwargs["messages"][0]["content"]:
+                content = "Hello from ZARRY."
+            else:
+                content = (
+                    "Explanation-only: This explanation preserves Kitty's supplied decision "
+                    "using qualitative context and notes unresolved entry confirmation."
+                )
+            return {"choices": [{"message": {"content": content}}]}
+        finally:
+            with self.guard:
+                self.active -= 1
+
+
 class GeneralChatTests(unittest.TestCase):
     def setUp(self):
         self.env = patch.dict(os.environ, {"ZARRY_API_KEY": "test-secret", "ZARRY_MODEL_PATH": "/fake/model.gguf"}, clear=False)
@@ -31,6 +60,43 @@ class GeneralChatTests(unittest.TestCase):
 
     def payload(self):
         return {"request_id": "request-123456", "messages": [{"role": "user", "content": "Hello"}]}
+
+    def test_chat_and_explanation_inference_are_serialized_on_shared_model(self):
+        model = ConcurrentFakeModel()
+        client = TestClient(create_app(model_loader=lambda *args: model))
+        explain_payload = {
+            "symbol": "BTCUSD",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "context": {
+                "trend_4h": "bullish",
+                "direction_1h": "bullish",
+                "setup_15m": "mixed",
+                "entry_5m": "not_confirmed",
+                "data_fresh": True,
+            },
+            "expected_fields": ["trend_4h", "direction_1h", "setup_15m", "entry_5m", "data_fresh"],
+            "kitty_assessment": {"decision": "WAIT", "reason_codes": ["TIMEFRAME_CONFLICT"]},
+            "task": "explain",
+        }
+        with client:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                chat_future = pool.submit(
+                    client.post,
+                    "/v1/chat",
+                    json=self.payload(),
+                    headers={"Authorization": "Bearer test-secret"},
+                )
+                explain_future = pool.submit(
+                    client.post,
+                    "/v1/explain",
+                    json=explain_payload,
+                    headers={"Authorization": "Bearer test-secret"},
+                )
+                chat_response = chat_future.result()
+                explain_response = explain_future.result()
+        self.assertEqual(chat_response.status_code, 200, chat_response.text)
+        self.assertEqual(explain_response.status_code, 200, explain_response.text)
+        self.assertEqual(model.max_active, 1)
 
     def test_general_chat_requires_authentication(self):
         self.assertEqual(self.client.post("/v1/chat", json=self.payload()).status_code, 401)
