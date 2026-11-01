@@ -33,6 +33,23 @@ class BenchmarkContractTests(unittest.TestCase):
         }
         self.assertEqual(M.parse_output(json.dumps(value)), value)
 
+    def test_parse_discards_qwen_reasoning_and_keeps_final_json(self):
+        case = M.load_cases(M.CASES)[0]
+        result = {
+            "symbol": case["symbol"],
+            "decision": case["kitty"]["decision"],
+            "summary": "Explanation-only: Kitty's WAIT is preserved because the supplied timeframe signals conflict.",
+            "uncertainty": "The supplied entry confirmation remains unresolved.",
+            "cited_fields": case["expected_fields"],
+            "numeric_claims": [],
+        }
+        parsed = M.parse_output("<think>internal reasoning</think>\\n" + json.dumps(result))
+        self.assertEqual(parsed, result)
+
+    def test_parse_rejects_unterminated_thinking_block(self):
+        with self.assertRaises(ValueError):
+            M.parse_output("<think>unfinished reasoning")
+
     def test_parse_rejects_extra_keys_and_invalid_decisions(self):
         value = {
             "symbol": "BTCUSD",
