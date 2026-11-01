@@ -63,7 +63,7 @@ def build_messages(case):
         "context": case["context"],
         "expected_fields": case.get("expected_fields", []),
         "kitty_assessment": case["kitty"],
-        "task": "Explain Kitty's assessment without changing it.",
+        "task": "explain",
     }
     return [
         {"role": "system", "content": SYSTEM},
