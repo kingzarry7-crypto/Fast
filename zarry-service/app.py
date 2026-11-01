@@ -13,6 +13,7 @@ import re
 import resource
 import shutil
 import time
+from threading import Lock
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Literal
@@ -353,6 +354,8 @@ def create_app(model_loader=_load_model) -> FastAPI:
         app.state.model = None
 
     app = FastAPI(title="ZARRY Inference Service", version="1.0.0", lifespan=lifespan)
+    # llama.cpp model instances are not safe for concurrent inference requests.
+    app.state.model_lock = Lock()
     # Preserve the independent general-chat endpoint while keeping Kitty's
     # assessment endpoint as a separate, explanation-only contract.
     app.include_router(create_general_chat_router())
@@ -460,11 +463,12 @@ def create_app(model_loader=_load_model) -> FastAPI:
                     ),
                 })
             try:
-                raw = model.create_chat_completion(
-                    messages=messages,
-                    temperature=0,
-                    max_tokens=int(os.getenv("ZARRY_MAX_TOKENS", "300")),
-                )["choices"][0]["message"]["content"]
+                with request.app.state.model_lock:
+                    raw = model.create_chat_completion(
+                        messages=messages,
+                        temperature=0,
+                        max_tokens=int(os.getenv("ZARRY_MAX_TOKENS", "300")),
+                    )["choices"][0]["message"]["content"]
                 summary, _model_uncertainty = _parse_model_explanation(raw or "")
                 if "explanation-only" not in summary.lower():
                     summary = "Explanation-only: " + summary
