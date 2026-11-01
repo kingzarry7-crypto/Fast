@@ -149,7 +149,7 @@ class ZarryServiceTests(unittest.TestCase):
         payload = self.payload()
         payload["expected_fields"] = ["missing_field"]
         response = self.post_explain(payload)
-        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.status_code, 422)
 
     def test_preserves_buy_sell_and_no_trade_decisions(self):
         for decision in ("BUY", "SELL", "NO TRADE"):
