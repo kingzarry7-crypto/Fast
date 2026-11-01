@@ -27,6 +27,12 @@ class DownloadModelTests(unittest.TestCase):
             "b2d17796e6fd93c353a0415a3abd8b7f801701de",
         )
 
+    def test_railway_startup_forces_the_pinned_qwen_model_over_legacy_overrides(self):
+        startup = (Path(__file__).resolve().parents[1] / "start.sh").read_text()
+        self.assertIn('export ZARRY_MODEL_REPO="unsloth/Qwen3-1.7B-GGUF"', startup)
+        self.assertIn('export ZARRY_MODEL_FILE_PATTERN="Qwen3-1.7B-Q4_K_M.gguf"', startup)
+        self.assertIn('export ZARRY_MODEL_REVISION="b2d17796e6fd93c353a0415a3abd8b7f801701de"', startup)
+
     def test_resolves_the_exact_qwen_quantized_model(self):
         with tempfile.TemporaryDirectory() as directory:
             expected = Path(directory) / "Qwen3-1.7B-Q4_K_M.gguf"
