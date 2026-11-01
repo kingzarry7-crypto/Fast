@@ -26,6 +26,36 @@ def _events(chunks):
 
 
 class StreamingProviderPreferenceTests(unittest.TestCase):
+    def test_explicit_huggingface_is_primary_even_when_private_qwen_is_configured(self):
+        with patch.dict(os.environ, {
+            "AI_PROVIDER": "HF",
+            "ZARRY_PRIVATE_SERVICE_URL": "http://zarry.railway.internal:8080",
+            "ZARRY_SERVICE_URL": "",
+            "ZARRY_API_URL": "",
+        }, clear=True), \
+             patch.object(streaming_chat.ai_engine, "HF_TOKEN", "hf-test"), \
+             patch.object(streaming_chat.ai_engine, "OPENAI_API_KEY", "openai-test"), \
+             patch.object(streaming_chat, "_stream_openai_compatible", return_value=iter(["chunk"])):
+            providers = [name for name, _stream in _provider_streams([])]
+
+        self.assertEqual(providers[0], "huggingface")
+        self.assertNotEqual(providers[0], "zarry")
+        self.assertIn("openai", providers)
+
+    def test_explicit_huggingface_is_not_selected_without_token(self):
+        with patch.dict(os.environ, {
+            "AI_PROVIDER": "HF",
+            "ZARRY_PRIVATE_SERVICE_URL": "",
+            "ZARRY_SERVICE_URL": "",
+            "ZARRY_API_URL": "",
+        }, clear=True), \
+             patch.object(streaming_chat.ai_engine, "HF_TOKEN", ""), \
+             patch.object(streaming_chat.ai_engine, "OPENAI_API_KEY", "openai-test"):
+            providers = [name for name, _stream in _provider_streams([])]
+
+        self.assertNotIn("huggingface", providers)
+        self.assertEqual(providers[0], "openai")
+
     def test_explicit_ai_provider_is_first_in_streaming_fallback_order(self):
         with patch.dict(os.environ, {"AI_PROVIDER": "openrouter", "ZARRY_API_URL": ""}, clear=False), \
              patch.object(streaming_chat.ai_engine, "HF_TOKEN", "hf-test"), \
