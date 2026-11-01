@@ -50,3 +50,12 @@ def run_general_gateway_smoke(provider) -> str:
             type(exc).__name__,
         )
         return "failed"
+
+def main() -> str:
+    """CLI entrypoint used by the Fast container after its HTTP health check."""
+    from .providers import SelfHostedZarryProvider
+    return run_general_gateway_smoke(SelfHostedZarryProvider())
+
+
+if __name__ == "__main__":
+    main()
