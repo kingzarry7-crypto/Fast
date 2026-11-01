@@ -58,6 +58,15 @@ class GeneralChatTests(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()["detail"], "general chat token limit must be between 16 and 512")
 
+    def test_general_chat_rejects_oversized_token_limit(self):
+        with patch.dict(os.environ, {"ZARRY_CHAT_MAX_TOKENS": "513"}):
+            response = self.client.post(
+                "/v1/chat",
+                json=self.payload(),
+                headers={"Authorization": "Bearer test-secret"},
+            )
+        self.assertEqual(response.status_code, 503)
+
     def test_general_chat_defaults_to_cpu_friendly_token_limit(self):
         with patch.dict(os.environ, {}, clear=True):
             os.environ["ZARRY_API_KEY"] = "test-secret"
