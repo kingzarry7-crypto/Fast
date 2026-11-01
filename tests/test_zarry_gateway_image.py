@@ -175,5 +175,35 @@ class HuggingFaceFirstImageProviderTests(unittest.TestCase):
         )
 
 
+    def test_service_hides_internal_budget_metadata_from_strict_image_response(self):
+        from zarry_gateway.identity import AuthenticatedPrincipal
+        from zarry_gateway.schemas import ImageRequest
+        from zarry_gateway.service import AssistantService
+
+        class Provider:
+            def __init__(self): self.received = None
+            def generate(self, prompt, *, request_id, width, height):
+                self.received = (prompt, request_id, width, height)
+                return {
+                    "request_id": request_id,
+                    "image_url": "https://images.example/generated.png",
+                    "provider": "huggingface-fal-z-image-turbo",
+                    "fallback_used": False,
+                    "budget_reserved_usd": "0.01",
+                }
+
+        provider = Provider()
+        service = AssistantService(image_provider=provider)
+        principal = AuthenticatedPrincipal(
+            subject_id="web:user-1", platform="web", platform_user_id="user-1"
+        )
+        payload = ImageRequest(prompt="a lighthouse", size="1024x768")
+        result = service.image(principal=principal, payload=payload)
+        self.assertEqual(set(result), {
+            "request_id", "image_url", "provider", "fallback_used"
+        })
+        self.assertEqual(provider.received, ("a lighthouse", payload.request_id, 1024, 768))
+
+
 if __name__ == "__main__":
     unittest.main()
