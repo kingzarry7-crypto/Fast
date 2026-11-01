@@ -78,11 +78,12 @@ def main():
             assert result["decision"] == case["kitty"]["decision"], (case["id"], result)
             assert result["authority"] == "KITTY_DETERMINISTIC_ENGINE", result
             assert result["mode"] == "explanation_only", result
+            assert result["explanation_source"] in {"model", "deterministic_fallback"}, result
             assert result["cited_fields"] == case["expected_fields"], result
             assert result["numeric_claims"] == [], result
             assert "explanation-only" in result["summary"].lower(), result
             assert not any(char.isdigit() for char in result["summary"] + result["uncertainty"]), result
-            print("API CASE PASSED", case["id"], "latency_ms", response.headers.get("X-ZARRY-Latency-Ms"), flush=True)
+            print("API CASE PASSED", case["id"], "source", result["explanation_source"], "latency_ms", response.headers.get("X-ZARRY-Latency-Ms"), flush=True)
 
         metrics = client.get("/metrics", headers={"Authorization": "Bearer " + os.environ["ZARRY_API_KEY"]})
         assert metrics.status_code == 200, metrics.text
