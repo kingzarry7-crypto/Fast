@@ -74,7 +74,7 @@ def build_messages(case):
     }
     return [
         {"role": "system", "content": SYSTEM},
-        {"role": "user", "content": "/no_think\\n" + json.dumps(message, sort_keys=True)},
+        {"role": "user", "content": "/no_think\n" + json.dumps(message, sort_keys=True)},
     ]
 SCORE_KEYS = (
     "valid_json",
