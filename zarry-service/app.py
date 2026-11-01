@@ -126,6 +126,7 @@ def _load_model(model_path: str, threads: int, context_size: int):
         n_threads=threads,
         n_gpu_layers=0,
         verbose=False,
+        chat_template_kwargs={"enable_thinking": False},
     )
 
 
@@ -280,7 +281,6 @@ def create_app(model_loader=_load_model) -> FastAPI:
                 temperature=0,
                 max_tokens=int(os.getenv("ZARRY_MAX_TOKENS", "300")),
                 response_format={"type": "json_object", "schema": output_schema},
-                chat_template_kwargs={"enable_thinking": False},
             )["choices"][0]["message"]["content"]
             parsed = ExplainResponse.model_validate_json(extract_final_response(raw or ""))
             _validate_grounding(parsed, payload)
