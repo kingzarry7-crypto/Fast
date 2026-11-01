@@ -107,7 +107,8 @@ class BenchmarkContractTests(unittest.TestCase):
     def test_prompt_passes_expected_fields_and_kitty_decision_to_model(self):
         case = M.load_cases(M.CASES)[0]
         messages = M.build_messages(case)
-        user_payload = json.loads(messages[1]["content"])
+        self.assertTrue(messages[1]["content"].startswith("/no_think\\n"))
+        user_payload = json.loads(messages[1]["content"].removeprefix("/no_think\\n"))
         self.assertEqual(user_payload["expected_fields"], case["expected_fields"])
         self.assertEqual(user_payload["kitty_assessment"]["decision"], case["kitty"]["decision"])
         self.assertEqual(user_payload["task"], "Explain Kitty's assessment without changing it.")
