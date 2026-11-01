@@ -43,7 +43,7 @@ class BenchmarkContractTests(unittest.TestCase):
             "cited_fields": case["expected_fields"],
             "numeric_claims": [],
         }
-        parsed = M.parse_output("<think>internal reasoning</think>\\n" + json.dumps(result))
+        parsed = M.parse_output("<think>internal reasoning</think>\n" + json.dumps(result))
         self.assertEqual(parsed, result)
 
     def test_parse_rejects_unterminated_thinking_block(self):
