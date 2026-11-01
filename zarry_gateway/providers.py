@@ -22,7 +22,21 @@ class SelfHostedZarryProvider:
 
     def __init__(self, base_url: str | None = None, api_key: str | None = None,
                  timeout: tuple[float, float] = (5.0, 180.0), session=None):
-        self.base_url = (base_url if base_url is not None else os.getenv("ZARRY_SERVICE_URL", "")).strip().rstrip("/")
+        if base_url is not None:
+            selected_base_url = base_url
+        else:
+            private_service_url = os.getenv("ZARRY_PRIVATE_SERVICE_URL", "").strip()
+            configured_service_url = os.getenv("ZARRY_SERVICE_URL", "").strip()
+            configured_host = (urlsplit(configured_service_url).hostname or "").lower()
+            if private_service_url:
+                selected_base_url = private_service_url
+            elif configured_host == "zarry-production.up.railway.app":
+                # This Railway project exposes the ZARRY service privately as zarry.
+                # Prefer service-to-service traffic over the public Railway hostname.
+                selected_base_url = "http://zarry.railway.internal:8080"
+            else:
+                selected_base_url = configured_service_url
+        self.base_url = selected_base_url.strip().rstrip("/")
         self.api_key = api_key if api_key is not None else os.getenv("ZARRY_API_KEY", "")
         self.timeout = timeout
         self.session = session or requests
