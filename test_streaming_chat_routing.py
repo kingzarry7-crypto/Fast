@@ -57,6 +57,28 @@ class StreamingProviderPreferenceTests(unittest.TestCase):
 
         self.assertEqual(providers[0], "zarry")
 
+    def test_private_qwen_uses_groq_before_invalid_legacy_huggingface_fallback(self):
+        with patch.dict(os.environ, {
+            "AI_PROVIDER": "AUTO",
+            "ZARRY_PRIVATE_SERVICE_URL": "http://zarry.railway.internal:8080",
+            "ZARRY_SERVICE_URL": "",
+            "ZARRY_API_URL": "",
+        }, clear=True), \\
+             patch.object(streaming_chat.ai_engine, "HF_TOKEN", "hf-test"), \\
+             patch.object(streaming_chat.ai_engine, "CLOUDFLARE_AI_TOKEN", "cf-test"), \\
+             patch.object(streaming_chat.ai_engine, "OPENAI_API_KEY", "openai-test"), \\
+             patch.object(streaming_chat.ai_engine, "GEMINI_API_KEY", "gemini-test"), \\
+             patch.object(streaming_chat, "_GROQ_KEY", "groq-test"), \\
+             patch.object(streaming_chat, "_OPENROUTER_KEY", "router-test"), \\
+             patch.object(streaming_chat, "_CHUTES_KEY", "chutes-test"), \\
+             patch.object(streaming_chat, "_stream_zarry", return_value=iter(["qwen"])), \\
+             patch.object(streaming_chat, "_stream_openai_compatible", return_value=iter(["fallback"])), \\
+             patch.object(streaming_chat, "_stream_cloudflare", return_value=iter(["cloudflare"])):
+            providers = [name for name, _stream in _provider_streams([])]
+
+        self.assertEqual(providers[:2], ["zarry", "groq"])
+        self.assertEqual(providers[-1], "huggingface")
+
     def test_private_qwen_stream_calls_v1_chat_even_when_legacy_url_exists(self):
         messages = [
             {"role": "system", "content": "Keep answers grounded."},
