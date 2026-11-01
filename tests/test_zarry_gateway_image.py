@@ -143,5 +143,20 @@ class HuggingFaceFirstImageProviderTests(unittest.TestCase):
         self.assertEqual(fallback.calls, [])
 
 
+    def test_incomplete_huggingface_cost_contract_blocks_replicate_fallback(self):
+        from zarry_gateway.image import HuggingFaceFirstImageProvider
+        class Primary:
+            api_key = "configured-token"
+            def is_configured(self): return False
+        class Fallback:
+            def __init__(self): self.calls = []
+            def generate(self, *args, **kwargs): self.calls.append((args, kwargs))
+        fallback = Fallback()
+        provider = HuggingFaceFirstImageProvider(Primary(), fallback)
+        with self.assertRaisesRegex(RuntimeError, "billing or storage contract is incomplete"):
+            provider.generate("a red kite", request_id=uuid4(), width=1024, height=1024)
+        self.assertEqual(fallback.calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()
