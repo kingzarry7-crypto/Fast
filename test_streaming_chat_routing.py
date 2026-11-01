@@ -261,15 +261,15 @@ class StreamingIntentRoutingTests(unittest.TestCase):
         engine._load_persistent_context.return_value = ""
         engine._build_openai_messages.return_value = [{"role": "user", "content": "how"}]
 
-        with patch("streaming_chat.ai_engine.AIEngine", return_value=engine), \\
-             patch("streaming_chat.ai_engine._detect_media_intent", return_value=None), \\
-             patch("coding_request.handle_coding_request", return_value=None), \\
-             patch("account_agent.handle_web_request", return_value=None), \\
-             patch("agent_router.route_agent_request", return_value=None), \\
-             patch("web_research_engine.should_research", return_value=False), \\
-             patch("tavily_search.should_trigger_tavily", return_value=False), \\
-             patch("streaming_chat.ai_engine.clean_ai_response", side_effect=lambda value: value), \\
-             patch("streaming_chat._provider_streams", return_value=[("zarry", iter(["hello"]))]), \\
+        with patch("streaming_chat.ai_engine.AIEngine", return_value=engine), \
+             patch("streaming_chat.ai_engine._detect_media_intent", return_value=None), \
+             patch("coding_request.handle_coding_request", return_value=None), \
+             patch("account_agent.handle_web_request", return_value=None), \
+             patch("agent_router.route_agent_request", return_value=None), \
+             patch("web_research_engine.should_research", return_value=False), \
+             patch("tavily_search.should_trigger_tavily", return_value=False), \
+             patch("streaming_chat.ai_engine.clean_ai_response", side_effect=lambda value: value), \
+             patch("streaming_chat._provider_streams", return_value=[("zarry", iter(["hello"]))]), \
              self.assertLogs("kz_streaming_chat", level="INFO") as captured:
             events = _events(_build_stream_generator(
                 user_id="user-1",
@@ -279,7 +279,7 @@ class StreamingIntentRoutingTests(unittest.TestCase):
             ))
 
         self.assertTrue(any(event.get("type") == "done" for event in events))
-        output = "\\n".join(captured.output)
+        output = "\n".join(captured.output)
         self.assertIn("ZARRY_STREAM_PROVIDER_START provider=zarry", output)
         self.assertIn("ZARRY_STREAM_FIRST_DELTA provider=zarry", output)
         self.assertIn("ZARRY_STREAM_PROVIDER_COMPLETE provider=zarry", output)
