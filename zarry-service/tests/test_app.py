@@ -12,10 +12,11 @@ from app import SYSTEM_PROMPT, create_app
 
 
 class FakeModel:
-    def __init__(self, changed_decision=False, bad_number=False, ungrounded_text_number=False):
+    def __init__(self, changed_decision=False, bad_number=False, ungrounded_text_number=False, generic_summary=False):
         self.changed_decision = changed_decision
         self.bad_number = bad_number
         self.ungrounded_text_number = ungrounded_text_number
+        self.generic_summary = generic_summary
         self.last_response_format = None
 
     def create_chat_completion(self, **kwargs):
@@ -27,11 +28,13 @@ class FakeModel:
             "symbol": user["symbol"],
             "decision": "BUY" if self.changed_decision else user["kitty_assessment"]["decision"],
             "summary": (
-                "Explanation-only: this is more than 50% certain."
+                "Explanation-only: this unsupported numeric estimate claims the supplied context establishes a confidence level above fifty percent."
                 if self.ungrounded_text_number
-                else "Explanation-only: the supplied timeframes are mixed."
+                else "explanation-only"
+                if self.generic_summary
+                else "Explanation-only: this explanation uses the supplied context and preserves Kitty's assessment while noting the conflicting timeframe evidence."
             ),
-            "uncertainty": "The entry is not confirmed.",
+            "uncertainty": "The supplied entry confirmation remains unresolved by the available context.",
             "cited_fields": ["trend_4h", "entry_5m"],
             "numeric_claims": [999999 if self.bad_number else 68000],
         }
@@ -192,6 +195,8 @@ class ZarryServiceTests(unittest.TestCase):
         )
         self.assertFalse(schema["additionalProperties"])
         self.assertIn("NO TRADE", schema["properties"]["decision"]["enum"])
+        self.assertEqual(schema["properties"]["summary"]["minLength"], 60)
+        self.assertEqual(schema["properties"]["uncertainty"]["minLength"], 20)
 
     def test_system_prompt_never_turns_context_warnings_into_wait(self):
         self.assertIn("Never turn a context warning into a new WAIT decision.", SYSTEM_PROMPT)
@@ -200,6 +205,8 @@ class ZarryServiceTests(unittest.TestCase):
         self.assertIn('exact literal phrase "explanation-only"', SYSTEM_PROMPT)
         self.assertIn("Do not include numeric digits or percentages in summary or uncertainty.", SYSTEM_PROMPT)
         self.assertIn("cited_fields must include every expected_fields key exactly as provided; do not omit any.", SYSTEM_PROMPT)
+        self.assertIn("Write a concrete explanation of at least eight words", SYSTEM_PROMPT)
+        self.assertIn("Uncertainty must contain at least four words", SYSTEM_PROMPT)
 
     def test_preserves_kitty_no_trade_decision(self):
         payload = self.payload()
@@ -252,6 +259,18 @@ class ZarryServiceTests(unittest.TestCase):
             json=payload,
             headers={"Authorization": "Bearer test-secret"},
         )
+        self.assertEqual(response.status_code, 502)
+
+
+
+    def test_rejects_generic_explanation(self):
+        client = TestClient(create_app(model_loader=lambda *args: FakeModel(generic_summary=True)))
+        with client:
+            response = client.post(
+                "/v1/explain",
+                json=self.payload(),
+                headers={"Authorization": "Bearer test-secret"},
+            )
         self.assertEqual(response.status_code, 502)
 
 
