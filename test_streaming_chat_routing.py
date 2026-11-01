@@ -191,13 +191,13 @@ class StreamingIntentRoutingTests(unittest.TestCase):
             raise TimeoutError("upstream timed out")
             yield "unreachable"
 
-        with patch("streaming_chat.ai_engine.AIEngine", return_value=engine), \\
-             patch("streaming_chat.ai_engine._detect_media_intent", return_value=None), \\
-             patch("coding_request.handle_coding_request", return_value=None), \\
-             patch("account_agent.handle_web_request", return_value=None), \\
-             patch("agent_router.route_agent_request", return_value=None), \\
-             patch("web_research_engine.should_research", return_value=False), \\
-             patch("tavily_search.should_trigger_tavily", return_value=False), \\
+        with patch("streaming_chat.ai_engine.AIEngine", return_value=engine), \
+             patch("streaming_chat.ai_engine._detect_media_intent", return_value=None), \
+             patch("coding_request.handle_coding_request", return_value=None), \
+             patch("account_agent.handle_web_request", return_value=None), \
+             patch("agent_router.route_agent_request", return_value=None), \
+             patch("web_research_engine.should_research", return_value=False), \
+             patch("tavily_search.should_trigger_tavily", return_value=False), \
              patch("streaming_chat._provider_streams", return_value=[("zarry", fail())]):
             events = _events(_build_stream_generator(
                 user_id="user-1",
@@ -225,13 +225,13 @@ class StreamingIntentRoutingTests(unittest.TestCase):
             second_provider_started.append(True)
             yield "duplicate answer"
 
-        with patch("streaming_chat.ai_engine.AIEngine", return_value=engine), \\
-             patch("streaming_chat.ai_engine._detect_media_intent", return_value=None), \\
-             patch("coding_request.handle_coding_request", return_value=None), \\
-             patch("account_agent.handle_web_request", return_value=None), \\
-             patch("agent_router.route_agent_request", return_value=None), \\
-             patch("web_research_engine.should_research", return_value=False), \\
-             patch("tavily_search.should_trigger_tavily", return_value=False), \\
+        with patch("streaming_chat.ai_engine.AIEngine", return_value=engine), \
+             patch("streaming_chat.ai_engine._detect_media_intent", return_value=None), \
+             patch("coding_request.handle_coding_request", return_value=None), \
+             patch("account_agent.handle_web_request", return_value=None), \
+             patch("agent_router.route_agent_request", return_value=None), \
+             patch("web_research_engine.should_research", return_value=False), \
+             patch("tavily_search.should_trigger_tavily", return_value=False), \
              patch("streaming_chat._provider_streams", return_value=[
                  ("zarry", partial_then_fail()),
                  ("openai", second_provider()),
