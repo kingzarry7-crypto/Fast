@@ -12,12 +12,12 @@ ZARRY runs as a dedicated Railway service, isolated from the Fast/Kitty API. It 
 - Railway health check: `/ready` (returns ready only after the model is loaded)
 - Liveness: `/health`
 
-The Docker image must include `app.py`, `contract.py`, `general_chat.py`, `download_model.py`, `start.sh`, and `smoke_test.py`. The startup script downloads or reuses the pinned model, starts Uvicorn, waits for model readiness, and runs the authenticated synthetic-WAIT smoke test before leaving the service online.
+The Docker image must include `app.py`, `contract.py`, `general_chat.py`, `download_model.py`, `start.sh`, and `smoke_test.py`. The startup script downloads or reuses the pinned model, starts Uvicorn, waits for model readiness, and runs authenticated smoke tests for both the synthetic-WAIT explanation endpoint and general chat before leaving the service online.
 
 ## API contracts
 
 - `POST /v1/explain`: authenticated explanation of an existing Kitty assessment. Kitty's exact symbol and decision are preserved by server-side validation. ZARRY cannot create a trading decision, access a broker, or place orders.
-- `POST /v1/chat`: authenticated general-purpose chat. It is a separate conversation contract and has no Kitty decision or broker authority.
+- `POST /v1/chat`: authenticated general-purpose chat. It is a separate conversation contract and has no Kitty decision or broker authority. Startup smoke tests verify both unauthorized rejection and a non-empty authenticated model response.
 - `GET /metrics`: authenticated operational metrics.
 - `GET /ready`, `GET /health`: readiness and liveness.
 
