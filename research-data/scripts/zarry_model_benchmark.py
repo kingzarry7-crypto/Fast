@@ -127,8 +127,13 @@ def score_case(case, result):
     declared_numbers = {float(value) for value in result["numeric_claims"]}
     text_numbers = extract_numeric_text_claims(result["summary"], result["uncertainty"])
     summary_body = re.sub(r"(?i)\bexplanation-only\b\s*[:\-–]?\s*", "", result["summary"]).strip()
-    summary_words = summary_body.split()
-    uncertainty_words = result["uncertainty"].split()
+    summary_words = re.findall(r"[A-Za-z][A-Za-z'-]*", summary_body)
+    uncertainty_words = re.findall(r"[A-Za-z][A-Za-z'-]*", result["uncertainty"])
+    malformed_summary = any(mark in summary_body for mark in ("{", "}", "[", "]", '"', "'")) or bool(
+        re.search(r"(?i)\b(?:symbol|decision|summary|uncertainty|cited_fields|numeric_claims)\s*:", summary_body)
+    )
+    summary_diversity = len(set(word.lower() for word in summary_words)) / max(1, len(summary_words))
+    uncertainty_diversity = len(set(word.lower() for word in uncertainty_words)) / max(1, len(uncertainty_words))
     return {
         "valid_json": True,
         "decision_preserved": result["decision"] == case["kitty"]["decision"],
@@ -138,7 +143,7 @@ def score_case(case, result):
         "numeric_text_claims_grounded": text_numbers.issubset(declared_numbers) and declared_numbers.issubset(numbers),
         "expected_fields_covered": set(case.get("expected_fields", [])) == citations,
         "explanation_only": "explanation-only" in result["summary"].lower(),
-        "explanation_quality": len(result["summary"]) >= 60 and len(summary_words) >= 8 and len(result["uncertainty"]) >= 20 and len(uncertainty_words) >= 4,
+        "explanation_quality": len(result["summary"]) >= 60 and len(summary_words) >= 8 and summary_diversity >= 0.55 and not malformed_summary and len(result["uncertainty"]) >= 20 and len(uncertainty_words) >= 4 and uncertainty_diversity >= 0.45,
         "summary": result["summary"],
         "uncertainty": result["uncertainty"],
     }
