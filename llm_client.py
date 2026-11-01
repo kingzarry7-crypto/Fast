@@ -14,9 +14,6 @@ import urllib.request
 from typing import Any
 
 from openai import OpenAI
-from uuid import uuid4
-
-from zarry_gateway.providers import SelfHostedZarryProvider
 
 logger = logging.getLogger("kz_llm_client")
 
@@ -110,23 +107,7 @@ def _create_completion(name: str, key: str, base_url: str, model: str,
 
 
 def _zarry_completion(messages: list[dict[str, Any]], max_tokens: int, timeout: float):
-    """Call the pinned self-hosted Railway Qwen service, or legacy /generate if configured."""
-    if os.getenv("ZARRY_PRIVATE_SERVICE_URL", "").strip() or os.getenv("ZARRY_SERVICE_URL", "").strip():
-        latest_user_message = next(
-            (
-                str(item.get("content") or "")
-                for item in reversed(messages or [])
-                if isinstance(item, dict) and item.get("role") == "user"
-            ),
-            "",
-        )
-        provider = SelfHostedZarryProvider()
-        return provider.generate(
-            message=latest_user_message,
-            request_id=uuid4(),
-            messages=messages,
-        )
-
+    """Call the user's self-hosted Zarry /generate API, if configured."""
     endpoint = os.getenv("ZARRY_API_URL", "").strip()
     if not endpoint:
         return None
@@ -198,11 +179,7 @@ def ask(messages: list[dict[str, Any]], max_tokens: int = 500):
     # A configured local Zarry endpoint is an automatic-mode fallback/primary,
     # but it must not override an explicit provider choice such as OPENAI.
     should_try_zarry = requested_provider in {"", "AUTO", "AUTOMATIC", "ZARRY", "LOCAL_ZARRY"}
-    has_private_zarry = bool(
-        os.getenv("ZARRY_PRIVATE_SERVICE_URL", "").strip()
-        or os.getenv("ZARRY_SERVICE_URL", "").strip()
-    )
-    if should_try_zarry and (has_private_zarry or os.getenv("ZARRY_API_URL", "").strip()):
+    if should_try_zarry and os.getenv("ZARRY_API_URL", "").strip():
         try:
             answer = _zarry_completion(messages, max_tokens, timeout)
             if answer:
