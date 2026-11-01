@@ -57,7 +57,7 @@ class StreamingProviderPreferenceTests(unittest.TestCase):
 
         self.assertEqual(providers[0], "zarry")
 
-    def test_private_qwen_uses_groq_before_invalid_legacy_huggingface_fallback(self):
+    def test_private_qwen_uses_openai_before_known_invalid_groq_fallback(self):
         with patch.dict(os.environ, {
             "AI_PROVIDER": "AUTO",
             "ZARRY_PRIVATE_SERVICE_URL": "http://zarry.railway.internal:8080",
@@ -76,7 +76,7 @@ class StreamingProviderPreferenceTests(unittest.TestCase):
              patch.object(streaming_chat, "_stream_cloudflare", return_value=iter(["cloudflare"])):
             providers = [name for name, _stream in _provider_streams([])]
 
-        self.assertEqual(providers[:2], ["zarry", "groq"])
+        self.assertEqual(providers[:3], ["zarry", "openai", "groq"])
         self.assertEqual(providers[-1], "huggingface")
 
     def test_private_qwen_stream_calls_v1_chat_even_when_legacy_url_exists(self):
@@ -132,7 +132,7 @@ class StreamingProviderPreferenceTests(unittest.TestCase):
             providers = [name for name, _stream in _provider_streams([])]
         self.assertEqual(providers[0], "gemini")
 
-    def test_auto_streaming_order_prefers_groq_before_other_fallbacks(self):
+    def test_auto_streaming_order_prefers_openai_before_groq_fallback(self):
         with patch.dict(os.environ, {"AI_PROVIDER": "AUTO", "ZARRY_API_URL": ""}, clear=False), \
              patch.object(streaming_chat.ai_engine, "HF_TOKEN", ""), \
              patch.object(streaming_chat.ai_engine, "CLOUDFLARE_AI_TOKEN", "cf-test"), \
@@ -144,7 +144,7 @@ class StreamingProviderPreferenceTests(unittest.TestCase):
              patch.object(streaming_chat, "_stream_cloudflare", return_value=iter(["chunk"])):
             providers = [name for name, _stream in _provider_streams([])]
 
-        self.assertEqual(providers[0], "groq")
+        self.assertEqual(providers[:2], ["openai", "groq"])
 
 
 class StreamingIntentRoutingTests(unittest.TestCase):
