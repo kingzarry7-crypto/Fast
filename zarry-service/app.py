@@ -98,8 +98,8 @@ class ExplainRequest(StrictModel):
 class ExplainResponse(StrictModel):
     symbol: Literal["BTCUSD", "XAUUSD"]
     decision: Literal["BUY", "SELL", "WAIT", "NO TRADE"]
-    summary: str = Field(min_length=1, max_length=3000)
-    uncertainty: str = Field(max_length=1500)
+    summary: str = Field(min_length=60, max_length=3000)
+    uncertainty: str = Field(min_length=20, max_length=1500)
     cited_fields: list[str] = Field(max_length=80)
     numeric_claims: list[float | int] = Field(max_length=80)
     authority: Literal["KITTY_DETERMINISTIC_ENGINE"] = "KITTY_DETERMINISTIC_ENGINE"
@@ -136,6 +136,11 @@ def _validate_grounding(output: ExplainResponse, request: ExplainRequest) -> Non
         raise ValueError("model changed Kitty's decision")
     if "explanation-only" not in output.summary.lower():
         raise ValueError("model response is not marked explanation-only")
+    summary_body = re.sub(r"(?i)\\bexplanation-only\\b", "", output.summary).strip()
+    if len(summary_body.split()) < 8:
+        raise ValueError("model explanation is too generic")
+    if len(output.uncertainty.split()) < 4:
+        raise ValueError("model uncertainty is too generic")
     if not set(output.cited_fields).issubset(request.context):
         raise ValueError("model cited fields absent from supplied context")
     if request.expected_fields and set(request.expected_fields) != set(output.cited_fields):
