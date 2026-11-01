@@ -29,12 +29,13 @@ Hugging Face's consumer inference response does not provide ZARRY with a
 guaranteed per-request invoice amount. Therefore ZARRY does not describe a
 computed estimate as provider-reported actual billing.
 
-For Hugging Face, ZARRY reserves the published Fal per-megapixel tariff for
-the requested dimensions before dispatch, then settles the reservation using
-the same published tariff evaluated against the returned image dimensions.
-This is a conservative tariff settlement, not an invoice-level actual-cost
-report. If the image dimensions cannot be read, the reservation is retained
-and the image is not stored or returned.
+For Hugging Face, ZARRY reserves the maximum supported tariff (**$0.01**) before
+dispatch. After a successful response, it settles against the published
+$0.005-per-megapixel tariff using the returned image dimensions, rounding up
+to the next whole megapixel as a conservative upper bound. This is a
+conservative tariff settlement, not an invoice-level actual-cost report. If
+the image dimensions cannot be read, the reservation is retained and the
+image is not stored or returned.
 
 For Replicate, ZARRY reserves the maximum published tier ($0.01) before
 dispatch and settles the published tier after a successful prediction.

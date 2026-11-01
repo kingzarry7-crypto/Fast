@@ -46,6 +46,9 @@ class ImageProviderTests(unittest.TestCase):
         self.assertEqual(result["image_url"], "https://images.example/generated.png")
         self.assertEqual([c[0] for c in ledger.calls], ["reserve", "settle"])
         self.assertEqual(client.calls[0]["prompt"], "a red kite")
+        self.assertEqual(client.calls[0]["provider"], "fal-ai")
+        self.assertEqual(client.calls[0]["width"], 1024)
+        self.assertEqual(client.calls[0]["height"], 1024)
         self.assertEqual(storage.saved[0][1], request_id)
 
     def test_unknown_cost_fails_before_provider_dispatch(self):
@@ -158,6 +161,18 @@ class HuggingFaceFirstImageProviderTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "billing or storage contract is incomplete"):
             provider.generate("a red kite", request_id=uuid4(), width=1024, height=1024)
         self.assertEqual(fallback.calls, [])
+
+
+    def test_huggingface_settlement_uses_returned_dimensions(self):
+        from zarry_gateway.image import fal_zimage_turbo_settlement_usd
+        class GeneratedImage:
+            size = (1024, 768)
+        self.assertEqual(
+            fal_zimage_turbo_settlement_usd(
+                GeneratedImage(), "Tongyi-MAI/Z-Image-Turbo", "1024x768"
+            ),
+            "0.005",
+        )
 
 
 if __name__ == "__main__":
