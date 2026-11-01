@@ -42,7 +42,7 @@ class FakeModel:
         }
         content = json.dumps(result)
         if self.thinking_prefix:
-            content = "<think>internal reasoning is not for the caller</think>\\n" + content
+            content = "<think>internal reasoning is not for the caller</think>\n" + content
         return {"choices": [{"message": {"content": content}}]}
 
 
