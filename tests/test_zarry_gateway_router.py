@@ -117,7 +117,6 @@ class GatewayRouterTests(unittest.TestCase):
                     "image_url": "https://images.example/generated.png",
                     "provider": "huggingface-fal-z-image-turbo",
                     "fallback_used": False,
-                    "budget_reserved_usd": "0.01",
                 }
         gateway = ImageGateway()
         app = FastAPI()
