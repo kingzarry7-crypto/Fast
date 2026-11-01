@@ -97,6 +97,7 @@ class BenchmarkContractTests(unittest.TestCase):
         user_payload = json.loads(messages[1]["content"])
         self.assertEqual(user_payload["expected_fields"], case["expected_fields"])
         self.assertEqual(user_payload["kitty_assessment"]["decision"], case["kitty"]["decision"])
+        self.assertEqual(user_payload["task"], "explain")
         self.assertIn("if expected_fields is supplied", messages[0]["content"].lower())
         self.assertIn("include every listed key in cited_fields", messages[0]["content"].lower())
         self.assertIn("Never invent or estimate confidence percentages", messages[0]["content"])
