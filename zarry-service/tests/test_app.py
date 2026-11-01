@@ -179,6 +179,7 @@ class ZarryServiceTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         response_format = self.model.last_response_format
         self.assertEqual(response_format["type"], "json_object")
+        self.assertIn("schema", response_format)
         schema = response_format["schema"]
         self.assertEqual(
             set(schema["required"]),
