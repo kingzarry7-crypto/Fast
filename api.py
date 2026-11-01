@@ -905,7 +905,14 @@ try:
 
     app.add_event_handler("startup", _schedule_zarry_general_gateway_smoke)
 except Exception as _zarry_general_import_error:
-    logger.warning("ZARRY general gateway unavailable: %s", type(_zarry_general_import_error).__name__)
+    # Keep the exception message (which may contain configuration data) out of logs,
+    # but include source frames so AttributeError/compatibility failures are actionable.
+    import traceback as _zarry_traceback
+    logger.error(
+        "ZARRY general gateway unavailable error_type=%s traceback=%s",
+        type(_zarry_general_import_error).__name__,
+        "".join(_zarry_traceback.format_tb(_zarry_general_import_error.__traceback__))[-4000:],
+    )
 
 # ============================================================
 # CONVERSATIONS
