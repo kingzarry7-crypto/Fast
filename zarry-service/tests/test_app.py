@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -44,7 +45,7 @@ class ZarryServiceTests(unittest.TestCase):
     def payload(self):
         return {
             "symbol": "BTCUSD",
-            "timestamp": "2026-10-30T12:00:00Z",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "context": {"trend_4h": "bullish", "entry_5m": "not_confirmed", "last_price": 68000},
             "kitty_assessment": {"decision": "WAIT", "reason_codes": ["TIMEFRAME_CONFLICT"]},
             "task": "explain",
