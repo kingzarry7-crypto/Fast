@@ -20,7 +20,7 @@ class StrictModel(BaseModel):
 
 
 class KittyAssessment(StrictModel):
-    decision: Literal["BUY", "SELL", "WAIT"]
+    decision: Literal["BUY", "SELL", "WAIT", "NO TRADE"]
     reason_codes: list[str] = Field(default_factory=list)
 
 
@@ -48,7 +48,7 @@ class ExplainRequest(StrictModel):
 
 class ExplainResponse(StrictModel):
     symbol: Literal["BTCUSD", "XAUUSD"]
-    decision: Literal["BUY", "SELL", "WAIT"]
+    decision: Literal["BUY", "SELL", "WAIT", "NO TRADE"]
     summary: str = Field(min_length=1, max_length=3000)
     uncertainty: str = Field(max_length=1500)
     cited_fields: list[str]
@@ -58,7 +58,7 @@ class ExplainResponse(StrictModel):
 
 
 SYSTEM_PROMPT = """You are ZARRY, an explanation-only model.
-Kitty's deterministic assessment is authoritative. Never change BUY/SELL/WAIT.
+Kitty's deterministic assessment is authoritative. Never change BUY/SELL/WAIT/NO TRADE.
 Never invent prices, indicators, candles, fills, account facts or outcomes.
 Use only the supplied context. Explain stale data, conflicting timeframes,
 unconfirmed entries or missing risk levels as reasons to WAIT.

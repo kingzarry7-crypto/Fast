@@ -46,3 +46,27 @@ not passed to Fast. No broker, order, market-data, or tool-execution access is
 provided.
 
 This remains a prototype. It is not deployed or connected to Fast/Kitty yet.
+
+
+## Fast application proxy (guarded, not enabled)
+
+Fast mounts an optional authenticated proxy at `POST /api/zarry/explain`.
+It uses the existing web-session cookie authentication and forwards only a
+bounded Kitty assessment/context payload to this service. Kitty's decision is
+preserved exactly, including `NO TRADE`; Fast independently validates the
+response before returning it to the caller.
+
+The proxy is **disabled by default**. To enable it in a future approved
+environment configuration, Fast requires:
+
+- `ZARRY_ENABLED=true`
+- `ZARRY_SERVICE_URL=https://<private-zarry-service-host>` (base URL, without `/v1/explain`)
+- `ZARRY_API_KEY=<same bearer secret configured on this service>`
+- Optional `ZARRY_TIMEOUT_SECONDS=120` (integer from 1 to 120; default 120)
+
+The proxy returns an error instead of a fallback explanation when the service
+is unavailable, times out, changes Kitty's decision, cites unknown context, or
+returns unsupported numeric claims. The route does not call Kitty or any
+broker, and it does not create or execute trades. No runtime secrets are stored
+in this repository. This PR does not enable the feature or deploy either
+service.

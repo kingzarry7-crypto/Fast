@@ -68,6 +68,17 @@ class ZarryServiceTests(unittest.TestCase):
         self.assertEqual(response.json()["authority"], "KITTY_DETERMINISTIC_ENGINE")
         self.assertEqual(response.json()["mode"], "explanation_only")
 
+    def test_preserves_kitty_no_trade_decision(self):
+        payload = self.payload()
+        payload["kitty_assessment"]["decision"] = "NO TRADE"
+        response = self.client.post(
+            "/v1/explain",
+            json=payload,
+            headers={"Authorization": "Bearer test-secret"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["decision"], "NO TRADE")
+
     def test_rejects_invalid_model_decision(self):
         client = TestClient(create_app(model_loader=lambda *args: FakeModel(changed_decision=True)))
         with client:
