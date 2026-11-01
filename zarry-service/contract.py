@@ -36,3 +36,14 @@ MODEL_OUTPUT_SCHEMA = {
     "required": ["symbol", "decision", "summary", "uncertainty", "cited_fields", "numeric_claims"],
     "additionalProperties": False,
 }
+
+
+def extract_final_response(raw: str) -> str:
+    """Discard Qwen reasoning blocks and return only the final model response."""
+    if not isinstance(raw, str):
+        raise TypeError("model response must be text")
+    if "</think>" in raw:
+        raw = raw.rsplit("</think>", 1)[-1]
+    if "<think>" in raw:
+        raise ValueError("model returned an unterminated thinking block")
+    return raw.strip()
