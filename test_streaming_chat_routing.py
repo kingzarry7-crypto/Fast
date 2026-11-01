@@ -44,6 +44,19 @@ class StreamingProviderPreferenceTests(unittest.TestCase):
         self.assertIn("groq", providers)
         self.assertIn("chutes", providers)
 
+    def test_private_qwen_service_is_primary_without_legacy_zarry_api_url(self):
+        with patch.dict(os.environ, {
+            "AI_PROVIDER": "AUTO",
+            "ZARRY_PRIVATE_SERVICE_URL": "http://zarry.railway.internal:8080",
+            "ZARRY_SERVICE_URL": "",
+            "ZARRY_API_URL": "",
+        }, clear=True), \
+             patch.object(streaming_chat.ai_engine, "HF_TOKEN", ""), \
+             patch.object(streaming_chat, "_stream_zarry", return_value=iter(["qwen reply"])):
+            providers = [name for name, _stream in _provider_streams([])]
+
+        self.assertEqual(providers[0], "zarry")
+
     def test_gemini_is_available_in_streaming_provider_order(self):
         with patch.dict(os.environ, {"AI_PROVIDER": "GEMINI", "ZARRY_API_URL": ""}, clear=False), \
              patch.object(streaming_chat.ai_engine, "HF_TOKEN", ""), \
