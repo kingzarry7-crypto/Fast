@@ -101,7 +101,7 @@ class ExplainResponse(StrictModel):
     summary: str = Field(min_length=60, max_length=3000)
     uncertainty: str = Field(min_length=20, max_length=1500)
     cited_fields: list[str] = Field(max_length=80)
-    numeric_claims: list[float | int] = Field(max_length=80)
+    numeric_claims: list[float | int] = Field(max_length=0)
     authority: Literal["KITTY_DETERMINISTIC_ENGINE"] = "KITTY_DETERMINISTIC_ENGINE"
     mode: Literal["explanation_only"] = "explanation_only"
 
@@ -145,6 +145,8 @@ def _validate_grounding(output: ExplainResponse, request: ExplainRequest) -> Non
         raise ValueError("model cited fields absent from supplied context")
     if request.expected_fields and set(request.expected_fields) != set(output.cited_fields):
         raise ValueError("model cited_fields must exactly match expected_fields")
+    if output.numeric_claims:
+        raise ValueError("numeric claims are disabled in qualitative-only explanations")
     available_numbers = {
         float(value)
         for value in request.context.values()
