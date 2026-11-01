@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "zarry-service"))
-from app import _extract_numeric_text_claims, create_app
+from app import _extract_numeric_text_claims, _parse_model_explanation, create_app
 
 
 class RetryModel:
@@ -42,6 +42,13 @@ class RetryModel:
 class ZarryValidationRetryTests(unittest.TestCase):
     def test_numeric_grounding_detects_hyphenated_numeric_phrases(self):
         self.assertEqual(_extract_numeric_text_claims("15-minute window and 1-hour direction"), {15.0, 1.0})
+
+    def test_parses_labeled_prose_after_short_preamble(self):
+        summary, uncertainty = _parse_model_explanation(
+            "Here is the explanation.\\nSUMMARY: explanation-only: Kitty preserves the supplied decision because the context shows conflicting evidence and no confirmed entry.\\nUNCERTAINTY: Entry confirmation remains unresolved in the supplied context."
+        )
+        self.assertIn("explanation-only", summary)
+        self.assertIn("Entry confirmation", uncertainty)
 
     def test_retries_malformed_and_ungrounded_responses_without_relaxing_contract(self):
         with patch.dict(os.environ, {
