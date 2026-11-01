@@ -57,6 +57,28 @@ class StreamingProviderPreferenceTests(unittest.TestCase):
 
         self.assertEqual(providers[0], "zarry")
 
+    def test_private_qwen_stream_calls_v1_chat_even_when_legacy_url_exists(self):
+        messages = [
+            {"role": "system", "content": "Keep answers grounded."},
+            {"role": "user", "content": "Hello"},
+        ]
+        with patch.dict(os.environ, {
+            "ZARRY_PRIVATE_SERVICE_URL": "http://zarry.railway.internal:8080",
+            "ZARRY_SERVICE_URL": "",
+            "ZARRY_API_URL": "https://legacy.example/generate",
+        }, clear=False), patch(
+            "zarry_gateway.providers.SelfHostedZarryProvider"
+        ) as provider_class:
+            provider_class.return_value.generate.return_value = "Qwen response"
+            chunks = list(streaming_chat._stream_zarry(messages))
+
+        self.assertEqual(chunks, ["Qwen response"])
+        provider_class.return_value.generate.assert_called_once()
+        self.assertEqual(
+            provider_class.return_value.generate.call_args.kwargs["messages"],
+            messages,
+        )
+
     def test_gemini_is_available_in_streaming_provider_order(self):
         with patch.dict(os.environ, {"AI_PROVIDER": "GEMINI", "ZARRY_API_URL": ""}, clear=False), \
              patch.object(streaming_chat.ai_engine, "HF_TOKEN", ""), \
