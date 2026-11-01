@@ -35,6 +35,58 @@ Do not include numeric digits, prices, percentages, probabilities, or numeric ti
 Do not return JSON, labels, markdown fences, or reasoning. Do not place orders or change risk settings."""
 
 
+def _sanitize_model_value(value):
+    """Remove numeric payloads before they reach a model that must not repeat them."""
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, (int, float)):
+        return "numeric detail omitted"
+    if isinstance(value, str):
+        return "numeric detail omitted" if any(char.isdigit() for char in value) else value
+    if isinstance(value, list):
+        return [_sanitize_model_value(item) for item in value]
+    if isinstance(value, dict):
+        cleaned = {}
+        for key, item in value.items():
+            if any(char.isdigit() for char in str(key)):
+                continue
+            cleaned[str(key)] = _sanitize_model_value(item)
+        return cleaned
+    return "detail omitted"
+
+
+def _sanitize_context_for_model(context: dict) -> dict:
+    """Keep qualitative evidence while omitting prices, numeric keys, and time labels."""
+    aliases = {
+        "trend_4h": "higher_timeframe_trend",
+        "direction_1h": "shorter_timeframe_direction",
+        "setup_15m": "setup",
+        "entry_5m": "entry",
+        "stale_minutes": "staleness_present",
+        "stop_loss": "stop_loss_available",
+        "take_profit": "take_profit_available",
+        "take_profit_1": "take_profit_available",
+        "take_profit_2": "take_profit_available",
+    }
+    cleaned = {}
+    for key, value in context.items():
+        key = str(key)
+        if key in {"stop_loss", "take_profit", "take_profit_1", "take_profit_2"}:
+            cleaned[aliases[key]] = value is not None
+            continue
+        if key == "stale_minutes":
+            cleaned[aliases[key]] = value is not None and value is not False
+            continue
+        if key in aliases:
+            clean_key = aliases[key]
+        elif any(char.isdigit() for char in key):
+            continue
+        else:
+            clean_key = key
+        cleaned[clean_key] = _sanitize_model_value(value)
+    return cleaned
+
+
 def _parse_model_explanation(raw: str) -> tuple[str, str]:
     """Extract model prose without trusting model-generated authority fields."""
     text = extract_final_response(raw or "").strip()
@@ -372,12 +424,10 @@ def create_app(model_loader=_load_model) -> FastAPI:
         if model is None:
             raise HTTPException(status_code=503, detail="model is not loaded")
         message = {
-            "symbol": payload.symbol,
-            "timestamp": payload.timestamp,
-            "context": payload.context,
-            "expected_fields": payload.expected_fields,
-            "kitty_assessment": payload.kitty_assessment.model_dump(),
-            "task": "Explain Kitty's assessment without changing it.",
+            "kitty_decision": payload.kitty_assessment.decision,
+            "reason_codes": _sanitize_model_value(payload.kitty_assessment.reason_codes),
+            "context": _sanitize_context_for_model(payload.context),
+            "task": "Explain Kitty's supplied decision using only qualitative context. Numeric details were deliberately omitted.",
         }
         base_messages = [
             {"role": "system", "content": SERVICE_EXPLANATION_PROMPT},
@@ -395,8 +445,8 @@ def create_app(model_loader=_load_model) -> FastAPI:
                     "content": (
                         "Your previous response failed server validation: "
                         + str(last_error)
-                        + ". Return exactly two plain-text lines: SUMMARY: ... and UNCERTAINTY: ... . "
-                        "Do not return JSON or markdown. Do not use any numeric digits, numeric time labels, "
+                        + ". Return one short plain-text paragraph only; do not return JSON, labels, or markdown. "
+                        "Do not use numeric digits, numeric time labels, "
                         "prices, percentages, probabilities, or numeric claims. Use qualitative wording. "
                         "Preserve Kitty's exact decision and explain only the supplied context."
                     ),
