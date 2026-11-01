@@ -15,11 +15,17 @@ def clear_obsolete_model_cache(cache_dir: str | Path | None, repo_id: str) -> bo
     """Remove only the previous SmolLM3 repository cache after selecting another model."""
     if not cache_dir or repo_id == OBSOLETE_REPO:
         return False
-    obsolete = Path(cache_dir) / "hub" / "models--unsloth--SmolLM3-3B-GGUF"
-    if not obsolete.exists():
-        return False
-    shutil.rmtree(obsolete)
-    return True
+    cache_root = Path(cache_dir)
+    obsolete_paths = (
+        cache_root / "models--unsloth--SmolLM3-3B-GGUF",
+        cache_root / "hub" / "models--unsloth--SmolLM3-3B-GGUF",
+    )
+    removed = False
+    for obsolete in obsolete_paths:
+        if obsolete.exists():
+            shutil.rmtree(obsolete)
+            removed = True
+    return removed
 
 
 def resolve_model_file(snapshot_dir: str | Path, pattern: str = DEFAULT_PATTERN) -> Path:
