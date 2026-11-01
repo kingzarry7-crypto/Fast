@@ -280,6 +280,7 @@ def create_app(model_loader=_load_model) -> FastAPI:
                 temperature=0,
                 max_tokens=int(os.getenv("ZARRY_MAX_TOKENS", "300")),
                 response_format={"type": "json_object", "schema": output_schema},
+                chat_template_kwargs={"enable_thinking": False},
             )["choices"][0]["message"]["content"]
             parsed = ExplainResponse.model_validate_json(extract_final_response(raw or ""))
             _validate_grounding(parsed, payload)
