@@ -241,6 +241,16 @@ class ZarryServiceTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 502)
 
+    def test_rejects_explanation_that_omits_an_expected_context_field(self):
+        payload = self.payload()
+        payload["expected_fields"] = ["last_price"]
+        response = self.client.post(
+            "/v1/explain",
+            json=payload,
+            headers={"Authorization": "Bearer test-secret"},
+        )
+        self.assertEqual(response.status_code, 502)
+
 
 if __name__ == "__main__":
     unittest.main()
