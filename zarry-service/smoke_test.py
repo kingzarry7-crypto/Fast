@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime, timezone
 
 import requests
 
@@ -36,7 +37,7 @@ def main() -> int:
 
     payload = {
         "symbol": "BTCUSD",
-        "timestamp": "2026-10-31T00:00:00Z",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "context": {"rsi_14": 50.0, "timeframe": "1h", "status": "synthetic smoke test"},
         "kitty_assessment": {"decision": "WAIT", "reason_codes": ["deployment_smoke_test"]},
         "task": "explain",
