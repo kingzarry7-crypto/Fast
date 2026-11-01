@@ -892,9 +892,16 @@ try:
     )
 
     def _schedule_zarry_general_gateway_smoke():
+        # Full text generation shares the single llama.cpp model lock with user
+        # requests. Running it automatically on every Fast restart can block
+        # real chat for the entire inference duration. Keep it available only
+        # as an explicit operator diagnostic; health/readiness checks remain
+        # independent and do not consume model inference capacity.
+        enabled = os.getenv("ZARRY_STARTUP_INFERENCE_SMOKE", "false").strip().lower()
+        if enabled not in {"1", "true", "yes"}:
+            logger.info("ZARRY_GENERAL_GATEWAY_SMOKE skipped reason=disabled_by_default")
+            return
         logger.warning("ZARRY_GENERAL_GATEWAY_SMOKE scheduled")
-        # Run outside FastAPI startup so a slow CPU model cannot delay health checks.
-        # This calls the provider directly and never writes to a user's conversation memory.
         provider = getattr(_zarry_general_service, "text_provider", None)
         Thread(
             target=run_general_gateway_smoke,
