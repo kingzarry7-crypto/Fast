@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from typing import Any, Dict
 
 from fastapi import Request, HTTPException
@@ -20,6 +21,15 @@ DEFAULTS = {
     "rememberPreferences": True,
     "riskReminder": True,
 }
+
+
+def _is_web_user_uuid(user_id: Any) -> bool:
+    """Only authenticated web-user UUIDs may reach UUID-backed Neon tables."""
+    try:
+        uuid.UUID(str(user_id).strip())
+        return True
+    except (TypeError, ValueError, AttributeError):
+        return False
 
 
 def _user_id(row, row_value=None) -> str:
@@ -48,7 +58,9 @@ def _normalise(raw: Any) -> Dict[str, bool]:
 
 
 def _read_settings(user_id: str, get_db_cursor) -> Dict[str, bool]:
-    if not user_id or get_db_cursor is None:
+    # AIEngine also invokes this hook for Telegram/Discord/service identities.
+    # Those synthetic IDs must never reach PostgreSQL UUID columns.
+    if not _is_web_user_uuid(user_id) or get_db_cursor is None:
         return dict(DEFAULTS)
     try:
         with get_db_cursor(commit=False) as cur:
@@ -87,7 +99,9 @@ def _read_settings(user_id: str, get_db_cursor) -> Dict[str, bool]:
 
 
 def _write_settings(user_id: str, preferences: Dict[str, bool], get_db_cursor) -> Dict[str, bool]:
-    if not user_id or get_db_cursor is None:
+    if not _is_web_user_uuid(user_id):
+        raise ValueError("settings persistence requires a web-user UUID")
+    if get_db_cursor is None:
         raise RuntimeError("settings storage unavailable")
     payload = json.dumps({"chat_behavior": preferences})
     with get_db_cursor(commit=True) as cur:
