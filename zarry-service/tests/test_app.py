@@ -15,9 +15,11 @@ class FakeModel:
     def __init__(self, changed_decision=False, bad_number=False):
         self.changed_decision = changed_decision
         self.bad_number = bad_number
+        self.last_response_format = None
 
     def create_chat_completion(self, **kwargs):
         import json
+        self.last_response_format = kwargs.get("response_format")
 
         user = json.loads(kwargs["messages"][1]["content"])
         result = {
@@ -35,7 +37,8 @@ class ZarryServiceTests(unittest.TestCase):
     def setUp(self):
         self.env = patch.dict(os.environ, {"ZARRY_API_KEY": "test-secret", "ZARRY_MODEL_PATH": "/fake/model.gguf"}, clear=False)
         self.env.start()
-        self.client = TestClient(create_app(model_loader=lambda *args: FakeModel()))
+        self.model = FakeModel()
+        self.client = TestClient(create_app(model_loader=lambda *args: self.model))
         self.client.__enter__()
 
     def tearDown(self):
@@ -166,6 +169,23 @@ class ZarryServiceTests(unittest.TestCase):
         self.assertEqual(response.json()["decision"], "WAIT")
         self.assertEqual(response.json()["authority"], "KITTY_DETERMINISTIC_ENGINE")
         self.assertEqual(response.json()["mode"], "explanation_only")
+
+    def test_model_receives_strict_schema_in_llama_cpp_response_format(self):
+        response = self.client.post(
+            "/v1/explain",
+            json=self.payload(),
+            headers={"Authorization": "Bearer test-secret"},
+        )
+        self.assertEqual(response.status_code, 200)
+        response_format = self.model.last_response_format
+        self.assertEqual(response_format["type"], "json_object")
+        schema = response_format["schema"]
+        self.assertEqual(
+            set(schema["required"]),
+            {"symbol", "decision", "summary", "uncertainty", "cited_fields", "numeric_claims"},
+        )
+        self.assertFalse(schema["additionalProperties"])
+        self.assertIn("NO TRADE", schema["properties"]["decision"]["enum"])
 
     def test_system_prompt_never_turns_context_warnings_into_wait(self):
         self.assertIn("Never turn a context warning into a new WAIT decision.", SYSTEM_PROMPT)
