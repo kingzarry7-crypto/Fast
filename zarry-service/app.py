@@ -31,7 +31,7 @@ Kitty's deterministic assessment is authoritative. Explain the supplied assessme
 Never change Kitty's symbol or BUY/SELL/WAIT/NO TRADE decision. Never recommend a different action.
 Use only the supplied context. Never invent prices, indicators, candles, fills, account facts, outcomes, probabilities, or confidence.
 Write one short, natural-language paragraph explaining why the supplied Kitty decision is preserved, grounded in the context.
-Do not include numeric digits, prices, percentages, probabilities, or numeric time labels. Use qualitative wording such as "shorter-term" instead of "15-minute".
+Do not include numeric digits, prices, percentages, probabilities, or numeric time labels. Use qualitative wording such as "shorter-term" instead of numeric timeframe labels.
 Do not return JSON, labels, markdown fences, or reasoning. Do not place orders or change risk settings."""
 
 
