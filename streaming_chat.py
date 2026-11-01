@@ -453,7 +453,7 @@ def _build_stream_generator(
         media_intent = None
     if media_intent is not None:
         try:
-            reply = str(engine._route_media_request(user_id, message, media_intent, None) or "").strip()
+            reply = ai_engine.clean_ai_response(str(engine._route_media_request(user_id, message, media_intent, None) or "")).strip()
         except Exception as exc:
             logger.exception("Streaming media task failed safely: %s", type(exc).__name__)
             reply = "I recognized this as a media task, but the media pipeline failed. No successful output was created; please retry or check the media provider configuration."
@@ -488,7 +488,7 @@ def _build_stream_generator(
             "project": None,
         }
     if coding_result is not None:
-        reply = str(coding_result.get("reply") or "").strip()
+        reply = ai_engine.clean_ai_response(str(coding_result.get("reply") or "")).strip()
         engine._save_memory(user_id, message, reply)
         yield _sse({"type": "activity", "stage": "coding", "label": "Generating project files", "done": True})
         yield _sse({"type": "start", "provider": "coding_agent"})
@@ -517,7 +517,7 @@ def _build_stream_generator(
         connector_result = None
 
     if connector_result is not None:
-        reply = str(connector_result.get("reply") or "").strip()
+        reply = ai_engine.clean_ai_response(str(connector_result.get("reply") or "")).strip()
         if reply:
             engine._save_memory(user_id, message, reply)
             yield _sse({"type": "activity", "stage": "responding", "label": "Preparing connected-account response", "done": False})
@@ -557,7 +557,7 @@ def _build_stream_generator(
         except Exception:
             pass
     if agent_result is not None and str(agent_result.get("reply") or "").strip():
-        reply = str(agent_result["reply"])[:8000]
+        reply = ai_engine.clean_ai_response(str(agent_result["reply"]))[:8000]
         engine._save_memory(user_id, message, reply)
         yield _sse({"type": "activity", "stage": "specialist", "label": "Using the relevant specialist agent", "done": True})
         yield _sse({"type": "start", "provider": str(agent_result.get("provider") or "specialist_agent")})
