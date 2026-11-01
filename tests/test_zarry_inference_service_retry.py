@@ -20,7 +20,6 @@ class RetryModel:
 
     def create_chat_completion(self, **kwargs):
         self.calls += 1
-        request = json.loads(kwargs["messages"][1]["content"].removeprefix("/no_think\n"))
         summary = (
             "Explanation-only: the supplied evidence is more than 50% certain."
             if self.calls == 1
@@ -31,7 +30,7 @@ class RetryModel:
             "decision": "SELL",
             "summary": summary,
             "uncertainty": "The supplied context leaves entry confirmation unresolved.",
-            "cited_fields": request["expected_fields"],
+            "cited_fields": ["invented_field"],
             "numeric_claims": [],
         }
         return {"choices": [{"message": {"content": json.dumps(result)}}]}
