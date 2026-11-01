@@ -85,6 +85,7 @@ SCORE_KEYS = (
     "numeric_text_claims_grounded",
     "expected_fields_covered",
     "explanation_only",
+    "explanation_quality",
 )
 
 
@@ -128,6 +129,9 @@ def score_case(case, result):
     citations = set(result["cited_fields"])
     declared_numbers = {float(value) for value in result["numeric_claims"]}
     text_numbers = extract_numeric_text_claims(result["summary"], result["uncertainty"])
+    summary_body = re.sub(r"(?i)\\bexplanation-only\\b", "", result["summary"]).strip()
+    summary_words = summary_body.split()
+    uncertainty_words = result["uncertainty"].split()
     return {
         "valid_json": True,
         "decision_preserved": result["decision"] == case["kitty"]["decision"],
@@ -137,6 +141,7 @@ def score_case(case, result):
         "numeric_text_claims_grounded": text_numbers.issubset(declared_numbers) and declared_numbers.issubset(numbers),
         "expected_fields_covered": set(case.get("expected_fields", [])).issubset(citations),
         "explanation_only": "explanation-only" in result["summary"].lower(),
+        "explanation_quality": len(result["summary"]) >= 60 and len(summary_words) >= 8 and len(result["uncertainty"]) >= 20 and len(uncertainty_words) >= 4,
         "summary": result["summary"],
         "uncertainty": result["uncertainty"],
     }
