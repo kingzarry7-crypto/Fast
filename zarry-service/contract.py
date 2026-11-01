@@ -19,7 +19,7 @@ You cannot place orders or change risk settings.
 Return one JSON object with exactly: symbol, decision, summary, uncertainty,
 cited_fields, numeric_claims. symbol and decision must exactly match Kitty.
 cited_fields must be supplied context keys. numeric_claims must be numbers
-copied exactly from supplied context. Include the phrase explanation-only."""
+copied exactly from supplied context. The summary MUST contain the exact literal phrase "explanation-only"."""
 
 MODEL_OUTPUT_SCHEMA = {
     "type": "object",
