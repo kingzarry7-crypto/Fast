@@ -64,20 +64,35 @@ class DownloadModelTests(unittest.TestCase):
             Path("/custom/hf-cache"),
         )
 
-    def test_removes_only_incomplete_files_from_selected_model_cache(self):
+    def test_removes_failed_qwen_cache_without_the_pinned_snapshot(self):
         with tempfile.TemporaryDirectory() as tmp:
-            blobs = Path(tmp) / "models--unsloth--Qwen3-1.7B-GGUF" / "blobs"
-            blobs.mkdir(parents=True)
-            partial = blobs / "incomplete.download.incomplete"
-            complete = blobs / "complete.gguf"
-            partial.write_text("partial")
-            complete.write_text("complete")
+            root = Path(tmp) / "models--unsloth--Qwen3-1.7B-GGUF"
+            (root / "blobs").mkdir(parents=True)
+            (root / "blobs" / "failed-xet-reconstruction").write_text("partial")
+            (root / "snapshots" / "old-revision").mkdir(parents=True)
             self.assertEqual(
-                clear_incomplete_model_downloads(tmp, DEFAULT_REPO),
+                clear_incomplete_model_downloads(
+                    tmp, DEFAULT_REPO, DEFAULT_REVISION, DEFAULT_PATTERN
+                ),
                 1,
             )
-            self.assertFalse(partial.exists())
-            self.assertTrue(complete.exists())
+            self.assertFalse(root.exists())
+
+    def test_preserves_qwen_cache_with_the_exact_pinned_snapshot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "models--unsloth--Qwen3-1.7B-GGUF"
+            snapshot = root / "snapshots" / DEFAULT_REVISION
+            snapshot.mkdir(parents=True)
+            model = snapshot / DEFAULT_PATTERN
+            model.touch()
+            (root / "blobs").mkdir()
+            self.assertEqual(
+                clear_incomplete_model_downloads(
+                    tmp, DEFAULT_REPO, DEFAULT_REVISION, DEFAULT_PATTERN
+                ),
+                0,
+            )
+            self.assertTrue(model.exists())
 
     def test_removes_only_obsolete_smollm3_cache_when_switching_models(self):
         with tempfile.TemporaryDirectory() as tmp:
