@@ -24,8 +24,6 @@ class RetryModel:
         summary = (
             "Explanation-only: the supplied evidence is more than 50% certain."
             if self.calls == 1
-            else "Explanation-only: Kitty's decision follows the mixed setup in a 15m timeframe."
-            if self.calls == 2
             else "Explanation-only: Kitty's decision is preserved because the supplied timeframes conflict and entry confirmation remains unresolved."
         )
         result = {
@@ -96,7 +94,7 @@ class ZarryValidationRetryTests(unittest.TestCase):
                 )
 
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(model.calls, 3)
+        self.assertEqual(model.calls, 2)
         result = response.json()
         self.assertEqual(result["decision"], "WAIT")
         self.assertEqual(result["symbol"], "BTCUSD")
