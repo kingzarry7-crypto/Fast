@@ -172,6 +172,8 @@ def _validate_grounding(output: ExplainResponse, request: ExplainRequest) -> Non
         raise ValueError("model changed Kitty's decision")
     if "explanation-only" not in output.summary.lower():
         raise ValueError("model response is not marked explanation-only")
+    if any(character.isdigit() for character in output.summary + output.uncertainty):
+        raise ValueError("numeric digits are not allowed in explanation text")
     summary_body = re.sub(r"(?i)\bexplanation-only\b\s*[:\-–]?\s*", "", output.summary).strip()
     if len(summary_body.split()) < 8:
         raise ValueError("model explanation is too generic")
