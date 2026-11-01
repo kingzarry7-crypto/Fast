@@ -26,6 +26,7 @@ class GeneralGatewayStartupSmokeTests(unittest.TestCase):
         self.assertEqual(kwargs["message"], "Reply with exactly: ZARRY_CONNECTION_OK.")
         self.assertEqual(kwargs["timeout"], (5.0, 180.0))
         self.assertIn("ZARRY_GENERAL_GATEWAY_SMOKE status=passed", " ".join(logs.output))
+        self.assertIn("transport=railway_private", " ".join(logs.output))
 
     def test_failure_logs_only_exception_type(self):
         provider = Mock()
