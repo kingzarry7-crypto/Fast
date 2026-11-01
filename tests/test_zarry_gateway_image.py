@@ -90,5 +90,58 @@ class ImageProviderTests(unittest.TestCase):
         self.assertEqual([c[0] for c in ledger.calls], ["reserve"])
 
 
+class HuggingFaceFirstImageProviderTests(unittest.TestCase):
+    def test_fal_z_image_turbo_price_rounds_up_to_billable_megapixels(self):
+        from zarry_gateway.image import fal_zimage_turbo_cost_usd
+        self.assertEqual(fal_zimage_turbo_cost_usd("Tongyi-MAI/Z-Image-Turbo", "1024x768"), "0.005")
+        self.assertEqual(fal_zimage_turbo_cost_usd("Tongyi-MAI/Z-Image-Turbo", "1024x1024"), "0.01")
+
+    def test_huggingface_primary_is_used_when_configured(self):
+        from zarry_gateway.image import HuggingFaceFirstImageProvider
+        class Primary:
+            def __init__(self): self.calls = []
+            def is_configured(self): return True
+            def generate(self, prompt, *, request_id, size):
+                self.calls.append((prompt, request_id, size))
+                return {"request_id": request_id, "image_url": "https://images.example/hf.png",
+                        "provider": "huggingface-fal-z-image-turbo", "fallback_used": False}
+        class Fallback:
+            def generate(self, *args, **kwargs): raise AssertionError("fallback must not run")
+        primary = Primary()
+        provider = HuggingFaceFirstImageProvider(primary, Fallback())
+        request_id = uuid4()
+        result = provider.generate("a red kite", request_id=request_id, width=1024, height=768)
+        self.assertEqual(result["provider"], "huggingface-fal-z-image-turbo")
+        self.assertEqual(primary.calls, [("a red kite", request_id, "1024x768")])
+
+    def test_replicate_is_used_only_when_huggingface_is_unconfigured_before_dispatch(self):
+        from zarry_gateway.image import HuggingFaceFirstImageProvider
+        class Primary:
+            def is_configured(self): return False
+            def generate(self, *args, **kwargs): raise AssertionError("unconfigured primary must not run")
+        class Fallback:
+            def generate(self, prompt, *, request_id, width, height):
+                return {"request_id": request_id, "image_url": "https://images.example/replicate.png",
+                        "provider": "replicate-z-image-turbo", "fallback_used": False}
+        provider = HuggingFaceFirstImageProvider(Primary(), Fallback())
+        result = provider.generate("a red kite", request_id=uuid4(), width=1024, height=1024)
+        self.assertTrue(result["fallback_used"])
+        self.assertEqual(result["provider"], "replicate-z-image-turbo")
+
+    def test_ambiguous_huggingface_failure_never_dispatches_replicate_fallback(self):
+        from zarry_gateway.image import HuggingFaceFirstImageProvider
+        class Primary:
+            def is_configured(self): return True
+            def generate(self, *args, **kwargs): raise TimeoutError("unknown provider outcome")
+        class Fallback:
+            def __init__(self): self.calls = []
+            def generate(self, *args, **kwargs): self.calls.append((args, kwargs))
+        fallback = Fallback()
+        provider = HuggingFaceFirstImageProvider(Primary(), fallback)
+        with self.assertRaises(TimeoutError):
+            provider.generate("a red kite", request_id=uuid4(), width=1024, height=1024)
+        self.assertEqual(fallback.calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()
