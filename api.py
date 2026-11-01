@@ -861,7 +861,7 @@ try:
                 HF_ZIMAGE_MODEL,
                 HuggingFaceFirstImageProvider,
                 HuggingFaceImageProvider,
-                fal_zimage_turbo_cost_usd,
+                fal_zimage_turbo_reservation_usd,
                 fal_zimage_turbo_settlement_usd,
             )
             from zarry_gateway.replicate_image import ReplicateZImageTurboProvider
@@ -879,7 +879,7 @@ try:
                     model=HF_ZIMAGE_MODEL,
                     provider="fal-ai",
                     ledger=_image_ledger,
-                    cost_estimator=fal_zimage_turbo_cost_usd,
+                    cost_estimator=fal_zimage_turbo_reservation_usd,
                     actual_cost_resolver=fal_zimage_turbo_settlement_usd,
                     storage=_image_storage,
                 )
