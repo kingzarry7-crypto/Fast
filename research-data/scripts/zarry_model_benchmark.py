@@ -189,6 +189,7 @@ def evaluate(name, config, cases, args):
         n_threads=args.threads,
         n_gpu_layers=args.gpu_layers,
         verbose=False,
+        chat_template_kwargs={"enable_thinking": False},
     )
     print(f"[{name}] model loaded; evaluating {len(cases)} frozen cases", flush=True)
     rows = []
@@ -204,7 +205,6 @@ def evaluate(name, config, cases, args):
                 temperature=0,
                 max_tokens=args.max_tokens,
                 response_format=response_format(case.get("expected_fields", [])),
-                chat_template_kwargs={"enable_thinking": False},
             )
             raw_output = response["choices"][0]["message"]["content"] or ""
             parsed = parse_output(raw_output)
