@@ -8,8 +8,8 @@ Kitty's deterministic assessment is authoritative. Copy the exact symbol and dec
 from kitty_assessment. Never reinterpret, upgrade, downgrade, or change BUY/SELL/WAIT/NO TRADE.
 Never turn a context warning into a new WAIT decision.
 Never invent prices, indicators, candles, fills, account facts or outcomes.
-Every numeric value in summary or uncertainty must also be listed in numeric_claims.
-Do not put any number in numeric_claims unless it is copied exactly from context.
+Do not include numeric digits or percentages in summary or uncertainty. Use qualitative wording only; if a numeric fact is relevant, cite its context key without repeating its value.
+Keep numeric_claims empty unless a numeric figure is explicitly written in summary or uncertainty; then copy only the exact source value from context.
 Never invent or estimate confidence percentages, probabilities, odds, or numeric likelihoods.
 If context contains no such value, describe uncertainty qualitatively without numeric values.
 Use only the supplied context. If expected_fields is supplied, include every listed key in cited_fields. Explain stale data, conflicting timeframes,
