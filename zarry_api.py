@@ -24,6 +24,17 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+NUMERIC_TEXT_RE = re.compile(r"(?<![A-Za-z0-9_])[-+]?(?:\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d+)?%?(?![A-Za-z0-9_-])")
+
+
+def _extract_numeric_text_claims(*texts: str) -> set[float]:
+    claims: set[float] = set()
+    for text in texts:
+        for token in NUMERIC_TEXT_RE.findall(text or ""):
+            claims.add(float(token.replace(",", "").rstrip("%")))
+    return claims
+
+
 Decision = Literal["BUY", "SELL", "WAIT", "NO TRADE"]
 
 
@@ -114,8 +125,12 @@ def _validate_response(result: ZarryExplainResponse, payload: ZarryExplainReques
         for value in payload.context.values()
         if isinstance(value, (int, float)) and not isinstance(value, bool)
     }
-    if any(float(value) not in available_numbers for value in result.numeric_claims):
+    declared_numbers = {float(value) for value in result.numeric_claims}
+    if not declared_numbers.issubset(available_numbers):
         raise ValueError("ZARRY produced an ungrounded numeric claim")
+    text_numbers = _extract_numeric_text_claims(result.summary, result.uncertainty)
+    if not text_numbers.issubset(declared_numbers):
+        raise ValueError("ZARRY used an undeclared numeric claim in its explanation")
 
 
 def create_router(
