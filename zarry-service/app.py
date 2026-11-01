@@ -70,6 +70,62 @@ def _parse_model_explanation(raw: str) -> tuple[str, str]:
     raise ValueError("model response did not contain usable explanation prose")
 
 
+def _deterministic_summary(request: "ExplainRequest") -> str:
+    """Build a transparent, qualitative fallback from validated context only."""
+    context = request.context
+    facts = []
+    if context.get("data_fresh") is False or "stale_minutes" in context:
+        facts.append("the supplied market context is marked stale")
+    elif context.get("data_fresh") is True:
+        facts.append("the supplied market context is marked fresh")
+
+    trend = str(context.get("trend_4h", "")).lower()
+    direction = str(context.get("direction_1h", "")).lower()
+    if trend and direction:
+        if trend == direction:
+            facts.append("the higher-timeframe trend and shorter-term direction agree")
+        else:
+            facts.append("the supplied timeframe directions conflict")
+
+    setup = str(context.get("setup_15m", "")).lower()
+    if setup in {"mixed", "extended", "pullback_held", "pullback", "breakout", "lower_high_rejected", "bullish_reversal_attempt", "breakdown"}:
+        setup_text = {
+            "mixed": "the setup is marked mixed",
+            "extended": "the setup is marked extended",
+            "pullback_held": "the pullback setup is marked held",
+            "pullback": "the setup is marked as a pullback",
+            "breakout": "the setup is marked as a breakout",
+            "lower_high_rejected": "the setup is marked as a rejected lower high",
+            "bullish_reversal_attempt": "the setup is marked as a reversal attempt",
+            "breakdown": "the setup is marked as a breakdown",
+        }[setup]
+        facts.append(setup_text)
+
+    entry = str(context.get("entry_5m", "")).lower()
+    if entry in {"not_confirmed", "unconfirmed", "late", "bullish_reclaim", "bullish", "bearish_breakdown", "bearish"}:
+        entry_text = {
+            "not_confirmed": "entry confirmation is not established",
+            "unconfirmed": "entry confirmation remains unresolved",
+            "late": "the entry is marked late",
+            "bullish_reclaim": "the entry context is marked as a bullish reclaim",
+            "bullish": "the entry context is marked bullish",
+            "bearish_breakdown": "the entry context is marked as a bearish breakdown",
+            "bearish": "the entry context is marked bearish",
+        }[entry]
+        facts.append(entry_text)
+
+    if "stop_loss" not in context or not any(key.startswith("take_profit") for key in context):
+        facts.append("risk levels are not fully supplied")
+    if not facts:
+        facts.append("the explanation is limited to the supplied context")
+
+    reason = "; ".join(facts[:3])
+    return (
+        f"Explanation-only: deterministic fallback preserves Kitty's {request.kitty_assessment.decision} "
+        f"decision because {reason}. No new trading decision is made."
+    )
+
+
 def _deterministic_uncertainty(request: "ExplainRequest") -> str:
     """Describe only limitations that can be inferred directly from supplied context."""
     context = request.context
@@ -167,6 +223,7 @@ class ExplainResponse(StrictModel):
     numeric_claims: list[float | int] = Field(max_length=0)
     authority: Literal["KITTY_DETERMINISTIC_ENGINE"] = "KITTY_DETERMINISTIC_ENGINE"
     mode: Literal["explanation_only"] = "explanation_only"
+    explanation_source: Literal["model", "deterministic_fallback"] = "model"
 
 
 NUMERIC_TEXT_RE = re.compile(r"(?<![A-Za-z0-9_])[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?(?![A-Za-z0-9_])")
@@ -361,6 +418,7 @@ def create_app(model_loader=_load_model) -> FastAPI:
                     uncertainty=uncertainty,
                     cited_fields=list(payload.expected_fields),
                     numeric_claims=[],
+                    explanation_source="model",
                 )
                 _validate_grounding(parsed, payload)
                 break
@@ -374,11 +432,28 @@ def create_app(model_loader=_load_model) -> FastAPI:
                 )
 
         if parsed is None:
-            # Fail closed: invalid model prose is never passed to the caller.
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="model returned invalid or ungrounded explanation",
-            ) from last_error
+            # Preserve service availability without disguising a model failure:
+            # this response is explicitly labeled as a deterministic fallback.
+            logger.warning(
+                "ZARRY using deterministic explanation fallback after three invalid model attempts: %s",
+                type(last_error).__name__ + ": " + str(last_error),
+            )
+            try:
+                parsed = ExplainResponse(
+                    symbol=payload.symbol,
+                    decision=payload.kitty_assessment.decision,
+                    summary=_deterministic_summary(payload),
+                    uncertainty=_deterministic_uncertainty(payload),
+                    cited_fields=list(payload.expected_fields),
+                    numeric_claims=[],
+                    explanation_source="deterministic_fallback",
+                )
+                _validate_grounding(parsed, payload)
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="model and deterministic fallback both failed validation",
+                ) from exc
 
         parsed.authority = "KITTY_DETERMINISTIC_ENGINE"
         parsed.mode = "explanation_only"
