@@ -275,7 +275,7 @@ def create_app(model_loader=_load_model) -> FastAPI:
         parsed = None
         # Small local models sometimes violate a semantic rule despite constrained
         # decoding. Permit one bounded correction attempt, without relaxing any gate.
-        for attempt in range(2):
+        for attempt in range(3):
             messages = list(base_messages)
             if attempt:
                 messages.append({
@@ -284,9 +284,9 @@ def create_app(model_loader=_load_model) -> FastAPI:
                         "Your previous response failed server validation: "
                         + str(last_error)
                         + ". Return a corrected JSON object matching the exact schema. "
-                        "Do not include digits, prices, percentages, probabilities, or numeric claims "
-                        "in summary or uncertainty. Include every expected_fields key in cited_fields. "
-                        "Preserve Kitty's exact symbol and decision."
+                        "Do not include digits, prices, percentages, probabilities, numeric claims, or numeric time labels "
+                        "such as 15-minute or 1-hour in summary or uncertainty. Use qualitative wording instead. "
+                        "Include every expected_fields key in cited_fields and preserve Kitty's exact symbol and decision."
                     ),
                 })
             try:
@@ -303,7 +303,7 @@ def create_app(model_loader=_load_model) -> FastAPI:
                 last_error = exc
                 parsed = None
                 logger.warning(
-                    "ZARRY explanation validation failed (attempt %s/2): %s",
+                    "ZARRY explanation validation failed (attempt %s/3): %s",
                     attempt + 1,
                     type(exc).__name__ + ": " + str(exc),
                 )
