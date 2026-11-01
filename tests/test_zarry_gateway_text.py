@@ -50,6 +50,29 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(kwargs["json"]["messages"][0]["role"], "user")
         self.assertEqual(kwargs["headers"]["Authorization"], "Bearer secret")
 
+    def test_internal_system_context_is_folded_into_latest_user_message(self):
+        request_id = uuid4()
+        response = Mock()
+        response.json.return_value = {"request_id": str(request_id), "response": "Hello"}
+        response.raise_for_status.return_value = None
+        session = Mock()
+        session.post.return_value = response
+        provider = SelfHostedZarryProvider(
+            "http://zarry.railway.internal:8080", "secret", session=session
+        )
+        provider.generate(
+            message="Hello",
+            request_id=request_id,
+            messages=[
+                {"role": "system", "content": "Use the user's saved context."},
+                {"role": "user", "content": "Hello"},
+            ],
+        )
+        sent = session.post.call_args.kwargs["json"]["messages"]
+        self.assertEqual([item["role"] for item in sent], ["user"])
+        self.assertIn("Use the user's saved context.", sent[0]["content"])
+        self.assertTrue(sent[0]["content"].endswith("Hello"))
+
     def test_allows_railway_private_http_and_uses_cpu_safe_timeout(self):
         request_id = uuid4()
         response = Mock()

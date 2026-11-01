@@ -15,6 +15,41 @@ class TextProvider(Protocol):
     def generate(self, *, message: str, request_id: UUID, timeout: tuple[float, float]) -> str: ...
 
 
+def _normalise_chat_messages(messages, fallback_message: str) -> list[dict[str, str]]:
+    """Keep the private service contract to user/assistant turns while preserving trusted app context."""
+    system_context = []
+    turns = []
+    for item in messages or []:
+        if not isinstance(item, dict):
+            continue
+        role = item.get("role")
+        content = item.get("content")
+        if not isinstance(content, str) or not content.strip():
+            continue
+        if role == "system":
+            system_context.append(content.strip())
+        elif role in {"user", "assistant"}:
+            turns.append({"role": role, "content": content.strip()[:8000]})
+
+    if not turns:
+        turns = [{"role": "user", "content": str(fallback_message or "").strip()[:8000]}]
+    if turns[-1]["role"] != "user":
+        turns.append({"role": "user", "content": str(fallback_message or "").strip()[:8000]})
+
+    if system_context:
+        last_user = next((item for item in reversed(turns) if item["role"] == "user"), None)
+        if last_user is not None:
+            prefix = "[Trusted application context]\n" + "\n\n".join(system_context)
+            room = max(0, 8000 - len(last_user["content"]) - 2)
+            if room:
+                last_user["content"] = (prefix[:room] + "\n\n" + last_user["content"])[:8000]
+
+    turns = turns[-20:]
+    while len(turns) > 1 and sum(len(item["content"]) for item in turns) > 24000:
+        turns.pop(0)
+    return turns
+
+
 class SelfHostedZarryProvider:
     """Calls the dedicated general-chat contract, never the trading explain route."""
 
@@ -52,8 +87,8 @@ class SelfHostedZarryProvider:
         )
         if not (secure_public_url or railway_private_url) or parsed_url.username or parsed_url.password or not self.api_key:
             raise RuntimeError("ZARRY text provider is not configured")
-        bounded_messages = messages or [{"role": "user", "content": message}]
-        if not isinstance(bounded_messages, list) or not 1 <= len(bounded_messages) <= 20:
+        bounded_messages = _normalise_chat_messages(messages, message)
+        if not 1 <= len(bounded_messages) <= 20:
             raise ValueError("Conversation history is outside the supported bounds")
         response = self.session.post(
             self.base_url + "/v1/chat",

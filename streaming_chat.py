@@ -198,7 +198,28 @@ def _build_zarry_context(messages: list):
 
 
 def _stream_zarry(messages: list):
-    """Use the Colab-hosted Zarry /generate API for the streaming chat path."""
+    """Prefer the private Railway Qwen service; retain the legacy endpoint only as a fallback."""
+    if os.getenv("ZARRY_PRIVATE_SERVICE_URL", "").strip() or os.getenv("ZARRY_SERVICE_URL", "").strip():
+        from uuid import uuid4
+        from zarry_gateway.providers import SelfHostedZarryProvider
+
+        latest_user_message = next(
+            (
+                str(item.get("content") or "")
+                for item in reversed(messages or [])
+                if isinstance(item, dict) and item.get("role") == "user"
+            ),
+            "",
+        )
+        provider = SelfHostedZarryProvider()
+        answer = provider.generate(
+            message=latest_user_message,
+            request_id=uuid4(),
+            messages=messages,
+        )
+        yield answer
+        return
+
     endpoint = os.getenv("ZARRY_API_URL", "").strip()
     if not endpoint:
         raise RuntimeError("zarry_not_configured")
@@ -246,7 +267,11 @@ def _provider_streams(messages: list):
         preferred = "huggingface"
 
     default_order = ["zarry", "huggingface", "cloudflare", "openai", "groq", "openrouter", "chutes", "gemini"]
-    if not os.getenv("ZARRY_API_URL", "").strip():
+    has_private_zarry = bool(
+        os.getenv("ZARRY_PRIVATE_SERVICE_URL", "").strip()
+        or os.getenv("ZARRY_SERVICE_URL", "").strip()
+    )
+    if not has_private_zarry and not os.getenv("ZARRY_API_URL", "").strip():
         default_order = default_order[1:]
     if not ai_engine.HF_TOKEN:
         default_order = [p for p in default_order if p != "huggingface"]
@@ -258,7 +283,7 @@ def _provider_streams(messages: list):
         order = [preferred] + [p for p in default_order if p != preferred]
 
     for provider in order:
-        if provider == "zarry" and os.getenv("ZARRY_API_URL", "").strip():
+        if provider == "zarry" and (has_private_zarry or os.getenv("ZARRY_API_URL", "").strip()):
             yield provider, _stream_zarry(messages)
         elif provider == "huggingface" and ai_engine.HF_TOKEN:
             yield provider, _stream_openai_compatible(

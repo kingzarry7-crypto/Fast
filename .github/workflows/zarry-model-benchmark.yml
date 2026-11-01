@@ -13,7 +13,7 @@ on:
       models:
         description: "Models to benchmark (space-separated)"
         required: true
-        default: "qwen3-0.6b qwen3-1.7b smollm3-3b"
+        default: "qwen3-1.7b"
         type: string
 permissions:
   contents: read

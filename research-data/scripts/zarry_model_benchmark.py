@@ -22,11 +22,6 @@ MODELS = {
         "license": "Apache-2.0",
         "pattern": "Qwen3-1.7B-Q4_K_M.gguf",
     },
-    "smollm3-3b": {
-        "repo_id": "unsloth/SmolLM3-3B-GGUF",
-        "license": "Apache-2.0 (base model)",
-        "pattern": "*Q4_K_M.gguf",
-    },
 }
 SYSTEM = """You are ZARRY, an explanation-only model. Kitty's deterministic decision is authoritative.
 Never change BUY/SELL/WAIT. Never invent prices, indicators, candles, fills or outcomes.
