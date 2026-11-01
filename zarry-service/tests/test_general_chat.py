@@ -34,6 +34,19 @@ class GeneralChatTests(unittest.TestCase):
     def test_general_chat_requires_authentication(self):
         self.assertEqual(self.client.post("/v1/chat", json=self.payload()).status_code, 401)
 
+    def test_general_chat_accepts_case_insensitive_bearer_scheme(self):
+        response = self.client.post(
+            "/v1/chat",
+            json=self.payload(),
+            headers={"Authorization": "bEaReR test-secret"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_root_advertises_general_chat_endpoint(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("POST /v1/chat (Bearer API key required)", response.json()["endpoints"]["chat"])
+
     def test_general_chat_is_separate_and_works(self):
         response = self.client.post("/v1/chat", json=self.payload(), headers={"Authorization": "Bearer test-secret"})
         self.assertEqual(response.status_code, 200)
