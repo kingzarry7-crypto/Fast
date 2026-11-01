@@ -7,7 +7,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from app import create_app
+from app import SYSTEM_PROMPT, create_app
 
 
 class FakeModel:
@@ -165,6 +165,10 @@ class ZarryServiceTests(unittest.TestCase):
         self.assertEqual(response.json()["decision"], "WAIT")
         self.assertEqual(response.json()["authority"], "KITTY_DETERMINISTIC_ENGINE")
         self.assertEqual(response.json()["mode"], "explanation_only")
+
+    def test_system_prompt_never_turns_context_warnings_into_wait(self):
+        self.assertIn("Never turn a context warning into a new WAIT decision.", SYSTEM_PROMPT)
+        self.assertNotIn("as reasons to WAIT", SYSTEM_PROMPT)
 
     def test_preserves_kitty_no_trade_decision(self):
         payload = self.payload()
