@@ -78,6 +78,10 @@ class StreamingProviderPreferenceTests(unittest.TestCase):
             provider_class.return_value.generate.call_args.kwargs["messages"],
             messages,
         )
+        self.assertEqual(
+            provider_class.return_value.generate.call_args.kwargs["timeout"],
+            (5.0, 18.0),
+        )
 
     def test_ai_engine_uses_private_qwen_for_normal_chat(self):
         engine = streaming_chat.ai_engine.AIEngine()
