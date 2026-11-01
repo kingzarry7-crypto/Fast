@@ -13,7 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 CASES = ROOT / "research-data/zarry-model/benchmark_cases.json"
 sys.path.insert(0, str(ROOT / "zarry-service"))
-from contract import MODEL_OUTPUT_SCHEMA, SYSTEM_PROMPT
+from contract import MODEL_OUTPUT_SCHEMA, SYSTEM_PROMPT, extract_final_response
 
 SYSTEM = SYSTEM_PROMPT
 OUTPUT_SCHEMA = MODEL_OUTPUT_SCHEMA
@@ -103,11 +103,8 @@ def load_cases(path):
 
 
 def parse_output(raw):
-    text = raw.strip()
-    start, end = text.find("{"), text.rfind("}")
-    if start < 0 or end <= start:
-        raise ValueError("No JSON object")
-    value = json.loads(text[start : end + 1])
+    text = extract_final_response(raw)
+    value = json.loads(text)
     if not isinstance(value, dict) or set(value) != REQUIRED:
         raise ValueError("Wrong response keys")
     if value["decision"] not in {"BUY", "SELL", "WAIT", "NO TRADE"}:
