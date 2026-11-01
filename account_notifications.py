@@ -8,6 +8,14 @@ from typing import Any
 from database import get_db_cursor
 
 
+def _is_uuid(value: Any) -> bool:
+    try:
+        uuid.UUID(str(value or "").strip())
+        return True
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
 def _ensure_table() -> None:
     with get_db_cursor(commit=True) as cur:
         cur.execute("""
@@ -30,7 +38,9 @@ def queue_account_notification(
     user_id: str, provider: str, event_type: str, payload: dict[str, Any],
     dedupe_key: str | None = None,
 ) -> str | None:
-    """Persist an event for each connected channel; never fail the monitor tick."""
+    """Persist an event for a linked web user; platform IDs are not UUIDs."""
+    if not _is_uuid(user_id):
+        return None
     try:
         _ensure_table()
         notification_id = str(uuid.uuid4())
@@ -54,7 +64,7 @@ def queue_account_notification(
 
 def pending_account_notifications(user_id: str, channel: str, limit: int = 20) -> list[dict[str, Any]]:
     column = {"telegram": "telegram_delivered", "discord": "discord_delivered"}.get(channel)
-    if not column:
+    if not column or not _is_uuid(user_id):
         return []
     try:
         _ensure_table()
@@ -85,7 +95,7 @@ def pending_account_notifications(user_id: str, channel: str, limit: int = 20) -
 
 def mark_account_notification_delivered(notification_id: str, channel: str) -> bool:
     column = {"telegram": "telegram_delivered", "discord": "discord_delivered"}.get(channel)
-    if not column:
+    if not column or not _is_uuid(notification_id):
         return False
     try:
         _ensure_table()
@@ -100,6 +110,8 @@ def mark_account_notification_delivered(notification_id: str, channel: str) -> b
 
 
 def list_web_account_notifications(user_id: str, limit: int = 30) -> list[dict[str, Any]]:
+    if not _is_uuid(user_id):
+        return []
     try:
         _ensure_table()
         with get_db_cursor(commit=False) as cur:
@@ -127,6 +139,8 @@ def list_web_account_notifications(user_id: str, limit: int = 30) -> list[dict[s
 
 
 def mark_web_account_notification_read(user_id: str, notification_id: str) -> bool:
+    if not _is_uuid(user_id) or not _is_uuid(notification_id):
+        return False
     try:
         _ensure_table()
         with get_db_cursor(commit=True) as cur:
