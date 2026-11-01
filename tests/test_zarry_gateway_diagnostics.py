@@ -5,6 +5,11 @@ from zarry_gateway.diagnostics import run_general_gateway_smoke
 
 
 class GeneralGatewayStartupSmokeTests(unittest.TestCase):
+    def test_diagnostic_logger_emits_info_level_status(self):
+        import logging
+        logger = logging.getLogger("zarry_gateway.diagnostics")
+        self.assertLessEqual(logger.getEffectiveLevel(), logging.INFO)
+
     def test_skips_when_provider_is_not_configured(self):
         provider = Mock()
         provider.base_url = ""

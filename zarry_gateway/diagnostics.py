@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def run_general_gateway_smoke(provider) -> str:
