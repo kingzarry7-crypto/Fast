@@ -39,6 +39,24 @@ class RetryModel:
         return {"choices": [{"message": {"content": json.dumps(result)}}]}
 
 
+class AlwaysBadModel:
+    def __init__(self):
+        self.calls = 0
+
+    def create_chat_completion(self, **kwargs):
+        self.calls += 1
+        request = json.loads(kwargs["messages"][1]["content"].removeprefix("/no_think\\n"))
+        result = {
+            "symbol": request["symbol"],
+            "decision": "BUY",
+            "summary": "Explanation-only: the supplied setup is more than 50% certain in the 15m timeframe.",
+            "uncertainty": "The context may be incomplete.",
+            "cited_fields": ["invented_field"],
+            "numeric_claims": [50],
+        }
+        return {"choices": [{"message": {"content": json.dumps(result)}}]}
+
+
 class ZarryValidationRetryTests(unittest.TestCase):
     def test_numeric_grounding_detects_hyphenated_numeric_phrases(self):
         self.assertEqual(_extract_numeric_text_claims("15-minute window and 1-hour direction"), {15.0, 1.0})
@@ -49,6 +67,43 @@ class ZarryValidationRetryTests(unittest.TestCase):
         )
         self.assertIn("explanation-only", summary)
         self.assertIn("Entry confirmation", uncertainty)
+
+    def test_bad_model_falls_back_transparently_without_changing_kitty(self):
+        with patch.dict(os.environ, {
+            "ZARRY_API_KEY": "fallback-test-secret",
+            "ZARRY_MODEL_PATH": "/fake/model.gguf",
+        }):
+            model = AlwaysBadModel()
+            client = TestClient(create_app(model_loader=lambda *args: model))
+            with client:
+                payload = {
+                    "symbol": "BTCUSD",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "context": {
+                        "trend_4h": "bullish",
+                        "direction_1h": "bearish",
+                        "setup_15m": "mixed",
+                        "entry_5m": "not_confirmed",
+                        "data_fresh": True,
+                    },
+                    "expected_fields": ["trend_4h", "direction_1h", "setup_15m", "entry_5m", "data_fresh"],
+                    "kitty_assessment": {"decision": "WAIT", "reason_codes": ["TIMEFRAME_CONFLICT"]},
+                    "task": "explain",
+                }
+                response = client.post(
+                    "/v1/explain", json=payload,
+                    headers={"Authorization": "Bearer fallback-test-secret"},
+                )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(model.calls, 3)
+        result = response.json()
+        self.assertEqual(result["decision"], "WAIT")
+        self.assertEqual(result["symbol"], "BTCUSD")
+        self.assertEqual(result["explanation_source"], "deterministic_fallback")
+        self.assertEqual(result["numeric_claims"], [])
+        self.assertIn("deterministic fallback", result["summary"].lower())
+        self.assertNotRegex(result["summary"] + result["uncertainty"], r"\\d")
 
     def test_retries_malformed_and_ungrounded_responses_without_relaxing_contract(self):
         with patch.dict(os.environ, {
