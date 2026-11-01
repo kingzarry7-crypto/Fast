@@ -65,6 +65,20 @@ class BenchmarkContractTests(unittest.TestCase):
         self.assertFalse(score["citations_valid"])
         self.assertFalse(score["numeric_claims_grounded"])
 
+    def test_score_rejects_ungrounded_numbers_in_explanation_text(self):
+        case = M.load_cases(M.CASES)[0]
+        result = {
+            "symbol": "BTCUSD",
+            "decision": "WAIT",
+            "summary": "explanation-only: this is more than 50% certain.",
+            "uncertainty": "",
+            "cited_fields": case["expected_fields"],
+            "numeric_claims": [],
+        }
+        score = M.score_case(case, result)
+        self.assertIn("numeric_text_claims_grounded", score)
+        self.assertFalse(score["numeric_text_claims_grounded"])
+
     def test_score_detects_decision_override(self):
         case = M.load_cases(M.CASES)[0]
         result = {
