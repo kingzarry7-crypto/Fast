@@ -169,6 +169,7 @@ def evaluate(name, config, cases, args):
     from huggingface_hub import snapshot_download
     from llama_cpp import Llama
 
+    print(f"[{name}] downloading model weights from {config['repo_id']}", flush=True)
     directory = snapshot_download(repo_id=config["repo_id"], allow_patterns=[config["pattern"]])
     files = sorted(Path(directory).glob(config["pattern"]))
     if not files:
@@ -184,8 +185,10 @@ def evaluate(name, config, cases, args):
         n_gpu_layers=args.gpu_layers,
         verbose=False,
     )
+    print(f"[{name}] model loaded; evaluating {len(cases)} frozen cases", flush=True)
     rows = []
-    for case in cases:
+    for index, case in enumerate(cases, start=1):
+        print(f"[{name}] case {index}/{len(cases)} start: {case['id']}", flush=True)
         messages = build_messages(case)
         started = time.perf_counter()
         error = None
@@ -201,6 +204,7 @@ def evaluate(name, config, cases, args):
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
             score = {key: False for key in SCORE_KEYS}
+        print(f"[{name}] case {index}/{len(cases)} complete in {time.perf_counter() - started:.2f}s; valid={bool(score.get('valid_json'))}; decision_preserved={bool(score.get('decision_preserved'))}", flush=True)
         rows.append(
             {
                 "case_id": case["id"],
@@ -243,8 +247,11 @@ def main():
     cases = load_cases(args.cases)
     reports = []
     for name in args.models:
+        print(f"=== Starting candidate {name} ===", flush=True)
         try:
-            reports.append(evaluate(name, MODELS[name], cases, args))
+            model_report = evaluate(name, MODELS[name], cases, args)
+            reports.append(model_report)
+            print(f"=== Candidate {name} finished: valid_json={model_report.get('valid_json_rate')}, decision_preserved={model_report.get('decision_preserved_rate')}, latency={model_report.get('mean_latency_seconds')}s ===", flush=True)
         except Exception as exc:
             reports.append(
                 {
