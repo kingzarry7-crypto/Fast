@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Research-only benchmark for small ZARRY GGUF explanation models."""
 import argparse
+from copy import deepcopy
 import json
 import os
 import re
@@ -45,13 +46,19 @@ def extract_numeric_text_claims(*texts):
         for token in NUMERIC_TEXT_RE.findall(text or ""):
             claims.add(float(token.replace(",", "").rstrip("%")))
     return claims
-def response_format():
-    """Constrain decoding to the exact public explanation response shape."""
+def response_format(expected_fields=None):
+    """Constrain decoding to the public response shape and required citations."""
     # llama-cpp-python 0.3.16 expects the schema under the JSON-object
     # response_format contract; the OpenAI json_schema envelope is not its API.
+    schema = deepcopy(OUTPUT_SCHEMA)
+    if expected_fields:
+        cited_fields = schema["properties"]["cited_fields"]
+        cited_fields["items"] = {"type": "string", "enum": expected_fields}
+        cited_fields["minItems"] = len(expected_fields)
+        cited_fields["maxItems"] = len(expected_fields)
     return {
         "type": "json_object",
-        "schema": OUTPUT_SCHEMA,
+        "schema": schema,
     }
 
 
@@ -63,7 +70,7 @@ def build_messages(case):
         "context": case["context"],
         "expected_fields": case.get("expected_fields", []),
         "kitty_assessment": case["kitty"],
-        "task": "explain",
+        "task": "Explain Kitty's assessment without changing it.",
     }
     return [
         {"role": "system", "content": SYSTEM},
@@ -189,7 +196,7 @@ def evaluate(name, config, cases, args):
                 messages=messages,
                 temperature=0,
                 max_tokens=args.max_tokens,
-                response_format=response_format(),
+                response_format=response_format(case.get("expected_fields", [])),
             )
             raw_output = response["choices"][0]["message"]["content"] or ""
             parsed = parse_output(raw_output)
