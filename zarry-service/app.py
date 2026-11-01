@@ -8,6 +8,7 @@ from __future__ import annotations
 import hmac
 from copy import deepcopy
 import json
+import logging
 import os
 import re
 import resource
@@ -22,6 +23,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from contract import MODEL_OUTPUT_SCHEMA, SYSTEM_PROMPT, extract_final_response
+
+logger = logging.getLogger("zarry.service")
 
 
 class StrictModel(BaseModel):
@@ -257,30 +260,60 @@ def create_app(model_loader=_load_model) -> FastAPI:
             "kitty_assessment": payload.kitty_assessment.model_dump(),
             "task": "Explain Kitty's assessment without changing it.",
         }
-        try:
-            output_schema = deepcopy(MODEL_OUTPUT_SCHEMA)
-            if payload.expected_fields:
-                cited_fields_schema = output_schema["properties"]["cited_fields"]
-                cited_fields_schema["items"] = {"type": "string", "enum": payload.expected_fields}
-                cited_fields_schema["minItems"] = len(payload.expected_fields)
-                cited_fields_schema["maxItems"] = len(payload.expected_fields)
-            raw = model.create_chat_completion(
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": "/no_think\n" + json.dumps(message, sort_keys=True)},
-                ],
-                temperature=0,
-                max_tokens=int(os.getenv("ZARRY_MAX_TOKENS", "300")),
-                response_format={"type": "json_object", "schema": output_schema},
-            )["choices"][0]["message"]["content"]
-            parsed = ExplainResponse.model_validate_json(extract_final_response(raw or ""))
-            _validate_grounding(parsed, payload)
-        except Exception as exc:
+        output_schema = deepcopy(MODEL_OUTPUT_SCHEMA)
+        if payload.expected_fields:
+            cited_fields_schema = output_schema["properties"]["cited_fields"]
+            cited_fields_schema["items"] = {"type": "string", "enum": payload.expected_fields}
+            cited_fields_schema["minItems"] = len(payload.expected_fields)
+            cited_fields_schema["maxItems"] = len(payload.expected_fields)
+
+        base_messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": "/no_think\\n" + json.dumps(message, sort_keys=True)},
+        ]
+        last_error = None
+        parsed = None
+        # Small local models sometimes violate a semantic rule despite constrained
+        # decoding. Permit one bounded correction attempt, without relaxing any gate.
+        for attempt in range(2):
+            messages = list(base_messages)
+            if attempt:
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "Your previous response failed server validation: "
+                        + str(last_error)
+                        + ". Return a corrected JSON object matching the exact schema. "
+                        "Do not include digits, prices, percentages, probabilities, or numeric claims "
+                        "in summary or uncertainty. Include every expected_fields key in cited_fields. "
+                        "Preserve Kitty's exact symbol and decision."
+                    ),
+                })
+            try:
+                raw = model.create_chat_completion(
+                    messages=messages,
+                    temperature=0,
+                    max_tokens=int(os.getenv("ZARRY_MAX_TOKENS", "300")),
+                    response_format={"type": "json_object", "schema": output_schema},
+                )["choices"][0]["message"]["content"]
+                parsed = ExplainResponse.model_validate_json(extract_final_response(raw or ""))
+                _validate_grounding(parsed, payload)
+                break
+            except Exception as exc:
+                last_error = exc
+                parsed = None
+                logger.warning(
+                    "ZARRY explanation validation failed (attempt %s/2): %s",
+                    attempt + 1,
+                    type(exc).__name__ + ": " + str(exc),
+                )
+
+        if parsed is None:
             # Fail closed: invalid model output is never passed to the caller.
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="model returned invalid or ungrounded explanation",
-            ) from exc
+            ) from last_error
 
         parsed.authority = "KITTY_DETERMINISTIC_ENGINE"
         parsed.mode = "explanation_only"
