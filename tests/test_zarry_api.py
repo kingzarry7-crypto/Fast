@@ -75,7 +75,7 @@ class ZarryProxyTests(unittest.TestCase):
         }
         self.valid_upstream(symbol="XAUUSD")
         response = self.client.post("/api/zarry/explain", json=self.payload)
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["symbol"], "XAUUSD")
         self.assertEqual(response.json()["decision"], "NO TRADE")
         self.assertEqual(response.json()["mode"], "explanation_only")
