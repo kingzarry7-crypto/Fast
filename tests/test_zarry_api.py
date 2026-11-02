@@ -7,7 +7,7 @@ import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from zarry_api import create_router
+from zarry_api import create_router, install_router
 
 
 class ZarryProxyTests(unittest.TestCase):
@@ -185,6 +185,13 @@ class ZarryProxyTests(unittest.TestCase):
         response = self.client.post("/api/zarry/explain", json=self.payload)
         self.assertEqual(response.status_code, 503)
         self.upstream.assert_not_called()
+
+
+class ZarryRouterInstallationTests(unittest.TestCase):
+    def test_install_router_registers_authenticated_explanation_endpoint(self):
+        app = FastAPI()
+        install_router(app, lambda request: {"id": "test-user"})
+        self.assertIn("/api/zarry/explain", app.openapi()["paths"])
 
 
 if __name__ == "__main__":
