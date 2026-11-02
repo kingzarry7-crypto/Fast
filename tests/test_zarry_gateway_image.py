@@ -182,8 +182,8 @@ class HuggingFaceFirstImageProviderTests(unittest.TestCase):
 
         class Provider:
             def __init__(self): self.received = None
-            def generate(self, prompt, *, request_id, width, height):
-                self.received = (prompt, request_id, width, height)
+            def generate(self, prompt, *, request_id, size):
+                self.received = (prompt, request_id, size)
                 return {
                     "request_id": request_id,
                     "image_url": "https://images.example/generated.png",
@@ -202,7 +202,7 @@ class HuggingFaceFirstImageProviderTests(unittest.TestCase):
         self.assertEqual(set(result), {
             "request_id", "image_url", "provider", "fallback_used"
         })
-        self.assertEqual(provider.received, ("a lighthouse", payload.request_id, 1024, 768))
+        self.assertEqual(provider.received, ("a lighthouse", payload.request_id, "1024x768"))
 
 
 if __name__ == "__main__":
