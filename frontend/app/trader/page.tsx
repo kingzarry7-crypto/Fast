@@ -198,7 +198,7 @@ export default function TraderPage() {
           </section>
 
           <section>
-            <div className="mb-3 flex items-end justify-between gap-3"><div><p className="font-mono-tech text-[10px] tracking-[0.25em] text-cyan-300/60">KITTY · COMPLETED CANDLES</p><h2 className="mt-1 text-xl font-semibold">Market signals</h2></div><span className="text-xs text-slate-400">1-hour timeframe</span></div>
+            <div className="mb-3 flex items-end justify-between gap-3"><div><p className="font-mono-tech text-[10px] tracking-[0.25em] text-cyan-300/60">KITTY · COMPLETED CANDLES</p><h2 className="mt-1 text-xl font-semibold">Market signals</h2></div><span className="text-xs text-slate-400">4H / 1H / 15M / 5M MTF</span></div>
             <div className="grid gap-4 md:grid-cols-2">
               {markets.map((symbol) => {
                 const row = signals.find((item) => item.symbol === symbol);
