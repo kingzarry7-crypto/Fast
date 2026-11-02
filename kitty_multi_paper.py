@@ -382,9 +382,19 @@ def run_cycle(symbol: str | None = None) -> dict[str, Any]:
                     except (TypeError, ValueError):
                         valid_levels = False
                     if valid_levels:
-                        # Size from a 0.5% starting-equity risk budget, then apply
-                        # the existing notional and available-cash caps.
-                        risk_budget_usd = STARTING_CASH * 0.005
+                        # Limit each new trade to 0.5% of current equity and
+                        # total open stop risk to 1% of current equity.
+                        marked = conn.execute(
+                            "SELECT COALESCE(SUM(quantity * mark_price), 0) AS value FROM kitty_multi_paper_positions WHERE ABS(quantity)>1e-12"
+                        ).fetchone()
+                        equity = max(0.0, cash + float(marked["value"] or 0.0))
+                        open_risk_row = conn.execute(
+                            """SELECT COALESCE(SUM(quantity * MAX(avg_entry - stop_loss, 0)), 0) AS risk
+                               FROM kitty_multi_paper_positions
+                               WHERE quantity > 1e-12 AND stop_loss IS NOT NULL"""
+                        ).fetchone()
+                        open_risk = max(0.0, float(open_risk_row["risk"] or 0.0))
+                        risk_budget_usd = min(equity * 0.005, max(0.0, equity * 0.01 - open_risk))
                         risk_notional = risk_budget_usd * price / (price - proposed_stop)
                         cash_cap = max(0.0, cash) / (1.0 + FEE_RATE)
                         notional = min(cfg["max_order_notional_usd"], cash_cap, risk_notional)
