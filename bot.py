@@ -2328,11 +2328,11 @@ async def cancelnotify_command(update, context):
 LEGACY_AGENT_SIGNAL_WATCH_REQUESTED = clean_env_str(os.getenv("AGENT_SIGNAL_WATCH", "false")).lower() in ("1", "true", "yes", "on")
 
 KITTY_TELEGRAM_WATCH = clean_env_str(os.getenv("KITTY_TELEGRAM_WATCH", "true")).lower() in ("1", "true", "yes", "on")
-KITTY_TELEGRAM_INTERVAL_SEC = max(7200, env_int("KITTY_TELEGRAM_INTERVAL_SEC", 7200))  # Never scan more often than every 2 hours
+KITTY_TELEGRAM_INTERVAL_SEC = max(900, env_int("KITTY_TELEGRAM_INTERVAL_SEC", 900))  # Never scan more often than every 15 minutes
 
 
 async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE, force: bool = False):
-    """Scan BTC and XAU/USD every two hours; Kitty model gates every multi-timeframe alert."""
+    """Scan BTC and XAU/USD every 15 minutes; alert only on validated 15M setups."""
     if not KITTY_TELEGRAM_WATCH:
         return
     if not ADMIN_IDS:
@@ -2363,7 +2363,17 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE, force: b
                 )
             _validate_candles(candles, "1h", feed_symbol)
             closed_candles = candles[:-1]
-            candle_time = _validate_candles(closed_candles, "1h", feed_symbol)
+            model_candle_time = _validate_candles(closed_candles, "1h", feed_symbol)
+            # Anchor alert identity to the latest completed 15M setup candle.
+            # Missing/stale 15M data blocks this scan; never fall back to 1H.
+            setup_candles = await asyncio.to_thread(
+                get_candles, feed_symbol, timeframe="15m", outputsize=160
+            )
+            if not isinstance(setup_candles, list) or len(setup_candles) < 20:
+                raise ValueError("Need at least 20 fresh 15M candles for setup anchoring")
+            _validate_candles(setup_candles, "15m", feed_symbol)
+            completed_setup_candles = setup_candles[:-1]
+            candle_time = _validate_candles(completed_setup_candles, "15m", feed_symbol)
             # Persist deduplication in the shared bot database so restarts do not
             # resend the same candle. If a recipient failed previously, retry only
             # that recipient and avoid repeating successful deliveries.
@@ -2374,7 +2384,7 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE, force: b
                     delivery_conn, feed_symbol, candle_time, [str(uid) for uid in ADMIN_IDS]
                 ):
                     logger.info(
-                        "Kitty two-hour watch skipped already-delivered candle: %s %s",
+                        "Kitty 15-minute watch skipped already-delivered setup candle: %s %s",
                         feed_symbol, candle_time,
                     )
                     continue
@@ -2444,10 +2454,12 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE, force: b
                 f"Asset: <b>{html.escape(label)}</b>",
                 f"Decision: <b>{html.escape(safe['signal'])}</b>",
                 f"Kitty model candidate: <b>{html.escape(candidate)}</b> · Confidence: <b>{confidence * 100:.2f}%</b>",
-                "Scan: <b>every 2 hours</b> · Confirmation: 4H / 1H / 15M / 5M",
-                f"Last completed 1H candle: <code>{html.escape(candle_time)}</code>", "",
-                f"4H: {html.escape(str(tf4.get('trend', 'UNKNOWN')))} · 1H: {html.escape(str(tf1.get('trend', 'UNKNOWN')))} · "
-                f"15M: {html.escape(str(tf15.get('trend', 'UNKNOWN')))} · 5M: {html.escape(str(tf5.get('trend', 'UNKNOWN')))}",
+                "Scan: <b>every 15 minutes</b> · Setup: completed 15M · Confirmation: 1D / 4H / 2H / 1H / 30M / 15M / 5M / 1M",
+                f"Completed 15M setup candle: <code>{html.escape(candle_time)}</code> · Model candle: <code>{html.escape(model_candle_time)}</code>", "",
+                " · ".join(
+                    f"{tf.upper()}: {html.escape(str(mtf.get(tf, {}).get('trend', 'UNKNOWN')))}"
+                    for tf in ("1d", "4h", "2h", "1h", "30m", "15m", "5m", "1m")
+                ),
                 f"Decision reason: {html.escape(str(safe['reason']))}", "",
                 *(
                     [
@@ -2478,7 +2490,7 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE, force: b
             finally:
                 delivery_conn.close()
             logger.info(
-                "Kitty two-hour model-gated watch: symbol=%s signal=%s candidate=%s candle=%s delivered_to=%d",
+                "Kitty 15-minute model-gated watch: symbol=%s signal=%s candidate=%s candle=%s delivered_to=%d",
                 feed_symbol, safe["signal"], candidate, candle_time, sent,
             )
         except Exception as exc:
