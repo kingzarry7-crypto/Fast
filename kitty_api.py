@@ -72,7 +72,20 @@ def _validate_candles(candles, timeframe, symbol):
 
     stamp = ordered_times[-1]
     age = datetime.now(timezone.utc) - stamp
-    limit = timedelta(days=3) if timeframe == '1d' else timedelta(hours=6)
+    freshness_limits = {
+        "1m": timedelta(minutes=5),
+        "5m": timedelta(minutes=15),
+        "15m": timedelta(minutes=45),
+        "30m": timedelta(minutes=90),
+        "1h": timedelta(hours=3),
+        "2h": timedelta(hours=6),
+        "4h": timedelta(hours=12),
+        "1d": timedelta(days=3),
+    }
+    try:
+        limit = freshness_limits[str(timeframe).lower().strip()]
+    except KeyError as exc:
+        raise ValueError(f"{symbol}: unsupported timeframe for candle validation: {timeframe}") from exc
     if age < timedelta(minutes=-10) or age > limit:
         raise ValueError(
             f"{symbol}: stale or future candle timestamp {stamp.isoformat()} "
