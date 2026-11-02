@@ -165,7 +165,7 @@ class KittyAlertNormalizationTests(unittest.TestCase):
 
     def test_watcher_fails_closed_when_one_of_seven_timeframes_is_missing(self):
         from kitty_alerts import normalize_mtf_watch_signal
-        timeframes = ("1d", "4h", "2h", "1h", "30m", "15m", "5m", "1m")
+        timeframes = ("1d", "4h", "2h", "1h", "30m", "15m", "5m")
         mtf = {"mtf_signal": "BUY", "require_all_timeframes": True}
         mtf.update({tf: {"signal": "BUY"} for tf in timeframes if tf != "5m"})
         result = normalize_mtf_watch_signal(
