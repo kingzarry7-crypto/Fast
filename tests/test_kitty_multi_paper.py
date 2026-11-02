@@ -75,6 +75,10 @@ class KittyMultiPaperTests(unittest.TestCase):
             "symbol": "BTC/USD", "timeframe": "1h", "signal": "BUY",
             "price": float(closed["close"]), "completed_candle_time": closed["datetime"],
             "confidence_score": 0.8, "research_only": True, "trading_enabled": False,
+            "risk_levels": {
+                "stop_reference": float(closed["close"]) - 50.0,
+                "target_1_reference": float(closed["close"]) + 100.0,
+            },
             "reasons": ["test fixture"],
         }
         with paper._settings_lock:
@@ -92,6 +96,60 @@ class KittyMultiPaperTests(unittest.TestCase):
         self.assertFalse(state["live_trading_enabled"])
         self.assertFalse(state["exchange_connector_used"])
         self.assertLess(state["cash_usd"], 10_000)
+
+    def test_buy_without_valid_stop_and_target_is_blocked(self):
+        rows = candles()
+        closed = rows[-2]
+        signal = {
+            "symbol": "BTC/USD", "timeframe": "1h", "signal": "BUY",
+            "price": float(closed["close"]), "completed_candle_time": closed["datetime"],
+            "confidence_score": 0.8, "research_only": True, "trading_enabled": False,
+            "risk_levels": {},
+        }
+        with paper._settings_lock:
+            paper._settings.update({"enabled": True, "symbols": ["BTC/USD"], "timeframe": "1h"})
+        with patch("market.get_candles", return_value=rows), \
+             patch.object(self.kitty_api_stub, "_technical_signal", return_value=signal):
+            result = paper.run_cycle()
+        self.assertEqual(result["results"][0]["status"], "no_action")
+        self.assertEqual(result["results"][0]["side"], None)
+        self.assertEqual(paper.status()["positions"], [])
+
+    def test_stop_loss_closes_position_and_wins_over_same_candle_target(self):
+        rows = candles()
+        closed = rows[-2]
+        entry = float(closed["close"]) - 100.0
+        stop = entry - 10.0
+        target = entry + 10.0
+        closed["low"] = stop - 5.0
+        closed["high"] = target + 5.0
+        with paper._lock:
+            conn = paper._connect()
+            try:
+                conn.execute(
+                    """INSERT INTO kitty_multi_paper_positions
+                       (symbol,quantity,avg_entry,mark_price,updated_at,stop_loss,take_profit)
+                       VALUES(?,?,?,?,?,?,?)""",
+                    ("BTC/USD", 0.001, entry, entry, datetime.now(timezone.utc).isoformat(), stop, target),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+        signal = {
+            "symbol": "BTC/USD", "timeframe": "1h", "signal": "NO TRADE",
+            "price": float(closed["close"]), "completed_candle_time": closed["datetime"],
+        }
+        with paper._settings_lock:
+            paper._settings.update({"enabled": True, "symbols": ["BTC/USD"], "timeframe": "1h"})
+        with patch("market.get_candles", return_value=rows), \
+             patch.object(self.kitty_api_stub, "_technical_signal", return_value=signal), \
+             patch("trading_connector.place_market_order", side_effect=AssertionError("paper must never call broker")):
+            result = paper.run_cycle()
+        trade = result["results"][0]
+        self.assertEqual(trade["side"], "SELL")
+        self.assertEqual(trade["exit_reason"], "stop_loss")
+        self.assertAlmostEqual(trade["execution_price"], stop)
+        self.assertEqual(paper.status()["positions"], [])
 
     def test_sell_signal_closes_open_position_without_broker(self):
         rows = candles()
