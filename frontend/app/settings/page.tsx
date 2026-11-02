@@ -54,6 +54,9 @@ export default function SettingsPage() {
   const [kittySignal, setKittySignal] = useState<KittyTechnicalSignal | null>(null);
   const [kittySignalLoading, setKittySignalLoading] = useState(false);
   const [kittySignalError, setKittySignalError] = useState("");
+  const [kittyZarryExplanation, setKittyZarryExplanation] = useState<Awaited<ReturnType<typeof api.explainKittySignal>> | null>(null);
+  const [kittyZarryLoading, setKittyZarryLoading] = useState(false);
+  const [kittyZarryError, setKittyZarryError] = useState("");
 
   const refreshMembership = () =>
     setMembership(getMembershipSnapshot(user?.id, user?.is_subscribed));
@@ -109,6 +112,8 @@ export default function SettingsPage() {
     setKittySignalLoading(true);
     setKittySignalError("");
     setKittySignal(null);
+    setKittyZarryExplanation(null);
+    setKittyZarryError("");
     try {
       const result = await api.getKittyTechnicalSignal(kittySignalSymbol, kittySignalTimeframe);
       setKittySignal(result);
@@ -116,6 +121,24 @@ export default function SettingsPage() {
       setKittySignalError(error instanceof Error ? error.message : "Live technical signal unavailable for this symbol/timeframe.");
     } finally {
       setKittySignalLoading(false);
+    }
+  };
+
+  const explainKittySignal = async () => {
+    if (!kittySignal) return;
+    setKittyZarryLoading(true);
+    setKittyZarryError("");
+    setKittyZarryExplanation(null);
+    try {
+      const result = await api.explainKittySignal(kittySignal);
+      if (result.decision !== kittySignal.signal || result.mode !== "explanation_only") {
+        throw new Error("ZARRY returned an explanation that did not preserve Kitty's decision.");
+      }
+      setKittyZarryExplanation(result);
+    } catch (error) {
+      setKittyZarryError(error instanceof Error ? error.message : "ZARRY explanation is unavailable.");
+    } finally {
+      setKittyZarryLoading(false);
     }
   };
 
@@ -358,6 +381,37 @@ export default function SettingsPage() {
                     <Row label="TARGET 2 REFERENCE" value={kittySignal.risk_levels.target_2_reference == null ? "—" : String(kittySignal.risk_levels.target_2_reference)} />
                   </div>}
                   <p className="mt-3 text-[10px] leading-relaxed text-amber-100/60">{kittySignal.warning}</p>
+                  {(kittySignal.symbol === "BTC/USD" || kittySignal.symbol === "BTC/USDT" || kittySignal.symbol === "XAU/USD") && (
+                    <div className="mt-4 border-t border-cyan-500/10 pt-4">
+                      <p className="text-[10px] leading-relaxed text-cyan-100/45">
+                        ZARRY explains the existing Kitty assessment using only these supplied facts. It cannot change Kitty's decision or place orders.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void explainKittySignal()}
+                        disabled={kittyZarryLoading}
+                        className="mt-3 rounded-lg border border-cyan-400/30 px-4 py-2 font-mono-tech text-[10px] font-bold tracking-widest text-cyan-200 transition hover:bg-cyan-400/10 disabled:opacity-50"
+                      >
+                        {kittyZarryLoading ? "ZARRY IS EXPLAINING…" : "ASK ZARRY TO EXPLAIN"}
+                      </button>
+                      {kittyZarryError && (
+                        <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200/80">{kittyZarryError}</p>
+                      )}
+                      {kittyZarryExplanation && (
+                        <div className="mt-3 rounded-lg border border-cyan-400/15 bg-cyan-400/5 p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-[10px] font-mono-tech tracking-widest text-cyan-200/60">ZARRY · EXPLANATION ONLY</span>
+                            <span className="rounded-full border border-amber-400/25 px-2 py-1 text-[10px] font-bold text-amber-200">{kittyZarryExplanation.decision} · KITTY AUTHORITY</span>
+                          </div>
+                          <p className="mt-3 text-sm leading-relaxed text-white">{kittyZarryExplanation.summary}</p>
+                          <p className="mt-2 text-xs leading-relaxed text-amber-100/60">Uncertainty: {kittyZarryExplanation.uncertainty}</p>
+                          {kittyZarryExplanation.cited_fields.length > 0 && (
+                            <p className="mt-2 text-[10px] text-cyan-100/40">Based on: {kittyZarryExplanation.cited_fields.join(", ")}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>}
               </section>
 
