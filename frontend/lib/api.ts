@@ -835,6 +835,10 @@ export type KittyTechnicalSignal = {
   research_only: true;
   trading_enabled: false;
   warning: string;
+  gold_model_candidate_signal?: string;
+  gold_model_confidence?: number;
+  gold_model_signal_edge_validated?: boolean;
+  gold_model_signal_block_reason?: string | null;
 };
 
 export async function getKittyTechnicalSignal(
@@ -892,6 +896,10 @@ export async function explainKittySignal(
     risk_method: signal.risk_levels.method,
     reasons: signal.reasons.join("; ").slice(0, 1000),
     warning: signal.warning.slice(0, 1000),
+    gold_model_candidate_signal: signal.gold_model_candidate_signal ?? null,
+    gold_model_confidence: signal.gold_model_confidence ?? null,
+    gold_model_signal_edge_validated: signal.gold_model_signal_edge_validated ?? false,
+    gold_model_signal_block_reason: signal.gold_model_signal_block_reason ?? null,
   };
 
   return request<ZarryKittyExplanation>("/api/zarry/explain", {

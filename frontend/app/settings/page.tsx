@@ -373,6 +373,13 @@ export default function SettingsPage() {
                     <Row label="CONFIRMATIONS" value={kittySignal.confirmation_count + " / " + kittySignal.confirmations_required} />
                     <Row label="RSI (14)" value={String(kittySignal.indicators.rsi_14)} />
                   </div>
+                  {kittySignal.gold_model_candidate_signal && (
+                    <p className="mt-3 text-[10px] leading-relaxed text-amber-100/65">
+                      Gold ML research candidate: {kittySignal.gold_model_candidate_signal}
+                      {typeof kittySignal.gold_model_confidence === "number" ? ` · ${Math.round(kittySignal.gold_model_confidence * 100)}% model confidence (not profit probability)` : ""}
+                      {" — not an approved trading signal."}
+                    </p>
+                  )}
                   <p className="mt-3 text-[10px] text-cyan-100/50">Completed candle: {kittySignal.completed_candle_time} · {Math.round(kittySignal.confidence_score * 100)}% rule confirmations (not a probability of profit).</p>
                   <div className="mt-3 space-y-1">{kittySignal.reasons.map((reason) => <p key={reason} className="text-xs text-cyan-100/65">• {reason}</p>)}</div>
                   {kittySignal.signal !== "NO TRADE" && <div className="mt-3 grid gap-3 sm:grid-cols-3">

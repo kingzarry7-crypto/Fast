@@ -1,7 +1,12 @@
 """Safety tests for Kitty signals without proven per-market strategy edge."""
 import unittest
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+import kitty_api
 from kitty_api import _technical_signal
 
 
@@ -47,6 +52,40 @@ class KittyUnvalidatedSignalSafetyTests(unittest.TestCase):
         self.assertGreater(levels["target_2_reference"], levels["target_1_reference"])
         self.assertEqual(result["signal"], "NO TRADE")
         self.assertFalse(result["trading_enabled"])
+
+class KittyGoldEndpointContractTests(unittest.TestCase):
+    def test_gold_hourly_signal_keeps_shared_technical_response_shape_and_no_trade_gate(self):
+        app = FastAPI()
+        app.include_router(kitty_api.router)
+        prediction = {
+            "signal": "NO TRADE",
+            "class_prediction": "LONG",
+            "confidence": 0.617235,
+            "signal_edge_validated": False,
+            "signal_block_reason": "Holdout diagnostics did not validate positive net edge",
+        }
+        with (
+            patch("market.get_candles", return_value=rising_candles(80)),
+            patch.object(kitty_api.gold_model, "status", return_value={"available": True}),
+            patch.object(kitty_api.gold_model, "predict_features", return_value=prediction),
+        ):
+            response = TestClient(app).get("/api/kitty/signal?symbol=XAU%2FUSD&timeframe=1h")
+
+        self.assertEqual(response.status_code, 200, response.text)
+        result = response.json()
+        self.assertEqual(result["symbol"], "XAU/USD")
+        self.assertEqual(result["signal"], "NO TRADE")
+        self.assertFalse(result["trading_enabled"])
+        self.assertFalse(result["automatic_order_execution_enabled"])
+        self.assertIn("price", result)
+        self.assertIsInstance(result["price"], (int, float))
+        self.assertIsInstance(result["indicators"], dict)
+        self.assertIsInstance(result["risk_levels"], dict)
+        self.assertIsInstance(result["reasons"], list)
+        self.assertEqual(result["gold_model_candidate_signal"], "LONG")
+        self.assertEqual(result["gold_model_confidence"], 0.617235)
+        self.assertFalse(result["gold_model_signal_edge_validated"])
+
 
 if __name__ == "__main__":
     unittest.main()
