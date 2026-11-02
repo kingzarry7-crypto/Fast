@@ -87,6 +87,22 @@ class GatewayRouterTests(unittest.TestCase):
         self.assertNotIn("secret endpoint credentials", "\n".join(captured.output))
         self.assertNotIn("secret endpoint credentials", response.text)
 
+    def test_safe_failure_origin_reports_frame_without_exception_message(self):
+        from zarry_gateway.router import _safe_failure_origin
+
+        def provider_boundary():
+            raise TypeError("token=hf_super_secret_value")
+
+        try:
+            provider_boundary()
+        except TypeError as exc:
+            origin = _safe_failure_origin(exc)
+
+        self.assertEqual(origin["function"], "provider_boundary")
+        self.assertEqual(origin["file"], "test_zarry_gateway_router.py")
+        self.assertIsInstance(origin["line"], int)
+        self.assertNotIn("hf_super_secret_value", str(origin))
+
     def test_chat_requires_authenticated_web_session(self):
         self.authenticated=False; self.assertEqual(self.client.post("/api/assistant/chat",json={"message":"hi"}).status_code,401)
     def test_chat_returns_contract(self):
