@@ -28,7 +28,7 @@ jobs:
     # Do not permit a manual dispatch against a feature branch or tag.
     if: ${{ github.ref == 'refs/heads/main' }}
     # Environment secrets are only exposed to jobs that declare this environment.
-    environment: Configure Zarry
+    environment: Zarry
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
@@ -38,7 +38,7 @@ jobs:
         shell: bash
         run: |
           if [[ -z "${ZARRY_MIGRATION_DATABASE_URL}" ]]; then
-            echo "::error::Environment secret ZARRY_MIGRATION_DATABASE_URL is not available from Configure Zarry."
+            echo "::error::Environment secret ZARRY_MIGRATION_DATABASE_URL is not available from Zarry."
             exit 1
           fi
 
