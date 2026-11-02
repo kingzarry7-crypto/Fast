@@ -846,6 +846,68 @@ export async function getKittyTechnicalSignal(
   return request<KittyTechnicalSignal>(`/api/kitty/signal?${query.toString()}`, { method: "GET", signal });
 }
 
+export type ZarryKittyExplanation = {
+  symbol: "BTCUSD" | "XAUUSD";
+  decision: "BUY" | "SELL" | "WAIT" | "NO TRADE";
+  summary: string;
+  uncertainty: string;
+  cited_fields: string[];
+  numeric_claims: number[];
+  authority: "KITTY_DETERMINISTIC_ENGINE";
+  mode: "explanation_only";
+};
+
+export async function explainKittySignal(
+  signal: KittyTechnicalSignal,
+  abortSignal?: AbortSignal,
+): Promise<ZarryKittyExplanation> {
+  const symbol = signal.symbol === "XAU/USD"
+    ? "XAUUSD"
+    : signal.symbol === "BTC/USD" || signal.symbol === "BTC/USDT"
+      ? "BTCUSD"
+      : null;
+  if (!symbol) {
+    throw new ApiError({ status: 400, message: "ZARRY explanations currently support BTC and XAU/USD only." });
+  }
+
+  const context = {
+    timeframe: signal.timeframe,
+    signal_type: signal.signal_type,
+    price: signal.price,
+    completed_candle_time: signal.completed_candle_time,
+    confidence_score: signal.confidence_score,
+    confirmation_count: signal.confirmation_count,
+    confirmations_required: signal.confirmations_required,
+    ema_9: signal.indicators.ema_9,
+    ema_21: signal.indicators.ema_21,
+    ema_50: signal.indicators.ema_50,
+    rsi_14: signal.indicators.rsi_14,
+    macd_bias: signal.indicators.macd_bias,
+    momentum_6_candles_pct: signal.indicators.momentum_6_candles_pct,
+    atr_14: signal.indicators.atr_14,
+    stop_reference: signal.risk_levels.stop_reference,
+    target_1_reference: signal.risk_levels.target_1_reference,
+    target_2_reference: signal.risk_levels.target_2_reference,
+    risk_method: signal.risk_levels.method,
+    reasons: signal.reasons.join("; ").slice(0, 1000),
+    warning: signal.warning.slice(0, 1000),
+  };
+
+  return request<ZarryKittyExplanation>("/api/zarry/explain", {
+    method: "POST",
+    body: {
+      symbol,
+      timestamp: signal.completed_candle_time,
+      context,
+      kitty_assessment: {
+        decision: signal.signal,
+        reason_codes: [`kitty_${signal.signal.toLowerCase().replace(/[^a-z]+/g, "_")}`],
+      },
+    },
+    signal: abortSignal,
+  });
+}
+
 export type KittyMultiPaperSettings = {
   enabled: boolean;
   symbols: string[];
@@ -994,7 +1056,7 @@ export const api = {
   getKittyMultiPaperStatus, getKittyMultiPaperSettings, saveKittyMultiPaperSettings, runKittyMultiPaperCycle,
   getAgentStatus, runAgentGoal, generateMorningBrief, getLatestMorningBrief, listAgentJobs, approveAgentJob,
   getAgentLearning, getAgentV2, getAgentIntelligence, getAgentPreferences, updateAgentPreferences,
-  getAgentActionStatus, listAgentActions, approveAgentAction, getKZAgentStatus, transcribeAudio, getKittyPaperSettings, saveKittyPaperSettings, getKittyDemoSettings, saveKittyDemoSettings, getKittyTechnicalSignal,
+  getAgentActionStatus, listAgentActions, approveAgentAction, getKZAgentStatus, transcribeAudio, getKittyPaperSettings, saveKittyPaperSettings, getKittyDemoSettings, saveKittyDemoSettings, getKittyTechnicalSignal, explainKittySignal,
 };
 
 export type { AuthUser, AuthResponse, MeResponse, ChatResponse, ApiErrorData } from "@/types";
