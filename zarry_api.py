@@ -100,6 +100,7 @@ class ZarryExplainResponse(StrictModel):
     numeric_claims: list[float | int] = Field(max_length=80)
     authority: Literal["KITTY_DETERMINISTIC_ENGINE"]
     mode: Literal["explanation_only"]
+    explanation_source: Literal["model", "deterministic_fallback"]
 
 
 def _timeout_seconds() -> int:
