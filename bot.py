@@ -2357,7 +2357,7 @@ async def _kitty_telegram_signal_job_impl(context: ContextTypes.DEFAULT_TYPE, fo
         return
 
     from market import get_candles
-    from kitty_api import _validate_candles, _kitty_features
+    from kitty_api import _validate_candles, _kitty_features, _validate_candle_close_alignment
     from kitty_alerts import normalize_kitty_mtf_signal, validate_mtf_watch_levels
     from kitty_watch_state import all_recipients_delivered, ensure_delivery_table, is_delivered, mark_delivered
     import kitty_v3_retrained as btc_model
@@ -2391,6 +2391,11 @@ async def _kitty_telegram_signal_job_impl(context: ContextTypes.DEFAULT_TYPE, fo
             _validate_candles(setup_candles, "15m", feed_symbol)
             completed_setup_candles = setup_candles[:-1]
             candle_time = _validate_candles(completed_setup_candles, "15m", feed_symbol)
+            alignment = _validate_candle_close_alignment(model_candle_time, candle_time)
+            logger.info(
+                "Kitty candle alignment verified symbol=%s model_close=%s setup_close=%s lag_seconds=%s",
+                feed_symbol, alignment["model_close_time"], alignment["setup_close_time"], alignment["lag_seconds"],
+            )
             # Persist deduplication in the shared bot database so restarts do not
             # resend the same candle. If a recipient failed previously, retry only
             # that recipient and avoid repeating successful deliveries.
