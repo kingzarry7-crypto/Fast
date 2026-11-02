@@ -618,6 +618,28 @@ export async function getZarryMigrationStatus(signal?: AbortSignal) {
   });
 }
 
+export type AssistantImageResponse = {
+  request_id: string;
+  image_url: string;
+  provider: string;
+  fallback_used: boolean;
+};
+
+export async function generateAssistantImage(
+  prompt: string,
+  size: "1024x1024" | "1024x768" | "768x1024" = "1024x1024",
+  signal?: AbortSignal,
+) {
+  const trimmed = prompt.trim();
+  if (!trimmed) throw new ApiError({ status: 400, message: "Describe the image you want to create." });
+  if (trimmed.length > 2000) throw new ApiError({ status: 400, message: "Image prompt is too long (maximum 2,000 characters)." });
+  return request<AssistantImageResponse>("/api/assistant/image", {
+    method: "POST",
+    body: { prompt: trimmed, size },
+    signal,
+  });
+}
+
 export type AdminImageStorageTest = {
   status: "ok";
   upload: "ok";
@@ -1060,7 +1082,7 @@ export const api = {
   getBaseUrl, getMe, getCurrentUser, login, register, verifyEmail, resendVerification, forgotPassword, resetPassword, logout,
   listConversations, createConversation, getConversation, getConversationMessages, chat, sendChatMessage, streamChatMessage, decideGoogleApproval, generateChatSuggestions, healthCheck,
   getRealtimeStatus, startRealtimeCall, saveRealtimeTranscript, getPlatformStatus, getChatBehaviorPreferences, saveChatBehaviorPreferences, createMemoryLinkCode, createCheckoutSession, getBillingConfig,
-  getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, getZarryMigrationStatus, adminImageStorageTest, adminImageGenerationSmokeTest, adminEmailBroadcast, ttsSpeak, synthesizeSpeech,
+  getAdminStats, getAdminMe, adminUnlock, adminListUsers, adminBanUser, adminUnbanUser, getZarryMigrationStatus, generateAssistantImage, adminImageStorageTest, adminImageGenerationSmokeTest, adminEmailBroadcast, ttsSpeak, synthesizeSpeech,
   getMarkets, getMarketDetail, getSignals, getNews,
   getKittyMultiPaperStatus, getKittyMultiPaperSettings, saveKittyMultiPaperSettings, runKittyMultiPaperCycle,
   getAgentStatus, runAgentGoal, generateMorningBrief, getLatestMorningBrief, listAgentJobs, approveAgentJob,
