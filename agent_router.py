@@ -115,6 +115,51 @@ def _connected_accounts(user_id: str) -> list[dict[str, str]]:
         return []
 
 
+def _gold_kitty_snapshot() -> Dict[str, Any]:
+    """Read a fresh completed XAU/USD hourly snapshot without promoting it to a trade."""
+    from market import get_candles
+    from kitty_api import _kitty_features, _validate_candles
+    import kitty_gold_model as gold_model
+
+    candles = get_candles("XAU/USD", timeframe="1h", outputsize=180)
+    _validate_candles(candles, "1h", "XAU/USD")
+    if len(candles) < 56:
+        raise ValueError("At least 56 XAU/USD candles are required")
+    closed = candles[:-1]
+    latest_time = _validate_candles(closed, "1h", "XAU/USD")
+    price = float(closed[-1]["close"])
+    if not price > 0:
+        raise ValueError("XAU/USD returned an invalid close price")
+
+    status = gold_model.status()
+    snapshot: Dict[str, Any] = {
+        "status": "available",
+        "symbol": "XAU/USD",
+        "timeframe": "1h",
+        "price": price,
+        "latest_candle_time": latest_time,
+        "model_available": status.get("available") is True,
+        "signal": "NO TRADE",
+        "research_only": True,
+        "trading_enabled": False,
+    }
+    if status.get("available") is True:
+        prediction = gold_model.predict_features(_kitty_features(closed))
+        snapshot.update({
+            "model_signal": str(prediction.get("signal") or "NO TRADE").upper(),
+            "candidate_signal": str(prediction.get("class_prediction") or "UNKNOWN").upper(),
+            "confidence": prediction.get("confidence"),
+            "signal_edge_validated": prediction.get("signal_edge_validated") is True,
+            "signal_block_reason": prediction.get("signal_block_reason"),
+        })
+    else:
+        snapshot["reason"] = status.get("error") or "No symbol-verified Gold checkpoint is installed"
+    # An hourly-only snapshot is never a complete multi-timeframe setup.
+    # Keep the chat-facing output at NO TRADE even if the model's own edge gate changes.
+    snapshot["signal"] = "NO TRADE"
+    return snapshot
+
+
 def route_agent_request(message: str, user_id: str) -> Optional[Dict[str, Any]]:
     """Return a handled reply for explicit agent-routing requests, otherwise None."""
     text = (message or "").strip()
@@ -249,6 +294,14 @@ def route_agent_request(message: str, user_id: str) -> Optional[Dict[str, Any]]:
             except Exception as kitty_exc:
                 # Keep the primary market setup available if the optional model check fails.
                 kitty_context = {"status": "unavailable", "reason": type(kitty_exc).__name__}
+        elif symbol == "XAU/USD":
+            try:
+                kitty_context = _gold_kitty_snapshot()
+            except Exception as kitty_exc:
+                kitty_context = {
+                    "status": "unavailable",
+                    "reason": type(kitty_exc).__name__ + ": " + str(kitty_exc)[:160],
+                }
 
         try:
             tool_learn(
@@ -265,6 +318,23 @@ def route_agent_request(message: str, user_id: str) -> Optional[Dict[str, Any]]:
 
         if analysis.get("error") or analysis.get("data_ok") is False:
             detail = str(analysis.get("error") or "market provider did not confirm fresh data")
+            if symbol == "XAU/USD" and kitty_context and kitty_context.get("status") == "available":
+                confidence = kitty_context.get("confidence")
+                confidence_text = f"{float(confidence) * 100:.2f}%" if isinstance(confidence, (int, float)) else "not provided"
+                candidate = kitty_context.get("candidate_signal") or "not available"
+                reply = (
+                    f"The full multi-timeframe Market Agent could not complete {symbol} ({timeframe}): {detail[:180]}. "
+                    f"However, Kitty verified a live XAU/USD hourly candle at {str(kitty_context.get('latest_candle_time') or 'not provided')} "
+                    f"with close {str(kitty_context.get('price') or 'not provided')}. "
+                    f"Kitty's model candidate is {candidate} (confidence {confidence_text}); its approved output is "
+                    f"{str(kitty_context.get('signal') or 'NO TRADE')}. "
+                    "This hourly-only snapshot is research context, not the required 4H/1H/15M/5M setup. "
+                    "The chat-facing output remains NO TRADE. Do not trade from this candidate; no order was placed."
+                )
+                return {"status": "partial", "reply": reply, "provider": "market_agent",
+                        "operation": "analyze_market", "target": symbol}
+            if symbol == "XAU/USD" and kitty_context and kitty_context.get("status") == "unavailable":
+                detail += "; Kitty hourly fallback: " + str(kitty_context.get("reason") or "unavailable")[:160]
             reply = (
                 f"I routed this to the Market/Signal Agent for {symbol} ({timeframe}), "
                 "but it could not verify fresh market data. I will not invent a price or signal.\n"
@@ -300,6 +370,18 @@ def route_agent_request(message: str, user_id: str) -> Optional[Dict[str, Any]]:
                     f"top-class confidence: {probability_text}. "
                     "This is experimental context only and does not validate the setup."
                 )
+        if symbol == "XAU/USD" and kitty_context:
+            if kitty_context.get("status") == "available":
+                confidence = kitty_context.get("confidence")
+                confidence_text = f"{float(confidence) * 100:.2f}%" if isinstance(confidence, (int, float)) else "not provided"
+                lines.append(
+                    f"Kitty Gold hourly research output: {kitty_context.get('signal', 'NO TRADE')}; "
+                    f"model candidate: {kitty_context.get('candidate_signal', 'not available')}; "
+                    f"confidence: {confidence_text}; completed candle: {kitty_context.get('latest_candle_time')}. "
+                    "This hourly-only model context does not replace the required multi-timeframe setup; research only."
+                )
+            else:
+                lines.append("Kitty Gold hourly snapshot: unavailable (" + str(kitty_context.get("reason", "provider error"))[:120] + ").")
         reasons = analysis.get("reasons") or []
         if isinstance(reasons, str):
             reasons = [reasons]
