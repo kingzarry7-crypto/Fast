@@ -72,10 +72,10 @@ def normalize_mtf_watch_signal(mtf_data: dict[str, Any], late_entry: dict[str, A
         return {"signal": "WAIT", "reason": "Late-entry safety score is not finite"}
     if status in {"LATE", "EXTENDED / AVOID", "RISKY"} or late_score >= 45 or action in {"WAIT FOR PULLBACK", "WAIT FOR RETEST", "WAIT"}:
         return {"signal": "WAIT", "reason": "Late-entry / extension filter blocked setup"}
-    # Production watcher snapshots explicitly require all eight supported frames.
+    # Production watcher snapshots explicitly require all seven agreed frames.
     # Keep the legacy four-frame contract for other callers until they opt in.
     timeframes = (
-        ("1d", "4h", "2h", "1h", "30m", "15m", "5m", "1m")
+        ("1d", "4h", "2h", "1h", "30m", "15m", "5m")
         if data.get("require_all_timeframes") is True
         else ("4h", "1h", "15m", "5m")
     )
@@ -151,7 +151,7 @@ def normalize_kitty_mtf_signal(
     mtf_data: dict[str, Any],
     late_entry: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Require a validated Kitty model direction plus all eight aligned timeframe filters."""
+    """Require a validated Kitty model direction plus all seven aligned timeframe filters."""
     model = normalize_kitty_alert(prediction if isinstance(prediction, dict) else {})
     if not model["actionable"]:
         return {
