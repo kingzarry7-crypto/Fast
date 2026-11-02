@@ -46,7 +46,7 @@ jobs:
       - name: Run production API-path Qwen3 smoke benchmark
         run: |
           python research-data/scripts/zarry_real_model_api_benchmark.py --model-repo unsloth/Qwen3-1.7B-GGUF --threads 2 --output research-data/reports/zarry-api-model-benchmark-run-${{ github.run_id }}.json
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: zarry-model-benchmark-${{ github.run_id }}
           path: |

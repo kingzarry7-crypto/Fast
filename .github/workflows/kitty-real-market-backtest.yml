@@ -49,7 +49,7 @@ jobs:
         run: python fetch_kitty_5m_market_data.py --symbol BTC --limit "$CANDLE_LIMIT" --output research-data/BTC_5m.csv
       - name: Run cost-aware chronological holdout with supplied BTC account costs
         run: python run_kitty_realistic_backtest.py --symbol BTC --csv research-data/BTC_5m.csv --spread-bps-per-side "$BTC_SPREAD_BPS_PER_SIDE" --commission-bps-per-side "$BTC_COMMISSION_BPS_PER_SIDE" --output research-results/BTC_report.json
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: kitty-real-market-BTC-${{ github.run_number }}
@@ -85,7 +85,7 @@ jobs:
         run: python fetch_kitty_5m_market_data.py --symbol XAUUSD --limit "$CANDLE_LIMIT" --output research-data/XAUUSD_5m.csv
       - name: Run cost-aware chronological holdout with supplied XAU/USD broker costs
         run: python run_kitty_realistic_backtest.py --symbol XAUUSD --csv research-data/XAUUSD_5m.csv --spread-bps-per-side "$XAUUSD_SPREAD_BPS_PER_SIDE" --commission-bps-per-side "$XAUUSD_COMMISSION_BPS_PER_SIDE" --output research-results/XAUUSD_report.json
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: kitty-real-market-XAUUSD-${{ github.run_number }}
