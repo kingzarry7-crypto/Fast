@@ -37,12 +37,12 @@ class AssistantService:
             raise PermissionError("An authenticated principal is required")
         if self.image_provider is None:
             raise RuntimeError("Image generation is unavailable")
-        width, height = (int(value) for value in payload.size.split("x", 1))
+        # The provider contract accepts the validated size string directly.
+        # Passing width/height here bypassed every provider adapter's public API.
         result = self.image_provider.generate(
             payload.prompt,
             request_id=payload.request_id,
-            width=width,
-            height=height,
+            size=payload.size,
         )
         if not isinstance(result, dict):
             raise RuntimeError("Image provider returned an invalid result")
