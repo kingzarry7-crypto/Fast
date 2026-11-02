@@ -855,6 +855,7 @@ export type ZarryKittyExplanation = {
   numeric_claims: number[];
   authority: "KITTY_DETERMINISTIC_ENGINE";
   mode: "explanation_only";
+  explanation_source: "model" | "deterministic_fallback";
 };
 
 export async function explainKittySignal(
