@@ -60,5 +60,40 @@ class KittyTimeframeFreshnessTests(unittest.TestCase):
             _validate_candles(candles, "3h", "BTC/USDT")
 
 
+class KittyCandleAlignmentTests(unittest.TestCase):
+    def test_hourly_and_setup_candle_close_times_can_align(self):
+        from kitty_api import _validate_candle_close_alignment
+        result = _validate_candle_close_alignment(
+            "2026-11-02T09:00:00+00:00", "2026-11-02T09:45:00+00:00"
+        )
+        self.assertEqual(result["lag_seconds"], 0)
+
+    def test_hourly_close_may_precede_setup_close_by_one_completed_quarter(self):
+        from kitty_api import _validate_candle_close_alignment
+        result = _validate_candle_close_alignment(
+            "2026-11-02T09:00:00+00:00", "2026-11-02T10:00:00+00:00"
+        )
+        self.assertEqual(result["lag_seconds"], 900)
+
+    def test_hourly_close_newer_than_setup_close_fails_closed(self):
+        from kitty_api import _validate_candle_close_alignment
+        with self.assertRaisesRegex(ValueError, "newer than the 15M setup"):
+            _validate_candle_close_alignment(
+                "2026-11-02T10:00:00+00:00", "2026-11-02T09:45:00+00:00"
+            )
+
+    def test_hourly_close_more_than_one_hour_behind_setup_fails_closed(self):
+        from kitty_api import _validate_candle_close_alignment
+        with self.assertRaisesRegex(ValueError, "too far behind"):
+            _validate_candle_close_alignment(
+                "2026-11-02T08:00:00+00:00", "2026-11-02T09:15:00+00:00"
+            )
+
+    def test_invalid_alignment_timestamp_fails_closed(self):
+        from kitty_api import _validate_candle_close_alignment
+        with self.assertRaisesRegex(ValueError, "invalid candle alignment timestamp"):
+            _validate_candle_close_alignment("not-a-time", "2026-11-02T09:45:00+00:00")
+
+
 if __name__ == "__main__":
     unittest.main()
