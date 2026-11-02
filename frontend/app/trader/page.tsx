@@ -103,12 +103,12 @@ export default function TraderPage() {
         if (!r.ok) throw new Error(data.detail || "Could not verify cTrader status");
         return data as CTraderStatus;
       }),
-      fetch("/api/trader/paper/status", { credentials: "include", cache: "no-store" }).then(async (r) => {
+      fetch("/api/kitty/multi-paper/status", { credentials: "include", cache: "no-store" }).then(async (r) => {
         const data = await r.json();
         if (!r.ok) throw new Error(data.detail || "Paper ledger unavailable");
         return data as PaperStatus;
       }),
-      fetch("/api/trader/paper/signals?symbols=BTC%2FUSD%2CXAU%2FUSD&timeframe=1h", { credentials: "include", cache: "no-store" }).then(async (r) => {
+      fetch("/api/kitty/multi-paper/signals?symbols=BTC%2FUSD%2CXAU%2FUSD&timeframe=1h", { credentials: "include", cache: "no-store" }).then(async (r) => {
         const data = await r.json();
         if (!r.ok) throw new Error(data.detail || "Kitty research candidates unavailable");
         return data as { results?: SignalRow[] };
