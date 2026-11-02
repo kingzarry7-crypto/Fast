@@ -72,12 +72,18 @@ def normalize_mtf_watch_signal(mtf_data: dict[str, Any], late_entry: dict[str, A
         return {"signal": "WAIT", "reason": "Late-entry safety score is not finite"}
     if status in {"LATE", "EXTENDED / AVOID", "RISKY"} or late_score >= 45 or action in {"WAIT FOR PULLBACK", "WAIT FOR RETEST", "WAIT"}:
         return {"signal": "WAIT", "reason": "Late-entry / extension filter blocked setup"}
-    # Every supported timeframe must be present and aligned before BUY/SELL.
+    # Production watcher snapshots explicitly require all eight supported frames.
+    # Keep the legacy four-frame contract for other callers until they opt in.
+    timeframes = (
+        ("1d", "4h", "2h", "1h", "30m", "15m", "5m", "1m")
+        if data.get("require_all_timeframes") is True
+        else ("4h", "1h", "15m", "5m")
+    )
     required = {
         timeframe: str(
             (data.get(timeframe) if isinstance(data.get(timeframe), dict) else {}).get("signal") or ""
         ).strip().upper()
-        for timeframe in ("1d", "4h", "2h", "1h", "30m", "15m", "5m", "1m")
+        for timeframe in timeframes
     }
     opposing = "SELL" if signal == "BUY" else "BUY"
     if any(value == opposing for value in required.values()):
@@ -85,7 +91,7 @@ def normalize_mtf_watch_signal(mtf_data: dict[str, Any], late_entry: dict[str, A
     missing = [timeframe for timeframe, value in required.items() if value != signal]
     if missing:
         return {"signal": "WAIT", "reason": "No confirmation from: " + ", ".join(missing)}
-    return {"signal": signal, "reason": "1D, 4H, 2H, 1H, 30M, 15M, 5M and 1M candles agree; late-entry filter passed"}
+    return {"signal": signal, "reason": "All required timeframes agree; late-entry filter passed"}
 
 
 def validate_mtf_watch_levels(mtf_data: dict[str, Any], signal: str) -> dict[str, Any]:
