@@ -18,7 +18,24 @@ type SignalRow = {
   status?: string;
   timeframe?: string;
   completed_candle_time?: string;
-  signal?: { signal?: string; price?: number; reasons?: string[]; signal_type?: string };
+  signal?: {
+    signal?: string;
+    candidate_signal?: string;
+    candidate_direction?: string;
+    confidence_score?: number;
+    confirmation_count?: number;
+    confirmations_required?: number;
+    signal_gate_reason?: string;
+    price?: number;
+    reasons?: string[];
+    signal_type?: string;
+    candidate_risk_levels?: {
+      stop_reference?: number | null;
+      target_1_reference?: number | null;
+      target_2_reference?: number | null;
+      method?: string;
+    };
+  };
   signal_type?: string;
   model_validated_for_market?: boolean;
   error?: string;
@@ -169,7 +186,23 @@ export default function TraderPage() {
                     <div className="rounded-xl bg-black/20 p-3"><p className="text-[10px] tracking-widest text-slate-500">REFERENCE PRICE</p><p className="mt-2 text-lg">{typeof row?.signal?.price === "number" ? row.signal.price.toLocaleString(undefined, { maximumFractionDigits: 5 }) : "—"}</p></div>
                     <div className="rounded-xl bg-black/20 p-3"><p className="text-[10px] tracking-widest text-slate-500">COMPLETED CANDLE</p><p className="mt-2 text-xs text-slate-200">{row?.completed_candle_time ? new Date(row.completed_candle_time).toLocaleString() : "No fresh data"}</p></div>
                   </div>
-                  <p className="mt-4 text-xs leading-relaxed text-slate-400">{row?.status === "available" ? "Experimental rule-based technical signal. It is not a validated profitability claim." : "Signal unavailable or stale. Defaulting to WAIT / NO TRADE."}</p>
+                  <div className="mt-4 rounded-xl border border-cyan-300/15 bg-cyan-300/5 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-[10px] font-semibold tracking-[0.2em] text-cyan-200/70">DIRECTIONAL RESEARCH CANDIDATE</p>
+                      <span className="rounded-md border border-cyan-300/20 px-2 py-1 text-[10px] font-semibold text-cyan-100">NOT TRADE-APPROVED</span>
+                    </div>
+                    <p className="mt-2 text-xl font-bold">{row?.status === "available" ? (row.signal?.candidate_signal || "NO DIRECTION").replaceAll("_", " ") : "UNAVAILABLE"}</p>
+                    <p className="mt-1 text-xs text-slate-300/70">
+                      {typeof row?.signal?.confidence_score === "number" ? `Technical confluence ${Math.round(row.signal.confidence_score * 100)}% · ${row.signal.confirmation_count ?? 0}/${row.signal.confirmations_required ?? 5} confirmations` : "No candidate confidence available"}
+                    </p>
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      <div className="rounded-lg bg-black/20 p-2"><p className="text-[9px] tracking-wider text-slate-500">STOP REF.</p><p className="mt-1 text-xs">{typeof row?.signal?.candidate_risk_levels?.stop_reference === "number" ? row.signal.candidate_risk_levels.stop_reference.toLocaleString(undefined, { maximumFractionDigits: 5 }) : "—"}</p></div>
+                      <div className="rounded-lg bg-black/20 p-2"><p className="text-[9px] tracking-wider text-slate-500">TARGET 1</p><p className="mt-1 text-xs">{typeof row?.signal?.candidate_risk_levels?.target_1_reference === "number" ? row.signal.candidate_risk_levels.target_1_reference.toLocaleString(undefined, { maximumFractionDigits: 5 }) : "—"}</p></div>
+                      <div className="rounded-lg bg-black/20 p-2"><p className="text-[9px] tracking-wider text-slate-500">TARGET 2</p><p className="mt-1 text-xs">{typeof row?.signal?.candidate_risk_levels?.target_2_reference === "number" ? row.signal.candidate_risk_levels.target_2_reference.toLocaleString(undefined, { maximumFractionDigits: 5 }) : "—"}</p></div>
+                    </div>
+                    {row?.signal?.reasons?.length ? <ul className="mt-3 space-y-1 text-xs text-slate-300/75">{row.signal.reasons.map((reason, index) => <li key={index}>• {reason}</li>)}</ul> : null}
+                  </div>
+                  <p className="mt-4 text-xs leading-relaxed text-slate-400">{row?.status === "available" ? "Approval status: NO TRADE. Candidate direction and ATR references are research-only until this exact strategy passes independent after-cost validation. No orders are placed." : "Signal unavailable or stale. Defaulting to WAIT / NO TRADE."}</p>
                 </article>;
               })}
             </div>
