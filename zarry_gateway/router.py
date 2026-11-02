@@ -138,6 +138,45 @@ def create_general_router(
             logger.error("R2 public storage verification failed (%s)", type(exc).__name__)
             raise HTTPException(status_code=502, detail="R2 public storage verification failed")
 
+    @router.post("/admin/image-generation-preflight")
+    async def admin_image_generation_preflight(request: Request):
+        """Verify local image SDK configuration without network calls or budget use."""
+        if admin_check is None:
+            raise HTTPException(status_code=503, detail="Image preflight is unavailable")
+        try:
+            admin = admin_check(request)
+            if inspect.isawaitable(admin):
+                await admin
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=403, detail="Admin access denied")
+
+        provider = getattr(gateway, "image_provider", None)
+        preflight = getattr(provider, "preflight", None)
+        if not callable(preflight):
+            raise HTTPException(status_code=503, detail="Local image provider preflight is unavailable")
+        try:
+            result = preflight()
+            if inspect.isawaitable(result):
+                result = await result
+            if not isinstance(result, dict) or result.get("status") != "ready":
+                raise RuntimeError("Image provider preflight did not complete")
+            return {
+                "status": "ready",
+                "provider": str(result.get("provider", "unknown")),
+                "client_constructed": bool(result.get("client_constructed")),
+                "generation_performed": False,
+                "budget_reserved_usd": "0.00",
+            }
+        except Exception as exc:
+            origin = _safe_failure_origin(exc)
+            logger.error(
+                "Image provider preflight failed error_type=%s origin=%s:%s:%s",
+                type(exc).__name__, origin["file"], origin["function"], origin["line"],
+            )
+            raise HTTPException(status_code=502, detail="Image provider preflight failed")
+
     @router.post("/admin/image-generation-smoke-test")
     async def admin_image_generation_smoke_test(request: Request):
         # Admin authorization always happens before the persistent one-use claim.
