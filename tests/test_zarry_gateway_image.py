@@ -35,18 +35,24 @@ class FakeStorage:
 class ImageProviderTests(unittest.TestCase):
     def test_reserves_before_dispatch_then_settles_and_stores(self):
         ledger, client, storage = FakeLedger(), FakeClient(), FakeStorage()
+        factory_kwargs = {}
+        def client_factory(**kwargs):
+            factory_kwargs.update(kwargs)
+            return client
         provider = HuggingFaceImageProvider(
             api_key="hf_secret", model=HF_ZIMAGE_MODEL, provider="fal-ai", ledger=ledger,
             cost_estimator=lambda model, size: "0.01",
             actual_cost_resolver=lambda image, model, size: "0.008",
-            client_factory=lambda **kwargs: client, storage=storage,
+            client_factory=client_factory, storage=storage,
         )
         request_id = uuid4()
         result = provider.generate("a red kite", request_id=request_id, size="1024x1024")
         self.assertEqual(result["image_url"], "https://images.example/generated.png")
         self.assertEqual([c[0] for c in ledger.calls], ["reserve", "settle"])
         self.assertEqual(client.calls[0]["prompt"], "a red kite")
-        self.assertEqual(client.calls[0]["provider"], "fal-ai")
+        self.assertEqual(factory_kwargs, {"api_key": "hf_secret", "provider": "fal-ai"})
+        self.assertEqual(client.calls[0]["model"], HF_ZIMAGE_MODEL)
+        self.assertNotIn("provider", client.calls[0])
         self.assertEqual(client.calls[0]["width"], 1024)
         self.assertEqual(client.calls[0]["height"], 1024)
         self.assertEqual(storage.saved[0][1], request_id)
