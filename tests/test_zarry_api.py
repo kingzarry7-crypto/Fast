@@ -70,7 +70,7 @@ class ZarryProxyTests(unittest.TestCase):
         self.payload["symbol"] = "XAUUSD"
         self.payload["context"] = {
             "close": 3900.0,
-            "rsi_14": 48.5,
+            "rsi_14": 54.2,
             "timeframe": "1h",
         }
         self.valid_upstream(symbol="XAUUSD")
