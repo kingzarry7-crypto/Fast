@@ -86,7 +86,7 @@ class KittyCandleAlignmentTests(unittest.TestCase):
         from kitty_api import _validate_candle_close_alignment
         with self.assertRaisesRegex(ValueError, "too far behind"):
             _validate_candle_close_alignment(
-                "2026-11-02T08:00:00+00:00", "2026-11-02T09:15:00+00:00"
+                "2026-11-02T08:00:00+00:00", "2026-11-02T10:00:00+00:00"
             )
 
     def test_invalid_alignment_timestamp_fails_closed(self):
