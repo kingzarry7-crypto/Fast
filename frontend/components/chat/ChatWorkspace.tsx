@@ -379,7 +379,16 @@ export default function ChatWorkspace({
     e.preventDefault();
     const text = input.trim();
     const hasImage = !!attached;
-    if ((!text && !hasImage) || sending) return;
+    if ((!text && !hasImage) || sending || generatingImage) return;
+
+    // Keep image creation out of the crowded composer controls. Users can still
+    // request it naturally by starting a message with "create/generate/draw an image".
+    const imageCreationIntent = /^(?:please\s+)?(?:create|generate|make|draw)\s+(?:an?\s+)?(?:image|picture|illustration|artwork)\b/i.test(text);
+    if (!hasImage && imageCreationIntent) {
+      await handleGenerateImage(text);
+      return;
+    }
+
     const payloadImage = attached
       ? { base64: attached.base64, mime: attached.mime, previewUrl: attached.previewUrl, name: attached.name }
       : undefined;
@@ -394,12 +403,8 @@ export default function ChatWorkspace({
     }
   };
 
-  const handleGenerateImage = async () => {
-    const prompt = input.trim();
-    if (!prompt || sending || generatingImage) {
-      if (!prompt) setAttachError("Describe the image you want ZARRY to create first.");
-      return;
-    }
+  const handleGenerateImage = async (prompt: string) => {
+    if (!prompt || sending || generatingImage) return;
     setGeneratingImage(true);
     setAttachError(null);
     setInput("");
@@ -747,25 +752,6 @@ export default function ChatWorkspace({
               aria-label="Choose an image to upload"
             />
 
-            <button
-              type="button"
-              onClick={() => void handleGenerateImage()}
-              disabled={sending || generatingImage || !input.trim()}
-              className="mb-0.5 flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-violet-400/25 px-3 text-[11px] font-medium text-violet-200 transition hover:border-violet-300/50 hover:bg-violet-300/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
-              title="Generate an image from your prompt"
-              aria-label="Generate image"
-            >
-              {generatingImage ? (
-                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-violet-200/30 border-t-violet-200" aria-hidden="true" />
-              ) : (
-                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-4 w-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1" />
-                  <circle cx="12" cy="12" r="4" />
-                </svg>
-              )}
-              <span>{generatingImage ? "Creating" : "Create image"}</span>
-            </button>
-
             <textarea
               ref={inputRef}
               rows={1}
@@ -860,7 +846,7 @@ export default function ChatWorkspace({
             ) : (
               <button
                 type="submit"
-                disabled={!input.trim() && !attached}
+                disabled={(!input.trim() && !attached) || sending || generatingImage}
                 className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-30 disabled:bg-zinc-600 disabled:text-zinc-300"
                 title="Send"
               >
