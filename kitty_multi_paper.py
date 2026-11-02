@@ -347,8 +347,13 @@ def run_cycle(symbol: str | None = None) -> dict[str, Any]:
                 risk_budget_usd = None
 
                 # Enforce stored long-position exits on every completed candle.
-                # If both stop and target trade inside one candle, assume stop first.
-                if quantity > 1e-12 and stop_loss is not None and take_profit is not None:
+                # Legacy positions without persisted risk levels are closed rather
+                # than left running indefinitely without downside protection.
+                if quantity > 1e-12 and (stop_loss is None or take_profit is None):
+                    side = "SELL"
+                    exit_reason = "legacy_unprotected_position"
+                elif quantity > 1e-12:
+                    # If both stop and target trade inside one candle, assume stop first.
                     last_candle = closed[-1]
                     candle_low = float(last_candle["low"])
                     candle_high = float(last_candle["high"])
