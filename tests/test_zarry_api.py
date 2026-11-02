@@ -40,7 +40,7 @@ class ZarryProxyTests(unittest.TestCase):
             "kitty_assessment": {"decision": "NO TRADE", "reason_codes": ["edge_not_validated"]},
         }
 
-    def valid_upstream(self, decision="NO TRADE", symbol="BTCUSD"):
+    def valid_upstream(self, decision="NO TRADE", symbol="BTCUSD", explanation_source="model"):
         response = Mock()
         response.status_code = 200
         response.json.return_value = {
@@ -52,6 +52,7 @@ class ZarryProxyTests(unittest.TestCase):
             "numeric_claims": [54.2],
             "authority": "KITTY_DETERMINISTIC_ENGINE",
             "mode": "explanation_only",
+            "explanation_source": explanation_source,
         }
         self.upstream.return_value = response
 
@@ -61,6 +62,7 @@ class ZarryProxyTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["decision"], "NO TRADE")
         self.assertEqual(response.json()["mode"], "explanation_only")
+        self.assertEqual(response.json()["explanation_source"], "model")
         kwargs = self.upstream.call_args.kwargs
         self.assertEqual(kwargs["headers"]["Authorization"], "Bearer test-secret")
         self.assertEqual(kwargs["timeout"], 9)
@@ -80,6 +82,12 @@ class ZarryProxyTests(unittest.TestCase):
         self.assertEqual(response.json()["decision"], "NO TRADE")
         self.assertEqual(response.json()["mode"], "explanation_only")
         self.assertEqual(self.upstream.call_args.kwargs["json"]["symbol"], "XAUUSD")
+
+    def test_proxy_accepts_deterministic_fallback_source_metadata(self):
+        self.valid_upstream(explanation_source="deterministic_fallback")
+        response = self.client.post("/api/zarry/explain", json=self.payload)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["explanation_source"], "deterministic_fallback")
 
     def test_proxy_is_disabled_by_default(self):
         os.environ.pop("ZARRY_ENABLED", None)
