@@ -166,6 +166,8 @@ def backtest(frame: pd.DataFrame, signals: pd.Series, candidate: Candidate, roun
         raise ValueError("signals must align exactly to the evaluation candles")
     if not signals.isin([-1, 0, 1]).all():
         raise ValueError("signals must be -1, 0, or +1")
+    if not np.isfinite(round_trip_cost_bps) or round_trip_cost_bps < 0:
+        raise ValueError("round-trip cost bps must be finite and non-negative")
     cost = round_trip_cost_bps / 10000.0
     trades: list[dict] = []
     i = 0
@@ -220,6 +222,36 @@ def backtest(frame: pd.DataFrame, signals: pd.Series, candidate: Candidate, roun
         })
         i = exit_i
     return {**_metrics(trades, cost), "trades": trades}
+
+
+def build_baseline_signals(features: pd.DataFrame, kind: str) -> pd.Series:
+    """Frozen comparison rules: 1H momentum-only and 4H/1H trend alignment."""
+    if kind == "momentum":
+        direction = np.sign(features["h1_momentum"].fillna(0))
+    elif kind == "trend":
+        direction = np.where(
+            (features["h4_direction"] > 0) & (features["h1_momentum"] > 0), 1,
+            np.where((features["h4_direction"] < 0) & (features["h1_momentum"] < 0), -1, 0),
+        )
+    else:
+        raise ValueError("kind must be momentum or trend")
+    return pd.Series(direction, index=features.index, dtype=int)
+
+
+def _json_safe(value):
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, (np.integer,)):
+        return int(value)
+    if isinstance(value, (np.floating, float)):
+        if not np.isfinite(value):
+            return "Infinity" if value > 0 else ("-Infinity" if value < 0 else None)
+        return float(value)
+    return value
 
 
 def _candidate_grid() -> list[Candidate]:
@@ -284,12 +316,12 @@ def evaluate(path: str | Path, round_trip_cost_bps: float = 5.0) -> dict:
     selected = max(eligible, key=lambda item: item["score"], default=None)
     # Benchmarks are frozen, non-tuned rule baselines and are reported separately.
     benchmark_candidates = {
-        "momentum": Candidate("both", 0.0005, 45, 68, 0.0035, 0.007, 8),
+        "momentum": Candidate("both", 0.0, 45, 68, 0.0035, 0.007, 8),
         "trend": Candidate("both", 0.0, 48, 65, 0.0025, 0.005, 8),
     }
     benchmarks = {}
     for name, candidate in benchmark_candidates.items():
-        sig = make_signals(features, candidate)
+        sig = build_baseline_signals(features, name)
         benchmarks[name] = {
             str(mult): backtest(test, sig.reindex(test.index).fillna(0).astype(int), candidate, round_trip_cost_bps * mult)
             for mult in COST_MULTIPLIERS
@@ -360,7 +392,7 @@ def main() -> None:
     args = parser.parse_args()
     report = evaluate(args.csv, args.round_trip_cost_bps)
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, indent=2, allow_nan=False, default=lambda x: "Infinity" if x == float("inf") else None), encoding="utf-8")
+    args.output.write_text(json.dumps(_json_safe(report), indent=2, allow_nan=False), encoding="utf-8")
     print(json.dumps({"output": str(args.output), "candidate_count": report["candidate_count"], "eligible_candidate_count": report["eligible_candidate_count"], "selected_candidate": report["selected_candidate"] is not None, "research_only": True}, indent=2))
 
 
