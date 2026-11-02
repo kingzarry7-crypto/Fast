@@ -1388,6 +1388,7 @@ def analyze_multi_timeframe(symbol):
 
     result = {
         "symbol": symbol,
+        "require_all_timeframes": True,
         **{tf: channel_tf(tf) for tf in ("1d", "2h", "30m", "1m")},
         "4h": channel_tf("4h"),
         "1h": channel_tf("1h"),
