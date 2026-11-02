@@ -326,7 +326,7 @@ def route_agent_request(message: str, user_id: str) -> Optional[Dict[str, Any]]:
                     f"However, Kitty verified a live XAU/USD hourly candle at {str(kitty_context.get('latest_candle_time') or 'not provided')} "
                     f"with close {str(kitty_context.get('price') or 'not provided')}. "
                     f"Kitty's model candidate is {candidate} (confidence {confidence_text}); its approved output is "
-                    f"{show(kitty_context.get('signal'), 'NO TRADE')}. "
+                    f"{str(kitty_context.get('signal') or 'NO TRADE')}. "
                     "This is research-only: directional output is blocked because positive after-cost edge has not "
                     "been validated. Do not trade from this candidate; no order was placed."
                 )
