@@ -409,7 +409,7 @@ def run_cycle(symbol: str | None = None) -> dict[str, Any]:
                     take_profit = None
 
                 if side == "SELL":
-                    trade_qty = quantity if exit_reason in {"stop_loss", "take_profit"} else trade_qty
+                    trade_qty = quantity if exit_reason in {"stop_loss", "take_profit", "legacy_unprotected_position"} else trade_qty
                     notional = trade_qty * execution_price
                     fee = notional * FEE_RATE
                     cash += notional - fee
