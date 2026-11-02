@@ -1,12 +1,14 @@
 """Contract tests for the isolated XAU/USD MTF research experiment."""
+import sys
 import unittest
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from research_data_scripts_xau_placeholder import (  # replaced by test loader below
-    Candidate, backtest, build_features, make_signals, load_ohlc,
-)
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "research-data" / "scripts"))
+from xau_mtf_robustness import Candidate, backtest, build_features, make_signals
 
 
 def synthetic_ohlc(periods=1600):
@@ -42,6 +44,17 @@ class GoldMtfResearchTests(unittest.TestCase):
         candidate = Candidate("long_only", 0, 0, 100, 0.05, 0.50, 8)
         result = backtest(frame, pd.Series(1, index=frame.index), candidate, 5.0)
         self.assertEqual(result["trade_count"], 0)
+
+    def test_baseline_tracks_are_distinct_from_mtf_candidate(self):
+        from xau_mtf_robustness import build_baseline_signals
+        frame = synthetic_ohlc()
+        features = build_features(frame, 960)
+        momentum = build_baseline_signals(features, "momentum")
+        trend = build_baseline_signals(features, "trend")
+        self.assertEqual(len(momentum), len(frame))
+        self.assertEqual(len(trend), len(frame))
+        self.assertTrue(momentum.isin([-1, 0, 1]).all())
+        self.assertTrue(trend.isin([-1, 0, 1]).all())
 
     def test_invalid_cost_is_rejected(self):
         frame = synthetic_ohlc()
