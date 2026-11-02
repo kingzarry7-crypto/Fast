@@ -38,6 +38,10 @@ TAVILY_TIMEOUT = int(clean_env_str(os.getenv("TAVILY_TIMEOUT"), "15") or "15")
 _search_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 CACHE_TTL = 300  # 5 minutes
 
+# Billing failures are not transient. Stop calling Tavily for this process after
+# an HTTP 402 and continue through the configured non-Tavily fallback chain.
+_tavily_payment_blocked = False
+
 def _get_cache_key(query: str, search_depth: str, max_results: int) -> str:
     return f"{query.lower().strip()}|{search_depth}|{max_results}"
 
@@ -70,7 +74,15 @@ def _fallback_search(query: str, max_results: int = 5) -> Dict[str, Any]:
 
 
 def _try_fallback(query: str, max_results: int, original_error: str) -> Dict[str, Any]:
-    # Ordered failover: Tavily (caller) -> configured SearXNG -> keyless DuckDuckGo.
+    # Reuse successful fallback results; the fallback cache has its own key so
+    # it never gets confused with a successful Tavily result.
+    cached = _get_cached(query, "fallback", max_results)
+    if cached:
+        cached_result = dict(cached)
+        cached_result["cached"] = True
+        return cached_result
+
+    # Ordered failover: Tavily (caller) -> Brave/Serper/SearXNG -> DuckDuckGo.
     try:
         from search_providers import searxng
         result = searxng.search(query, max_results=max_results)
@@ -152,6 +164,9 @@ def should_trigger_tavily(user_text: str) -> bool:
     return has_trigger
 
 def search_web(query: str, max_results: int = 5, search_depth: str = "basic", include_answer: bool = True, include_domains: Optional[List[str]] = None) -> Dict[str, Any]:
+    if _tavily_payment_blocked:
+        return _try_fallback(query, max_results, "payment_required")
+
     if not is_tavily_configured():
         return _try_fallback(query, max_results, "Tavily not configured")
 
@@ -213,7 +228,14 @@ def search_web(query: str, max_results: int = 5, search_depth: str = "basic", in
         # Tavily uses 432 for the account's configured plan limit and 433 for
         # the pay-as-you-go cap. Distinguish these from transient rate limits so
         # the caller can report the real action needed instead of retrying blindly.
-        if "432" in low or "plan limit exceeded" in low or "usage limit" in low:
+        if "402" in low or "payment required" in low or "payment_required" in low:
+            # Billing/account payment failures persist across requests. Open a
+            # process-local circuit so ordinary chat/search never keeps calling
+            # the failing paid endpoint; non-Tavily providers remain available.
+            global _tavily_payment_blocked
+            _tavily_payment_blocked = True
+            error_code = "payment_required"
+        elif "432" in low or "plan limit exceeded" in low or "usage limit" in low:
             error_code = "plan_limit_exceeded"
         elif "433" in low or "pay-as-you-go limit" in low:
             error_code = "payg_limit_exceeded"
@@ -263,4 +285,5 @@ def provider_status() -> Dict[str, Any]:
         "max_results_default": TAVILY_MAX_RESULTS,
         "timeout": TAVILY_TIMEOUT,
         "cache_size": len(_search_cache),
+        "payment_blocked": _tavily_payment_blocked,
     }
