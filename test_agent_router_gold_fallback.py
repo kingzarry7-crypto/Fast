@@ -74,7 +74,7 @@ class AgentRouterGoldFallbackTests(unittest.TestCase):
         self.assertIn("NO TRADE", result["reply"])
         self.assertIn("LONG", result["reply"])
         self.assertIn("62.27%", result["reply"])
-        self.assertIn("not been validated", result["reply"].lower())
+        self.assertIn("hourly-only snapshot is research context", result["reply"].lower())
         self.assertNotIn("market data feed is unavailable", result["reply"].lower())
 
     def test_does_not_claim_gold_snapshot_when_candle_provider_fails(self):
