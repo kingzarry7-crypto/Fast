@@ -400,7 +400,7 @@ export default function SettingsPage() {
                       {kittyZarryExplanation && (
                         <div className="mt-3 rounded-lg border border-cyan-400/15 bg-cyan-400/5 p-3">
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="text-[10px] font-mono-tech tracking-widest text-cyan-200/60">ZARRY · EXPLANATION ONLY</span>
+                            <span className="text-[10px] font-mono-tech tracking-widest text-cyan-200/60">ZARRY · EXPLANATION ONLY · {kittyZarryExplanation.explanation_source === "model" ? "MODEL" : "DETERMINISTIC FALLBACK"}</span>
                             <span className="rounded-full border border-amber-400/25 px-2 py-1 text-[10px] font-bold text-amber-200">{kittyZarryExplanation.decision} · KITTY AUTHORITY</span>
                           </div>
                           <p className="mt-3 text-sm leading-relaxed text-white">{kittyZarryExplanation.summary}</p>
