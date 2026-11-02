@@ -139,8 +139,10 @@ def backtest_ohlc(
             "estimated_cost": float(cost),
             "net_return": float(net),
         })
-        # Do not overlap trades or reuse a signal while a position is open.
-        i = exit_i + 1
+        # The position is closed by this candle's close, so a fresh signal
+        # formed at that close may enter at the following candle's open.
+        # This matches the shared forward-return simulator's exit-candle rule.
+        i = exit_i
     returns = np.array([t["net_return"] for t in trades], dtype=float)
     wins = returns[returns > 0]
     losses = returns[returns < 0]

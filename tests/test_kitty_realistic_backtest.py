@@ -318,5 +318,24 @@ class KittyRealisticBacktestTests(unittest.TestCase):
         self.assertEqual(result["trade_count"], 0)
 
 
+    def test_signal_on_exit_candle_is_eligible_for_next_open_entry(self):
+        frame = self.candles([
+            (100, 100.5, 99.5, 100),
+            (100, 101, 99, 100.2),
+            (100.2, 100.8, 99.8, 100.5),  # first trade exits by time here
+            (100.5, 101.5, 100, 101),  # second signal enters at this open
+            (101, 102, 100.5, 101.5),
+        ])
+        signals = pd.Series([1, 0, 1, 0, 0], index=frame.index)
+        result = backtest_ohlc(frame, signals, BacktestConfig(
+            stop_pct=0.05, target_pct=0.10, max_hold_bars=2,
+            spread_bps_per_side=0, commission_bps_per_side=0, slippage_bps_per_side=0,
+        ))
+        self.assertEqual(result["trade_count"], 2)
+        self.assertEqual(result["trades"][0]["exit_time"], frame.index[2].isoformat())
+        self.assertEqual(result["trades"][1]["signal_time"], frame.index[2].isoformat())
+        self.assertEqual(result["trades"][1]["entry_time"], frame.index[3].isoformat())
+
+
 if __name__ == "__main__":
     unittest.main()
