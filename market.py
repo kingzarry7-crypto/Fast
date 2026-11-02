@@ -2137,10 +2137,10 @@ def analyze_single_timeframe(candles: List[Dict], symbol: str, tf_name: str) -> 
     return {"timeframe": tf_name,"trend": trend,"price": price,"ema9": ema9,"ema21": ema21,"ema50": ema50,"rsi": rsi,"atr": atr,"structure": adv_structure.get("structure","NEUTRAL"),"structure_detail": adv_structure.get("detail",""),"structure_data": adv_structure,"support": adv_sr.get("support"),"resistance": adv_sr.get("resistance"),"sr_data": adv_sr,"ema_alignment": ema_align,"ema_extended": ema_ext,"rsi_state": rsi_state,"volatility": volatility,"exhaustion": exhaustion,"closes": closes,"candles": candles,"success": True}
 
 def fetch_mtf_candles(symbol: str) -> Dict[str, Any]:
-    timeframes=["1d","4h","2h","1h","30m","15m","5m","1m"]; results: Dict[str, Any]={}
+    timeframes=["1d","4h","2h","1h","30m","15m","5m"]; results: Dict[str, Any]={}
     for tf in timeframes:
         try:
-            size=150 if tf in ["15m","5m","1m","30m"] else 100
+            size=150 if tf in ["15m","5m","30m"] else 100
             candles=get_candles(symbol,tf,size)
             results[tf]={"success": True,"candles": candles,"error": None}
         except Exception as e:
@@ -2262,7 +2262,7 @@ def _analyze_market_fresh(symbol, timeframe="15m"):
                 raise RuntimeError(f"No candle data available for {symbol} on any timeframe")
             candles=mtf_raw[successful[0]]["candles"]; primary_tf=successful[0]
     # Validate each timeframe independently and calculate indicators from its
-    # latest completed candle only. A six-hour-old 1M feed must never be treated
+    # latest completed candle only. Each required timeframe is validated independently;
     # as valid confirmation merely because the hourly feed is fresh.
     from kitty_api import _validate_candles
 
