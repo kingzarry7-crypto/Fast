@@ -190,9 +190,6 @@ def backtest(frame: pd.DataFrame, signals: pd.Series, candidate: Candidate, roun
         target = entry * (1 + direction * candidate.target_pct)
         exit_i, exit_price, reason = last_i, float(frame["close"].iloc[last_i]), "time"
         for j in range(entry_i, last_i + 1):
-            if j < len(frame) - 1 and frame.index[j + 1] - frame.index[j] > pd.Timedelta(minutes=15):
-                exit_i, exit_price, reason = j, float(frame["close"].iloc[j]), "session_gap"
-                break
             high, low, opening = float(frame["high"].iloc[j]), float(frame["low"].iloc[j]), float(frame["open"].iloc[j])
             if direction == 1:
                 if low <= stop:
@@ -208,6 +205,9 @@ def backtest(frame: pd.DataFrame, signals: pd.Series, candidate: Candidate, roun
                 if low <= target:
                     exit_i, exit_price, reason = j, target, "target"
                     break
+            if j < len(frame) - 1 and frame.index[j + 1] - frame.index[j] > pd.Timedelta(minutes=15):
+                exit_i, exit_price, reason = j, float(frame["close"].iloc[j]), "session_gap"
+                break
         gross = direction * (exit_price / entry - 1)
         trades.append({
             "signal_time": frame.index[i].isoformat(),
