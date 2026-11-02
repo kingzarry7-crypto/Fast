@@ -146,7 +146,7 @@ def _gold_kitty_snapshot() -> Dict[str, Any]:
     if status.get("available") is True:
         prediction = gold_model.predict_features(_kitty_features(closed))
         snapshot.update({
-            "signal": str(prediction.get("signal") or "NO TRADE").upper(),
+            "model_signal": str(prediction.get("signal") or "NO TRADE").upper(),
             "candidate_signal": str(prediction.get("class_prediction") or "UNKNOWN").upper(),
             "confidence": prediction.get("confidence"),
             "signal_edge_validated": prediction.get("signal_edge_validated") is True,
@@ -154,8 +154,9 @@ def _gold_kitty_snapshot() -> Dict[str, Any]:
         })
     else:
         snapshot["reason"] = status.get("error") or "No symbol-verified Gold checkpoint is installed"
-    # This helper is informational only: never change the gated signal or allow orders.
-    snapshot["signal"] = "NO TRADE" if snapshot.get("signal_edge_validated") is not True else snapshot["signal"]
+    # An hourly-only snapshot is never a complete multi-timeframe setup.
+    # Keep the chat-facing output at NO TRADE even if the model's own edge gate changes.
+    snapshot["signal"] = "NO TRADE"
     return snapshot
 
 
@@ -327,8 +328,8 @@ def route_agent_request(message: str, user_id: str) -> Optional[Dict[str, Any]]:
                     f"with close {str(kitty_context.get('price') or 'not provided')}. "
                     f"Kitty's model candidate is {candidate} (confidence {confidence_text}); its approved output is "
                     f"{str(kitty_context.get('signal') or 'NO TRADE')}. "
-                    "This is research-only: directional output is blocked because positive after-cost edge has not "
-                    "been validated. Do not trade from this candidate; no order was placed."
+                    "This hourly-only snapshot is research context, not the required 4H/1H/15M/5M setup. "
+                    "The chat-facing output remains NO TRADE. Do not trade from this candidate; no order was placed."
                 )
                 return {"status": "partial", "reply": reply, "provider": "market_agent",
                         "operation": "analyze_market", "target": symbol}
@@ -377,7 +378,7 @@ def route_agent_request(message: str, user_id: str) -> Optional[Dict[str, Any]]:
                     f"Kitty Gold hourly research output: {kitty_context.get('signal', 'NO TRADE')}; "
                     f"model candidate: {kitty_context.get('candidate_signal', 'not available')}; "
                     f"confidence: {confidence_text}; completed candle: {kitty_context.get('latest_candle_time')}. "
-                    "Directional output remains blocked until positive after-cost edge is validated; research only."
+                    "This hourly-only model context does not replace the required multi-timeframe setup; research only."
                 )
             else:
                 lines.append("Kitty Gold hourly snapshot: unavailable (" + str(kitty_context.get("reason", "provider error"))[:120] + ").")
