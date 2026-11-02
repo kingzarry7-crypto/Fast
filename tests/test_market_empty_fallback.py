@@ -83,6 +83,33 @@ class MarketEmptyFallbackTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "No fresh candle provider returned data"):
                 market.get_candles("UNKNOWN/USD", "1h", 100)
 
+    def test_provider_diagnostics_include_latency_and_error_class_without_exception_text(self):
+        from datetime import datetime, timezone
+        candles = [{
+            "time": datetime.now(timezone.utc).isoformat(),
+            "open": 100.0, "high": 102.0, "low": 99.0, "close": 101.0, "volume": 10.0,
+        }]
+        with (
+            patch.object(market, "_is_gold_symbol", return_value=False),
+            patch.object(market, "_should_try_alpaca_market_data", return_value=True),
+            patch.object(market, "_alpaca_supports_symbol", return_value=True),
+            patch.object(market, "_alpaca_get_candles", side_effect=RuntimeError("secret-token-must-not-appear")),
+            patch.object(market, "_should_try_massive_market_data", return_value=False),
+            patch.object(market, "binance_pair", return_value="BTCUSDT"),
+            patch.object(market, "_binance_get_candles", return_value=candles),
+            patch.object(market, "_twelve_get_candles", side_effect=AssertionError("fresh Binance should be used")),
+            patch.object(market.time, "monotonic", side_effect=[10.0, 10.125, 11.0, 11.020]),
+        ):
+            with self.assertLogs("king_zarry_market", level="WARNING") as captured:
+                result = market.get_candles("BTC/USD", "1h", 100)
+        self.assertEqual(result, candles)
+        diagnostic = "\n".join(captured.output)
+        self.assertIn("provider=Alpaca", diagnostic)
+        self.assertIn("outcome=error", diagnostic)
+        self.assertIn("elapsed_ms=125", diagnostic)
+        self.assertIn("error_type=RuntimeError", diagnostic)
+        self.assertNotIn("secret-token-must-not-appear", diagnostic)
+
 
 if __name__ == "__main__":
     unittest.main()
