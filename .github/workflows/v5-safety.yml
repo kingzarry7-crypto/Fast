@@ -66,6 +66,8 @@ jobs:
         run: python -m unittest discover -s tests -p "test_kitty_alerts.py" -v
       - name: Test Kitty timeframe-specific candle freshness
         run: python -m unittest discover -s tests -p "test_kitty_mtf_freshness.py" -v
+      - name: Test Kitty Telegram delivery deduplication and retry state
+        run: python -m unittest discover -s tests -p "test_kitty_watch_state.py" -v
       - name: Test Coding Agent routing and provider configuration
         run: python -m unittest test_coding_request test_llm_client test_fal_media_adapter test_alpaca_bars_window test_twelvedata_calendar_routing test_calendar_live_health_status -v
       - name: Test ZARRY streaming provider routing and Gold Kitty chat fallback
