@@ -2261,19 +2261,39 @@ def _analyze_market_fresh(symbol, timeframe="15m"):
             if not successful:
                 raise RuntimeError(f"No candle data available for {symbol} on any timeframe")
             candles=mtf_raw[successful[0]]["candles"]; primary_tf=successful[0]
+    # Validate each timeframe independently and calculate indicators from its
+    # latest completed candle only. A six-hour-old 1M feed must never be treated
+    # as valid confirmation merely because the hourly feed is fresh.
+    from kitty_api import _validate_candles
+
     mtf_analyses: Dict[str, Dict]={}
     for tf,data in mtf_raw.items():
         if data.get("success") and data.get("candles"):
             try:
-                analysis=analyze_single_timeframe(data["candles"],symbol,tf)
+                raw_candles = data["candles"]
+                _validate_candles(raw_candles, tf, symbol)
+                if len(raw_candles) < 36:
+                    raise ValueError(f"{symbol}: insufficient completed candles for {tf}")
+                completed_candles = list(raw_candles[:-1])
+                latest_candle_time = _validate_candles(completed_candles, tf, symbol)
+                analysis=analyze_single_timeframe(completed_candles,symbol,tf)
+                if not analysis.get("success"):
+                    raise ValueError(analysis.get("error") or f"{tf} analysis failed")
+                analysis["candles"] = completed_candles
+                analysis["latest_candle_time"] = latest_candle_time
+                analysis["fresh"] = True
                 mtf_analyses[tf]=analysis
             except Exception as e:
                 logger.warning(f"Failed to analyze {tf}: {e}")
-                mtf_analyses[tf]={"trend": "UNAVAILABLE","error": str(e),"timeframe": tf,"success": False}
+                mtf_analyses[tf]={"trend": "UNAVAILABLE","error": str(e),"timeframe": tf,"success": False,"fresh": False}
     primary_analysis=mtf_analyses.get(primary_tf)
     if not primary_analysis or not primary_analysis.get("success"):
-        primary_analysis=analyze_single_timeframe(candles,symbol,primary_tf)
-        mtf_analyses[primary_tf]=primary_analysis
+        raise RuntimeError(
+            f"Primary timeframe {primary_tf} is unavailable, stale, or invalid for {symbol}"
+        )
+    # Downstream primary setup calculations must use the same completed candle
+    # series that passed timestamp and OHLC validation above.
+    candles = primary_analysis["candles"]
     closes=primary_analysis.get("closes")
     if not closes:
         closes=[safe_float(c.get("close")) for c in candles if safe_float(c.get("close")) is not None]
