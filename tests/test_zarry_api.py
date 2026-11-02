@@ -17,6 +17,7 @@ class ZarryProxyTests(unittest.TestCase):
             "ZARRY_SERVICE_URL": "https://zarry-service.up.railway.app",
             "ZARRY_API_KEY": "test-secret",
             "ZARRY_TIMEOUT_SECONDS": "9",
+            "ZARRY_ALLOWED_HOSTS": "",
         })
         self.env.start()
         self.addCleanup(self.env.stop)
