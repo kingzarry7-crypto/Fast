@@ -45,6 +45,35 @@ def _ema(values, period):
     return result
 
 
+def _validate_candle_close_alignment(model_candle_time, setup_candle_time):
+    """Require the completed 1H model bar to close within the 15M setup window."""
+    from datetime import datetime, timedelta, timezone
+
+    def parse_timestamp(value):
+        try:
+            stamp = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            if stamp.tzinfo is None:
+                raise ValueError("timezone is required")
+            return stamp.astimezone(timezone.utc)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("invalid candle alignment timestamp") from exc
+
+    model_open = parse_timestamp(model_candle_time)
+    setup_open = parse_timestamp(setup_candle_time)
+    model_close = model_open + timedelta(hours=1)
+    setup_close = setup_open + timedelta(minutes=15)
+    lag = (setup_close - model_close).total_seconds()
+    if lag < 0:
+        raise ValueError("hourly model candle closes newer than the 15M setup")
+    if lag > 3600:
+        raise ValueError("hourly model candle closes too far behind the 15M setup")
+    return {
+        "model_close_time": model_close.isoformat(),
+        "setup_close_time": setup_close.isoformat(),
+        "lag_seconds": int(lag),
+    }
+
+
 def _validate_candles(candles, timeframe, symbol):
     from datetime import datetime, timezone, timedelta
     from kitty_features import normalize_candle_timestamp
@@ -72,7 +101,20 @@ def _validate_candles(candles, timeframe, symbol):
 
     stamp = ordered_times[-1]
     age = datetime.now(timezone.utc) - stamp
-    limit = timedelta(days=3) if timeframe == '1d' else timedelta(hours=6)
+    freshness_limits = {
+        "1m": timedelta(minutes=5),
+        "5m": timedelta(minutes=15),
+        "15m": timedelta(minutes=45),
+        "30m": timedelta(minutes=90),
+        "1h": timedelta(hours=3),
+        "2h": timedelta(hours=6),
+        "4h": timedelta(hours=12),
+        "1d": timedelta(days=3),
+    }
+    try:
+        limit = freshness_limits[str(timeframe).lower().strip()]
+    except KeyError as exc:
+        raise ValueError(f"{symbol}: unsupported timeframe for candle validation: {timeframe}") from exc
     if age < timedelta(minutes=-10) or age > limit:
         raise ValueError(
             f"{symbol}: stale or future candle timestamp {stamp.isoformat()} "
