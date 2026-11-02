@@ -1459,6 +1459,9 @@ Primary Execution: 15M
 - Signal: {tf_5m.get('signal')} Trend: {tf_5m.get('trend')} RSI: {tf_5m.get('rsi',0):.1f}
 - Structure: {tf_5m.get('structure')} Strength: {tf_5m.get('strength')}
 
+Full timeframe context (all eight are mandatory confirmation inputs):
+{chr(10).join(f"{tf.upper()}: trend={mtf_data.get(tf, {}).get('trend')} signal={mtf_data.get(tf, {}).get('signal')} strength={mtf_data.get(tf, {}).get('strength')}" for tf in ("1D", "4H", "2H", "1H", "30M", "15M", "5M", "1M"))}
+
 MTF Consensus:
 - Bias: {mtf_data.get('mtf_bias')} Signal: {mtf_data.get('mtf_signal')} Strength: {mtf_data.get('mtf_strength')}
 - Conflict: {mtf_data.get('conflict')} Bullish Count: {mtf_data.get('bullish_count')} Bearish Count: {mtf_data.get('bearish_count')}
