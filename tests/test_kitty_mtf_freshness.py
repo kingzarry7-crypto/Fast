@@ -48,6 +48,12 @@ class KittyTimeframeFreshnessTests(unittest.TestCase):
                 result = _validate_candles(candles, timeframe, "BTC/USDT")
                 self.assertTrue(result.endswith("+00:00"))
 
+    def test_each_supported_timeframe_accepts_data_within_its_own_limit(self):
+        for timeframe, (_, max_age) in TIMEFRAME_LIMITS.items():
+            with self.subTest(timeframe=timeframe):
+                candles = make_candles(timeframe, max_age - timedelta(minutes=1))
+                _validate_candles(candles, timeframe, "BTC/USDT")
+
     def test_unknown_timeframe_fails_closed(self):
         candles = make_candles("1h", timedelta(minutes=1))
         with self.assertRaisesRegex(ValueError, "unsupported timeframe"):
