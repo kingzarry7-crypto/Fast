@@ -14,6 +14,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timezone
 from uuid import uuid4
 from typing import Any, Callable, Literal
+from urllib.parse import urlsplit
 
 import requests
 from fastapi import APIRouter, HTTPException, Request
@@ -111,6 +112,43 @@ def _timeout_seconds() -> int:
     return value
 
 
+def _validated_service_url(raw_url: str) -> str:
+    """Accept only Railway service hosts or explicitly allowlisted HTTPS hosts."""
+    try:
+        parsed = urlsplit(raw_url)
+        host = (parsed.hostname or "").lower().rstrip(".")
+        port = parsed.port
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail="ZARRY service URL is invalid") from exc
+
+    if (
+        parsed.username or parsed.password or not host
+        or parsed.query or parsed.fragment
+        or parsed.path not in ("", "/")
+    ):
+        raise HTTPException(status_code=503, detail="ZARRY service URL is invalid")
+
+    allowed_hosts = {
+        item.strip().lower().rstrip(".")
+        for item in os.getenv("ZARRY_ALLOWED_HOSTS", "").split(",")
+        if item.strip()
+    }
+    railway_private = host.endswith(".railway.internal")
+    railway_public = host.endswith(".up.railway.app")
+    explicitly_allowed = host in allowed_hosts
+
+    if parsed.scheme == "https":
+        if port not in (None, 443) or not (railway_private or railway_public or explicitly_allowed):
+            raise HTTPException(status_code=503, detail="ZARRY HTTPS host is not allowlisted")
+    elif parsed.scheme == "http":
+        if port not in (None, 80) or not railway_private:
+            raise HTTPException(status_code=503, detail="unencrypted ZARRY URLs are allowed only on Railway private networking")
+    else:
+        raise HTTPException(status_code=503, detail="ZARRY service URL must use HTTPS")
+
+    return f"{parsed.scheme}://{host}" + (f":{port}" if port else "")
+
+
 def _validate_response(result: ZarryExplainResponse, payload: ZarryExplainRequest) -> None:
     if result.symbol != payload.symbol:
         raise ValueError("ZARRY changed symbol")
@@ -172,12 +210,9 @@ def create_router(
             or os.getenv("ZARRY_API_URL", "").strip()
         ).rstrip("/")
         api_key = os.getenv("ZARRY_API_KEY", "").strip()
-        if not service_url.startswith(("https://", "http://")) or not api_key:
+        if not service_url or not api_key:
             raise HTTPException(status_code=503, detail="ZARRY service is not configured")
-        if service_url.startswith("http://"):
-            host = service_url[len("http://"):].split("/", 1)[0].split(":", 1)[0].lower()
-            if not host.endswith(".railway.internal"):
-                raise HTTPException(status_code=503, detail="unencrypted ZARRY URLs are allowed only on Railway private networking")
+        service_url = _validated_service_url(service_url)
 
         candidate_id = request.headers.get("X-Request-ID", "")[:128]
         request_id = candidate_id if re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", candidate_id) else str(uuid4())
