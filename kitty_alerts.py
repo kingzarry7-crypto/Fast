@@ -72,11 +72,12 @@ def normalize_mtf_watch_signal(mtf_data: dict[str, Any], late_entry: dict[str, A
         return {"signal": "WAIT", "reason": "Late-entry safety score is not finite"}
     if status in {"LATE", "EXTENDED / AVOID", "RISKY"} or late_score >= 45 or action in {"WAIT FOR PULLBACK", "WAIT FOR RETEST", "WAIT"}:
         return {"signal": "WAIT", "reason": "Late-entry / extension filter blocked setup"}
+    # Every supported timeframe must be present and aligned before BUY/SELL.
     required = {
-        "4h": str(tf4.get("signal") or "").strip().upper(),
-        "1h": str(tf1.get("signal") or "").strip().upper(),
-        "15m": str(tf15.get("signal") or "").strip().upper(),
-        "5m": str(tf5.get("signal") or "").strip().upper(),
+        timeframe: str(
+            (data.get(timeframe) if isinstance(data.get(timeframe), dict) else {}).get("signal") or ""
+        ).strip().upper()
+        for timeframe in ("1d", "4h", "2h", "1h", "30m", "15m", "5m", "1m")
     }
     opposing = "SELL" if signal == "BUY" else "BUY"
     if any(value == opposing for value in required.values()):
@@ -84,7 +85,7 @@ def normalize_mtf_watch_signal(mtf_data: dict[str, Any], late_entry: dict[str, A
     missing = [timeframe for timeframe, value in required.items() if value != signal]
     if missing:
         return {"signal": "WAIT", "reason": "No confirmation from: " + ", ".join(missing)}
-    return {"signal": signal, "reason": "4H, 1H, 15M and 5M candles agree; late-entry filter passed"}
+    return {"signal": signal, "reason": "1D, 4H, 2H, 1H, 30M, 15M, 5M and 1M candles agree; late-entry filter passed"}
 
 
 def validate_mtf_watch_levels(mtf_data: dict[str, Any], signal: str) -> dict[str, Any]:
@@ -144,7 +145,7 @@ def normalize_kitty_mtf_signal(
     mtf_data: dict[str, Any],
     late_entry: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Require a validated Kitty model direction plus agreeing 4H/1H/15M/5M filters."""
+    """Require a validated Kitty model direction plus all eight aligned timeframe filters."""
     model = normalize_kitty_alert(prediction if isinstance(prediction, dict) else {})
     if not model["actionable"]:
         return {
