@@ -1469,57 +1469,51 @@ def _fresh_market_candles(candles, timeframe: str, provider: str, symbol: str):
 
 
 def get_candles(symbol, timeframe="15m", outputsize=150):
-    """Return fresh OHLC candles; stale provider data falls through to the next source."""
-    def accept(candles, provider):
-        return _fresh_market_candles(candles, timeframe, provider, symbol)
+    """Return fresh OHLC candles and emit credential-safe per-provider diagnostics."""
+    def attempt(provider, fetch):
+        started = time.monotonic()
+        try:
+            candles = _fresh_market_candles(fetch(), timeframe, provider, symbol)
+        except Exception as exc:
+            elapsed_ms = round((time.monotonic() - started) * 1000)
+            logger.warning(
+                "market_candles_provider provider=%s symbol=%s timeframe=%s outcome=error elapsed_ms=%s error_type=%s",
+                provider, symbol, timeframe, elapsed_ms, type(exc).__name__,
+            )
+            return None
+        elapsed_ms = round((time.monotonic() - started) * 1000)
+        if candles:
+            logger.info(
+                "market_candles_provider provider=%s symbol=%s timeframe=%s outcome=fresh elapsed_ms=%s candle_count=%s",
+                provider, symbol, timeframe, elapsed_ms, len(candles),
+            )
+            return candles
+        logger.warning(
+            "market_candles_provider provider=%s symbol=%s timeframe=%s outcome=empty_or_stale elapsed_ms=%s",
+            provider, symbol, timeframe, elapsed_ms,
+        )
+        return None
 
     if _is_gold_symbol(symbol):
-        try:
-            candles = accept(_gold_free_get_candles(symbol, timeframe, outputsize), "free-gold")
-            if candles:
-                return candles
-            logger.warning("Free gold candles empty/stale for %s; trying remaining providers", symbol)
-        except Exception as e:
-            logger.warning("Free gold candle sources failed for %s (%s); trying remaining providers", symbol, type(e).__name__)
-    if _should_try_alpaca_market_data() and _alpaca_supports_symbol(symbol):
-        try:
-            candles = accept(_alpaca_get_candles(symbol, timeframe, outputsize), "Alpaca")
-            if candles:
-                logger.debug("candles %s via Alpaca tf=%s n=%s", symbol, timeframe, len(candles))
-                return candles
-            logger.warning("Alpaca returned empty/stale candles for %s tf=%s; trying fallback providers", symbol, timeframe)
-        except Exception as e:
-            reason = str(e)[:180]
-            _key, _secret = _alpaca_credentials()
-            for _credential in (_key, _secret):
-                if _credential:
-                    reason = reason.replace(_credential, "[redacted]")
-            logger.warning("Alpaca candles unavailable for %s (%s: %s); trying fallback providers", symbol, type(e).__name__, reason)
-    if _should_try_massive_market_data():
-        try:
-            candles = accept(_massive_get_candles(symbol, timeframe, outputsize), "Massive")
-            if candles:
-                logger.debug("candles %s via Massive tf=%s n=%s", symbol, timeframe, len(candles))
-                return candles
-            logger.warning("Massive returned empty/stale candles for %s tf=%s; trying fallback providers", symbol, timeframe)
-        except Exception as e:
-            logger.warning("Massive candles unavailable for %s (%s); trying fallback providers", symbol, type(e).__name__)
-    pair = binance_pair(symbol)
-    if pair:
-        try:
-            candles = accept(_binance_get_candles(pair, timeframe, outputsize), "Binance")
-            if candles:
-                logger.debug("candles %s via Binance %s tf=%s n=%s", symbol, pair, timeframe, len(candles))
-                return candles
-            logger.warning("Binance returned empty/stale candles for %s (%s); trying Twelve Data", symbol, pair)
-        except Exception as e:
-            logger.warning("Binance candles failed for %s (%s): %s — trying Twelve Data", symbol, pair, e)
-    try:
-        candles = accept(_twelve_get_candles(symbol, timeframe, outputsize), "Twelve Data")
+        candles = attempt("free-gold", lambda: _gold_free_get_candles(symbol, timeframe, outputsize))
         if candles:
             return candles
-    except Exception as e:
-        logger.warning("Twelve Data candles unavailable for %s (%s)", symbol, type(e).__name__)
+    if _should_try_alpaca_market_data() and _alpaca_supports_symbol(symbol):
+        candles = attempt("Alpaca", lambda: _alpaca_get_candles(symbol, timeframe, outputsize))
+        if candles:
+            return candles
+    if _should_try_massive_market_data():
+        candles = attempt("Massive", lambda: _massive_get_candles(symbol, timeframe, outputsize))
+        if candles:
+            return candles
+    pair = binance_pair(symbol)
+    if pair:
+        candles = attempt("Binance", lambda: _binance_get_candles(pair, timeframe, outputsize))
+        if candles:
+            return candles
+    candles = attempt("Twelve Data", lambda: _twelve_get_candles(symbol, timeframe, outputsize))
+    if candles:
+        return candles
     raise RuntimeError(f"No fresh candle provider returned data for {symbol} ({timeframe}); refusing to use an empty/stale dataset.")
 
 def calculate_ema(values, period):
