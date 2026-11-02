@@ -2343,7 +2343,7 @@ KITTY_TELEGRAM_WATCH = clean_env_str(os.getenv("KITTY_TELEGRAM_WATCH", "true")).
 KITTY_TELEGRAM_INTERVAL_SEC = max(900, env_int("KITTY_TELEGRAM_INTERVAL_SEC", 900))  # Never scan more often than every 15 minutes
 
 
-async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE, force: bool = False):
+async def _kitty_telegram_signal_job_impl(context: ContextTypes.DEFAULT_TYPE, force: bool = False):
     """Scan BTC and XAU/USD every 15 minutes; alert only on validated 15M setups."""
     if not KITTY_TELEGRAM_WATCH:
         return
@@ -2364,8 +2364,8 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE, force: b
     )
     for feed_symbol, analysis_symbol, label, model_module in assets:
         try:
-            # The model contract is hourly. Use only completed 1H candles for inference;
-            # the 4H/1H/15M/5M checks below are confirmation filters, not model retraining timeframes.
+            # The model contract remains hourly. All eight timeframes are independent
+            # confirmation filters; they do not alter or retrain the model input.
             candles = await asyncio.to_thread(
                 get_candles, feed_symbol, timeframe="1h", outputsize=160
             )
@@ -2507,6 +2507,18 @@ async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE, force: b
             )
         except Exception as exc:
             logger.warning("Kitty watch failed for %s: %s: %s", feed_symbol, type(exc).__name__, exc)
+
+_kitty_watch_lock = asyncio.Lock()
+
+
+async def kitty_telegram_signal_job(context: ContextTypes.DEFAULT_TYPE, force: bool = False):
+    """Single-flight entry point shared by scheduled and manual Kitty scans."""
+    if _kitty_watch_lock.locked():
+        logger.info("Kitty watcher skipped overlapping scan; previous scan still running")
+        return
+    async with _kitty_watch_lock:
+        return await _kitty_telegram_signal_job_impl(context, force=force)
+
 
 async def agent_morning_brief_job(context: ContextTypes.DEFAULT_TYPE):
     """Generate the daily Agent brief and account-aware morning feedback."""
