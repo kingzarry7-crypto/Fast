@@ -164,6 +164,7 @@ def should_trigger_tavily(user_text: str) -> bool:
     return has_trigger
 
 def search_web(query: str, max_results: int = 5, search_depth: str = "basic", include_answer: bool = True, include_domains: Optional[List[str]] = None) -> Dict[str, Any]:
+    global _tavily_payment_blocked
     if _tavily_payment_blocked:
         return _try_fallback(query, max_results, "payment_required")
 
@@ -232,7 +233,6 @@ def search_web(query: str, max_results: int = 5, search_depth: str = "basic", in
             # Billing/account payment failures persist across requests. Open a
             # process-local circuit so ordinary chat/search never keeps calling
             # the failing paid endpoint; non-Tavily providers remain available.
-            global _tavily_payment_blocked
             _tavily_payment_blocked = True
             error_code = "payment_required"
         elif "432" in low or "plan limit exceeded" in low or "usage limit" in low:
