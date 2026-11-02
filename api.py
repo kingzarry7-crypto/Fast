@@ -841,6 +841,12 @@ def _require_current_user(request: Request) -> Any:
         raise HTTPException(status_code=401, detail="Authentication required")
     return user_row
 
+try:
+    from zarry_api import install_router as install_zarry_explanation_router
+    install_zarry_explanation_router(app, _require_current_user)
+except Exception:
+    logger.warning("ZARRY explanation proxy unavailable")
+
 # General assistant gateway is independently default-off; Kitty remains separate.
 try:
     from zarry_gateway.router import create_general_router
