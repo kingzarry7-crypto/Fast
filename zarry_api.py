@@ -219,3 +219,8 @@ def create_router(
         return result
 
     return router
+
+
+def install_router(app, require_user: Callable[[Request], Any]) -> None:
+    """Mount the optional authenticated explanation endpoint on the Fast app."""
+    app.include_router(create_router(require_user))
