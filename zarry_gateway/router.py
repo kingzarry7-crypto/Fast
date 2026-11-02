@@ -241,6 +241,51 @@ def create_general_router(
             logger.error("One-shot image generation smoke test failed (%s)", type(exc).__name__)
             raise HTTPException(status_code=502, detail="One-time image generation test failed; lock remains consumed")
 
+    @router.get("/admin/image-generation-smoke-status")
+    async def admin_image_generation_smoke_status(request: Request):
+        # Read only the allowlisted diagnostic fields; never expose image URLs,
+        # prompts, provider credentials, or raw exception messages.
+        if admin_check is None:
+            raise HTTPException(status_code=503, detail="Image smoke status is unavailable")
+        try:
+            admin = admin_check(request)
+            if inspect.isawaitable(admin):
+                await admin
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=403, detail="Admin access denied")
+
+        try:
+            from database import get_db_cursor
+            with get_db_cursor(commit=False) as cur:
+                cur.execute(
+                    """
+                    SELECT status, request_id, provider, error_type,
+                           failure_stage, http_status_code, completed_at
+                    FROM zarry_image_smoke_test_lock
+                    WHERE lock_key = 'replicate-one-shot-v2'
+                    """
+                )
+                row = cur.fetchone()
+            if row is None:
+                return {"status": "not_run"}
+            if not isinstance(row, dict):
+                row = dict(row)
+            completed_at = row.get("completed_at")
+            return {
+                "status": row.get("status"),
+                "request_id": str(row["request_id"]) if row.get("request_id") else None,
+                "provider": row.get("provider"),
+                "error_type": row.get("error_type"),
+                "failure_stage": row.get("failure_stage"),
+                "http_status_code": row.get("http_status_code"),
+                "completed_at": completed_at.isoformat() if hasattr(completed_at, "isoformat") else completed_at,
+            }
+        except Exception as exc:
+            logger.error("One-shot image smoke status read failed (%s)", type(exc).__name__)
+            raise HTTPException(status_code=503, detail="Image smoke status is unavailable")
+
     @router.get("/admin/migration-status")
     async def admin_migration_status(request: Request):
         # The existing application admin gate is mandatory; this diagnostic
