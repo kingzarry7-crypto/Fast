@@ -95,12 +95,12 @@ class HuggingFaceImageProvider:
         self.client_factory = client_factory or self._default_client_factory
 
     @staticmethod
-    def _default_client_factory(*, api_key: str):
+    def _default_client_factory(*, api_key: str, provider: str):
         try:
             from huggingface_hub import InferenceClient
         except ImportError as exc:
             raise RuntimeError("huggingface_hub is not installed") from exc
-        return InferenceClient(api_key=api_key)
+        return InferenceClient(api_key=api_key, provider=provider)
 
     def is_configured(self) -> bool:
         return bool(
@@ -132,7 +132,7 @@ class HuggingFaceImageProvider:
 
         # Construct the local client before reserving; this performs no provider
         # request and avoids stranded budget if local setup fails.
-        client = self.client_factory(api_key=self.api_key)
+        client = self.client_factory(api_key=self.api_key, provider=self.provider)
 
         # Reserve before any billable provider call. Unknown outcomes retain the
         # reservation; only the published output tariff can settle it.
@@ -140,7 +140,7 @@ class HuggingFaceImageProvider:
         width_text, height_text = size.split("x", 1)
         width, height = int(width_text), int(height_text)
         generated = client.text_to_image(
-            prompt=prompt.strip(), model=self.model, provider=self.provider,
+            prompt=prompt.strip(), model=self.model,
             width=width, height=height,
         )
         actual = self.actual_cost_resolver(generated, self.model, size)
