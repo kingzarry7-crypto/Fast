@@ -384,7 +384,7 @@ export default function SettingsPage() {
                   {(kittySignal.symbol === "BTC/USD" || kittySignal.symbol === "BTC/USDT" || kittySignal.symbol === "XAU/USD") && (
                     <div className="mt-4 border-t border-cyan-500/10 pt-4">
                       <p className="text-[10px] leading-relaxed text-cyan-100/45">
-                        ZARRY explains the existing Kitty assessment using only these supplied facts. It cannot change Kitty's decision or place orders.
+                        ZARRY explains the existing Kitty assessment using only these supplied facts. It cannot change Kitty&apos;s decision or place orders.
                       </p>
                       <button
                         type="button"
