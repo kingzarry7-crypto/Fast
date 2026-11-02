@@ -40,11 +40,11 @@ class ZarryProxyTests(unittest.TestCase):
             "kitty_assessment": {"decision": "NO TRADE", "reason_codes": ["edge_not_validated"]},
         }
 
-    def valid_upstream(self, decision="NO TRADE"):
+    def valid_upstream(self, decision="NO TRADE", symbol="BTCUSD"):
         response = Mock()
         response.status_code = 200
         response.json.return_value = {
-            "symbol": "BTCUSD",
+            "symbol": symbol,
             "decision": decision,
             "summary": "This is an explanation-only account of Kitty's NO TRADE assessment.",
             "uncertainty": "The strategy has no validated net edge.",
@@ -65,6 +65,21 @@ class ZarryProxyTests(unittest.TestCase):
         self.assertEqual(kwargs["headers"]["Authorization"], "Bearer test-secret")
         self.assertEqual(kwargs["timeout"], 9)
         self.assertEqual(kwargs["json"]["kitty_assessment"]["decision"], "NO TRADE")
+
+    def test_proxy_supports_xauusd_and_preserves_kitty_no_trade(self):
+        self.payload["symbol"] = "XAUUSD"
+        self.payload["context"] = {
+            "close": 3900.0,
+            "rsi_14": 48.5,
+            "timeframe": "1h",
+        }
+        self.valid_upstream(symbol="XAUUSD")
+        response = self.client.post("/api/zarry/explain", json=self.payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["symbol"], "XAUUSD")
+        self.assertEqual(response.json()["decision"], "NO TRADE")
+        self.assertEqual(response.json()["mode"], "explanation_only")
+        self.assertEqual(self.upstream.call_args.kwargs["json"]["symbol"], "XAUUSD")
 
     def test_proxy_is_disabled_by_default(self):
         os.environ.pop("ZARRY_ENABLED", None)
