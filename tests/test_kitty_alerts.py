@@ -154,5 +154,24 @@ class KittyAlertNormalizationTests(unittest.TestCase):
         self.assertIn("model direction conflicts", result["reason"])
 
 
+    def test_watcher_requires_all_eight_timeframes_to_agree(self):
+        from kitty_alerts import normalize_mtf_watch_signal
+        timeframes = ("1d", "4h", "2h", "1h", "30m", "15m", "5m", "1m")
+        mtf = {"mtf_signal": "BUY", "require_all_timeframes": True}
+        mtf.update({tf: {"signal": "BUY"} for tf in timeframes})
+        result = normalize_mtf_watch_signal(
+            mtf, {"action": "EARLY - GOOD ENTRY WINDOW", "status": "EARLY", "score": 0})
+        self.assertEqual(result["signal"], "BUY")
+
+    def test_watcher_fails_closed_when_one_of_eight_timeframes_is_missing(self):
+        from kitty_alerts import normalize_mtf_watch_signal
+        timeframes = ("1d", "4h", "2h", "1h", "30m", "15m", "5m", "1m")
+        mtf = {"mtf_signal": "BUY", "require_all_timeframes": True}
+        mtf.update({tf: {"signal": "BUY"} for tf in timeframes if tf != "1m"})
+        result = normalize_mtf_watch_signal(
+            mtf, {"action": "EARLY - GOOD ENTRY WINDOW", "status": "EARLY", "score": 0})
+        self.assertEqual(result["signal"], "WAIT")
+        self.assertIn("1m", result["reason"])
+
 if __name__ == "__main__":
     unittest.main()
