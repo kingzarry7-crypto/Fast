@@ -1350,6 +1350,8 @@ def analyze_multi_timeframe(symbol):
         tf for tf in required_timeframes
         if not isinstance(raw_tfs.get(tf), dict)
         or raw_tfs[tf].get("success") is not True
+        or raw_tfs[tf].get("fresh") is not True
+        or not raw_tfs[tf].get("latest_candle_time")
         or not raw_tfs[tf].get("candles")
     ]
     if missing_timeframes:
