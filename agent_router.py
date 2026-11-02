@@ -323,8 +323,8 @@ def route_agent_request(message: str, user_id: str) -> Optional[Dict[str, Any]]:
                 candidate = kitty_context.get("candidate_signal") or "not available"
                 reply = (
                     f"The full multi-timeframe Market Agent could not complete {symbol} ({timeframe}): {detail[:180]}. "
-                    f"However, Kitty verified a live XAU/USD hourly candle at {show(kitty_context.get('latest_candle_time'))} "
-                    f"with close {show(kitty_context.get('price'))}. "
+                    f"However, Kitty verified a live XAU/USD hourly candle at {str(kitty_context.get('latest_candle_time') or 'not provided')} "
+                    f"with close {str(kitty_context.get('price') or 'not provided')}. "
                     f"Kitty's model candidate is {candidate} (confidence {confidence_text}); its approved output is "
                     f"{show(kitty_context.get('signal'), 'NO TRADE')}. "
                     "This is research-only: directional output is blocked because positive after-cost edge has not "
