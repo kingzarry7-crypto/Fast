@@ -383,7 +383,7 @@ export default function ChatWorkspace({
 
     // Keep image creation out of the crowded composer controls. Users can still
     // request it naturally by starting a message with "create/generate/draw an image".
-    const imageCreationIntent = /^(?:please\\s+)?(?:create|generate|make|draw)\\s+(?:an?\\s+)?(?:image|picture|illustration|artwork)\\b/i.test(text);
+    const imageCreationIntent = /^(?:please\s+)?(?:create|generate|make|draw)\s+(?:an?\s+)?(?:image|picture|illustration|artwork)\\b/i.test(text);
     if (!hasImage && imageCreationIntent) {
       await handleGenerateImage(text);
       return;
