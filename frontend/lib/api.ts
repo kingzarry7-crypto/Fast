@@ -852,7 +852,7 @@ export type ZarryKittyExplanation = {
   summary: string;
   uncertainty: string;
   cited_fields: string[];
-  numeric_claims: Array<number | string>;
+  numeric_claims: number[];
   authority: "KITTY_DETERMINISTIC_ENGINE";
   mode: "explanation_only";
 };
