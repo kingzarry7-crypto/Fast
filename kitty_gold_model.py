@@ -22,6 +22,53 @@ EXPECTED_ARCHITECTURE = [18, 64, 32, 3]
 CLASS_MAPPING = {"0": "SHORT", "1": "NO TRADE", "2": "LONG"}
 
 
+def evaluate_signal_gate(
+    best_class: str,
+    confidence: float,
+    margin: float,
+    edge_validated: bool,
+    minimum_confidence: float,
+    minimum_margin: float = 0.10,
+) -> dict[str, Any]:
+    """Explain the research signal decision without weakening any safety gate."""
+    candidate = str(best_class or "NO TRADE").strip().upper()
+    try:
+        confidence_value = float(confidence)
+        margin_value = float(margin)
+        threshold_value = float(minimum_confidence)
+        margin_threshold = float(minimum_margin)
+    except (TypeError, ValueError, OverflowError):
+        confidence_value = margin_value = threshold_value = margin_threshold = float("nan")
+
+    reason = "validated_research_candidate"
+    if candidate not in {"LONG", "SHORT", "NO TRADE"}:
+        reason = "invalid_model_class"
+    elif not all(math.isfinite(value) for value in (
+        confidence_value, margin_value, threshold_value, margin_threshold
+    )) or not (0.0 <= confidence_value <= 1.0 and 0.0 <= margin_value <= 1.0
+               and 0.0 <= threshold_value <= 1.0 and 0.0 <= margin_threshold <= 1.0):
+        reason = "invalid_signal_metrics"
+    elif not edge_validated:
+        reason = "holdout_edge_not_validated"
+    elif candidate == "NO TRADE":
+        reason = "model_predicted_no_trade"
+    elif confidence_value < threshold_value:
+        reason = "confidence_below_validated_threshold"
+    elif margin_value < margin_threshold:
+        reason = "probability_margin_below_minimum"
+
+    signal = candidate if reason == "validated_research_candidate" else "NO TRADE"
+    return {
+        "signal": signal,
+        "candidate_signal": candidate if candidate in {"LONG", "SHORT", "NO TRADE"} else "NO TRADE",
+        "signal_gate": reason,
+        "signal_block_reason": None if signal in {"LONG", "SHORT"} else reason,
+        "confidence_threshold": threshold_value if math.isfinite(threshold_value) else None,
+        "minimum_probability_margin": margin_threshold if math.isfinite(margin_threshold) else None,
+        "production_ready": False,
+    }
+
+
 def has_validated_edge(checkpoint: dict[str, Any]) -> bool:
     """Require explicit approval and sufficient positive after-cost holdout results."""
     metrics = checkpoint.get("test_metrics")
@@ -154,24 +201,24 @@ def predict_features(features: dict[str, float]) -> dict[str, Any]:
         minimum_confidence = float(checkpoint.get("recommended_min_confidence", 1.01))
     except (TypeError, ValueError, OverflowError):
         minimum_confidence = 1.01
-    signal = (
-        CLASS_MAPPING[str(best)]
-        if edge_validated and best != 1 and confidence >= minimum_confidence and margin >= 0.10
-        else "NO TRADE"
+    gate = evaluate_signal_gate(
+        best_class=CLASS_MAPPING[str(best)],
+        confidence=confidence,
+        margin=margin,
+        edge_validated=edge_validated,
+        minimum_confidence=minimum_confidence,
     )
     return {
         "model": "Kitty XAU/USD research candidate",
         "training_symbol": checkpoint["training_symbol"],
-        "signal": signal,
+        **gate,
         "class_prediction": CLASS_MAPPING[str(best)],
         "confidence": round(confidence, 6),
         "margin_over_second_class": round(margin, 6),
         "probabilities": {CLASS_MAPPING[str(i)]: round(float(probabilities[i]), 6) for i in range(3)},
         "best_epoch": checkpoint.get("best_epoch"),
         "signal_edge_validated": edge_validated,
-        "signal_block_reason": None if edge_validated else "Holdout diagnostics did not explicitly validate a positive net edge; directional signals are suppressed.",
         "research_only": True,
-        "production_ready": False,
         "trading_enabled": False,
         "automatic_order_execution_enabled": False,
         "warning": "Gold model inference is research-only and must pass walk-forward and paper-trading validation before use.",
