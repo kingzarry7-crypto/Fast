@@ -83,3 +83,5 @@ jobs:
         run: python -m unittest discover -s tests -p "test_market_eulerpool.py" -v
       - name: Test Kitty higher-timeframe readiness gate
         run: python -m unittest discover -s tests -p "test_kitty_htf_readiness.py" -v
+      - name: Test Trader dashboard paper API paths
+        run: python -m unittest discover -s tests -p "test_trader_dashboard_paper_api_paths.py" -v
