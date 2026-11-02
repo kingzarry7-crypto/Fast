@@ -451,6 +451,7 @@ def kitty_technical_signal(
                 # the authoritative signal remains the deterministic NO TRADE gate.
                 technical = _technical_signal(closed_candles, symbol, timeframe)
                 technical.update({
+                    "signal_type": "gold_ml_plus_rule_based_technical_research_only",
                     "prediction_mode": "research_only_hourly_model",
                     "prediction_available": True,
                     "prediction": prediction,
