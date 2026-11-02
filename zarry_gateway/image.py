@@ -104,6 +104,15 @@ class HuggingFaceImageProvider:
         # text_to_image(). Passing provider to the method raises TypeError.
         return InferenceClient(api_key=api_key, provider=provider)
 
+    def preflight(self) -> dict:
+        """Construct the local SDK client without provider dispatch or budget reservation."""
+        if not self.is_configured():
+            raise RuntimeError("Hugging Face image provider configuration is incomplete")
+        client = self.client_factory(api_key=self.api_key, provider=self.provider)
+        if not callable(getattr(client, "text_to_image", None)):
+            raise RuntimeError("Hugging Face client does not expose text_to_image")
+        return {"status": "ready", "provider": self.name, "client_constructed": True}
+
     def is_configured(self) -> bool:
         return bool(
             self.api_key and self.model == HF_ZIMAGE_MODEL
@@ -177,6 +186,15 @@ class HuggingFaceFirstImageProvider:
             getattr(huggingface_provider, "storage", None)
             or getattr(replicate_fallback, "storage", None)
         )
+
+    def preflight(self) -> dict:
+        """Preflight only HF; never invoke the billable fallback."""
+        if self.huggingface_provider is None:
+            raise RuntimeError("Hugging Face primary provider is unavailable")
+        preflight = getattr(self.huggingface_provider, "preflight", None)
+        if not callable(preflight):
+            raise RuntimeError("Hugging Face provider does not support local preflight")
+        return preflight()
 
     def generate(self, prompt: str, *, request_id, width: int, height: int) -> dict:
         hf_token_present = bool(

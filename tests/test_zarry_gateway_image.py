@@ -57,6 +57,23 @@ class ImageProviderTests(unittest.TestCase):
         self.assertEqual(client.calls[0]["height"], 1024)
         self.assertEqual(storage.saved[0][1], request_id)
 
+    def test_preflight_constructs_client_without_reserving_or_generating(self):
+        ledger, client = FakeLedger(), FakeClient()
+        calls = []
+        provider = HuggingFaceImageProvider(
+            api_key="hf_secret", model=HF_ZIMAGE_MODEL, provider="fal-ai", ledger=ledger,
+            cost_estimator=lambda model, size: "0.01",
+            actual_cost_resolver=lambda image, model, size: "0.01",
+            client_factory=lambda **kwargs: (calls.append(kwargs) or client),
+            storage=FakeStorage(),
+        )
+        result = provider.preflight()
+        self.assertEqual(result["status"], "ready")
+        self.assertTrue(result["client_constructed"])
+        self.assertEqual(calls, [{"api_key": "hf_secret", "provider": "fal-ai"}])
+        self.assertEqual(ledger.calls, [])
+        self.assertEqual(client.calls, [])
+
     def test_unknown_cost_fails_before_provider_dispatch(self):
         ledger, client = FakeLedger(), FakeClient()
         provider = HuggingFaceImageProvider(
