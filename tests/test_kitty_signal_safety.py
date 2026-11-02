@@ -77,6 +77,7 @@ class KittyGoldEndpointContractTests(unittest.TestCase):
         self.assertEqual(result["signal"], "NO TRADE")
         self.assertFalse(result["trading_enabled"])
         self.assertFalse(result["automatic_order_execution_enabled"])
+        self.assertIn("price", result)
         self.assertIsInstance(result["price"], (int, float))
         self.assertIsInstance(result["indicators"], dict)
         self.assertIsInstance(result["risk_levels"], dict)
