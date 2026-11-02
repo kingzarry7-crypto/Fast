@@ -1345,7 +1345,7 @@ def analyze_multi_timeframe(symbol):
 
     fresh = get_market_snapshot(symbol, "15m")
     raw_tfs = fresh.get("mtf_timeframes") or {}
-    required_timeframes = ("1d", "4h", "2h", "1h", "30m", "15m", "5m", "1m")
+    required_timeframes = ("1d", "4h", "2h", "1h", "30m", "15m", "5m")
     missing_timeframes = [
         tf for tf in required_timeframes
         if not isinstance(raw_tfs.get(tf), dict)
@@ -1402,7 +1402,7 @@ def analyze_multi_timeframe(symbol):
     result = {
         "symbol": symbol,
         "require_all_timeframes": True,
-        **{tf: channel_tf(tf) for tf in ("1d", "2h", "30m", "1m")},
+        **{tf: channel_tf(tf) for tf in ("1d", "2h", "30m")},
         "4h": channel_tf("4h"),
         "1h": channel_tf("1h"),
         "15m": tf15,
@@ -1461,8 +1461,8 @@ Primary Execution: 15M
 - Signal: {tf_5m.get('signal')} Trend: {tf_5m.get('trend')} RSI: {tf_5m.get('rsi',0):.1f}
 - Structure: {tf_5m.get('structure')} Strength: {tf_5m.get('strength')}
 
-Full timeframe context (all eight are mandatory confirmation inputs):
-{chr(10).join(f"{tf.upper()}: trend={mtf_data.get(tf, {}).get('trend')} signal={mtf_data.get(tf, {}).get('signal')} strength={mtf_data.get(tf, {}).get('strength')}" for tf in ("1d", "4h", "2h", "1h", "30m", "15m", "5m", "1m"))}
+Full timeframe context (all seven are mandatory confirmation inputs):
+{chr(10).join(f"{tf.upper()}: trend={mtf_data.get(tf, {}).get('trend')} signal={mtf_data.get(tf, {}).get('signal')} strength={mtf_data.get(tf, {}).get('strength')}" for tf in ("1d", "4h", "2h", "1h", "30m", "15m", "5m"))}
 
 MTF Consensus:
 - Bias: {mtf_data.get('mtf_bias')} Signal: {mtf_data.get('mtf_signal')} Strength: {mtf_data.get('mtf_strength')}
@@ -2369,7 +2369,7 @@ async def _kitty_telegram_signal_job_impl(context: ContextTypes.DEFAULT_TYPE, fo
     )
     for feed_symbol, analysis_symbol, label, model_module in assets:
         try:
-            # The model contract remains hourly. All eight timeframes are independent
+            # The model contract remains hourly. All seven agreed timeframes are independent
             # confirmation filters; they do not alter or retrain the model input.
             candles = await asyncio.to_thread(
                 get_candles, feed_symbol, timeframe="1h", outputsize=160
@@ -2471,11 +2471,11 @@ async def _kitty_telegram_signal_job_impl(context: ContextTypes.DEFAULT_TYPE, fo
                 f"Asset: <b>{html.escape(label)}</b>",
                 f"Decision: <b>{html.escape(safe['signal'])}</b>",
                 f"Kitty model candidate: <b>{html.escape(candidate)}</b> · Confidence: <b>{confidence * 100:.2f}%</b>",
-                "Scan: <b>every 15 minutes</b> · Setup: completed 15M · Confirmation: 1D / 4H / 2H / 1H / 30M / 15M / 5M / 1M",
+                "Scan: <b>every 15 minutes</b> · Setup: completed 15M · Confirmation: 1D / 4H / 2H / 1H / 30M / 15M / 5M",
                 f"Completed 15M setup candle: <code>{html.escape(candle_time)}</code> · Model candle: <code>{html.escape(model_candle_time)}</code>", "",
                 " · ".join(
                     f"{tf.upper()}: {html.escape(str(mtf.get(tf, {}).get('trend', 'UNKNOWN')))}"
-                    for tf in ("1d", "4h", "2h", "1h", "30m", "15m", "5m", "1m")
+                    for tf in ("1d", "4h", "2h", "1h", "30m", "15m", "5m")
                 ),
                 f"Decision reason: {html.escape(str(safe['reason']))}", "",
                 *(
