@@ -42,7 +42,7 @@ class SmokeGateTests(unittest.TestCase):
         }
 
         class Cursor:
-            def execute(self, query, params):
+            def execute(self, query, params=None):
                 self.query = query
                 self.params = params
 
@@ -50,7 +50,8 @@ class SmokeGateTests(unittest.TestCase):
                 return row
 
         @contextmanager
-        def cursor_context():
+        def cursor_context(commit=True):
+            self.assertFalse(commit)
             yield Cursor()
 
         fake_database = types.ModuleType("database")
