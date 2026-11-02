@@ -93,7 +93,9 @@ def _init_db() -> None:
                     quantity REAL NOT NULL,
                     avg_entry REAL NOT NULL,
                     mark_price REAL NOT NULL,
-                    updated_at TEXT NOT NULL
+                    updated_at TEXT NOT NULL,
+                    stop_loss REAL,
+                    take_profit REAL
                 );
                 CREATE TABLE IF NOT EXISTS kitty_multi_paper_cycles (
                     id TEXT PRIMARY KEY,
@@ -121,6 +123,12 @@ def _init_db() -> None:
                     UNIQUE(symbol, candle_time)
                 );
             """)
+            # Add risk columns to existing paper ledgers without deleting positions.
+            position_columns = {row["name"] for row in conn.execute("PRAGMA table_info(kitty_multi_paper_positions)").fetchall()}
+            if "stop_loss" not in position_columns:
+                conn.execute("ALTER TABLE kitty_multi_paper_positions ADD COLUMN stop_loss REAL")
+            if "take_profit" not in position_columns:
+                conn.execute("ALTER TABLE kitty_multi_paper_positions ADD COLUMN take_profit REAL")
             now = datetime.now(timezone.utc).isoformat()
             conn.execute("INSERT OR IGNORE INTO kitty_multi_paper_account(id,cash,updated_at) VALUES(1,?,?)", (STARTING_CASH, now))
             conn.execute(
@@ -325,36 +333,93 @@ def run_cycle(symbol: str | None = None) -> dict[str, Any]:
                     continue
                 account = conn.execute("SELECT cash FROM kitty_multi_paper_account WHERE id=1").fetchone()
                 cash = float(account["cash"])
-                pos = conn.execute("SELECT quantity,avg_entry FROM kitty_multi_paper_positions WHERE symbol=?", (market_symbol,)).fetchone()
+                pos = conn.execute("SELECT * FROM kitty_multi_paper_positions WHERE symbol=?", (market_symbol,)).fetchone()
                 quantity = float(pos["quantity"]) if pos else 0.0
                 avg_entry = float(pos["avg_entry"]) if pos else 0.0
+                stop_loss = float(pos["stop_loss"]) if pos and pos["stop_loss"] is not None else None
+                take_profit = float(pos["take_profit"]) if pos and pos["take_profit"] is not None else None
                 side = None
                 trade_qty = 0.0
                 notional = 0.0
                 fee = 0.0
-                if signal["signal"] == "BUY" and quantity <= 1e-12:
-                    notional = min(cfg["max_order_notional_usd"], max(0.0, cash) / (1.0 + FEE_RATE))
-                    if notional >= 1.0:
-                        trade_qty = notional / price
-                        fee = notional * FEE_RATE
-                        side = "BUY"
-                        cash -= notional + fee
-                        quantity = trade_qty
-                        avg_entry = price
-                elif signal["signal"] == "SELL" and quantity > 1e-12:
+                execution_price = price
+                exit_reason = None
+                risk_budget_usd = None
+
+                # Enforce stored long-position exits on every completed candle.
+                # If both stop and target trade inside one candle, assume stop first.
+                if quantity > 1e-12 and stop_loss is not None and take_profit is not None:
+                    last_candle = closed[-1]
+                    candle_low = float(last_candle["low"])
+                    candle_high = float(last_candle["high"])
+                    candle_open = float(last_candle["open"])
+                    if candle_low <= stop_loss:
+                        side = "SELL"
+                        exit_reason = "stop_loss"
+                        execution_price = min(stop_loss, candle_open)
+                    elif candle_high >= take_profit:
+                        side = "SELL"
+                        exit_reason = "take_profit"
+                        execution_price = take_profit
+
+                if side is None and signal["signal"] == "BUY" and quantity <= 1e-12:
+                    levels = signal.get("risk_levels") or {}
+                    proposed_stop = levels.get("stop_reference")
+                    proposed_target = levels.get("target_1_reference")
+                    valid_levels = False
+                    try:
+                        proposed_stop = float(proposed_stop)
+                        proposed_target = float(proposed_target)
+                        valid_levels = (
+                            math.isfinite(proposed_stop) and math.isfinite(proposed_target)
+                            and 0 < proposed_stop < price < proposed_target
+                        )
+                    except (TypeError, ValueError):
+                        valid_levels = False
+                    if valid_levels:
+                        # Size from a 0.5% starting-equity risk budget, then apply
+                        # the existing notional and available-cash caps.
+                        risk_budget_usd = STARTING_CASH * 0.005
+                        risk_notional = risk_budget_usd * price / (price - proposed_stop)
+                        cash_cap = max(0.0, cash) / (1.0 + FEE_RATE)
+                        notional = min(cfg["max_order_notional_usd"], cash_cap, risk_notional)
+                        if notional >= 1.0:
+                            trade_qty = notional / price
+                            fee = notional * FEE_RATE
+                            side = "BUY"
+                            cash -= notional + fee
+                            quantity = trade_qty
+                            avg_entry = price
+                            stop_loss = proposed_stop
+                            take_profit = proposed_target
+                if side is None and signal["signal"] == "SELL" and quantity > 1e-12:
                     side = "SELL"
                     trade_qty = quantity
                     notional = trade_qty * price
                     fee = notional * FEE_RATE
+                    exit_reason = "signal_exit"
+                    quantity = 0.0
+                    avg_entry = 0.0
+                    stop_loss = None
+                    take_profit = None
+
+                if side == "SELL":
+                    trade_qty = quantity if exit_reason in {"stop_loss", "take_profit"} else trade_qty
+                    notional = trade_qty * execution_price
+                    fee = notional * FEE_RATE
                     cash += notional - fee
                     quantity = 0.0
                     avg_entry = 0.0
+                    stop_loss = None
+                    take_profit = None
                 now = datetime.now(timezone.utc).isoformat()
                 cycle_status = "simulated_order" if side else "no_action"
                 details = {
                     "signal": signal,
                     "execution": "isolated SQLite paper ledger; no exchange calls",
                     "fee_rate": FEE_RATE,
+                    "exit_reason": exit_reason,
+                    "risk_budget_usd": risk_budget_usd,
                     "cash_after": round(cash, 6),
                 }
                 conn.execute(
@@ -364,13 +429,14 @@ def run_cycle(symbol: str | None = None) -> dict[str, Any]:
                 if side:
                     conn.execute(
                         "INSERT INTO kitty_multi_paper_orders(id,symbol,candle_time,side,quantity,price,notional_usd,fee_usd,cash_after,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                        (str(uuid.uuid4()), market_symbol, candle_time, side, trade_qty, price, notional, fee, cash, now),
+                        (str(uuid.uuid4()), market_symbol, candle_time, side, trade_qty, execution_price if side == "SELL" else price, notional, fee, cash, now),
                     )
                 conn.execute(
-                    """INSERT INTO kitty_multi_paper_positions(symbol,quantity,avg_entry,mark_price,updated_at)
-                       VALUES(?,?,?,?,?) ON CONFLICT(symbol) DO UPDATE SET quantity=excluded.quantity,
-                       avg_entry=excluded.avg_entry,mark_price=excluded.mark_price,updated_at=excluded.updated_at""",
-                    (market_symbol, quantity, avg_entry, price, now),
+                    """INSERT INTO kitty_multi_paper_positions(symbol,quantity,avg_entry,mark_price,updated_at,stop_loss,take_profit)
+                       VALUES(?,?,?,?,?,?,?) ON CONFLICT(symbol) DO UPDATE SET quantity=excluded.quantity,
+                       avg_entry=excluded.avg_entry,mark_price=excluded.mark_price,updated_at=excluded.updated_at,
+                       stop_loss=excluded.stop_loss,take_profit=excluded.take_profit""",
+                    (market_symbol, quantity, avg_entry, price, now, stop_loss, take_profit),
                 )
                 conn.execute("UPDATE kitty_multi_paper_account SET cash=?,updated_at=? WHERE id=1", (cash, now))
                 conn.commit()
@@ -378,6 +444,8 @@ def run_cycle(symbol: str | None = None) -> dict[str, Any]:
                     "symbol": market_symbol, "status": cycle_status, "signal": signal["signal"],
                     "side": side, "quantity": round(trade_qty, 10), "price": price,
                     "notional_usd": round(notional, 2), "fee_usd": round(fee, 4),
+                    "execution_price": execution_price if side == "SELL" else price,
+                    "exit_reason": exit_reason, "stop_loss": stop_loss, "take_profit": take_profit,
                     "candle_time": candle_time, "cash_after": round(cash, 2),
                 })
             except sqlite3.IntegrityError:
