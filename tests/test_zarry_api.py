@@ -14,7 +14,7 @@ class ZarryProxyTests(unittest.TestCase):
     def setUp(self):
         self.env = patch.dict(os.environ, {
             "ZARRY_ENABLED": "true",
-            "ZARRY_SERVICE_URL": "https://zarry.internal",
+            "ZARRY_SERVICE_URL": "https://zarry-service.up.railway.app",
             "ZARRY_API_KEY": "test-secret",
             "ZARRY_TIMEOUT_SECONDS": "9",
         })
@@ -165,6 +165,34 @@ class ZarryProxyTests(unittest.TestCase):
         self.assertEqual(limited.headers["Retry-After"], "60")
         self.assertEqual(self.upstream.call_count, 2)
 
+    def test_proxy_rejects_arbitrary_https_host(self):
+        os.environ["ZARRY_SERVICE_URL"] = "https://attacker.example"
+        self.valid_upstream()
+        response = self.client.post("/api/zarry/explain", json=self.payload)
+        self.assertEqual(response.status_code, 503)
+        self.upstream.assert_not_called()
+
+    def test_proxy_rejects_url_credentials_and_path(self):
+        for url in (
+            "https://user:pass@zarry-service.up.railway.app",
+            "https://zarry-service.up.railway.app/proxy",
+            "https://zarry-service.up.railway.app?target=attacker",
+        ):
+            with self.subTest(url=url):
+                os.environ["ZARRY_SERVICE_URL"] = url
+                self.valid_upstream()
+                response = self.client.post("/api/zarry/explain", json=self.payload)
+                self.assertEqual(response.status_code, 503)
+                self.upstream.assert_not_called()
+
+    def test_proxy_allows_exact_configured_custom_https_host(self):
+        os.environ["ZARRY_SERVICE_URL"] = "https://zarry.example.com"
+        os.environ["ZARRY_ALLOWED_HOSTS"] = "zarry.example.com"
+        self.valid_upstream()
+        response = self.client.post("/api/zarry/explain", json=self.payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.upstream.call_args.args[0], "https://zarry.example.com/v1/explain")
+
     def test_proxy_rejects_plain_http_outside_railway_private_network(self):
         os.environ["ZARRY_SERVICE_URL"] = "http://untrusted.example"
         self.valid_upstream()
@@ -174,11 +202,11 @@ class ZarryProxyTests(unittest.TestCase):
 
     def test_proxy_supports_existing_zarry_api_url_variable(self):
         os.environ.pop("ZARRY_SERVICE_URL", None)
-        os.environ["ZARRY_API_URL"] = "https://zarry.internal"
+        os.environ["ZARRY_API_URL"] = "https://zarry-service.up.railway.app"
         self.valid_upstream()
         response = self.client.post("/api/zarry/explain", json=self.payload)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(self.upstream.call_args.args[0], "https://zarry.internal/v1/explain")
+        self.assertEqual(self.upstream.call_args.args[0], "https://zarry-service.up.railway.app/v1/explain")
 
     def test_proxy_rejects_unconfigured_service_credentials(self):
         os.environ.pop("ZARRY_API_KEY", None)
