@@ -70,13 +70,6 @@ function money(value?: number) {
     ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value)
     : "—";
 }
-function signalLabel(row?: SignalRow) {
-  if (!row || row.status !== "available" || !row.completed_candle_time) return "WAIT / NO TRADE";
-  const stamp = Date.parse(row.completed_candle_time);
-  if (!Number.isFinite(stamp) || Date.now() - stamp > 3 * 60 * 60 * 1000 || stamp > Date.now() + 5 * 60 * 1000) return "WAIT / NO TRADE";
-  const value = String(row.signal?.signal || "").toUpperCase().replaceAll("_", " ");
-  return ["BUY", "SELL", "NO TRADE"].includes(value) ? value : "WAIT / NO TRADE";
-}
 function signalClass(value: string) {
   if (value === "BUY") return "border-emerald-400/30 bg-emerald-400/10 text-emerald-200";
   if (value === "SELL") return "border-rose-400/30 bg-rose-400/10 text-rose-200";
@@ -238,7 +231,7 @@ export default function TraderPage() {
                     </div>
                     {row?.signal?.reasons?.length ? <ul className="mt-3 space-y-1 text-xs text-slate-300/75">{row.signal.reasons.map((reason, index) => <li key={index}>• {reason}</li>)}</ul> : null}
                   </div>
-                  <p className="mt-4 text-xs leading-relaxed text-slate-400">{mtf?.error || !mtfRow ? "MTF analysis unavailable. Kitty defaults to WAIT / NO TRADE when market data or confirmation is missing." : "MTF setup comes from Kitty's existing market-analysis engine. It is a technical plan, not a profitability guarantee; this page never submits broker orders."}</p>
+                  <p className="mt-4 text-xs leading-relaxed text-slate-400">{mtf?.error || mtfRow?.error || !mtfRow ? "MTF analysis unavailable. Kitty defaults to WAIT / NO TRADE when market data or confirmation is missing." : "MTF setup comes from Kitty's existing market-analysis engine. It is a technical plan, not a profitability guarantee; this page never submits broker orders."}</p>
                 </article>;
               })}
             </div>
