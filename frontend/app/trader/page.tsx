@@ -113,11 +113,15 @@ export default function TraderPage() {
         if (!r.ok) throw new Error(data.detail || "Kitty research candidates unavailable");
         return data as { results?: SignalRow[] };
       }),
-      Promise.all(["BTC/USD", "XAU/USD"].map(async (symbol) => {
-        const r = await fetch(`/api/markets/${symbol}?timeframe=15m`, { credentials: "include", cache: "no-store" });
-        const data = await r.json();
-        if (!r.ok) throw new Error(data.detail || `Kitty MTF analysis unavailable for ${symbol}`);
-        return { symbol, ...(data as { status?: string; market?: MtfRow["market"] }) } as MtfRow;
+      Promise.all(["BTC/USD", "XAU/USD"].map(async (symbol): Promise<MtfRow> => {
+        try {
+          const r = await fetch(`/api/markets/${symbol}?timeframe=15m`, { credentials: "include", cache: "no-store" });
+          const data = await r.json();
+          if (!r.ok) return { symbol, error: data.detail || `Kitty MTF analysis unavailable for ${symbol}` };
+          return { symbol, ...(data as { status?: string; market?: MtfRow["market"] }) };
+        } catch (err) {
+          return { symbol, error: err instanceof Error ? err.message : "MTF request failed" };
+        }
       })),
     ]);
     if (brokerResult.status === "fulfilled") setBroker(brokerResult.value);
@@ -204,8 +208,8 @@ export default function TraderPage() {
                 return <article key={symbol} className={panel() + " p-5"}>
                   <div className="flex items-start justify-between gap-3"><div><p className="text-xs tracking-widest text-slate-400">KITTY MULTI-TIMEFRAME SETUP</p><h3 className="mt-1 text-2xl font-semibold">{symbol}</h3><p className="mt-1 text-[10px] text-slate-500">4H trend · 1H direction · 15M setup · 5M entry</p></div><span className={"rounded-lg border px-3 py-1.5 text-xs font-semibold " + signalClass(label)}>{label}</span></div>
                   <div className="mt-5 grid grid-cols-2 gap-3">
-                    <div className="rounded-xl bg-black/20 p-3"><p className="text-[10px] tracking-widest text-slate-500">REFERENCE PRICE</p><p className="mt-2 text-lg">{typeof row?.signal?.price === "number" ? row.signal.price.toLocaleString(undefined, { maximumFractionDigits: 5 }) : "—"}</p></div>
-                    <div className="rounded-xl bg-black/20 p-3"><p className="text-[10px] tracking-widest text-slate-500">COMPLETED CANDLE</p><p className="mt-2 text-xs text-slate-200">{row?.completed_candle_time ? new Date(row.completed_candle_time).toLocaleString() : "No fresh data"}</p></div>
+                    <div className="rounded-xl bg-black/20 p-3"><p className="text-[10px] tracking-widest text-slate-500">MTF REFERENCE PRICE</p><p className="mt-2 text-lg">{typeof mtf?.price === "number" ? mtf.price.toLocaleString(undefined, { maximumFractionDigits: 5 }) : "—"}</p></div>
+                    <div className="rounded-xl bg-black/20 p-3"><p className="text-[10px] tracking-widest text-slate-500">1H RESEARCH CANDLE</p><p className="mt-2 text-xs text-slate-200">{row?.completed_candle_time ? new Date(row.completed_candle_time).toLocaleString() : "No fresh data"}</p></div>
                   </div>
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     <div className="rounded-xl bg-black/20 p-3"><p className="text-[10px] tracking-widest text-slate-500">MTF ENTRY</p><p className="mt-2 text-sm">{formatLevel(mtf?.entry)}</p></div>
