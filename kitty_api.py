@@ -446,20 +446,25 @@ def kitty_technical_signal(
             if gold_status.get("available"):
                 features = _kitty_features(closed_candles)
                 prediction = gold_model.predict_features(features)
-                return {
-                    "symbol": symbol,
-                    "timeframe": timeframe,
-                    "signal": prediction["signal"],
-                    "signal_type": "gold_specific_research_ml_model",
+                # Keep the response shape shared with the Settings UI and BTC
+                # signal path. The ML candidate is additional research context;
+                # the authoritative signal remains the deterministic NO TRADE gate.
+                technical = _technical_signal(closed_candles, symbol, timeframe)
+                technical.update({
                     "prediction_mode": "research_only_hourly_model",
                     "prediction_available": True,
                     "prediction": prediction,
                     "model_status": gold_status,
-                    "completed_candle_time": _validate_candles(closed_candles, timeframe, symbol),
+                    "gold_model_candidate_signal": str(prediction.get("class_prediction") or "UNKNOWN").upper(),
+                    "gold_model_confidence": prediction.get("confidence"),
+                    "gold_model_signal_edge_validated": prediction.get("signal_edge_validated") is True,
+                    "gold_model_signal_block_reason": prediction.get("signal_block_reason"),
+                    "signal": "NO TRADE",
                     "trading_enabled": False,
                     "automatic_order_execution_enabled": False,
-                    "warning": "Gold ML output is research-only; the signal gate blocks BUY/SELL until a model has validated edge and explicit approval.",
-                }
+                    "warning": "Gold ML candidate is research-only. Kitty's approved signal remains NO TRADE because positive after-cost edge has not been validated; do not trade this candidate.",
+                })
+                return technical
             technical = _technical_signal(closed_candles, symbol, timeframe)
             technical["prediction_mode"] = "rule_based_technical_confluence"
             technical["gold_ml_model_available"] = False
