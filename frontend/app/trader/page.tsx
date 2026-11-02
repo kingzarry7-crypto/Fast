@@ -115,7 +115,7 @@ export default function TraderPage() {
       }),
       Promise.all(["BTC/USD", "XAU/USD"].map(async (symbol): Promise<MtfRow> => {
         try {
-          const r = await fetch(`/api/markets/${symbol}?timeframe=15m`, { credentials: "include", cache: "no-store" });
+          const r = await fetch(`/api/markets/${encodeURIComponent(symbol)}?timeframe=15m`, { credentials: "include", cache: "no-store" });
           const data = await r.json();
           if (!r.ok) return { symbol, error: data.detail || `Kitty MTF analysis unavailable for ${symbol}` };
           return { symbol, ...(data as { status?: string; market?: MtfRow["market"] }) };
