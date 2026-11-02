@@ -187,6 +187,15 @@ class HuggingFaceFirstImageProvider:
             or getattr(replicate_fallback, "storage", None)
         )
 
+    def preflight(self) -> dict:
+        """Preflight only HF; never invoke the billable fallback."""
+        if self.huggingface_provider is None:
+            raise RuntimeError("Hugging Face primary provider is unavailable")
+        preflight = getattr(self.huggingface_provider, "preflight", None)
+        if not callable(preflight):
+            raise RuntimeError("Hugging Face provider does not support local preflight")
+        return preflight()
+
     def generate(self, prompt: str, *, request_id, width: int, height: int) -> dict:
         hf_token_present = bool(
             getattr(self.huggingface_provider, "api_key", "").strip()
