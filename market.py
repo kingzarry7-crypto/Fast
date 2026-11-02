@@ -2154,6 +2154,25 @@ def fetch_mtf_candles(symbol: str) -> Dict[str, Any]:
             results[tf]={"success": False,"candles": [],"error": str(e)}
     return results
 
+def required_higher_timeframes_ready(mtf_analyses: Dict[str, Dict]) -> bool:
+    """Return true only when both 4H and 1H have usable directional context.
+
+    Neutral is a valid analysed state; missing, failed, errored, or unknown
+    higher-timeframe data must never be interpreted as permission to trade.
+    """
+    if not isinstance(mtf_analyses, dict):
+        return False
+    for timeframe in ("4h", "1h"):
+        analysis = mtf_analyses.get(timeframe)
+        if not isinstance(analysis, dict):
+            return False
+        if analysis.get("success") is False or analysis.get("error"):
+            return False
+        if analysis.get("trend") not in ("BULLISH", "BEARISH", "NEUTRAL"):
+            return False
+    return True
+
+
 def calculate_mtf_bias(mtf_analyses: Dict[str, Dict]) -> Dict[str, Any]:
     score=0.0; total_weight=0.0; trends: Dict[str,str]={}; successful_tfs: List[str]=[]
     for tf,weight in MTF_WEIGHTS.items():
@@ -2363,7 +2382,10 @@ def _analyze_market_fresh(symbol, timeframe="15m"):
     setup_strength=min(100,max(0,int(raw_strength)))
     signal="WAIT"; trigger_condition=None
     news_blocks=(news_risk=="EXTREME" and not (mtf.get("mtf_score",50)>=95 or mtf.get("mtf_score",50)<=5))
-    if not news_blocks:
+    htf_ready=required_higher_timeframes_ready(mtf_analyses)
+    if not htf_ready:
+        trigger_condition="4H/1H higher-timeframe data unavailable or invalid - WAIT until both are verified"
+    elif not news_blocks:
         if bullish_score>=60 and bullish_score>=bearish_score+15:
             if mtf.get("mtf_score",50)>=55 and mtf.get("htf_trend")!="BEARISH":
                 if not late_entry_data.get("late_entry") or late_entry_data.get("score",0)<70:

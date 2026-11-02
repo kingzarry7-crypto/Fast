@@ -81,3 +81,5 @@ jobs:
           python -m unittest discover -s tests -p "test_market_empty_fallback.py" -v
       - name: Test Eulerpool Gold reference-price fallback
         run: python -m unittest discover -s tests -p "test_market_eulerpool.py" -v
+      - name: Test Kitty higher-timeframe readiness gate
+        run: python -m unittest discover -s tests -p "test_kitty_htf_readiness.py" -v
