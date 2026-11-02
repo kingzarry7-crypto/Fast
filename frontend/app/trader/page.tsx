@@ -40,6 +40,17 @@ type SignalRow = {
   model_validated_for_market?: boolean;
   error?: string;
 };
+type MtfRow = {
+  symbol?: string;
+  status?: string;
+  market?: {
+    signal?: string; price?: number; confidence?: number; strength?: number; trend?: string;
+    entry?: number | string | Record<string, unknown> | null;
+    stop_loss?: number | null; tp1?: number | null; tp2?: number | null; tp3?: number | null;
+    reasons?: string[]; mtf?: unknown; structure?: string; volatility?: string; error?: string;
+  };
+  error?: string;
+};
 type PaperStatus = {
   mode?: string;
   enabled?: boolean;
@@ -71,6 +82,12 @@ function signalClass(value: string) {
   if (value === "SELL") return "border-rose-400/30 bg-rose-400/10 text-rose-200";
   return "border-amber-300/25 bg-amber-300/5 text-amber-100";
 }
+function formatLevel(value?: number | string | Record<string, unknown> | null) {
+  if (typeof value === "number" && Number.isFinite(value)) return value.toLocaleString(undefined, { maximumFractionDigits: 5 });
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") return Object.values(value).filter((item) => typeof item === "string" || typeof item === "number").join(" – ") || "—";
+  return "—";
+}
 function panel() {
   return "rounded-2xl border border-cyan-400/15 bg-[#07111f]/85 shadow-[0_18px_60px_rgba(0,0,0,0.18)]";
 }
@@ -79,6 +96,7 @@ export default function TraderPage() {
   const [broker, setBroker] = useState<CTraderStatus | null>(null);
   const [paper, setPaper] = useState<PaperStatus | null>(null);
   const [signals, setSignals] = useState<SignalRow[]>([]);
+  const [mtfSignals, setMtfSignals] = useState<MtfRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -86,7 +104,7 @@ export default function TraderPage() {
   const refresh = useCallback(async () => {
     setLoading(true);
     setError("");
-    const [brokerResult, paperResult, signalsResult] = await Promise.allSettled([
+    const [brokerResult, paperResult, signalsResult, mtfResult] = await Promise.allSettled([
       fetch("/api/ctrader/status", { credentials: "include", cache: "no-store" }).then(async (r) => {
         const data = await r.json();
         if (!r.ok) throw new Error(data.detail || "Could not verify cTrader status");
@@ -99,9 +117,15 @@ export default function TraderPage() {
       }),
       fetch("/api/trader/paper/signals?symbols=BTC%2FUSD%2CXAU%2FUSD&timeframe=1h", { credentials: "include", cache: "no-store" }).then(async (r) => {
         const data = await r.json();
-        if (!r.ok) throw new Error(data.detail || "Kitty signals unavailable");
+        if (!r.ok) throw new Error(data.detail || "Kitty research candidates unavailable");
         return data as { results?: SignalRow[] };
       }),
+      Promise.all(["BTC/USD", "XAU/USD"].map(async (symbol) => {
+        const r = await fetch(`/api/markets/${symbol}?timeframe=15m`, { credentials: "include", cache: "no-store" });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || `Kitty MTF analysis unavailable for ${symbol}`);
+        return { symbol, ...(data as { status?: string; market?: MtfRow["market"] }) } as MtfRow;
+      })),
     ]);
     if (brokerResult.status === "fulfilled") setBroker(brokerResult.value);
     else { setBroker(null); setError((old) => old || (brokerResult.reason instanceof Error ? brokerResult.reason.message : "cTrader status unavailable")); }
@@ -109,7 +133,9 @@ export default function TraderPage() {
     else setPaper(null);
     if (signalsResult.status === "fulfilled") setSignals(signalsResult.value.results || []);
     else setSignals([]);
-    if (paperResult.status === "rejected" && signalsResult.status === "rejected") {
+    if (mtfResult.status === "fulfilled") setMtfSignals(mtfResult.value || []);
+    else { setMtfSignals([]); setError((old) => old || (mtfResult.reason instanceof Error ? mtfResult.reason.message : "Kitty MTF analysis unavailable")); }
+    if (paperResult.status === "rejected" && signalsResult.status === "rejected" && mtfResult.status === "rejected") {
       setError((old) => old || "Kitty and paper-trading endpoints are unavailable. Check the Railway API deployment and sign-in session.");
     }
     setLoading(false);
@@ -179,13 +205,23 @@ export default function TraderPage() {
             <div className="grid gap-4 md:grid-cols-2">
               {markets.map((symbol) => {
                 const row = signals.find((item) => item.symbol === symbol);
-                const label = signalLabel(row);
+                const mtfRow = mtfSignals.find((item) => item.symbol === symbol);
+                const mtf = mtfRow?.market;
+                const label = mtf && !mtf.error ? String(mtf.signal || "WAIT").toUpperCase() : "WAIT / NO TRADE";
                 return <article key={symbol} className={panel() + " p-5"}>
-                  <div className="flex items-start justify-between gap-3"><div><p className="text-xs tracking-widest text-slate-400">MARKET</p><h3 className="mt-1 text-2xl font-semibold">{symbol}</h3></div><span className={"rounded-lg border px-3 py-1.5 text-xs font-semibold " + signalClass(label)}>{label}</span></div>
+                  <div className="flex items-start justify-between gap-3"><div><p className="text-xs tracking-widest text-slate-400">KITTY MULTI-TIMEFRAME SETUP</p><h3 className="mt-1 text-2xl font-semibold">{symbol}</h3><p className="mt-1 text-[10px] text-slate-500">4H trend · 1H direction · 15M setup · 5M entry</p></div><span className={"rounded-lg border px-3 py-1.5 text-xs font-semibold " + signalClass(label)}>{label}</span></div>
                   <div className="mt-5 grid grid-cols-2 gap-3">
                     <div className="rounded-xl bg-black/20 p-3"><p className="text-[10px] tracking-widest text-slate-500">REFERENCE PRICE</p><p className="mt-2 text-lg">{typeof row?.signal?.price === "number" ? row.signal.price.toLocaleString(undefined, { maximumFractionDigits: 5 }) : "—"}</p></div>
                     <div className="rounded-xl bg-black/20 p-3"><p className="text-[10px] tracking-widest text-slate-500">COMPLETED CANDLE</p><p className="mt-2 text-xs text-slate-200">{row?.completed_candle_time ? new Date(row.completed_candle_time).toLocaleString() : "No fresh data"}</p></div>
                   </div>
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <div className="rounded-xl bg-black/20 p-3"><p className="text-[10px] tracking-widest text-slate-500">MTF ENTRY</p><p className="mt-2 text-sm">{formatLevel(mtf?.entry)}</p></div>
+                    <div className="rounded-xl bg-black/20 p-3"><p className="text-[10px] tracking-widest text-slate-500">STOP LOSS</p><p className="mt-2 text-sm">{formatLevel(mtf?.stop_loss)}</p></div>
+                    <div className="rounded-xl bg-black/20 p-3"><p className="text-[10px] tracking-widest text-slate-500">TARGET 1</p><p className="mt-2 text-sm">{formatLevel(mtf?.tp1)}</p></div>
+                    <div className="rounded-xl bg-black/20 p-3"><p className="text-[10px] tracking-widest text-slate-500">TARGET 2</p><p className="mt-2 text-sm">{formatLevel(mtf?.tp2)}</p></div>
+                  </div>
+                  <p className="mt-3 text-xs leading-relaxed text-slate-400">{mtf?.trend ? `MTF bias: ${mtf.trend}` : "MTF bias unavailable"}{mtf?.structure ? ` · Structure: ${mtf.structure}` : ""}{mtf?.strength != null ? ` · Setup strength: ${mtf.strength}` : ""}</p>
+                  {mtf?.reasons?.length ? <ul className="mt-3 space-y-1 text-xs text-slate-300/75">{mtf.reasons.slice(0, 5).map((reason, index) => <li key={index}>• {reason}</li>)}</ul> : null}
                   <div className="mt-4 rounded-xl border border-cyan-300/15 bg-cyan-300/5 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-[10px] font-semibold tracking-[0.2em] text-cyan-200/70">DIRECTIONAL RESEARCH CANDIDATE</p>
@@ -202,7 +238,7 @@ export default function TraderPage() {
                     </div>
                     {row?.signal?.reasons?.length ? <ul className="mt-3 space-y-1 text-xs text-slate-300/75">{row.signal.reasons.map((reason, index) => <li key={index}>• {reason}</li>)}</ul> : null}
                   </div>
-                  <p className="mt-4 text-xs leading-relaxed text-slate-400">{row?.status === "available" ? "Approval status: NO TRADE. Candidate direction and ATR references are research-only until this exact strategy passes independent after-cost validation. No orders are placed." : "Signal unavailable or stale. Defaulting to WAIT / NO TRADE."}</p>
+                  <p className="mt-4 text-xs leading-relaxed text-slate-400">{mtf?.error || !mtfRow ? "MTF analysis unavailable. Kitty defaults to WAIT / NO TRADE when market data or confirmation is missing." : "MTF setup comes from Kitty's existing market-analysis engine. It is a technical plan, not a profitability guarantee; this page never submits broker orders."}</p>
                 </article>;
               })}
             </div>
