@@ -79,6 +79,7 @@ export default function ChatWorkspace({
   const [capability] = useState("AI");
   const [attached, setAttached] = useState<AttachedImage | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
+  const [generatingImage, setGeneratingImage] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [voicePanelOpen, setVoicePanelOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
@@ -393,6 +394,48 @@ export default function ChatWorkspace({
     }
   };
 
+  const handleGenerateImage = async () => {
+    const prompt = input.trim();
+    if (!prompt || sending || generatingImage) {
+      if (!prompt) setAttachError("Describe the image you want ZARRY to create first.");
+      return;
+    }
+    setGeneratingImage(true);
+    setAttachError(null);
+    setInput("");
+    const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    setMessages((previous) => [...previous, {
+      id: "image-prompt-" + Date.now(),
+      role: "user",
+      text: prompt,
+      timestamp,
+      status: "IMAGE GENERATION REQUEST",
+    }]);
+    try {
+      const result = await api.generateAssistantImage(prompt);
+      setMessages((previous) => [...previous, {
+        id: "image-result-" + result.request_id,
+        role: "assistant",
+        text: "Here is the image I generated for your prompt.",
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        status: "IMAGE GENERATED • " + result.provider,
+        imagePreviewUrl: result.image_url,
+      }]);
+    } catch (generationError) {
+      const message = generationError instanceof Error ? generationError.message : "Image generation failed. Please try again.";
+      setAttachError(message);
+      setMessages((previous) => [...previous, {
+        id: "image-error-" + Date.now(),
+        role: "assistant",
+        text: message,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        status: "IMAGE GENERATION FAILED",
+      }]);
+    } finally {
+      setGeneratingImage(false);
+    }
+  };
+
   useEffect(() => {
     return () => {
       stopListening();
@@ -703,6 +746,25 @@ export default function ChatWorkspace({
               onChange={handleFileInputChange}
               aria-label="Choose an image to upload"
             />
+
+            <button
+              type="button"
+              onClick={() => void handleGenerateImage()}
+              disabled={sending || generatingImage || !input.trim()}
+              className="mb-0.5 flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-violet-400/25 px-3 text-[11px] font-medium text-violet-200 transition hover:border-violet-300/50 hover:bg-violet-300/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
+              title="Generate an image from your prompt"
+              aria-label="Generate image"
+            >
+              {generatingImage ? (
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-violet-200/30 border-t-violet-200" aria-hidden="true" />
+              ) : (
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-4 w-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1" />
+                  <circle cx="12" cy="12" r="4" />
+                </svg>
+              )}
+              <span>{generatingImage ? "Creating" : "Create image"}</span>
+            </button>
 
             <textarea
               ref={inputRef}
