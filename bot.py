@@ -1345,6 +1345,17 @@ def analyze_multi_timeframe(symbol):
 
     fresh = get_market_snapshot(symbol, "15m")
     raw_tfs = fresh.get("mtf_timeframes") or {}
+    required_timeframes = ("1d", "4h", "2h", "1h", "30m", "15m", "5m", "1m")
+    missing_timeframes = [
+        tf for tf in required_timeframes
+        if not isinstance(raw_tfs.get(tf), dict)
+        or raw_tfs[tf].get("success") is not True
+        or not raw_tfs[tf].get("candles")
+    ]
+    if missing_timeframes:
+        raise RuntimeError(
+            "Kitty all-timeframe confirmation unavailable: " + ", ".join(missing_timeframes)
+        )
 
     def channel_tf(tf):
         src = dict(raw_tfs.get(tf) or {})
