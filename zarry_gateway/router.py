@@ -1,7 +1,9 @@
 """Authenticated FastAPI routes for the general-assistant gateway."""
 import inspect
 import logging
+import os
 import time
+import traceback
 from fastapi import APIRouter, HTTPException, Request
 from .identity import AuthenticatedPrincipal
 from .policy import general_gateway_enabled, image_generation_enabled
@@ -11,6 +13,19 @@ from .schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_failure_origin(exc):
+    """Return the final traceback frame without logging exception text or locals."""
+    frames = traceback.extract_tb(exc.__traceback__) if exc.__traceback__ else []
+    if not frames:
+        return {"file": "unknown", "function": "unknown", "line": 0}
+    frame = frames[-1]
+    return {
+        "file": os.path.basename(frame.filename),
+        "function": frame.name,
+        "line": int(frame.lineno),
+    }
 
 
 def create_general_router(
@@ -238,7 +253,13 @@ def create_general_router(
                     )
                 except Exception as audit_exc:
                     logger.error("One-shot image audit update failed (%s)", type(audit_exc).__name__)
-            logger.error("One-shot image generation smoke test failed (%s)", type(exc).__name__)
+            origin = _safe_failure_origin(exc)
+            logger.error(
+                "One-shot image generation smoke test failed "
+                "error_type=%s failure_stage=%s origin=%s:%s:%s",
+                type(exc).__name__, failure_stage, origin["file"],
+                origin["function"], origin["line"],
+            )
             raise HTTPException(status_code=502, detail="One-time image generation test failed; lock remains consumed")
 
     @router.get("/admin/image-generation-smoke-status")
